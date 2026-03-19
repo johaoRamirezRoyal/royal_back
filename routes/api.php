@@ -26,5 +26,6 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('usuarios')->group(function () {
         Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
         Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
+        Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId']);
     });
 });

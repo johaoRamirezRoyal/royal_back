@@ -32,4 +32,31 @@ class UsuariosController extends Controller
             200
         );
     }
+
+    public function mostrarInfoUsuarioId($id)
+    {
+        $usuario_id = $id;
+
+        if (empty($usuario_id)) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe agregar el ID del usuario'
+            ], 400);
+        }
+
+        $response = $this->service_usuarios->mostrarInfoUsuarioId($usuario_id);
+
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Usuario no encontrado'
+            ], 404);
+        }
+
+        return response()->json([
+            'error' => false,
+            'message' => 'Usuario encontrado',
+            'data' => $response['usuario']
+        ]);
+    }
 }

@@ -36,11 +36,20 @@ class UsuariosServices
             ->paginate($perPage);
     }
 
-    public function crearNuevoUsuario(Usuario $usuario){
-        $usuario = $usuario->toArray();
+    public function mostrarInfoUsuarioId($id_usuario){
+        $usuario_info = Usuario::with('perfilRelacion')->find($id_usuario);
 
-        DB::table('usuarios')->insert($usuario);
-        return ['message' => 'Usuario creado'];
+        if (!$usuario_info) {
+            return [
+                'error' => true,
+                'usuario' => null
+            ];
+        }
+
+        return [
+            'error' => false,
+            'usuario' => $usuario_info
+        ];
     }
 
 }
