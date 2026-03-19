@@ -130,13 +130,20 @@ class AuthController extends Controller
         ]);
     }
 
-    // 🔹 LOGOUT
     public function logout()
     {
-        auth('api')->logout();
+        try {
+            auth('api')->logout();
 
-        return response()->json([
-            'message' => 'Sesión cerrada'
-        ]);
+            return response()->json([
+                'error' => false,
+                'message' => 'Sesión cerrada correctamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => true,
+                'message' => 'No se pudo cerrar sesión'
+            ], 500);
+        }
     }
 }
