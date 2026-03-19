@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\Usuario;
 use App\Services\Auth\AuthServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Support\Facades\Validator;
@@ -21,7 +20,7 @@ class AuthController extends Controller
         $this->service_auth = $service_auth;
     }
 
-    // 🔹 REGISTRO
+
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -57,9 +56,7 @@ class AuthController extends Controller
             'estado' => 'activo'
         ];
 
-        $usuario = new Usuario($data_usuario);
-
-        $response = $this->service_auth->registrarUsuario($usuario);
+        $response = $this->service_auth->registrarUsuario($data_usuario);
 
         if (!$response) {
             return response()->json([
@@ -75,7 +72,6 @@ class AuthController extends Controller
         ], 201);
     }
 
-    // 🔹 LOGIN (JWT limpio)
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -95,7 +91,6 @@ class AuthController extends Controller
             'password' => $request->pass
         ];
 
-        // 🔥 AQUÍ pasa toda la magia JWT
         if (!$token = auth('api')->attempt($credentials)) {
             return response()->json([
                 'error' => true,
@@ -103,9 +98,9 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // 👇 Usuario autenticado por JWT
+        // Usuario autenticado por JWT
         $usuario = auth('api')->user();
-
+        
         // 🔹 Validación adicional de negocio (opcional)
         if ($usuario->estado !== 'activo') {
             return response()->json([
@@ -122,7 +117,6 @@ class AuthController extends Controller
         ]);
     }
 
-    // 🔹 PERFIL
     public function me()
     {
         return response()->json([

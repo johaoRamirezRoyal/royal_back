@@ -40,6 +40,11 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->belongsTo(Perfil::class, 'perfil', 'id_perfil');
     }
 
+    public function setPassAttribute($value)
+    {
+        $this->attributes['pass'] = bcrypt($value);
+    }
+
     // Campos asignables masivamente
     protected $fillable = [
         'documento',
@@ -79,6 +84,7 @@ class Usuario extends Authenticatable implements JWTSubject
         'id_curso' => 'integer',
         'id_grupo' => 'integer',
         'terminos' => 'integer',
+        'estado'   => 'string',
         'curso_proximo_user' => 'integer',
         'firma_digital' => 'integer',
         'fechareg' => 'datetime',

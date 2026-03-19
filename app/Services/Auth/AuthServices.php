@@ -12,9 +12,10 @@ class AuthServices
             ->first();
     }
 
-    public function registrarUsuario(Usuario $usuario){
+    public function registrarUsuario(Array $usuario){
         try {
-            $usuario = Usuario::create($usuario->toArray());
+            
+            $usuario = Usuario::create($usuario);
             
             return [
                 'success' => true,

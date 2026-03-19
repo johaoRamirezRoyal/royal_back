@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Usuarios;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Validator as FacadesValidator;
 
 class UsuariosController extends Controller
 {
@@ -33,6 +34,22 @@ class UsuariosController extends Controller
         );
     }
 
+    public function mostrarTodosUsuariosPaginado(Request $request){
+        $per_page = $request->input('per-page', 10);
+
+        return response()->json(
+            $this->service_usuarios->mostrarTodosUsuariosPaginado($per_page),
+            200
+        );
+    }
+
+    public function mostrarTodosUsuarios(){
+        return response()->json(
+            $this->service_usuarios->mostrarTodosUsuarios(),
+            200
+        );
+    }
+
     public function mostrarInfoUsuarioId($id)
     {
         $usuario_id = $id;
@@ -57,6 +74,48 @@ class UsuariosController extends Controller
             'error' => false,
             'message' => 'Usuario encontrado',
             'data' => $response['usuario']
+        ]);
+    }
+
+    public function actualizarUsuarios(Request $request, $id){
+        $usuario_id = $id;
+
+        $validator = FacadesValidator::make($request->all(), [
+            "documento" => 'required|numeric',
+            "nombre" => 'required|string',
+            "apellido" => 'nullable|string',
+            "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'perfil' => 'required|integer',
+            'id_nivel' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message'=> $validator->errors()->first(),
+            ]);
+        }
+
+        if(empty($usuario_id)){
+            return response()->json([
+                'error'=> true,
+                'message'=> 'Debes insertar el id del usuario',
+            ]);
+        }
+
+        $response = $this->service_usuarios->actualizarUsuarios($id, $request->all());
+
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $response['message'],
+            ]);
+        }
+
+        return response()->json([
+            'error'=> false,
+            'message' => 'Usuario actualizado',
+            'data' => $response['usuario'],
         ]);
     }
 }

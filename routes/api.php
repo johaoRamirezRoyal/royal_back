@@ -24,8 +24,11 @@ Route::middleware('auth:api')->group(function () {
 
     //USUARIOS
     Route::prefix('usuarios')->group(function () {
-        Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
+        Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
+        Route::get('/all/general', [UsuariosController::class, "mostrarTodosUsuariosPaginado"]);
         Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
+        Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuarios']);
         Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId']);
+        Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
     });
 });
