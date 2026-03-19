@@ -1,0 +1,53 @@
+# Laravel
+/vendor
+/node_modules
+/public/hot
+/public/storage
+/storage/*.key
+/storage/app/public
+/storage/debugbar
+/bootstrap/cache/*.php
+/bootstrap/cache/*.json
+
+# Environment files
+.env
+.env.backup
+.env.production
+.env.local
+
+# Logs
+/storage/logs/*.log
+
+# IDEs / Editors
+/.idea
+/.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PHPUnit
+.phpunit.result.cache
+
+# Laravel Mix / Vite
+/public/build
+/public/mix-manifest.json
+
+# Composer
+composer.lock
+
+# NPM
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Testing
+coverage/
+.phpunit.cache
+
+# Misc
+*.log
+*.cache
+*.tmp
