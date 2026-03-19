@@ -8,16 +8,23 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::prefix('usuarios')->group(function () {
-    Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
-    Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
-});
-
-Route::prefix('auth')->group(function (){
+// 🔓 RUTAS PÚBLICAS (sin token)
+Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
 });
 
+//RUTAS PROTEGIDAS 
 Route::middleware('auth:api')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
+
+    //AUTH
+    Route::prefix('auth')->group(function () {
+        Route::post('logout', [AuthController::class, 'logout']);
+    });
+
+    //USUARIOS
+    Route::prefix('usuarios')->group(function () {
+        Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
+        Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
+    });
 });
