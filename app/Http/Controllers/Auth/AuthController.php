@@ -8,6 +8,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Symfony\Component\Mime\Message;
 
 class AuthController extends Controller
 {
@@ -100,7 +101,7 @@ class AuthController extends Controller
 
         // Usuario autenticado por JWT
         $usuario = auth('api')->user();
-        
+
         // 🔹 Validación adicional de negocio (opcional)
         if ($usuario->estado !== 'activo') {
             return response()->json([
@@ -109,12 +110,33 @@ class AuthController extends Controller
             ], 403);
         }
 
+        return $this->responseWithCookie($token);
+
         return response()->json([
             'error' => false,
             'message' => 'Login exitoso',
             'token' => $token,
             'usuario' => $usuario
         ]);
+    }
+
+    private function responseWithCookie(string $token){
+        $ttl = $ttl = 60 * 60; // 1 hora manual
+
+        $cookie = cookie(
+            name: 'token',
+            value: $token,
+            minutes: $ttl / 60,
+            path: '/',
+            domain: null,
+            secure: app()->isProduction(),
+            httpOnly: true,
+            sameSite: 'Strict',
+        );
+
+        return response()
+                ->json(['Message' => 'Login Exitoso'])
+                ->withCookie($cookie);
     }
 
     public function me()
