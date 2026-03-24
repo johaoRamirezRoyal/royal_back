@@ -55,15 +55,16 @@ class UsuariosController extends Controller
         $perfil = $request->input('per');
 
         $permiso = $this->service_usuarios->tienePermiso($opcion, $perfil);
+        $code = ($permiso['permiso']) ? 200:405;
 
         if($permiso['error']){
             return response()->json([
                 'error'=> true,
                 'message' => $permiso['message']
-            ]);
+            ], $code);
         }
         
-        return response()->json($permiso);
+        return response()->json($permiso, $code);
     }
 
     public function mostrarInfoUsuarioId($id)

@@ -146,6 +146,28 @@ class AuthController extends Controller
         ]);
     }
 
+    public function check(){
+        try {
+            $user = auth('api')->user();
+
+            if(!$user){
+                return response()->json([
+                    'activo' => false
+                ], 401);
+            }
+
+            return response()->json([
+                'active' => true,
+                'usuario' => $user
+            ]);
+        }catch(\Exception $e){
+            return response()->json([
+                'active' => false,
+                'message' => 'Token expirado o invalido: ' . $e->getMessage()
+            ], 401);
+        }
+    }
+
     public function logout()
     {
         try {
