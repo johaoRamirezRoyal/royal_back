@@ -1,0 +1,32 @@
+<?php
+namespace App\Http\Controllers\Permisos;
+
+use App\Services\Permisos\PermisosService;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class PermisosController extends Controller
+
+{
+    protected $services_permisos;
+
+    public function __construct(PermisosService $services_permisos)
+    {
+        $this->services_permisos = $services_permisos;
+    }
+
+    public function verPermisosPorPerfil(Request $request){
+        $id_perfil = $request->input("perfil");
+
+        if(!$id_perfil){
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe tener un perfil para la visualización de permisos'
+            ], 401);
+        }
+
+        $datos = $this->services_permisos->verPermisosPorPerfil($id_perfil);
+
+        return response()->json($datos,200);
+    }
+}

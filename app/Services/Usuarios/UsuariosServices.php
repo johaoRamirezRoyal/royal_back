@@ -38,6 +38,24 @@ class UsuariosServices
             ->paginate($perPage);
     }
 
+    public function tienePermiso($opcion, $perfil){
+        try{
+            $permiso = DB::table('cron_permisos as p')
+            ->select('p.id', 'p.id_opcion')
+            ->join('cron_opciones as o','o.id','=','p.id_opcion')
+            ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+            ->where('p.id_opcion', $opcion)
+            ->where('p.id_perfil', $perfil)
+            ->where('p.activo', 1)
+            ->exists();
+
+            return ['permiso' => $permiso, 'error' => false];
+
+        }catch(\Illuminate\Database\QueryException $e){
+            return ['error' => true, 'message'=> $e->getMessage()];
+        }
+    }
+
     public function mostrarTodosUsuariosPaginado($perPage)
     {
         try{
@@ -60,9 +78,9 @@ class UsuariosServices
                 'error' => false,
                 'data' => $usuarios,
             ];
-        }catch(\Exception $e){
+        }catch(\Illuminate\Database\QueryException $e){
             return [
-                'error' => false,
+                'error' => true,
                 'data' => $e->getMessage(),
             ];
         }

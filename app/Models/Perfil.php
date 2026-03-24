@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Models\Opcion as ModelsOpcion;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Opcion;
 
 class Perfil extends Model
 {
@@ -29,4 +31,13 @@ class Perfil extends Model
 
     // Para que la columna fechareg sea tratada como instancia de Carbon
     protected $dates = ['fechareg'];
+
+    public function opciones(){
+        return $this->belongsToMany(
+            ModelsOpcion::class,
+            'cron_permisos',
+            'id_perfil',
+            'id_opcion'
+        )->withPivot('activo', 'user_log', 'fechareg');
+    }
 }

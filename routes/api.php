@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Usuarios\UsuariosController;
+use App\Http\Controllers\Permisos\PermisosController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -24,11 +25,19 @@ Route::middleware('auth:api')->group(function () {
 
     //USUARIOS
     Route::prefix('usuarios')->group(function () {
+        Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
+
         Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
         Route::get('/all/general', [UsuariosController::class, "mostrarTodosUsuariosPaginado"]);
         Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
         Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuarios']);
-        Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId']);
+
+        Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId'])->where('id', '[0-9]+');
+
         Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
+    });
+
+    Route::prefix('permisos')->group(function() {
+        Route::get('/listado', [PermisosController::class, 'verPermisosPorPerfil']);
     });
 });

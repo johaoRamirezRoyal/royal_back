@@ -91,7 +91,7 @@ class AuthController extends Controller
             'password' => $request->pass
         ];
 
-        if (!$token = auth('api')->attempt($credentials)) {
+        if (!$token = auth()->guard('api')->attempt($credentials)) {
             return response()->json([
                 'error' => true,
                 'message' => 'Credenciales incorrectas'
@@ -127,7 +127,7 @@ class AuthController extends Controller
     public function logout()
     {
         try {
-            auth('api')->logout();
+            auth()->guard('api')->logout();
 
             return response()->json([
                 'error' => false,

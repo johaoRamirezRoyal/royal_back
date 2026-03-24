@@ -50,6 +50,22 @@ class UsuariosController extends Controller
         );
     }
 
+    public function tienePermiso(Request $request){
+        $opcion = $request->input('opt');
+        $perfil = $request->input('per');
+
+        $permiso = $this->service_usuarios->tienePermiso($opcion, $perfil);
+
+        if($permiso['error']){
+            return response()->json([
+                'error'=> true,
+                'message' => $permiso['message']
+            ]);
+        }
+        
+        return response()->json($permiso);
+    }
+
     public function mostrarInfoUsuarioId($id)
     {
         $usuario_id = $id;
