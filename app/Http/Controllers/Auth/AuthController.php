@@ -129,9 +129,9 @@ class AuthController extends Controller
             minutes: $ttl / 60,
             path: '/',
             domain: null,
-            secure: app()->isProduction(),
+            secure: false,//app()->isProduction(),
             httpOnly: true,
-            sameSite: 'Strict',
+            sameSite: 'Lax',
         );
 
         return response()
