@@ -176,7 +176,9 @@ class AuthController extends Controller
             return response()->json([
                 'error' => false,
                 'message' => 'Sesión cerrada correctamente'
-            ]);
+            ])->withCookie(cookie()->forget('token'));
+
+
         } catch (\Exception $e) {
             return response()->json([
                 'error' => true,
