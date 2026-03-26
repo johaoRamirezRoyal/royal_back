@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Usuarios\UsuariosController;
 use App\Http\Controllers\Permisos\PermisosController;
@@ -42,5 +43,9 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('permisos')->group(function() {
         Route::get('/listado', [PermisosController::class, 'verPermisosPorPerfil']);
         Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones']);
+    });
+
+    Route::prefix('areas')->group(function(){
+        Route::get('/', [AreasController::class, 'obtenerTodasLasAreas']);
     });
 });
