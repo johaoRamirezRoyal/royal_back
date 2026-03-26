@@ -50,6 +50,26 @@ class UsuariosController extends Controller
         );
     }
 
+    public function filtrarUsuarios(Request $request)
+    {
+        $datos = $request->all();
+        $search = $request->input('s', '');
+
+        $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search);
+
+        if ($filtro['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $filtro['message']
+            ], 500);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => json_decode(json_encode($filtro['data'], JSON_INVALID_UTF8_SUBSTITUTE))
+        ], 200);
+    }
+
     public function tienePermiso(Request $request){
         $opcion = $request->input('opt');
         $perfil = $request->input('per');

@@ -25,8 +25,23 @@ class PermisosController extends Controller
             ], 401);
         }
 
-        $datos = $this->services_permisos->verPermisosPorPerfil($id_perfil);
+        $datos = $this->services_permisos->verPermisosActivosPorPerfil($id_perfil);
 
         return response()->json($datos,200);
+    }
+
+    public function verTodosLosPermisosOpciones(){
+        $datos = $this->services_permisos->verPermisosOpciones();
+
+        if($datos['error']){
+            return response()->json([
+                'error'=> true,
+                'message' => $datos['message']
+            ]);
+        }
+        return response()->json([
+            'error' => false,
+            'data' => $datos['data']
+        ]);
     }
 }

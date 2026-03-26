@@ -27,6 +27,7 @@ Route::middleware('auth:api')->group(function () {
     //USUARIOS
     Route::prefix('usuarios')->group(function () {
         Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
+        Route::get('/filtro', [UsuariosController::class, 'filtrarUsuarios']);
 
         Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
         Route::get('/all/general', [UsuariosController::class, "mostrarTodosUsuariosPaginado"]);
@@ -40,5 +41,6 @@ Route::middleware('auth:api')->group(function () {
 
     Route::prefix('permisos')->group(function() {
         Route::get('/listado', [PermisosController::class, 'verPermisosPorPerfil']);
+        Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones']);
     });
 });

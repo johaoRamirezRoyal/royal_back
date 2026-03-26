@@ -40,6 +40,10 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->belongsTo(Perfil::class, 'perfil', 'id_perfil');
     }
 
+    public function nivelRelacion(){
+        return $this->belongsTo(Nivel::class, 'id_nivel', 'id');
+    }
+
     public function setPassAttribute($value)
     {
         $this->attributes['pass'] = bcrypt($value);
@@ -70,13 +74,16 @@ class Usuario extends Authenticatable implements JWTSubject
         'fecha_activo',
         'fecha_inactivo',
         'fecha_editado',
-        'firma_digital',
-        'foto_digital'
+        'firma_digital'
     ];
 
     // Casts (opcional pero recomendado)
     protected $casts = [
         'perfil' => 'integer',
+        'documento',
+        'nombre',
+        'apellido',
+        'correo',
         'id_empresa' => 'integer',
         'id_super_empresa' => 'integer',
         'user_log' => 'integer',

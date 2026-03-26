@@ -1,6 +1,7 @@
 <?php
 namespace App\Services\Permisos;
 
+use App\Models\Opcion;
 use App\Models\Perfil;
 use App\Models\Permiso;
 
@@ -76,7 +77,7 @@ class PermisosService
         }
     }
 
-    public function verPermisosPorPerfil($id_perfil){
+    public function verPermisosActivosPorPerfil($id_perfil){
         try{
             $perfil = Perfil::with([
                 'opciones' => function($query){
@@ -94,6 +95,36 @@ class PermisosService
                 'error'=> false,
                 'data' => $perfil
             ];
+        }catch(\Exception $e){
+            return [
+                'error' => true,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function verPermisosOpciones(){
+        try{
+            $permisos =Opcion::with(['perfiles', 'modulo'])->get();
+
+            $data = $permisos->map(function ($item) {
+                return [
+                    'opcion' => [
+                        'id' => $item->id,
+                        'nombre' => $item->nombre,
+                        'activo' => $item->activo,
+                        'fechareg' => $item->fechareg,
+                        'modulo' => $item->modulo,
+                    ],
+                    'perfiles' => $item->perfiles
+                ];
+            });
+
+            return [
+                'error' => false,
+                'data' => $data
+            ];
+
         }catch(\Exception $e){
             return [
                 'error' => true,
