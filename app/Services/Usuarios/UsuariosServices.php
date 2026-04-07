@@ -35,6 +35,7 @@ class UsuariosServices
                 'fechareg'
             )
             ->where('estado', 'activo')
+            ->groupBy("nombre")
             ->whereNotIn('perfil', [17, 16, 6])
             ->paginate($perPage);
     }
@@ -78,6 +79,8 @@ class UsuariosServices
                     $query->where('id_grupo', $grupo);
                 })
                 ->whereNotIn('perfil', [17, 16, 6])
+                ->orderByDesc('nombre')
+                ->orderByDesc('documento')
                 ->get();
             return [
                 'error' => false,
@@ -129,6 +132,8 @@ class UsuariosServices
                     'nivelRelacion:id,nombre',
                     'cursoRelacion:id,nombre'
                 ])
+                ->orderBy("nombre")
+                ->orderBy("documento")
                 ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
 
