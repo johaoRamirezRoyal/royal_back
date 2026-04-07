@@ -54,8 +54,9 @@ class UsuariosController extends Controller
     {
         $datos = $request->all();
         $search = $request->input('s', '');
+        $per_page = $request->input('per-page', 10);
 
-        $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search);
+        $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search, $per_page);
 
         if ($filtro['error']) {
             return response()->json([

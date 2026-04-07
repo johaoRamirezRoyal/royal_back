@@ -40,7 +40,7 @@ class UsuariosServices
             ->paginate($perPage);
     }
 
-    public function filtrarUsuarios($datos, $search)
+    public function filtrarUsuarios($datos, $search, $perPage)
     {
         try {
             $usuarios = Usuario::select([
@@ -81,7 +81,7 @@ class UsuariosServices
                 ->whereNotIn('perfil', [17, 16, 6])
                 ->orderByDesc('nombre')
                 ->orderByDesc('documento')
-                ->get();
+                ->paginate((int) $perPage);
             return [
                 'error' => false,
                 'data' => $usuarios
