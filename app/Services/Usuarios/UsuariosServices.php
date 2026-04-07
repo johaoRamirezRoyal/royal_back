@@ -120,14 +120,16 @@ class UsuariosServices
                 'correo',
                 'perfil',
                 'id_nivel',
+                'id_curso',
                 'id_grupo',
                 'estado'
             ])
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
-                    'nivelRelacion:id,nombre'
+                    'nivelRelacion:id,nombre',
+                    'cursoRelacion:id,nombre'
                 ])
-                ->whereNotIn('perfil', [17, 16, 6])
+                ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
 
             return [

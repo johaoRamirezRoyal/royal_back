@@ -44,6 +44,10 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->belongsTo(Nivel::class, 'id_nivel', 'id');
     }
 
+    public function cursoRelacion(){
+        return $this->belongsTo(Cursos::class, 'id_curso', 'id');
+    }
+
     public function setPassAttribute($value)
     {
         $this->attributes['pass'] = bcrypt($value);
