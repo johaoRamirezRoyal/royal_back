@@ -59,8 +59,8 @@ class UsuariosServices
                 'fecha_activo',
                 'fecha_editado'
             ])->with([
-                'perfilRelacion',
-                'nivelRelacion'
+                'perfilRelacion:id_perfil,nombre',
+                'nivelRelacion:id_nivel,nombre'
             ])->when($search, function ($query, $search) {
                     $query->where(function ($q) use ($search) {
                         $q->where('nombre', 'LIKE', "%$search%")
@@ -123,7 +123,10 @@ class UsuariosServices
                 'id_grupo',
                 'estado'
             ])
-                ->with('perfilRelacion')
+                ->with([
+                    'perfilRelacion:id_perfil,nombre',
+                    'nivelRelacion:id,nombre'
+                ])
                 ->whereNotIn('perfil', [17, 16, 6])
                 ->paginate((int) $perPage);
 
