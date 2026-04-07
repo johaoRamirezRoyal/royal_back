@@ -61,7 +61,7 @@ class UsuariosServices
                 'fecha_editado'
             ])->with([
                 'perfilRelacion:id_perfil,nombre',
-                'nivelRelacion:id_nivel,nombre'
+                'nivelRelacion:id,nombre'
             ])->when($search, function ($query, $search) {
                     $query->where(function ($q) use ($search) {
                         $q->where('nombre', 'LIKE', "%$search%")
