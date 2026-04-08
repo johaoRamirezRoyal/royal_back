@@ -2,8 +2,9 @@
 
 use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\Usuarios\UsuariosController;
+use App\Http\Controllers\Cursos\CursosController;
 use App\Http\Controllers\Permisos\PermisosController;
+use App\Http\Controllers\Usuarios\UsuariosController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -17,21 +18,21 @@ Route::prefix('auth')->group(function () {
     Route::get('/check', [AuthController::class, 'check']);
 });
 
-//RUTAS PROTEGIDAS 
+// RUTAS PROTEGIDAS
 Route::middleware('auth:api')->group(function () {
 
-    //AUTH
+    // AUTH
     Route::prefix('auth')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
     });
 
-    //USUARIOS
+    // USUARIOS
     Route::prefix('usuarios')->group(function () {
         Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
         Route::get('/filtro', [UsuariosController::class, 'filtrarUsuarios']);
 
         Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
-        Route::get('/all/general', [UsuariosController::class, "mostrarTodosUsuariosPaginado"]);
+        Route::get('/all/general', [UsuariosController::class, 'mostrarTodosUsuariosPaginado']);
         Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
         Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuarios']);
 
@@ -40,12 +41,16 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
     });
 
-    Route::prefix('permisos')->group(function() {
+    Route::prefix('cursos')->group(function () {
+        Route::get('/all', [CursosController::class, 'findAll']);
+    });
+
+    Route::prefix('permisos')->group(function () {
         Route::get('/listado', [PermisosController::class, 'verPermisosPorPerfil']);
         Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones']);
     });
 
-    Route::prefix('areas')->group(function(){
+    Route::prefix('areas')->group(function () {
         Route::get('/', [AreasController::class, 'obtenerTodasLasAreas']);
     });
 });

@@ -40,7 +40,7 @@ class UsuariosServices
             ->paginate($perPage);
     }
 
-    public function filtrarUsuarios($datos, $search, $perPage)
+    public function filtrarUsuarios($datos, $search, $sort, $dir, $perPage)
     {
         try {
             $usuarios = Usuario::select([
@@ -63,24 +63,27 @@ class UsuariosServices
                 'perfilRelacion:id_perfil,nombre',
                 'nivelRelacion:id,nombre'
             ])->when($search, function ($query, $search) {
-                    $query->where(function ($q) use ($search) {
-                        $q->where('nombre', 'LIKE', "%$search%")
-                            ->orWhere('apellido', 'LIKE', "%$search%")
-                            ->orWhere('documento', 'LIKE', "%$search%")
-                            ->orWhere('correo', 'LIKE', "%$search%");
-                    });
-                })->when($datos['perfil'] ?? null, function ($query, $perfil) {
-                    $query->where('perfil', $perfil);
-                })
+                $query->where(function ($q) use ($search) {
+                    $q->where('nombre', 'LIKE', "%$search%")
+                        ->orWhere('apellido', 'LIKE', "%$search%")
+                        ->orWhere('documento', 'LIKE', "%$search%")
+                        ->orWhere('correo', 'LIKE', "%$search%");
+                });
+            })->when($datos['perfil'] ?? null, function ($query, $perfil) {
+                $query->where('perfil', $perfil);
+            })
                 ->when($datos['id_nivel'] ?? null, function ($query, $nivel) {
                     $query->where('id_nivel', $nivel);
                 })
                 ->when($datos['id_grupo'] ?? null, function ($query, $grupo) {
                     $query->where('id_grupo', $grupo);
                 })
-                ->whereNotIn('perfil', [17, 16, 6])
-                ->orderByDesc('nombre')
-                ->orderByDesc('documento')
+                ->whereNotIn('perfil', [17, 16, 6]);
+
+            if (!empty($sort)) $usuarios
+                ->orderBy($sort, $dir);
+
+            $usuarios = $usuarios
                 ->paginate((int) $perPage);
             return [
                 'error' => false,

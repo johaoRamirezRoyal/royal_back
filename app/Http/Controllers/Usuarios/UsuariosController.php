@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Validator as FacadesValidator;
 
+use function Illuminate\Log\log;
+
 class UsuariosController extends Controller
 {
     protected $service_usuarios;
@@ -54,9 +56,11 @@ class UsuariosController extends Controller
     {
         $datos = $request->all();
         $search = $request->input('s', '');
+        $sort = $request->input('sort', '');
+        $dir = $request->input('dir', 'asc');
         $per_page = $request->input('per-page', 10);
 
-        $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search, $per_page);
+        $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search, $sort, $dir, $per_page);
 
         if ($filtro['error']) {
             return response()->json([
