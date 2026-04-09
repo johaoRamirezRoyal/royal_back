@@ -31,6 +31,8 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('usuarios')->group(function () {
         Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
         Route::get('/filtro', [UsuariosController::class, 'filtrarUsuarios']);
+        Route::get('/perfiles', [UsuariosController::class, 'mostrarTodosPerfiles']);
+        Route::get('/niveles', [UsuariosController::class, 'mostrarTodosNiveles']);
 
         Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
         Route::get('/all/general', [UsuariosController::class, 'mostrarTodosUsuariosPaginado']);
@@ -72,4 +74,6 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('areas')->group(function () {
         Route::get('/', [AreasController::class, 'obtenerTodasLasAreas']);
     });
+
+
 });

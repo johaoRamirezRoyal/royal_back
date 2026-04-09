@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Usuarios;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Services\Niveles\NivelesServices;
+use App\Services\Perfiles\PerfilesServices;
 use Illuminate\Support\Facades\Validator as FacadesValidator;
 
 use function Illuminate\Log\log;
@@ -12,10 +14,14 @@ use function Illuminate\Log\log;
 class UsuariosController extends Controller
 {
     protected $service_usuarios;
+    protected $service_perfiles;
+    protected $service_niveles;
 
-    public function __construct(UsuariosServices $usuariosServices)
+    public function __construct(UsuariosServices $usuariosServices, PerfilesServices $perfilesServices, NivelesServices $nivelesServices)
     {
         $this->service_usuarios = $usuariosServices;
+        $this->service_perfiles = $perfilesServices;
+        $this->service_niveles = $nivelesServices;
     }
 
     //GET /usuarios
@@ -196,5 +202,40 @@ class UsuariosController extends Controller
             'message' => 'Usuario actualizado',
             'data' => $response['usuario'],
         ]);
+    }
+
+    // ===================== NIVELES ========================
+    public function mostrarTodosNiveles(){
+        $response = $this->service_niveles->mostrarTodosNiveles();
+
+        if($response['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $response['message']
+            ], 404);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $response['data']
+        ], 200);
+    }
+
+
+    //==================== PERFILES ========================
+    public function mostrarTodosPerfiles(){
+        $response = $this->service_perfiles->mostrarTodosPerfiles();
+    
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $response['message']
+            ], 404);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $response['data']
+        ], 200);
     }
 }
