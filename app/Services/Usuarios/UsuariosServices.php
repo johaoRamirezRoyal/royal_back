@@ -206,6 +206,22 @@ class UsuariosServices
         }
     }
 
+    public function agregarUsuario(array $data){
+        try {
+            $usuario = Usuario::create($data);
+            return [
+                'error' => false,
+                'usuario' => $usuario
+            ];
+        }catch(\Exception $e){
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+
+    }
+
     public function actualizarUsuarios($id_usuario, array $data)
     {
         $usuario_info = Usuario::find($id_usuario);

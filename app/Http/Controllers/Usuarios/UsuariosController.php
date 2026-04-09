@@ -119,6 +119,43 @@ class UsuariosController extends Controller
         ]);
     }
 
+    public function agregarUsuario(Request $request){
+        $validator = FacadesValidator::make($request->all(), [
+            "documento" => 'required',
+            "nombre" => 'required|string',
+            "apellido" => 'nullable|string',
+            "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'perfil' => 'required|integer',
+            'id_nivel' => 'required|integer',
+            "user" => 'required|string|unique:usuarios,user',
+            "pass" => 'required|string',
+            "grupo" => "nullable|integer",
+            "curso" => "nullable|integer",
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message'=> $validator->errors()->first(),
+            ]);
+        }
+
+        $response = $this->service_usuarios->agregarUsuario($request->all());
+
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $response['message'],
+            ]);
+        }
+
+        return response()->json([
+            'error'=> false,
+            'message' => 'Usuario agregado',
+            'data' => $response['usuario'],
+        ]);
+    }
+
     public function actualizarUsuarios(Request $request, $id){
         $usuario_id = $id;
 

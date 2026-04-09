@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Cursos\CursosController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
+use App\Models\Usuario;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -39,6 +40,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId'])->where('id', '[0-9]+');
 
         Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
+        Route::post('/', [UsuariosController::class, 'agregarUsuario']);
     });
 
     Route::prefix('cursos')->group(function () {
