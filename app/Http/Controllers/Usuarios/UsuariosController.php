@@ -66,6 +66,8 @@ class UsuariosController extends Controller
         $dir = $request->input('dir', 'asc');
         $per_page = $request->input('per-page', 10);
 
+        log($datos);
+
         $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search, $sort, $dir, $per_page);
 
         if ($filtro['error']) {

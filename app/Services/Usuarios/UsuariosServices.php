@@ -69,11 +69,11 @@ class UsuariosServices
                         ->orWhere('documento', 'LIKE', "%$search%")
                         ->orWhere('correo', 'LIKE', "%$search%");
                 });
-            })->when($datos['perfil'] ?? null, function ($query, $perfil) {
-                $query->where('perfil', $perfil);
+            })->when($datos['perfiles'] ?? null, function ($query, $perfil) {
+                $query->whereIn('perfil', $perfil);
             })
-                ->when($datos['id_nivel'] ?? null, function ($query, $nivel) {
-                    $query->where('id_nivel', $nivel);
+                ->when($datos['niveles'] ?? null, function ($query, $nivel) {
+                    $query->whereIn('id_nivel', $nivel);
                 })
                 ->when($datos['id_grupo'] ?? null, function ($query, $grupo) {
                     $query->where('id_grupo', $grupo);
