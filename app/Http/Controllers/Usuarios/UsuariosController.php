@@ -206,6 +206,34 @@ class UsuariosController extends Controller
         ]);
     }
 
+    public function actualizarEstadoUsuarios(Request $request){
+        $ids = $request->input('ids', []);
+        $estado = $request->input('estado', 'activo');
+
+        if (empty($ids) || !is_array($ids)){
+            return response()->json([
+                'error' => true,
+                'message' => 'Debes proporcionar un array de IDs de usuarios a cambiar el estado',
+                400,
+            ]);
+        }
+
+        $response = $this->service_usuarios->actualizarEstadoUsuarios($ids, $estado);
+
+        if($response['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $response['message'],
+                500
+            ]);
+        }
+
+        return response()->json([
+            'error' => $response['error'],
+            'message' => $response['message']
+        ], 200);
+    }
+
     // ===================== NIVELES ========================
     public function mostrarTodosNiveles(){
         $response = $this->service_niveles->mostrarTodosNiveles();

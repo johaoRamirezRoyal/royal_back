@@ -213,6 +213,7 @@ class UsuariosServices
                 'error' => false,
                 'usuario' => $usuario
             ];
+
         }catch(\Exception $e){
             return [
                 'error' => true,
@@ -244,6 +245,22 @@ class UsuariosServices
                 'usuario' => $usuario_return
             ];
         } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function actualizarEstadoUsuarios(array $id_usuarios, string $estado){
+        try{
+            Usuario::whereIn('id_user', $id_usuarios)->update(['estado' => $estado]);
+
+            return [
+                'error' => false,
+                'message' => 'Usuarios actualizados correctamente'
+            ];
+        }catch(\Exception $e){
             return [
                 'error' => true,
                 'message' => $e->getMessage()

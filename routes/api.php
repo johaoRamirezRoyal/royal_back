@@ -41,6 +41,17 @@ Route::middleware('auth:api')->group(function () {
 
         Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId'])->where('id', '[0-9]+');
 
+        Route::put('/estado', [UsuariosController::class, 'actualizarEstadoUsuarios']);
+        /**
+        {
+        "ids": [
+                11,
+                12,
+                13
+            ],
+        "estado": "activo"
+        }
+         */
         Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
         Route::post('/', [UsuariosController::class, 'agregarUsuario']);
         /**
