@@ -31,4 +31,26 @@ class AuthServices
             
         }
     }
+
+    public function buscarUsuarioPorEmail($email){
+        try{
+            $usuario = Usuario::where('correo', $email)->first();
+            if (!$usuario){
+                return [
+                    'success' => false,
+                    'message' => 'Usuario no encontrado'
+                ];
+            }
+
+            return [
+                'success' => true,
+                'data' => $usuario
+            ];
+        }catch(\Exception $e){
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
 }

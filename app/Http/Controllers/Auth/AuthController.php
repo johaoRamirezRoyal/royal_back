@@ -8,7 +8,8 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Symfony\Component\Mime\Message;
+use Laravel\Socialite\Facades\Socialite;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
@@ -20,6 +21,74 @@ class AuthController extends Controller
         $this->service_usuarios = $usuariosServices;
         $this->service_auth = $service_auth;
     }
+
+    // ===== GOOGLE OAUTH CONFIG (BEGIN) =====
+    public function redirectToGoogle()
+    {
+        /** @var \Laravel\Socialite\Two\GoogleProvider $provider */
+        $provider = Socialite::driver('google');
+
+        return $provider->stateless()->redirect();
+    }
+
+    public function callbackGoogle()
+    {
+        try{
+            /** @var \Laravel\Socialite\Two\GoogleProvider $provider */
+            $provider = Socialite::driver('google');
+            $googleUser = $provider->stateless()->user();
+
+            //Buscar al usuario mediante el correo
+            $usuario = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
+
+            //Si no existe usuario, lo registramos
+            if(!$usuario){
+                if(!str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')){
+                    return response()->json([
+                        'error' => true,
+                        'message' => 'El correo debe ser institucional (@royalschool.edu.co',  
+                    ], 422);
+                }
+
+                $data_usuario = [
+                    'documento' => null,
+                    'nombre' => $googleUser->getName(),
+                    'apellido' => null,
+                    'correo' => $googleUser->getEmail(),
+                    'telefono' => null,
+                    'asignatura' => null,
+                    'user' => $googleUser->getEmail(),
+                    'pass' => Hash::make(uniqid()), // Contraseña aleatoria
+                    'perfil' => 10, // Perfil por defecto (trabajador)
+                    'id_nivel' => 1, // Nivel por defecto (Administrativo)
+                    'fechareg' => now(),
+                    'estado' => 'activo'
+                ];
+
+                $usuario = $this->service_auth->registrarUsuario($data_usuario);
+            }
+
+            //Validamos la creación y el estado
+            if(!$usuario['success'] || $usuario['data']->estado !== 'activo'){
+                return response()->json([
+                    'error' => true,
+                    'message' => 'No se pudo registrar el usuario o el usuario no está activo'
+                ], 500);
+            }
+
+            //Se genera el JWT
+            $token = JWTAuth::fromUser($usuario['data']);
+
+            return $this->responseWithCookie($token);
+
+        }catch(\Exception $e){
+            return response()->json([
+                'error' => true,
+                'message' => 'Error en la autenticación con Google: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
 
     public function register(Request $request)
