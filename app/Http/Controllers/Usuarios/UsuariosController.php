@@ -129,10 +129,12 @@ class UsuariosController extends Controller
 
     public function agregarUsuario(Request $request){
         $validator = FacadesValidator::make($request->all(), [
-            "documento" => 'required',
+            "documento" => 'required|string',
             "nombre" => 'required|string',
             "apellido" => 'nullable|string',
             "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            "telefono" => ['nullable', 'numeric', 'digits_between:7,12'],
+            "asignatura" => 'nullable|string',
             'perfil' => 'required|integer',
             'id_nivel' => 'required|integer',
             "user" => 'required|string|unique:usuarios,user',
