@@ -261,7 +261,7 @@ class UsuariosController extends Controller
         if ($response['error']) {
             return response()->json([
                 'error' => true,
-                'message' => $response['message']
+                'message' => $response['data']
             ], 404);
         }
 

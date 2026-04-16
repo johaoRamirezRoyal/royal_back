@@ -47,6 +47,6 @@ class Inventario extends Model
     }
 
     public function categoria(){
-        return $this->belongTo(Categoria::class, 'id', 'id_categoria');
+        return $this->belongsTo(Categoria::class, 'id_categoria', 'id');
     }
 }

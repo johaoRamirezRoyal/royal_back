@@ -7,7 +7,7 @@ class PerfilesServices
 {
     public function mostrarTodosPerfiles(){
         try{
-            $perfiles = Perfil::all();
+            $perfiles = Perfil::whereNot('id_perfil', 1)->get();
 
             return [
                 'error' => false,

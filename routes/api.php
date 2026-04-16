@@ -5,10 +5,15 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Cursos\CursosController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
+use App\Http\Controllers\Inventarios\InventariosController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return response()->json([
+        'message' => 'Bienvenido a la API de Royal School',
+        'version' => '1.0',
+        'status' => 'success'
+    ]);
 });
 
 // 🔓 RUTAS PÚBLICAS (sin token)
@@ -76,18 +81,35 @@ Route::middleware('auth:api')->group(function () {
          */
     });
 
+    // CURSOS
     Route::prefix('cursos')->group(function () {
         Route::get('/all', [CursosController::class, 'findAll']);
     });
 
+    // PERMISOS
     Route::prefix('permisos')->group(function () {
         Route::get('/listado', [PermisosController::class, 'verPermisosPorPerfil']);
         Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones']);
     });
 
+    //AREAS
     Route::prefix('areas')->group(function () {
         Route::put('/', [AreasController::class, 'actualizarArea']);
+        /**
+        * Ejemplo de JSON para actualizar un area: 
+        {
+            "id": 1,
+            "nombre": "S40 (1B)",
+            "user_log": 1,
+            "activo": 1
+        }
+        */
+
         Route::get('/filtro', [AreasController::class, 'filtrarAreas']);
+        /*
+            Filtrada area
+            http://localhost:8000/api/areas/filtro?filtro=filtro_a_buscar
+        */
 
         Route::post('/asignar', [AreasController::class, 'asignarArea']);
         /**
@@ -109,6 +131,24 @@ Route::middleware('auth:api')->group(function () {
         }
          */
         Route::get('/', [AreasController::class, 'obtenerTodasLasAreas']);
+    });
+
+    // INVENTARIO
+    Route::prefix('inventario')->group(function() {
+        Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario']);
+        /**
+         *  Ejemplo de JSON para obtener el listado de inventario paginado:
+            {
+                "search": "computado",
+                "id_categoria": [],
+                "estado": [],
+                "id_usuario": 3123,
+                "per_page": 20
+            }
+            
+            * URL Puede ser: 
+            http://localhost:8000/api/inventario/listado?page=300&per_page=10
+         */
     });
 
 });
