@@ -190,7 +190,7 @@ class AuthController extends Controller
     }
 
     private function responseWithCookie(string $token){
-        $ttl = $ttl = 60 * 60; // 1 hora manual
+        $ttl = $ttl = 60 * 60 * 24; // 1 día manual
 
         $cookie = cookie(
             name: 'token',
