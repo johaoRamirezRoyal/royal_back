@@ -170,12 +170,12 @@ class UsuariosController extends Controller
         $usuario_id = $id;
 
         $validator = FacadesValidator::make($request->all(), [
-            "documento" => 'required|numeric',
-            "nombre" => 'required|string',
+            "documento" => 'numeric',
+            "nombre" => 'string',
             "apellido" => 'nullable|string',
-            "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
-            'perfil' => 'required|integer',
-            'id_nivel' => 'required|integer',
+            "correo" => 'email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'perfil' => 'integer',
+            'id_nivel' => 'integer',
         ]);
 
         if ($validator->fails()) {

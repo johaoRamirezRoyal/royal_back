@@ -1,4 +1,5 @@
-<?php 
+<?php
+
 namespace App\Services\inventario;
 
 use App\Models\Inventario;
@@ -6,8 +7,9 @@ use Illuminate\Support\Facades\DB;
 
 class InventarioServices
 {
-    public function obtenerListadoInventario($perPage = 15, $search = null, $datos = []){
-        try{
+    public function obtenerListadoInventario($perPage = 15, $search = null, $datos = [])
+    {
+        try {
             $listado = Inventario::select(
                 'id_user',
                 'id_area',
@@ -18,32 +20,36 @@ class InventarioServices
                     '[',
                     GROUP_CONCAT(
                         JSON_OBJECT(
-                            'id', id,
-                            'marca', marca,
-                            'modelo', modelo,
-                            'precio', precio,
-                            'estado', estado,
-                            'codigo', codigo
+                            'id', inventario.id,
+                            'marca', inventario.marca,
+                            'modelo', inventario.modelo,
+                            'precio', inventario.precio,
+                            'estado_id', inventario.estado,
+                            'estado_nombre', e.nombre,
+                            'codigo', inventario.codigo
                         )
                     ),
                     ']'
                 ) as items
             ")
             )
-                ->with(['usuario:id_user,nombre,apellido',
+                ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
+                ->with([
+                    'usuario:id_user,nombre,apellido',
                     'area:id,nombre',
-                    'categoria:id,nombre'])
-                ->when($search, function($query, $search) {
-                    $query->where(function($q) use ($search) {
+                    'categoria:id,nombre'
+                ])
+                ->when($search, function ($query, $search) {
+                    $query->where(function ($q) use ($search) {
                         $q->where('descripcion', 'like', "%{$search}%");
                     });
-                })->when($datos['id_area'] ?? null, function($query) use ($datos){
+                })->when($datos['id_area'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('id_area', $datos['id_area']);
-                })->when($datos['id_categoria'] ?? null, function($query) use ($datos){
+                })->when($datos['id_categoria'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('id_categoria', $datos['id_categoria']);
-                })->when($datos['estado'] ?? null, function($query) use ($datos){
+                })->when($datos['estado'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('estado', $datos['estado']);
-                })->when($datos['id_usuario'] ?? null, function($query) use ($datos){
+                })->when($datos['id_usuario'] ?? null, function ($query) use ($datos) {
                     $query->where('id_user', $datos['id_usuario']);
                 })
                 ->groupBy('id_user', 'id_area', 'descripcion', 'id_categoria')
@@ -60,8 +66,7 @@ class InventarioServices
                 'data' => $listado,
                 'message' => "Listado de inventario obtenido"
             ];
-
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
                 'data' => null,
@@ -70,8 +75,9 @@ class InventarioServices
         }
     }
 
-    public function agregarInventario($inventario){
-        try{
+    public function agregarInventario($inventario)
+    {
+        try {
             $inventario = Inventario::create($inventario);
 
             return [
@@ -79,7 +85,7 @@ class InventarioServices
                 'data' => $inventario,
                 'message' => "Inventario agregado"
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
                 'data' => null,
