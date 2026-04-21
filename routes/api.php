@@ -19,9 +19,6 @@ Route::get('/', function () {
 
 // 🔓 RUTAS PÚBLICAS (sin token)
 Route::prefix('auth')->group(function () {
-    Route::get('/google', [AuthController::class, 'redirectToGoogle']);
-    Route::get('/google/callback', [AuthController::class, 'callbackGoogle']);
-
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::get('/check', [AuthController::class, 'check']);
