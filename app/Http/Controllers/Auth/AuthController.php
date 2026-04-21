@@ -3,17 +3,23 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\HasAuthCookie;
 use App\Services\Auth\AuthServices;
 use App\Services\Usuarios\UsuariosServices;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\GoogleProvider;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
+    use HasAuthCookie;
+
     protected $service_usuarios;
+
     protected $service_auth;
 
     public function __construct(UsuariosServices $usuariosServices, AuthServices $service_auth)
@@ -25,7 +31,7 @@ class AuthController extends Controller
     // ===== GOOGLE OAUTH CONFIG (BEGIN) =====
     public function redirectToGoogle()
     {
-        /** @var \Laravel\Socialite\Two\GoogleProvider $provider */
+        /** @var GoogleProvider $provider */
         $provider = Socialite::driver('google');
 
         return $provider->stateless()->redirect();
@@ -33,23 +39,24 @@ class AuthController extends Controller
 
     public function callbackGoogle()
     {
-        try{
-            /** @var \Laravel\Socialite\Two\GoogleProvider $provider */
+        try {
+            /** @var GoogleProvider $provider */
             $provider = Socialite::driver('google');
             $googleUser = $provider->stateless()->user();
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
 
-            //Buscar al usuario mediante el correo
-            $usuario = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
+            // Validar dominio institucional
+            if (! str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')) {
+                return redirect("{$frontendUrl}/?error=dominio_invalido");
+            }
 
-            //Si no existe usuario, lo registramos
-            if(!$usuario){
-                if(!str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')){
-                    return response()->json([
-                        'error' => true,
-                        'message' => 'El correo debe ser institucional (@royalschool.edu.co',  
-                    ], 422);
-                }
+            $usuarioResult = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
 
+            if ($usuarioResult && $usuarioResult['success']) {
+                // Usuario existente
+                $userModel = $usuarioResult['data'];
+            } else {
+                // Usuario nuevo
                 $data_usuario = [
                     'documento' => null,
                     'nombre' => $googleUser->getName(),
@@ -58,46 +65,46 @@ class AuthController extends Controller
                     'telefono' => null,
                     'asignatura' => null,
                     'user' => $googleUser->getEmail(),
-                    'pass' => Hash::make(uniqid()), // Contraseña aleatoria
-                    'perfil' => 10, // Perfil por defecto (trabajador)
-                    'id_nivel' => 1, // Nivel por defecto (Administrativo)
+                    'pass' => Hash::make(uniqid()),
+                    'perfil' => 10,
+                    'id_nivel' => 1,
                     'fechareg' => now(),
-                    'estado' => 'activo'
+                    'estado' => 'activo',
                 ];
 
-                $usuario = $this->service_auth->registrarUsuario($data_usuario);
+                $result = $this->service_auth->registrarUsuario($data_usuario);
+
+                if (! $result['success']) {
+                    return redirect("{$frontendUrl}/?error=usuario_inactivo");
+                }
+
+                $userModel = $result['data'];
             }
 
-            //Validamos la creación y el estado
-            if(!$usuario['success'] || $usuario['data']->estado !== 'activo'){
-                return response()->json([
-                    'error' => true,
-                    'message' => 'No se pudo registrar el usuario o el usuario no está activo'
-                ], 500);
+            // Validar estado
+            if ($userModel->estado !== 'activo') {
+                return redirect("{$frontendUrl}/?error=usuario_inactivo");
             }
 
-            //Se genera el JWT
-            $token = JWTAuth::fromUser($usuario['data']);
+            $token = JWTAuth::fromUser($userModel);
+            $cookie = $this->makeCookie($token);
 
-            return $this->responseWithCookie($token);
+            return redirect("{$frontendUrl}/home")->withCookie($cookie);
 
-        }catch(\Exception $e){
-            return response()->json([
-                'error' => true,
-                'message' => 'Error en la autenticación con Google: ' . $e->getMessage(),
-            ], 500);
+        } catch (\Exception $e) {
+            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+
+            return redirect("{$frontendUrl}/?error=google_auth_failed");
         }
     }
-
-
 
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            "documento" => 'required|numeric|unique:usuarios,documento',
-            "nombre" => 'required|string',
-            "apellido" => 'nullable|string',
-            "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'documento' => 'required|numeric|unique:usuarios,documento',
+            'nombre' => 'required|string',
+            'apellido' => 'nullable|string',
+            'correo' => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
             'user' => 'required|string|unique:usuarios,user',
             'pass' => 'required|string|min:6',
             'perfil' => 'required|integer',
@@ -107,7 +114,7 @@ class AuthController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'error' => true,
-                'message' => $validator->errors()
+                'message' => $validator->errors(),
             ], 422);
         }
 
@@ -123,22 +130,22 @@ class AuthController extends Controller
             'perfil' => $request->perfil,
             'id_nivel' => $request->id_nivel,
             'fechareg' => now(),
-            'estado' => 'activo'
+            'estado' => 'activo',
         ];
 
         $response = $this->service_auth->registrarUsuario($data_usuario);
 
-        if (!$response) {
+        if (! $response) {
             return response()->json([
                 'error' => true,
-                'message' => 'No se pudo registrar el usuario'
+                'message' => 'No se pudo registrar el usuario',
             ], 500);
         }
 
         return response()->json([
             'error' => false,
             'message' => 'Usuario creado correctamente',
-            'data' => $response
+            'data' => $response,
         ], 201);
     }
 
@@ -152,19 +159,19 @@ class AuthController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'error' => true,
-                'message' => $validator->errors()
+                'message' => $validator->errors(),
             ], 422);
         }
 
         $credentials = [
             'user' => $request->user,
-            'password' => $request->pass
+            'password' => $request->pass,
         ];
 
-        if (!$token = auth()->guard('api')->attempt($credentials)) {
+        if (! $token = auth()->guard('api')->attempt($credentials)) {
             return response()->json([
                 'error' => true,
-                'message' => 'Credenciales incorrectas'
+                'message' => 'Credenciales incorrectas',
             ], 401);
         }
 
@@ -175,64 +182,47 @@ class AuthController extends Controller
         if ($usuario->estado !== 'activo') {
             return response()->json([
                 'error' => true,
-                'message' => 'Usuario inactivo'
+                'message' => 'Usuario inactivo',
             ], 403);
         }
 
         return $this->responseWithCookie($token);
-
-        return response()->json([
-            'error' => false,
-            'message' => 'Login exitoso',
-            'token' => $token,
-            'usuario' => $usuario
-        ]);
     }
 
-    private function responseWithCookie(string $token){
-        $ttl = $ttl = 60 * 60 * 24; // 1 día manual
-
-        $cookie = cookie(
-            name: 'token',
-            value: $token,
-            minutes: $ttl / 60,
-            path: '/',
-            domain: null,
-            secure: false,//app()->isProduction(),
-            httpOnly: true,
-            sameSite: 'Lax',
-        );
-
+    private function responseWithCookie(string $token)
+    {
         return response()
-                ->json(['Message' => 'Login Exitoso'])
-                ->withCookie($cookie);
+            ->json(['Message' => 'Login Exitoso'])
+            ->withCookie($this->makeCookie($token));
     }
 
     public function me()
     {
         return response()->json([
-            'usuario' => auth('api')->user()
+            'usuario' => auth('api')->user(),
         ]);
     }
 
-    public function check(){
+    public function check()
+    {
         try {
             $user = auth('api')->user();
 
-            if(!$user){
+            if (! $user) {
                 return response()->json([
-                    'activo' => false
+                    'active' => false,
                 ], 401);
             }
 
             return response()->json([
                 'active' => true,
-                'usuario' => $user
+                'usuario' => $user,
             ]);
-        }catch(\Exception $e){
+
+        } catch (\Exception $e) {
             return response()->json([
                 'active' => false,
-                'message' => 'Token expirado o invalido: ' . $e->getMessage()
+                'message' => 'Token expirado o inválido: '.$e->getMessage(),
             ], 401);
         }
     }
@@ -244,14 +234,13 @@ class AuthController extends Controller
 
             return response()->json([
                 'error' => false,
-                'message' => 'Sesión cerrada correctamente'
+                'message' => 'Sesión cerrada correctamente',
             ])->withCookie(cookie()->forget('token'));
-
 
         } catch (\Exception $e) {
             return response()->json([
                 'error' => true,
-                'message' => 'No se pudo cerrar sesión'
+                'message' => 'No se pudo cerrar sesión',
             ], 500);
         }
     }
