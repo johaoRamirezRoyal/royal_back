@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Categorias\CategoriasController;
 use App\Http\Controllers\Cursos\CursosController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
@@ -149,6 +150,13 @@ Route::middleware('auth:api')->group(function () {
             * URL Puede ser: 
             http://localhost:8000/api/inventario/listado?page=300&per_page=10
          */
+    });
+
+    // CATEGORIAS
+    Route::prefix('categorias')->group(function(){
+        Route::get('/', [CategoriasController::class, 'obtenerTodasLasCategorias']);
+        Route::post("/", [CategoriasController::class, 'agregarNuevaCategoria']);
+        Route::put("/", [CategoriasController::class, 'actualizarCategoria']);
     });
 
 });
