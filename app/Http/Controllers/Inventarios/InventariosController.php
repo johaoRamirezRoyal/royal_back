@@ -70,7 +70,7 @@ class InventariosController extends Controller
     }
 
     public function obtenerListadoInventario(Request $request){
-        $per_page = $request->input('per_page', 10); // Número de elementos por página, por defecto 10
+        $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
         $search = $request->input('search', null);
         $datos = $request->only(['id_area', 'id_categoria', 'estado', 'id_usuario']);
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos);

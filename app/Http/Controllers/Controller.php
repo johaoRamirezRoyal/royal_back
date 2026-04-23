@@ -10,7 +10,7 @@ abstract class Controller
 {
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
 
-    public function success(mixed $data = null, string $message, int $status = 200)
+    public function success(string $message, mixed $data = null, int $status = 200)
     {
         return response()->json(
             [
