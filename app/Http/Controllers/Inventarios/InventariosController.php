@@ -70,7 +70,7 @@ class InventariosController extends Controller
     }
 
     public function obtenerListadoInventario(Request $request){
-        $per_page = $request->input('per_page', 10); // Número de elementos por página, por defecto 10
+        $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
         $search = $request->input('search', null);
         $datos = $request->only(['id_area', 'id_categoria', 'estado', 'id_usuario']);
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos);
@@ -88,5 +88,31 @@ class InventariosController extends Controller
             'message' => $listado_inventario['message'],
             'data' => $listado_inventario['data']
         ]);
+    }
+
+    public function descontinuarInventario(Request $request){
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            "ids" => "required|array|min:1",
+            "ids.*" => "integer|distinct|exists:inventario,id",
+            "id_log" => "integer|exists:usuarios,id_user", 
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $descontinuar = $this->inventario_services->descontinuarInventario($data['ids'], $data['id_log']);
+
+        $status = match (true) {
+            $descontinuar['error'] && str_contains($descontinuar['message'], "SQL") => 500,
+            $descontinuar['error'] => 400,
+            default => 200,
+        };
+        return response()->json($descontinuar, $status);
     }
 }

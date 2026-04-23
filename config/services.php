@@ -40,4 +40,13 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
+
+    'hikvision' => [
+        'protocol' => env('HIKVISION_PROTOCOL', 'http'),
+        'host' => env('HIKVISION_HOST'),
+        'port' => env('HIKVISION_PORT', 8000),
+        'username' => env('HIKVISION_USERNAME'),
+        'password' => env('HIKVISION_PASSWORD'),
+        'device_type' => 'DS-K1T321MFWX-B'
+    ],
 ];
