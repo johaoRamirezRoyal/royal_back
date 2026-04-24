@@ -141,12 +141,14 @@ Route::middleware('auth:api')->group(function () {
                 "id_categoria": [],
                 "estado": [],
                 "id_usuario": 3123,
-                "per_page": 20
+                "per-page": 20
             }
             
             * URL Puede ser: 
             http://localhost:8000/api/inventario/listado?page=300&per_page=10
          */
+
+        Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
     });
 
     // CATEGORIAS

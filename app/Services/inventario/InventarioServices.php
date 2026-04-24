@@ -3,7 +3,10 @@
 namespace App\Services\inventario;
 
 use App\Models\Inventario;
+use App\Models\InventarioDescontinuado;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\GenericMail;
 
 class InventarioServices
 {
@@ -90,6 +93,68 @@ class InventarioServices
                 'error' => true,
                 'data' => null,
                 'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function descontinuarInventario(array $ids, ?int $id_log = null)
+    {
+        try {
+
+            $result = DB::transaction(function () use ($ids, $id_log) {
+
+                $inventario = Inventario::whereIn('id', $ids)
+                    ->where('estado', '!=', 5)
+                    ->get();
+
+                if ($inventario->isEmpty()) {
+                    return [
+                        "error" => true,
+                        "data" => null,
+                        "message" => "No se encontraron esos elementos del inventario"
+                    ];
+                }
+
+                Inventario::whereIn('id', $inventario->pluck('id'))
+                    ->update(["estado" => 5]);
+
+                $registros = [];
+
+                foreach ($inventario as $inv) {
+                    $registros[] = [
+                        "id_inventario" => $inv->id,
+                        "id_log" => $id_log
+                    ];
+                }
+
+                InventarioDescontinuado::insert($registros);
+
+                return [
+                    "error" => false,
+                    "message" => "Inventario descontinuado correctamente",
+                    "data" => $inventario
+                ];
+            });
+
+            if (!$result['error']) {
+
+                $titulo = "Notificación | Inventario Descontinuado";
+                $contenido = "Se han descontinuado los siguientes elementos:\n\n";
+
+                foreach ($result['data'] as $inv) {
+                    $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
+                }
+
+                Mail::to("hernando.ramirez@royalschool.edu.co")
+                    ->send(new GenericMail($titulo, $contenido));
+            }
+
+            return $result;
+        } catch (\Exception $e) {
+            return [
+                "error" => true,
+                "message" => $e->getMessage(),
+                "data" => null,
             ];
         }
     }

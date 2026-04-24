@@ -89,4 +89,30 @@ class InventariosController extends Controller
             'data' => $listado_inventario['data']
         ]);
     }
+
+    public function descontinuarInventario(Request $request){
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            "ids" => "required|array|min:1",
+            "ids.*" => "integer|distinct|exists:inventario,id",
+            "id_log" => "integer|exists:usuarios,id_user", 
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $descontinuar = $this->inventario_services->descontinuarInventario($data['ids'], $data['id_log']);
+
+        $status = match (true) {
+            $descontinuar['error'] && str_contains($descontinuar['message'], "SQL") => 500,
+            $descontinuar['error'] => 400,
+            default => 200,
+        };
+        return response()->json($descontinuar, $status);
+    }
 }
