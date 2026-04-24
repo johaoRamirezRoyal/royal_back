@@ -1,7 +1,7 @@
 @component('mail::message')
     # Recuperación de contraseña
 
-    Hola, **{{ $user->name }}**.
+    Hola, **{{ $name }}**.
 
     Recibimos una solicitud para restablecer la contraseña de tu cuenta. Haz clic en el botón para continuar.
 

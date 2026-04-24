@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
+use App\Events\PasswordRestore;
 use App\Listeners\SendPasswordRestore;
-use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // PasswordReset
         $this->app->bind(
-            PasswordReset::class,
+            PasswordRestore::class,
             SendPasswordRestore::class
         );
     }

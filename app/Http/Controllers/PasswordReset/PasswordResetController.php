@@ -1,11 +1,13 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\PasswordReset;
 
 use App\Events\PasswordRestore;
+use App\Http\Controllers\Controller;
+use App\Models\PasswordResetTokens;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 use function Symfony\Component\Clock\now;
@@ -28,11 +30,12 @@ class PasswordResetController extends Controller
         $user = Usuario::where('correo', $request->email)->first();
         $token = Str::random(64);
 
-        DB::table('password_reset_tokens')->updateOrInsert(
-            ['email' => $user->email],
+        PasswordResetTokens::updateOrInsert(
+            ['email' => $user->correo],
             [
                 'token' => \bcrypt($token),
                 'created_at' => now(),
+                'expires_at' => Carbon::now()->addMinutes(config('auth.passwords.users.expire')),  // <- expira en 60 minutos
             ]
         );
 

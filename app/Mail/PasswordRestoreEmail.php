@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\Usuario;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -13,13 +14,15 @@ class PasswordRestoreEmail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    public string $name;
     public string $url;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(string $token)
+    public function __construct(Usuario $user, string $token)
     {
+        $this->name = $user->nombre;
         $this->url = url("/password/reset?token={$token}");
     }
 

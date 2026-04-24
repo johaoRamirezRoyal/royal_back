@@ -4,16 +4,17 @@ use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Categorias\CategoriasController;
 use App\Http\Controllers\Cursos\CursosController;
+use App\Http\Controllers\Inventarios\InventariosController;
+use App\Http\Controllers\PasswordReset\PasswordResetController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
-use App\Http\Controllers\Inventarios\InventariosController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return response()->json([
         'message' => 'Bienvenido a la API de Royal School',
         'version' => '1.0',
-        'status' => 'success'
+        'status' => 'success',
     ]);
 });
 
@@ -22,6 +23,10 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::get('/check', [AuthController::class, 'check']);
+
+    Route::prefix('password')->group(function () {
+        Route::post('restore', [PasswordResetController::class, 'createToken']);
+    });
 });
 
 // RUTAS PROTEGIDAS
@@ -62,7 +67,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/', [UsuariosController::class, 'agregarUsuario']);
         /**
          * Ejemplo de JSON para agregar usuario:
-         * 
+         *
          *
         {
             "documento": 10203040,
@@ -90,19 +95,18 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones']);
     });
 
-    //AREAS
+    // AREAS
     Route::prefix('areas')->group(function () {
         Route::put('/', [AreasController::class, 'actualizarArea']);
         /**
-        * Ejemplo de JSON para actualizar un area: 
+         * Ejemplo de JSON para actualizar un area:
         {
             "id": 1,
             "nombre": "S40 (1B)",
             "user_log": 1,
             "activo": 1
         }
-        */
-
+         */
         Route::get('/filtro', [AreasController::class, 'filtrarAreas']);
         /*
             Filtrada area
@@ -117,7 +121,6 @@ Route::middleware('auth:api')->group(function () {
                 "id_area": 104
             }
          */
-
         Route::post('/estado', [AreasController::class, 'desactivarAreas']);
         /**
          * Ejemplo JSON para cambiar el estado del area:
@@ -132,7 +135,7 @@ Route::middleware('auth:api')->group(function () {
     });
 
     // INVENTARIO
-    Route::prefix('inventario')->group(function() {
+    Route::prefix('inventario')->group(function () {
         Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario']);
         /**
          *  Ejemplo de JSON para obtener el listado de inventario paginado:
@@ -143,19 +146,18 @@ Route::middleware('auth:api')->group(function () {
                 "id_usuario": 3123,
                 "per-page": 20
             }
-            
-            * URL Puede ser: 
+
+         * URL Puede ser:
             http://localhost:8000/api/inventario/listado?page=300&per_page=10
          */
-
         Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
     });
 
     // CATEGORIAS
-    Route::prefix('categorias')->group(function(){
+    Route::prefix('categorias')->group(function () {
         Route::get('/', [CategoriasController::class, 'obtenerTodasLasCategorias']);
-        Route::post("/", [CategoriasController::class, 'agregarNuevaCategoria']);
-        Route::put("/", [CategoriasController::class, 'actualizarCategoria']);
+        Route::post('/', [CategoriasController::class, 'agregarNuevaCategoria']);
+        Route::put('/', [CategoriasController::class, 'actualizarCategoria']);
     });
 
 });
