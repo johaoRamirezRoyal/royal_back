@@ -8,13 +8,15 @@ use App\Models\PasswordResetTokens;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 use function Symfony\Component\Clock\now;
 
 class PasswordResetController extends Controller
 {
-    public function createToken(Request $request)
+    public function createToken(Request $request): JsonResponse
     {
         $request->validate([
             'email' => 'required|string|exists:usuarios,correo|min:10|max:140',
@@ -42,5 +44,67 @@ class PasswordResetController extends Controller
         event(new PasswordRestore($user, $token));
 
         return $this->success('Te enviamos un enlace de recuperacion');
+    }
+
+    public function validateToken(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => 'required|string|size:64',
+            'email' => 'required|email',
+            'email.email' => 'El correo no tiene un formato valido.',
+            'email.min' => 'El correo debe tener al menos 10 caracteres',
+            'email.max' => 'El correo no puede superar los 140 caracteres',
+            'email.exists' => 'No existe una cuenta con este correo',
+        ]);
+
+        $record = PasswordResetTokens::where('email', $request->email)
+            ->first();
+
+        if (! $record) {
+            return response()->json(['message' => 'Token inválido.'], 404);
+        }
+
+        if (Carbon::now()->isAfter($record->expires_at)) {
+            return response()->json(['message' => 'Token expirado.'], 410);
+        }
+
+        if (! Hash::check($request->token, $record->token)) {
+            return response()->json(['message' => 'Token inválido.'], 404);
+        }
+
+        return $this->success('Token válido.', 200);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        $record = PasswordResetTokens::where('email', $request->email)
+            ->first();
+
+        if (! $record || ! Hash::check($request->token, $record->token)) {
+            return response()->json(['message' => 'Token inválido.'], 404);
+        }
+
+        if (Carbon::now()->isAfter($record->expires_at)) {
+            return response()->json(['message' => 'El enlace ha expirado.'], 410);
+        }
+
+        // Actualizar estado del token
+        $used = (new PasswordResetTokens)->usedReset();
+
+        if (! $used) {
+            return $this->success('El token ha sido usado anteriormente. Solicita un nuevo token', 410);
+        }
+
+        // Actualizar contraseña
+        Usuario::where('correo', $request->email)
+            ->update(['pass' => Hash::make($request->password)]);
+
+        return $this->success('Contraseña actualizada.', 200);
     }
 }
