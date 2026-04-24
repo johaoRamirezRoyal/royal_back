@@ -151,6 +151,7 @@ Route::middleware('auth:api')->group(function () {
             http://localhost:8000/api/inventario/listado?page=300&per_page=10
          */
         Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
+        Route::post('/', [InventariosController::class, 'agregarInventario']);
     });
 
     // CATEGORIAS

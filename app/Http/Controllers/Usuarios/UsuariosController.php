@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Usuarios;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
+use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
 use Illuminate\Support\Facades\Validator as FacadesValidator;
@@ -127,30 +129,10 @@ class UsuariosController extends Controller
         ]);
     }
 
-    public function agregarUsuario(Request $request){
-        $validator = FacadesValidator::make($request->all(), [
-            "documento" => 'required|string',
-            "nombre" => 'required|string',
-            "apellido" => 'nullable|string',
-            "correo" => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
-            "telefono" => ['nullable', 'numeric', 'digits_between:7,12'],
-            "asignatura" => 'nullable|string',
-            'perfil' => 'required|integer',
-            'id_nivel' => 'required|integer',
-            "user" => 'required|string|unique:usuarios,user',
-            "pass" => 'required|string',
-            "grupo" => "nullable|integer",
-            "curso" => "nullable|integer",
-        ]);
+    public function agregarUsuario(RegistrarUsuarioRequest $request){
+        $data = $request->toUsuarioFormatCreate();
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => true,
-                'message'=> $validator->errors()->first(),
-            ]);
-        }
-
-        $response = $this->service_usuarios->agregarUsuario($request->all());
+        $response = $this->service_usuarios->agregarUsuario($data);
 
         if ($response['error']) {
             return response()->json([
@@ -166,24 +148,9 @@ class UsuariosController extends Controller
         ]);
     }
 
-    public function actualizarUsuarios(Request $request, $id){
+    public function actualizarUsuarios(ActualizarUsuarioRequest $request, $id){
         $usuario_id = $id;
-
-        $validator = FacadesValidator::make($request->all(), [
-            "documento" => 'numeric',
-            "nombre" => 'string',
-            "apellido" => 'nullable|string',
-            "correo" => 'email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
-            'perfil' => 'integer',
-            'id_nivel' => 'integer',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => true,
-                'message'=> $validator->errors()->first(),
-            ]);
-        }
+        $data = $request->toUsuarioFormatUpdate();
 
         if(empty($usuario_id)){
             return response()->json([
@@ -192,7 +159,7 @@ class UsuariosController extends Controller
             ]);
         }
 
-        $response = $this->service_usuarios->actualizarUsuarios($id, $request->all());
+        $response = $this->service_usuarios->actualizarUsuarios($usuario_id, $data);
 
         if ($response['error']) {
             return response()->json([
