@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Inventarios;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Services\inventario\InventarioServices as InventarioServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -16,41 +17,9 @@ class InventariosController extends Controller
         $this->inventario_services = $inventarioServices;
     }
 
-    public function agregarInventario(Request $request){
-        $validator = Validator::make($request->all(),[
-            "descripcion" => "required|string",
-            "marca" => "string",
-            "modelo" => "string",
-            "precio" => "integer",
-            "estado" => "required|integer",
-            "id_usuario" => "required|integer",
-            "activo" => "required|integer",
-            "fecha_compra" => "date",
-            "id_area" => "required|integer",
-            "id_categoria" => "required|integer",
-            "id_compra" => "integer"
-        ]);
-
-        if($validator->fails()){
-            return response()->json([
-                'error' => true,
-                'message' => $validator->errors()->first()
-            ]);
-        }
-
-        $inventario_data = $request->only([
-            "descripcion",
-            "marca",
-            "modelo",
-            "precio",
-            "estado",
-            "id_usuario",
-            "activo",
-            "fecha_compra",
-            "id_area",
-            "id_categoria",
-            "id_compra"
-        ]);
+    public function agregarInventario(RegistrarInventarioRequest $request){
+        
+        $inventario_data = $request->toInventarioCreate();
 
         $agregar = $this->inventario_services->agregarInventario($inventario_data);
 

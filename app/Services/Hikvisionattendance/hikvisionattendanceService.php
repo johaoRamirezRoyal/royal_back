@@ -139,6 +139,32 @@ class hikvisionattendanceService{
     }
 
     /**
+     * Summary of testConnection
+     * @return bool
+     */
+    public function testConnection()
+    {
+        try {
+            Log::info("Probando conexión con dispositivo: $this->baseUrl");
+
+            $response = $this->client->get('/ISAPI/System/deviceInfo');
+
+            $isConnected = $response->getStatusCode() === 200;
+
+            Log::info("Conexión exitosa", ['status' => $response->getStatusCode()]);
+
+            return $isConnected;
+            
+        } catch (GuzzleException $e) {
+            Log::error("Fallo en conexión con dispositivo", [
+                'error' => $e->getMessage(),
+                'base_url' => $this->baseUrl,
+            ]);
+            return false;
+        }
+    }
+
+    /**
      * Obtener eventos de acceso (facial, huella, QR)
      * @return array['error', 'message', 'data']
      */

@@ -149,6 +149,7 @@ Route::middleware('auth:api')->group(function () {
          */
 
         Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
+        Route::post('/', [InventariosController::class, 'agregarInventario']);
     });
 
     // CATEGORIAS
