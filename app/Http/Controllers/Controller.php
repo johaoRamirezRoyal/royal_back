@@ -15,6 +15,7 @@ abstract class Controller
         return response()->json(
             [
                 'message' => $message,
+                'success' => true,
                 'data' => $data,
             ],
             $status
@@ -24,6 +25,11 @@ abstract class Controller
 
     public function error(array|string $message = ['message' => 'ERROR'], int $status = 500)
     {
-        return response()->json($message, $status);
+        return
+        response()->json([
+            'message' => is_array($message) ? $message : [$message],
+            'success' => false,
+            'data' => null,
+        ], $status);
     }
 }
