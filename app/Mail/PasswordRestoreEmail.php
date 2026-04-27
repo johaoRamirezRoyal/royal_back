@@ -15,6 +15,7 @@ class PasswordRestoreEmail extends Mailable
     use Queueable, SerializesModels;
 
     public string $name;
+    public string $email;
     public string $url;
 
     /**
@@ -23,7 +24,11 @@ class PasswordRestoreEmail extends Mailable
     public function __construct(Usuario $user, string $token)
     {
         $this->name = $user->nombre;
-        $this->url = url("/password/reset?token={$token}");
+        $this->email = $user->correo;
+        $this->url = config('app.frontend_url') . "/password/restore?" . http_build_query([
+            'token' => $token,
+            'email' => $this->email
+        ]);
     }
 
     /**
