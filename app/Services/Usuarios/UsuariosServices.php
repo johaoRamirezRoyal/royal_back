@@ -2,7 +2,7 @@
 
 namespace App\Services\Usuarios;
 
-use App\Models\Usuario;
+use App\Models\Usuarios\Usuario;
 use Illuminate\Support\Facades\DB;
 use function Laravel\Prompts\search;
 

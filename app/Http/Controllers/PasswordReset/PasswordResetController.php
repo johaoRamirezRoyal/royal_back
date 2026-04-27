@@ -5,7 +5,7 @@ namespace App\Http\Controllers\PasswordReset;
 use App\Events\PasswordRestore;
 use App\Http\Controllers\Controller;
 use App\Models\PasswordResetTokens;
-use App\Models\Usuario;
+use App\Models\Usuarios\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;

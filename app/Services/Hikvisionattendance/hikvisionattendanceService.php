@@ -2,17 +2,14 @@
 
 namespace App\Services\Hikvisionattendance;
 
-use App\Models\Usuario;
 use GuzzleHttp\Client; 
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Pool;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Request;
-use Psr\Http\Message\StreamFactoryInterface;
 
 class hikvisionattendanceService{
     protected Client $client;

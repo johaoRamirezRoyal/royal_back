@@ -1,9 +1,10 @@
 <?php
 namespace App\Services\Permisos;
 
-use App\Models\Opcion;
-use App\Models\Perfil;
-use App\Models\Permiso;
+
+use App\Models\PermisosAutorizaciones\Opcion;
+use App\Models\PermisosAutorizaciones\Permiso;
+use App\Models\Usuarios\Perfil;
 
 class PermisosService
 {

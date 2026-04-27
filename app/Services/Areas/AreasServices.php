@@ -2,8 +2,8 @@
 
 namespace App\Services\Areas;
 
-use App\Models\Areas;
-use App\Models\Inventario;
+use App\Models\Areas\Areas;
+use App\Models\Inventario\Inventario;
 
 class AreasServices
 {

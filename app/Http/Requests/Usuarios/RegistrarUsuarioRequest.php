@@ -90,6 +90,9 @@ class RegistrarUsuarioRequest extends FormRequest
             'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
             'documento.unique' => 'El documento ya está registrado a un usuario',
             'correo.unique' => 'El correo ya está registrado a un usuario',
+            'perfil.exists' => 'El perfil seleccionado no existe',
+            'id_curso.exists' => 'El curso seleccionado no existe',
+            'id_nivel.exists' => 'El nivel seleccionado no existe',
         ];
     }
 

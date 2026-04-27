@@ -1,11 +1,10 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Usuarios;
 
-use App\Models\Opcion as ModelsOpcion;
+use App\Models\PermisosAutorizaciones\Opcion;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Opcion;
 
 class Perfil extends Model
 {
@@ -34,7 +33,7 @@ class Perfil extends Model
 
     public function opciones(){
         return $this->belongsToMany(
-            ModelsOpcion::class,
+            Opcion::class,
             'cron_permisos',
             'id_perfil',
             'id_opcion'

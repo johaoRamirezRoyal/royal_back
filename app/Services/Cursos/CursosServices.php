@@ -2,7 +2,7 @@
 
 namespace App\Services\Cursos;
 
-use App\Models\Cursos;
+use App\Models\Areas\Cursos;
 use Throwable;
 
 class CursosServices
