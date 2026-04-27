@@ -1,7 +1,9 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Areas;
 
+use App\Models\Usuarios\Nivel;
+use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
 class Cursos extends Model

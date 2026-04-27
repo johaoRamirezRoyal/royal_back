@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\Usuarios;
 
+use App\Models\Cursos;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 

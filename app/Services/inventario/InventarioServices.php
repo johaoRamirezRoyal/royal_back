@@ -2,11 +2,13 @@
 
 namespace App\Services\inventario;
 
-use App\Models\Inventario;
-use App\Models\InventarioDescontinuado;
+use App\Models\Inventario\Inventario;
+use App\Models\Inventario\InventarioDescontinuado;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\GenericMail;
+use App\Models\Inventario\InventarioLiberado;
+use Illuminate\Support\Facades\Log;
 
 class InventarioServices
 {
@@ -155,6 +157,66 @@ class InventarioServices
                 "error" => true,
                 "message" => $e->getMessage(),
                 "data" => null,
+            ];
+        }
+    }
+
+    public function liberarInventario(array $ids, ?int $id_log = null){
+        try {
+            $result = DB::transaction(function () use ($ids, $id_log) {
+                $inventario = Inventario::whereIn('id', $ids)
+                            ->whereNotIn('estado', [4, 5])    
+                            ->get();
+
+                if($inventario->isEmpty()){
+                    return [
+                        'error' => true,
+                        'message' => 'No se encontraron esos elementos en el inventario',
+                        'data' => null,
+                    ];
+                }
+
+                Inventario::whereIn('id', $inventario->pluck('id'))
+                    ->update(["estado" => 4]);
+
+                $registros = [];
+
+                foreach($inventario as $i){
+                    $registros[] = [
+                        'id_inventario' => $i->id,
+                        'id_log' => $id_log,
+                    ];
+                }
+
+                InventarioLiberado::insert($registros);
+
+                return [
+                    "error" => false,
+                    "message" => "Inventario Liberado correctamente",
+                    "data" => $inventario
+                ];
+            });
+
+            if(!$result['error']){
+                $titulo = "Notificación | Inventario Liberado";
+                $contenido = "Se han Liberado los siguientes elementos:\n\n";
+
+                foreach ($result['data'] as $inv) {
+                    $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
+                }
+
+                Mail::to("hernando.ramirez@royalschool.edu.co")
+                    ->send(new GenericMail($titulo, $contenido));
+            }
+
+            return $result;
+        }catch(\Exception $e){
+            Log::error('No se liberaron los elementos: ' . $e->getMessage());
+
+            return [
+                'error' => true,
+                'message' => 'Error liberando esos elementos: ' . $e->getMessage(),
+                'data' => null
             ];
         }
     }

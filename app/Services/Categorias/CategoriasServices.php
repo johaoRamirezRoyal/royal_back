@@ -2,7 +2,7 @@
 
 namespace App\Services\Categorias;
 
-use App\Models\Categoria;
+use App\Models\Inventario\Categoria;
 use Illuminate\Support\Facades\DB;
 
 class CategoriasServices

@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\PermisosAutorizaciones;
 
-use App\Models\Perfil;
+use App\Models\Usuarios\Perfil;
 use Illuminate\Database\Eloquent\Model;
 
 class Opcion extends Model

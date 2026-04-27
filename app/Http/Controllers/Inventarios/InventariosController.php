@@ -8,6 +8,8 @@ use App\Services\inventario\InventarioServices as InventarioServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
+use function PHPSTORM_META\map;
+
 class InventariosController extends Controller
 {
     protected $inventario_services;
@@ -83,5 +85,32 @@ class InventariosController extends Controller
             default => 200,
         };
         return response()->json($descontinuar, $status);
+    }
+
+    public function liberarInventario(Request $request) {
+        $data = $request->only('ids', 'id_log');
+
+        $validator = Validator::make($data, [
+            "ids" => "required|array|min:1",
+            "ids.*" => "integer|distinct|exists:inventario,id",
+            "id_log" => "integer|exists:usuarios,id_user"
+            ]);
+
+        if($validator->fails()){
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $liberar = $this->inventario_services->liberarInventario($data['ids'], $data['id_log']);
+
+        $status = match (true) {
+            $liberar['error'] && str_contains($liberar['message'], "SQL") => 500,
+            $liberar['error'] => 400,
+            default => 200,
+        };
+
+        return response()->json($liberar, $status);
     }
 }

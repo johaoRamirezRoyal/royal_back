@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Services\Auth; 
+namespace App\Services\Auth;
 
-use App\Models\Usuario;
+use App\Models\Usuarios\Usuario;
 
 class AuthServices 
 {

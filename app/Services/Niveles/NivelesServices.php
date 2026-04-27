@@ -2,7 +2,7 @@
 
 namespace App\Services\Niveles;
 
-use App\Models\Nivel;
+use App\Models\Usuarios\Nivel;
 
 class NivelesServices 
 {

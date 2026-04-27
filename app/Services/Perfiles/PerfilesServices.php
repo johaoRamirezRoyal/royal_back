@@ -1,7 +1,7 @@
 <?php
 namespace App\Services\Perfiles;
 
-use App\Models\Perfil;
+use App\Models\Usuarios\Perfil;
 
 class PerfilesServices 
 {
