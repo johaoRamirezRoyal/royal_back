@@ -26,4 +26,15 @@ abstract class Controller
     {
         return response()->json($message, $status);
     }
+
+    protected function apiResponse(array $response)
+    {
+        $status = match (true) {
+            $response['error'] && str_contains($response['message'], "SQL") => 500,
+            $response['error'] => 400,
+            default => 200,
+        };
+
+        return response()->json($response, $status);
+    }
 }

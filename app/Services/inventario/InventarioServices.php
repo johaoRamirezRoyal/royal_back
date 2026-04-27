@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\GenericMail;
 use App\Models\Inventario\InventarioLiberado;
 use Illuminate\Support\Facades\Log;
+use PhpParser\Node\Expr\NullsafeMethodCall;
 
 class InventarioServices
 {
@@ -118,7 +119,10 @@ class InventarioServices
                 }
 
                 Inventario::whereIn('id', $inventario->pluck('id'))
-                    ->update(["estado" => 5]);
+                    ->update([
+                        "estado" => 5,
+                        "activo" => 0,
+                        ]);
 
                 $registros = [];
 
@@ -177,7 +181,10 @@ class InventarioServices
                 }
 
                 Inventario::whereIn('id', $inventario->pluck('id'))
-                    ->update(["estado" => 4]);
+                    ->update(["estado" => 4,
+                                "id_user" => null,
+                                "id_area" => null,
+                            ]);
 
                 $registros = [];
 
@@ -217,6 +224,45 @@ class InventarioServices
                 'error' => true,
                 'message' => 'Error liberando esos elementos: ' . $e->getMessage(),
                 'data' => null
+            ];
+        }
+    }
+
+    public function asignarInventario(array $ids, int $id_area, int $id_usuario){
+        try{
+            $inventario_liberado = Inventario::whereIn('id', $ids)
+                                                ->where('estado', 4)
+                                                ->get();
+    
+            if($inventario_liberado->isEmpty()){
+                return [
+                    'message' => "Ese inventario no está liberado.",
+                    'data' => null,
+                    'error' => true,
+                ];
+            }
+    
+            Inventario::whereIn('id', $inventario_liberado->pluck('id'))
+                ->where('estado', 4)
+                ->update([
+                    'estado' => 1,
+                    'id_area' => $id_area,
+                    'id_user' => $id_usuario,
+                ]);
+    
+            return [
+                'data' => $inventario_liberado,
+                'message' => "Inventario asignado",
+                'error' => false,
+            ];
+
+        }catch(\Exception $e){
+            Log::error("No se asigno el inventario: " . $e->getMessage());
+
+            return [
+                'data' => null,
+                'error' => true,
+                'message' => $e->getMessage()
             ];
         }
     }

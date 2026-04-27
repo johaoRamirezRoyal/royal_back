@@ -105,12 +105,28 @@ class InventariosController extends Controller
 
         $liberar = $this->inventario_services->liberarInventario($data['ids'], $data['id_log']);
 
-        $status = match (true) {
-            $liberar['error'] && str_contains($liberar['message'], "SQL") => 500,
-            $liberar['error'] => 400,
-            default => 200,
-        };
+        return $this->apiResponse($liberar);
+    }
 
-        return response()->json($liberar, $status);
+    public function asignarInventario(Request $request){
+        $data = $request->only('ids', 'id_area', 'id_user');
+
+        $validator = Validator::make($data, [
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|distinct|exists:inventario,id',
+            'id_area' => "integer|distinct|exists:areas,id",
+            'id_user' => "integer|distinct|exists:usuarios,id_user"
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $asignar = $this->inventario_services->asignarInventario($data['ids'], $data['id_area'], $data['id_user']);
+
+        return $this->apiResponse($asignar);
     }
 }
