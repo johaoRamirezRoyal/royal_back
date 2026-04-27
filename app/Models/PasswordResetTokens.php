@@ -14,19 +14,6 @@ class PasswordResetTokens extends Model
         'used',
     ];
 
-    const CREATE_AT = 'createAt';
-
-    const UPDATE_AT = 'updateAt';
-
-    public function usedReset(): bool
-    {
-        $used = $this->used;
-        if (! $used) {
-            return false;
-        }
-        $this->used = true;
-        $this->save();
-
-        return true;
-    }
+    const CREATE_AT = 'create_at';
+    const UPDATE_AT = 'update_at';
 }

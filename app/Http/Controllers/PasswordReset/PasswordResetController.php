@@ -19,13 +19,14 @@ class PasswordResetController extends Controller
     public function createToken(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => 'required|string|exists:usuarios,correo|min:10|max:140',
+            'email' => 'required|email|exists:usuarios,correo|min:10|max:140|ends_with:@royalschool.edu.co',
         ],
             [
                 'email.required' => 'El correo es un campo obligatorio.',
                 'email.email' => 'El correo no tiene un formato valido.',
                 'email.min' => 'El correo debe tener al menos 10 caracteres',
                 'email.max' => 'El correo no puede superar los 140 caracteres',
+                'email.ends_with' => "Asegurate de digitar un correo institucional",
                 'email.exists' => 'No existe una cuenta con este correo',
             ]);
 
@@ -36,6 +37,7 @@ class PasswordResetController extends Controller
             ['email' => $user->correo],
             [
                 'token' => \bcrypt($token),
+                'used' => false,
                 'created_at' => now(),
                 'expires_at' => Carbon::now()->addMinutes(config('auth.passwords.users.expire')),  // <- expira en 60 minutos
             ]
@@ -84,22 +86,23 @@ class PasswordResetController extends Controller
         ]);
 
         $record = PasswordResetTokens::where('email', $request->email)
+            ->where('used', false)
+            ->latest()
             ->first();
 
         if (! $record || ! Hash::check($request->token, $record->token)) {
-            return response()->json(['message' => 'Token inválido.'], 404);
+            return $this->error('Token inválido.', 404);
         }
 
         if (Carbon::now()->isAfter($record->expires_at)) {
-            return response()->json(['message' => 'El enlace ha expirado.'], 410);
+            return $this->error('El enlace ha expirado.', 410);
         }
 
-        // Actualizar estado del token
-        $used = (new PasswordResetTokens)->usedReset();
-
-        if (! $used) {
-            return $this->success('El token ha sido usado anteriormente. Solicita un nuevo token', 410);
+        if ($record->used) {
+            return $this->error('El token ha sido usado anteriormente. Solicita un nuevo token', 410);
         }
+
+        $record->update(['used' => true]);
 
         // Actualizar contraseña
         Usuario::where('correo', $request->email)

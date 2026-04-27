@@ -27,7 +27,7 @@ Route::prefix('auth')->group(function () {
     Route::prefix('password')->group(function () {
         Route::post('restore', [PasswordResetController::class, 'createToken']);
         Route::post('validate-token', [PasswordResetController::class, 'validateToken']);
-        Route::post('update-password', [PasswordResetController::class, 'resetPasswordd']);
+        Route::patch('update-password', [PasswordResetController::class, 'resetPassword']);
     });
 });
 
