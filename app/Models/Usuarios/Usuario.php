@@ -2,7 +2,7 @@
 
 namespace App\Models\Usuarios;
 
-use App\Models\Cursos;
+use App\Models\Areas\Cursos;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 

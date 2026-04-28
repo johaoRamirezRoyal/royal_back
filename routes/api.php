@@ -8,7 +8,10 @@ use App\Http\Controllers\Inventarios\InventariosController;
 use App\Http\Controllers\PasswordReset\PasswordResetController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
+use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Support\Facades\Route;
+
+Route::get('getList', [hikvisionattendanceService::class, 'obtenerEmpleadosRegistrados']);
 
 Route::get('/', function () {
     return response()->json([
@@ -155,7 +158,7 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
         Route::post('/', [InventariosController::class, 'agregarInventario']);
         Route::put('/liberar', [InventariosController::class, 'liberarInventario']);
-        Route::put("/asignar", [InventariosController::class, 'asignarInventario']);
+        Route::put('/asignar', [InventariosController::class, 'asignarInventario']);
     });
 
     // CATEGORIAS
