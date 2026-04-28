@@ -56,4 +56,8 @@ class Inventario extends Model
     public function estado(){
         return $this->belongsTo(Estado::class, 'estado', 'id');
     }
+
+    public function reportes(){
+        return $this->hasMany(Reportes::class, 'id_inventario');
+    }
 }
