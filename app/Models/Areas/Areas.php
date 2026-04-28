@@ -2,6 +2,7 @@
 
 namespace App\Models\Areas;
 
+use App\Models\Inventario\Reportes;
 use Illuminate\Database\Eloquent\Model;
 
 
@@ -26,4 +27,9 @@ class Areas extends Model
     protected $attributes = [
         'activo' => 1
     ];
+
+
+    public function reportes(){
+        return $this->hasMany(Reportes::class, 'id_area');
+    }
 }

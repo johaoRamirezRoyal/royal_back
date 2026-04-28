@@ -49,9 +49,18 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->belongsTo(Cursos::class, 'id_curso', 'id');
     }
 
+    public function reportes(){
+        return $this->hasMany(Reportes::class, 'id_user');
+    }
+
     public function setPassAttribute($value)
     {
         $this->attributes['pass'] = bcrypt($value);
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notificacion::class, 'user_id', 'id_user');
     }
 
     // Campos asignables masivamente

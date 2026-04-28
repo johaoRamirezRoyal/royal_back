@@ -9,10 +9,25 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\GenericMail;
 use App\Models\Inventario\InventarioLiberado;
 use Illuminate\Support\Facades\Log;
-use PhpParser\Node\Expr\NullsafeMethodCall;
 
 class InventarioServices
 {
+
+    /**
+     * Summary of mailTo
+     * @var array
+     */
+    private array $mailTo = [
+        'hernando.ramirez@royalschool.edu.co'
+    ];
+
+    /**
+     * Summary of obtenerListadoInventario
+     * @param mixed $perPage
+     * @param mixed $search
+     * @param mixed $datos
+     * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
+     */
     public function obtenerListadoInventario($perPage = 15, $search = null, $datos = [])
     {
         try {
@@ -69,7 +84,7 @@ class InventarioServices
 
             return [
                 'error' => false,
-                'data' => $listado,
+                'data' => $listado->toArray(),
                 'message' => "Listado de inventario obtenido"
             ];
         } catch (\Exception $e) {
@@ -81,6 +96,11 @@ class InventarioServices
         }
     }
 
+    /**
+     * Summary of agregarInventario
+     * @param mixed $inventario
+     * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
+     */
     public function agregarInventario($inventario)
     {
         try {
@@ -88,7 +108,7 @@ class InventarioServices
 
             return [
                 'error' => false,
-                'data' => $inventario,
+                'data' => $inventario->toArray(),
                 'message' => "Inventario agregado"
             ];
         } catch (\Exception $e) {
@@ -100,6 +120,11 @@ class InventarioServices
         }
     }
 
+    /**
+     * Summary of descontinuarInventario
+     * @param array $ids
+     * @param mixed $id_log
+     */
     public function descontinuarInventario(array $ids, ?int $id_log = null)
     {
         try {
@@ -151,7 +176,7 @@ class InventarioServices
                     $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
                 }
 
-                Mail::to("hernando.ramirez@royalschool.edu.co")
+                Mail::to($this->mailTo)
                     ->send(new GenericMail($titulo, $contenido));
             }
 
@@ -165,6 +190,11 @@ class InventarioServices
         }
     }
 
+    /**
+     * Summary of liberarInventario
+     * @param array $ids
+     * @param mixed $id_log
+     */
     public function liberarInventario(array $ids, ?int $id_log = null){
         try {
             $result = DB::transaction(function () use ($ids, $id_log) {
@@ -212,7 +242,7 @@ class InventarioServices
                     $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
                 }
 
-                Mail::to("hernando.ramirez@royalschool.edu.co")
+                Mail::to($this->mailTo)
                     ->send(new GenericMail($titulo, $contenido));
             }
 
@@ -228,6 +258,13 @@ class InventarioServices
         }
     }
 
+    /**
+     * Summary of asignarInventario
+     * @param array $ids
+     * @param int $id_area
+     * @param int $id_usuario
+     * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
+     */
     public function asignarInventario(array $ids, int $id_area, int $id_usuario){
         try{
             $inventario_liberado = Inventario::whereIn('id', $ids)
@@ -249,9 +286,20 @@ class InventarioServices
                     'id_area' => $id_area,
                     'id_user' => $id_usuario,
                 ]);
-    
+
+            $titulo = "Notificación | Inventario Asignado";
+            $contenido = "Se han Asignado los siguientes elementos:\n\n";
+
+
+            foreach($inventario_liberado as $inv){
+                $contenido .= "{$inv->descripcion} (Codigo: {$inv->id})\n";
+            }
+
+            Mail::to($this->mailTo)
+                    ->send(new GenericMail($titulo, $contenido));
+
             return [
-                'data' => $inventario_liberado,
+                'data' => $inventario_liberado->toArray(),
                 'message' => "Inventario asignado",
                 'error' => false,
             ];
@@ -265,5 +313,19 @@ class InventarioServices
                 'message' => $e->getMessage()
             ];
         }
+    }
+
+    //REPORTAR INVENTARIO
+
+    public function reportarInventario(
+        array $ids, 
+        int $id_log, 
+        int $id_responsable, 
+        string $descripcion,
+        string $estado,
+        int $id_anio,
+        int $id_periodo
+        ): array{
+        return [];
     }
 }
