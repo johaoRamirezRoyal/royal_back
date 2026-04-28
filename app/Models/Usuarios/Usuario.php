@@ -3,6 +3,8 @@
 namespace App\Models\Usuarios;
 
 use App\Models\Areas\Cursos;
+use App\Models\Inventario\Reportes;
+use App\Models\Notificacion;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
