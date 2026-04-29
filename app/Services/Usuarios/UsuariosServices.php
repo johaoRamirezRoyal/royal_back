@@ -4,6 +4,8 @@ namespace App\Services\Usuarios;
 
 use App\Models\Usuarios\Usuario;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
 use function Laravel\Prompts\search;
 
 class UsuariosServices
@@ -16,6 +18,11 @@ class UsuariosServices
                             FROM usuarios WHERE estado = 'activo';");
     }
 
+    /**
+     * Summary of mostrarTodosUsuariosActivoPaginado
+     * @param mixed $perPage
+     * @return \Illuminate\Pagination\LengthAwarePaginator
+     */
     public function mostrarTodosUsuariosActivoPaginado($perPage)
     {
         return DB::table('usuarios')
@@ -38,6 +45,40 @@ class UsuariosServices
             ->groupBy("nombre")
             ->whereNotIn('perfil', [17, 16, 6])
             ->paginate($perPage);
+    }
+
+    /**
+     * Summary of mostrarUsuariosPorPerfil
+     * @param int $id_perfil
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function mostrarUsuariosPorPerfil(int $id_perfil){
+        try{
+            $usuarios = Usuario::where('perfil', $id_perfil)
+                                ->where('estado', 'activo')        
+                                ->get();
+            if($usuarios->isEmpty()){
+                return [
+                    'error' => true,
+                    'message' => "No hay usuarios en ese nivel especificado",
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Usuarios obtenidos",
+                'data' => $usuarios->toArray(),
+            ];
+        }catch(\Exception $e){
+            Log::error("No se obtubieron a los usuarios del perfil: " . $e->getMessage());
+
+            return [
+                'error' => true,
+                'message' => "Error obteniendo a los usuarios: " . $e->getMessage(),
+                'data' => [],
+            ];
+        }
     }
 
     public function filtrarUsuarios($datos, $search, $sort, $dir, $perPage)
