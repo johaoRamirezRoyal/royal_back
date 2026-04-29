@@ -2,35 +2,36 @@
 
 namespace App\Http\Requests\Usuarios;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class RegistrarUsuarioRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
-     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'correo' => strtolower(trim($this->correo)),
+            'nombre' => trim($this->nombre),
+            'apellido' => $this->apellido ? trim($this->apellido) : null,
+            'telefono' => $this->telefono ? trim($this->telefono) : null,
+        ]);
+    }
+
     public function rules(): array
     {
-
-        $usuarioId = $this->route('id');
+        $usuarioId = $this->route('id'); // para update
 
         return [
             "documento" => [
                 'required',
                 'numeric',
-                'digits_between:5,16'
+                'digits_between:5,16',
+                Rule::unique('usuarios', 'documento')->ignore($usuarioId, 'id'),
             ],
 
             "nombre" => [
@@ -40,7 +41,7 @@ class RegistrarUsuarioRequest extends FormRequest
             ],
 
             "apellido" => [
-                'required',
+                'nullable',
                 'string',
                 'max:100',
             ],
@@ -49,11 +50,11 @@ class RegistrarUsuarioRequest extends FormRequest
                 'required',
                 'email',
                 'ends_with:@royalschool.edu.co',
-                'unique:usuarios,correo',
+                Rule::unique('usuarios', 'correo')->ignore($usuarioId, 'id'),
             ],
 
             "pass" => [
-                'required',
+                $usuarioId ? 'nullable' : 'required', // requerido solo en create
                 'string',
                 'min:6'
             ],
@@ -87,28 +88,52 @@ class RegistrarUsuarioRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'documento.required' => 'El documento es obligatorio',
+            'documento.numeric' => 'El documento debe ser numérico',
+            'documento.digits_between' => 'El documento debe tener entre 5 y 16 dígitos',
+            'documento.unique' => 'El documento ya está registrado',
+
+            'nombre.required' => 'El nombre es obligatorio',
+            'nombre.max' => 'El nombre no puede superar los 100 caracteres',
+
+            'apellido.max' => 'El apellido no puede superar los 100 caracteres',
+
+            'correo.required' => 'El correo es obligatorio',
+            'correo.email' => 'El correo no es válido',
             'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
-            'documento.unique' => 'El documento ya está registrado a un usuario',
-            'correo.unique' => 'El correo ya está registrado a un usuario',
+            'correo.unique' => 'El correo ya está registrado',
+
+            'pass.required' => 'La contraseña es obligatoria',
+            'pass.min' => 'La contraseña debe tener al menos 6 caracteres',
+
+            'perfil.required' => 'El perfil es obligatorio',
             'perfil.exists' => 'El perfil seleccionado no existe',
-            'id_curso.exists' => 'El curso seleccionado no existe',
+
+            'id_nivel.required' => 'El nivel es obligatorio',
             'id_nivel.exists' => 'El nivel seleccionado no existe',
+
+            'id_curso.exists' => 'El curso seleccionado no existe',
         ];
     }
 
-    public function toUsuarioFormatCreate(): array
+    public function toUsuarioData(): array
     {
-        return [
+        $data = [
             'documento' => $this->documento,
-            'nombre' => trim($this->nombre),
-            'apellido' => $this->apellido ? trim($this->apellido) : null,
+            'nombre' => $this->nombre,
+            'apellido' => $this->apellido,
             'correo' => $this->correo,
-            'pass' => $this->pass,
             'perfil' => $this->perfil,
             'id_nivel' => $this->id_nivel,
             'id_curso' => $this->id_curso,
             'telefono' => $this->telefono,
-            'fechareg' => now(),
         ];
+
+        // Solo agregar contraseña si viene (útil para update)
+        if ($this->filled('pass')) {
+            $data['pass'] = bcrypt($this->pass);
+        }
+
+        return $data;
     }
 }

@@ -12,6 +12,7 @@ use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('getList', [hikvisionattendanceService::class, 'obtenerEmpleadosRegistrados']);
+Route::get('/testHikvision', [hikvisionattendanceService::class, 'testConnection']);
 
 Route::get('/', function () {
     return response()->json([

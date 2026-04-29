@@ -143,20 +143,27 @@ class hikvisionattendanceService
     /**
      * Summary of testConnection
      *
-     * @return bool
+     * @return array
      */
     public function testConnection()
     {
         try {
             Log::info("Probando conexión con dispositivo: $this->baseUrl");
 
-            $response = $this->client->get('/ISAPI/System/deviceInfo');
+            $response = $this->client->get('/ISAPI/System/capabilities?format=json');
+
+            $body = $response->getBody()->getContents();
+
+            $data = $this->parseXmlResponse($body);
 
             $isConnected = $response->getStatusCode() === 200;
 
-            Log::info('Conexión exitosa', ['status' => $response->getStatusCode()]);
+            Log::info('Conexión exitosa', 
+                        ['status' => $response->getStatusCode(),
+                        'data' => $data,
+                        ]);
 
-            return $isConnected;
+            return ['isConnected' => $isConnected, 'data' => $data];
 
         } catch (GuzzleException $e) {
             Log::error('Fallo en conexión con dispositivo', [
@@ -164,7 +171,7 @@ class hikvisionattendanceService
                 'base_url' => $this->baseUrl,
             ]);
 
-            return false;
+            return ['status' => 400];
         }
     }
 
