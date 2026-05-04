@@ -4,13 +4,23 @@ namespace App\Http\Controllers\Admissions;
 
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
+use App\Services\Admisiones\AdmisionesServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class AdmissionsController extends Controller
 {
+
+    protected AdmisionesServices $admisiones_services;
+
+    public function __construct(AdmisionesServices $admisionesServices)
+    {
+        $this->admisiones_services = $admisionesServices;
+    }
+
     public function requestVerification(Request $request)
     {
         $request->validate([
@@ -102,5 +112,38 @@ class AdmissionsController extends Controller
         Cache::forget("email_token_{$data['email']}");
 
         return $this->success('Correo valido!');
+    }
+
+    public function registrarAspirante(RegistrarAspiranteRequest $request)
+    {
+        $data = $request->validated();
+
+        $resultado = $this->admisiones_services->registrarAspirante($data);
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function mostrarInformacionAspiranteId(Request $request)
+    {
+        $id = $request->input('id');
+
+        if (!$id) {
+            return response()->json([
+                'error' => true,
+                'message' => "Debe proporcionar un ID de aspirante válido",
+                'data' => []
+            ]);
+        }
+
+        $resultado = $this->admisiones_services->mostrarInformacionAspiranteId($id);
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function eliminarRegistroAspirante(int $id)
+    {
+        $resultado = $this->admisiones_services->eliminarRegistroAspirante($id);
+
+        return $this->apiResponse($resultado);
     }
 }

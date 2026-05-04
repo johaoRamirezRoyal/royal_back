@@ -186,8 +186,8 @@ Route::middleware('auth:api')->group(function () {
     });
 
     Route::prefix('/admisiones')->group(function () {
-        Route::get('/', [AdmisionesController::class, 'mostrarInformacionAspiranteId']);
-        Route::post('/', [AdmisionesController::class, 'registrarAspirante']);
-        Route::delete('/', [AdmisionesController::class, 'eliminarRegistroAspirante']);
+        Route::get('/', [AdmissionsController::class, 'mostrarInformacionAspiranteId']);
+        Route::post('/', [AdmissionsController::class, 'registrarAspirante']);
+        Route::delete('/', [AdmissionsController::class, 'eliminarRegistroAspirante']);
     });
 });
