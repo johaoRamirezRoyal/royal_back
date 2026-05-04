@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Admisiones\AdmisionesController;
+use App\Http\Controllers\Admissions\AdmissionsController;
 use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Categorias\CategoriasController;
@@ -20,7 +20,7 @@ Route::get('/', function () {
     ]);
 });
 
-// 🔓 RUTAS PÚBLICAS (sin token)
+// 🔓 RUTAS PÚBLICAS (sin tok   en)
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
@@ -31,6 +31,13 @@ Route::prefix('auth')->group(function () {
         Route::post('validate-token', [PasswordResetController::class, 'validateToken']);
         Route::patch('update-password', [PasswordResetController::class, 'resetPassword']);
     });
+
+});
+
+Route::prefix('admissions')->group(function () {
+    Route::post('request-validation', [AdmissionsController::class, 'requestVerification']);
+    Route::post('validate-session', [AdmissionsController::class, 'validateVerificationCode']);
+    Route::post('validate-code', [AdmissionsController::class, 'forgetVerificationCode']);
 });
 
 // RUTAS PROTEGIDAS
