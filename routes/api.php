@@ -5,15 +5,13 @@ use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Categorias\CategoriasController;
 use App\Http\Controllers\Cursos\CursosController;
+use App\Http\Controllers\Hikvision\HikvisionController;
 use App\Http\Controllers\Inventarios\InventariosController;
 use App\Http\Controllers\PasswordReset\PasswordResetController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Support\Facades\Route;
-
-Route::get('getList', [hikvisionattendanceService::class, 'obtenerEmpleadosRegistrados']);
-Route::get('/testHikvision', [hikvisionattendanceService::class, 'testConnection']);
 
 Route::get('/', function () {
     return response()->json([
@@ -175,6 +173,15 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/', [CategoriasController::class, 'obtenerTodasLasCategorias']);
         Route::post('/', [CategoriasController::class, 'agregarNuevaCategoria']);
         Route::put('/', [CategoriasController::class, 'actualizarCategoria']);
+    });
+
+    //HIKVISION
+    Route::prefix('/hikvision')->group(function () {
+        Route::post("/", [HikvisionController::class, 'registrarEmpleadosMasivoPerfil']);
+        Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
+        Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
+        Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosRegistradosPorPerfil']);
+        Route::get("/userInfo", [HikvisionController::class, 'obtenerUnEmpleadoEspecifico']);
     });
 
 });

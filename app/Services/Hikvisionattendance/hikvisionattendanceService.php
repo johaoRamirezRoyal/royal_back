@@ -40,8 +40,8 @@ class hikvisionattendanceService
         $this->username = config('services.hikvision.username');
         $this->password = config('services.hikvision.password');
         $this->baseUrl = config('services.hikvision.protocol')
-                                .'://'
-                                .config('services.hikvision.host');
+            . '://'
+            . config('services.hikvision.host');
 
         $stack = HandlerStack::create();
         $stack->push($this->retryMiddleware(3, 1000)); // 3 intentos
@@ -134,7 +134,7 @@ class hikvisionattendanceService
 
             return json_decode(json_encode($xml), true);
         } catch (\Exception $e) {
-            Log::error('Error parseando XML: '.$e->getMessage());
+            Log::error('Error parseando XML: ' . $e->getMessage());
 
             return null;
         }
@@ -142,8 +142,7 @@ class hikvisionattendanceService
 
     /**
      * Summary of testConnection
-     *
-     * @return array
+     * @return array{data: mixed, isConnected: bool|array{data: null, isConnected: int}}
      */
     public function testConnection()
     {
@@ -158,20 +157,22 @@ class hikvisionattendanceService
 
             $isConnected = $response->getStatusCode() === 200;
 
-            Log::info('Conexión exitosa', 
-                        ['status' => $response->getStatusCode(),
-                        'data' => $data,
-                        ]);
+            Log::info(
+                'Conexión exitosa',
+                [
+                    'status' => $response->getStatusCode(),
+                    'data' => $data,
+                ]
+            );
 
             return ['isConnected' => $isConnected, 'data' => $data];
-
         } catch (GuzzleException $e) {
             Log::error('Fallo en conexión con dispositivo', [
                 'error' => $e->getMessage(),
                 'base_url' => $this->baseUrl,
             ]);
 
-            return ['status' => 400];
+            return ['isConnected' => false, 'data' => null];
         }
     }
 
@@ -210,9 +211,8 @@ class hikvisionattendanceService
                 'message' => 'Acesso de eventos',
                 'data' => $response->getBody()->getContents(),
             ];
-
         } catch (GuzzleException $e) {
-            Log::error('Error obteniendo eventos de acceso: '.$e->getMessage());
+            Log::error('Error obteniendo eventos de acceso: ' . $e->getMessage());
 
             return [
                 'error' => true,
@@ -265,9 +265,8 @@ class hikvisionattendanceService
                 'message' => "Asistencia obtenida del usuario: {$nombre_usuario}",
                 'data' => $asistencia,
             ];
-
         } catch (\Exception $e) {
-            Log::error('Error obteniendo la asistencia del empleado: '.$e->getMessage());
+            Log::error('Error obteniendo la asistencia del empleado: ' . $e->getMessage());
 
             return [
                 'error' => true,
@@ -316,7 +315,8 @@ class hikvisionattendanceService
             ];
 
             $response = $this->client->post(
-                '/ISAPI/AccessControl/Employee', [
+                '/ISAPI/AccessControl/Employee',
+                [
                     'body' => json_encode($payload),
                     'headers' => [
                         'Content-Type' => 'application/json',
@@ -338,7 +338,7 @@ class hikvisionattendanceService
                 'id_user' => $datos_empleado['id_user'],
             ];
         } catch (GuzzleException $e) {
-            Log::error('Error registrando al empleado: '.$e->getMessage());
+            Log::error('Error registrando al empleado: ' . $e->getMessage());
 
             return [
                 'error' => true,
@@ -360,56 +360,70 @@ class hikvisionattendanceService
             'error' => [],
         ];
 
-        $request = function () use ($usuarios) {
+        $requests = function () use ($usuarios) {
             foreach ($usuarios as $usuario) {
-                $payload = [
+                // Estructura JSON que espera Hikvision
+                $data = [
                     'UserInfo' => [
-                        'employeeNo' => $usuario['id_user'],
-                        'name' => $usuario['nombre'],
-                        'userType' => $usuario['perfil'],
+                        'employeeNo'    => (string) $usuario['id_user'],
+                        'name'          => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
+                        'userType'      => 'normal',
+                        'gender'        => 'male',
+                        'localUIRight'  => false, // En JSON usa booleanos reales, no strings
                         'Valid' => [
-                            'enable' => true,
-                            'beginTime' => $usuario['fechareg'],
-                            'endTime' => '2035-12-31T23:59:59',
-                            'timeType' => 'local',
+                            'enable'    => true,
+                            'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                            'endTime'   => '2035-12-31T23:59:59',
+                            'timeType'  => 'local',
                         ],
                     ],
                 ];
 
-                yield new Request(
-                    'POST',
-                    '/ISAPI/AccessControl/Employee',
-                    ['Content-Type' => 'Application/json'],
-                    json_encode($payload)
-                );
+                yield function () use ($data) {
+                    return $this->client->postAsync(
+                        '/ISAPI/AccessControl/UserInfo/Record?format=json', // Forzamos el formato en la URL
+                        [
+                            'headers' => [
+                                'Content-Type' => 'application/json',
+                                'Accept'       => 'application/json',
+                            ],
+                            'json' => $data, // Guzzle codifica esto automáticamente
+                        ]
+                    );
+                };
             }
         };
 
-        $pool = new Pool($this->client, $request(), [
+        $pool = new Pool($this->client, $requests(), [
             'concurrency' => $concurrencias,
+
             'fulfilled' => function ($response, $index) use (&$result, $usuarios) {
                 $usuario = $usuarios[$index];
 
-                if (in_array($response->getStatusCode(), [200, 201])) {
-                    $result['success'][] = [
-                        'id_user' => $usuario['id_user'],
-                        'message' => 'Registrado Correctamente',
-                    ];
-                } else {
-                    $result['error'][] = [
-                        'id_user' => $usuario['id_user'],
-                        'message' => 'Respuesta inesperada en la petición a hikvision',
-                    ];
-                }
+                $result['success'][] = [
+                    'id_user' => $usuario['id_user'],
+                    'message' => 'Registrado Correctamente',
+                ];
             },
+
             'rejected' => function ($reason, $index) use (&$result, $usuarios) {
-                $usuarios = $usuarios[$index];
+
+                $usuario = $usuarios[$index];
+
+                $response = method_exists($reason, 'getResponse')
+                    ? $reason->getResponse()
+                    : null;
+
+                $body = $response ? $response->getBody()->getContents() : null;
+
+                Log::error('Hikvision FULL ERROR', [
+                    'usuario' => $usuario,
+                    'response' => $body
+                ]);
 
                 $result['error'][] = [
-                    'id_user' => $usuarios['id_user'],
-                    'message' => $reason instanceof \Exception
-                                        ? $reason->getMessage()
-                                        : 'Error desconocido',
+                    'id_user' => $usuario['id_user'],
+                    'message' => $body ?? $reason->getMessage(),
                 ];
             },
         ]);
@@ -426,11 +440,12 @@ class hikvisionattendanceService
     }
 
     /**
-     * Obtener listado de usuarios registrados en hikvision
-     *
-     * @return array['error', 'message', 'data']
+     * Summary of obtenerEmpleadosRegistrados
+     * @param int $pageSize
+     * @param int $pagina
+     * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
-    public function obtenerEmpleadosRegistrados($pageSize = 30, $pagina = 1)
+    public function obtenerEmpleadosRegistrados(int $pageSize = 30, int $pagina = 1)
     {
         try {
             $todosLosEmpleados = [];
@@ -456,45 +471,116 @@ class hikvisionattendanceService
                 $todosLosEmpleados = array_merge($todosLosEmpleados, $usuarios);
 
                 $offset += $pageSize;
-
             } while ($offset < $totalMatch);
 
-            return $todosLosEmpleados;
-
+            return [
+                'error' => false,
+                'message' => "Usuarios registrados obtenidos",
+                'data' => $todosLosEmpleados
+            ];
         } catch (\Exception $e) {
-            Log::error('Error obteniendo todos los empleados: '.$e->getMessage());
-            throw $e;
+            Log::error('Error obteniendo todos los empleados: ' . $e->getMessage());
+            return [
+                'error' => true,
+                'message' => "Error obteniendo a los usuarios registrados en hikvision",
+                'data' => null,
+            ];
         }
     }
 
     /**
      * Summary of obtenerUnEmpleadoEspecifico
-     *
-     * @param  mixed  $id_usuario
-     * @return array['error', 'message', 'data']
+     * @param mixed $id_usuario
+     * @return array{data: array<int|string>, error: bool, message: string|array{data: array{data: null, status: int}, error: bool, message: string}}
      */
     public function obtenerUnEmpleadoEspecifico($id_usuario)
     {
         try {
-            $response = $this->client->get(
-                "/ISAPI/AccessControl/Employee/$id_usuario", [
-                    'headers' => [
-                        'Accept' => 'application/json',
-                    ],
+            $response = $this->client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+                'json' => [
+                    'UserInfoSearchCond' => [
+                        'searchID' => '1',
+                        'searchResultPosition' => 0,
+                        'maxResults' => 1,
+                        'EmployeeNoList' => [
+                            [
+                                'employeeNo' => (string) $id_usuario
+                            ]
+                        ],
+                    ]
                 ],
-            );
+            ]);
+
+            $data = json_decode($response->getBody()->getContents());
+            $status = $response->getStatusCode();
 
             return [
                 'error' => false,
                 'message' => 'Información obtenida',
-                'data' => $response->getBody()->getContents(),
+                'data' => [$data],
             ];
         } catch (GuzzleException $e) {
-            Log::error('Error al obtener la información del empleado: '.$e->getMessage());
+            Log::error('Error al obtener la información del empleado: ' . $e->getMessage());
 
             return [
                 'error' => true,
                 'message' => 'No se pudo obtener la información del empleado... ',
+                'data' => ['data' => null],
+            ];
+        }
+    }
+
+    /**
+     * Summary of obtenerEmpleadosRegistradosPorPerfil
+     * @param array $usuarios
+     * @return array{data: array, error: bool, message: string|array{data: mixed, error: bool, message: string}|array{data: null, error: bool, message: string}}
+     */
+    public function obtenerEmpleadosRegistradosPorPerfil(array $usuarios)
+    {
+        try {
+            if (empty($usuarios)) {
+                return [
+                    'error' => true,
+                    'message' => 'La lista de usuarios está vacía',
+                    'data' => [],
+                ];
+            }
+
+            // Construir lista en formato Hikvision
+            $employeeList = array_map(function ($usuario) {
+                return [
+                    'employeeNo' => (string) $usuario['id_user']
+                ];
+            }, $usuarios);
+
+            $response = $this->client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+                'json' => [
+                    'UserInfoSearchCond' => [
+                        'searchID' => (string) now()->timestamp,
+                        'searchResultPosition' => 0,
+                        'maxResults' => count($usuarios), // importante
+                        'EmployeeNoList' => $employeeList,
+                    ],
+                ],
+            ]);
+
+            $body = $response->getBody()->getContents();
+            $data = json_decode($body, true);
+
+            return [
+                'error' => false,
+                'message' => 'Información obtenida correctamente',
+                'data' => $data,
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error al obtener empleados por lista', [
+                'error' => $e->getMessage(),
+                'usuarios' => $usuarios
+            ]);
+
+            return [
+                'error' => true,
+                'message' => 'No se pudo obtener la información de los empleados',
                 'data' => null,
             ];
         }
