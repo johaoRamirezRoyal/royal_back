@@ -33,6 +33,11 @@ abstract class Controller
         ], $status);
     }
 
+    /**
+     * Summary of apiResponse
+     * @param array $response
+     * @return \Illuminate\Http\JsonResponse
+     */
     protected function apiResponse(array $response)
     {
         $status = match (true) {

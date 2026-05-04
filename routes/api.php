@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admisiones\AdmisionesController;
 use App\Http\Controllers\Areas\AreasController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Categorias\CategoriasController;
@@ -9,7 +10,6 @@ use App\Http\Controllers\Inventarios\InventariosController;
 use App\Http\Controllers\PasswordReset\PasswordResetController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
-use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -174,6 +174,13 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
         Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosRegistradosPorPerfil']);
         Route::get("/userInfo", [HikvisionController::class, 'obtenerUnEmpleadoEspecifico']);
+        Route::delete("/perfil", [HikvisionController::class, 'eliminarUsuariosRegistrados']);
+        Route::put("/desactivar", [HikvisionController::class, 'desactivarUsuario']);
     });
 
+    Route::prefix('/admisiones')->group(function () {
+        Route::get('/', [AdmisionesController::class, 'mostrarInformacionAspiranteId']);
+        Route::post('/', [AdmisionesController::class, 'registrarAspirante']);
+        Route::delete('/', [AdmisionesController::class, 'eliminarRegistroAspirante']);
+    });
 });

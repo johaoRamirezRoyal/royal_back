@@ -316,7 +316,6 @@ class InventarioServices
     }
 
     //REPORTAR INVENTARIO
-
     public function reportarInventario(
         array $ids, 
         int $id_log, 

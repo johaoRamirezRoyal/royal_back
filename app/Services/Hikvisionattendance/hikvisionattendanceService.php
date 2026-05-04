@@ -11,6 +11,8 @@ use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
 use Illuminate\Support\Facades\Log;
 
+use function PHPUnit\Framework\isEmpty;
+
 class hikvisionattendanceService
 {
     protected Client $client;
@@ -209,7 +211,7 @@ class hikvisionattendanceService
             return [
                 'error' => false,
                 'message' => 'Acesso de eventos',
-                'data' => $response->getBody()->getContents(),
+                'data' => $data,
             ];
         } catch (GuzzleException $e) {
             Log::error('Error obteniendo eventos de acceso: ' . $e->getMessage());
@@ -582,6 +584,186 @@ class hikvisionattendanceService
                 'error' => true,
                 'message' => 'No se pudo obtener la información de los empleados',
                 'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Summary of eliminarUsuariosRegistrados
+     * @param array $usuarios
+     * @return array{data: array, error: bool, message: string|array{data: mixed, error: bool, message: string}}
+     */
+    public function eliminarUsuariosRegistrados(array $usuarios){
+        $listaEmpleados = [];
+
+        foreach ($usuarios as $usuario) {
+            // Usamos id_user como indicaste
+            if (isset($usuario['id_user'])) {
+                $listaEmpleados[] = [
+                    'employeeNo' => (string)$usuario['id_user']
+                ];
+            }
+        }
+
+        if (empty($listaEmpleados)) {
+            return ['error' => true, 'message' => 'No hay IDs de usuario para procesar'];
+        }
+
+        $body = [
+            'UserInfoDelCond' => [
+                'mode' => 'byEmployeeNo',
+                'EmployeeNoList' => $listaEmpleados
+            ],
+        ];
+
+        try{
+            $response = $this->client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ],
+                'json' => $body
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "Usuarios borrados",
+                'data' => json_decode($response->getBody()->getContents(), true),
+            ];
+        }catch(\Exception $e){
+            $errorMsg = $e->getMessage();
+
+            // Si el error es 400, intentemos ver qué dijo el equipo exactamente
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorMsg = $e->getResponse()->getBody()->getContents();
+            }
+
+            Log::error("Error eliminando en Hikvision: " . $errorMsg);
+
+            return [
+                'error' => true,
+                'message' => "Error al borrar: " . $errorMsg
+            ];
+        }
+    }
+
+    /**
+     * Summary of desactivarUsuario
+     * @param array $usuario
+     * @param int $estado
+     * @return array{data: array, error: bool, message: string|array{data: mixed, error: bool, message: string}}
+     */
+    public function desactivarUsuario(array $usuario, int $estado){
+        try{
+            $enable = ($estado == 1) ? true : false;
+            $message = ($estado == 1) ? "Usuario Activado" : "Usuario Desactivado";
+
+            if(!isset($usuario['id_user'])){
+                return [
+                    'error' => true,
+                    'message' => "El usuario debe contener información, mínimo el id_user",
+                    'data' => [],
+                ];
+            }
+
+            $body = [
+                'UserInfo' => [
+                    'employeeNo' => (string) $usuario['id_user'],
+                    'name' => substr($usuario['nombre'], 0, 30),
+                    'userType' => 'normal',
+                    'Valid' => [
+                        'enable' => $enable, // Desactivamos el acceso
+                        'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                        'endTime' => '2035-12-31T23:59:59', // Fecha lejana
+                        'timeType' => 'local',
+                    ],
+                ],
+            ];
+
+            // CAMBIO: Endpoint /Modify y método PUT
+            $response = $this->client->put("/ISAPI/AccessControl/UserInfo/Modify?format=json", [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ],
+                'json' => $body,
+            ]);
+    
+            $data = json_decode($response->getBody()->getContents());
+    
+            return [
+                'error' => false,
+                'message' => $message,
+                'data' => $data,
+            ];
+        }catch(\Exception $e){
+            Log::error("Error al desactivar el usuario: " . $e->getMessage());
+            return[
+                'error' => true,
+                'message' => "Error desactivando al usuario",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Actualiza la información de un usuario en el dispositivo Hikvision vía ISAPI.
+     *
+     * @param array $datos_usuario Debe contener al menos 'employeeNo' y los campos a actualizar.
+     * @return array
+     */
+    public function actualizarInformacionUsuario(array $datos_usuario)
+    {
+        try {
+            if (!isset($datos_usuario['id_user'])) {
+                return [
+                    'error' => true,
+                    'message' => 'El id_user es obligatorio para actualizar el usuario.',
+                    'data' => null,
+                ];
+            }
+
+            // Mapeamos id_user a employeeNo para el ISAPI
+            $payload_user = $datos_usuario;
+            $payload_user['employeeNo'] = (string) $datos_usuario['id_user'];
+            unset($payload_user['id_user']);
+
+            // Limpieza de nombre si viene en el payload (máximo 32 caracteres según ISAPI)
+            if (isset($payload_user['name'])) {
+                $payload_user['name'] = substr(preg_replace('/[^A-Za-z0-9 ]/', '', $payload_user['name']), 0, 32);
+            }
+
+            $body = [
+                'UserInfo' => $payload_user
+            ];
+
+            $response = $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ],
+                'json' => $body,
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            return [
+                'error' => false,
+                'message' => 'Información del usuario actualizada correctamente',
+                'data' => $data,
+            ];
+        } catch (\Exception $e) {
+            $errorMsg = $e->getMessage();
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorMsg = $e->getResponse()->getBody()->getContents();
+            }
+
+            Log::error("Error actualizando usuario en Hikvision: " . $errorMsg);
+
+            return [
+                'error' => true,
+                'message' => "No se pudo actualizar la información del usuario",
+                'data' => $errorMsg,
             ];
         }
     }

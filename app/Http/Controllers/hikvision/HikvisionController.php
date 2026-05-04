@@ -2,11 +2,11 @@
 namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Usuarios\UsuariosController;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class HikvisionController extends Controller
 {
@@ -88,5 +88,49 @@ class HikvisionController extends Controller
         $registro_masivo = $this->hikvision_service->registrarEmpleadosMasivo($usuarios['data']);
 
         return $this->apiResponse($registro_masivo);
+    }
+
+    public function eliminarUsuariosRegistrados(Request $request){
+        $id_perfil = $request->input("id_perfil");
+
+        $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
+
+        if($usuarios['error']){
+            return $this->apiResponse($usuarios);
+        }
+
+        $eliminacion_masiva = $this->hikvision_service->eliminarUsuariosRegistrados($usuarios['data']);
+
+        return $this->apiResponse($eliminacion_masiva);
+    }
+
+    public function desactivarUsuario(Request $request){
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            'id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
+            'enable' => ['required', 'integer', 'in:0,1'],
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ]);
+        }
+
+        $id_user = $request->input("id_user");
+        $enable = $request->input("enable");
+
+        $usuario = $this->usuario_services->mostrarInfoUsuarioId($id_user);
+        Log::info("Usuario cargado", $usuario['usuario']->toArray());
+        if($usuario['error']){
+            return $this->apiResponse($usuario);
+        }
+
+        $desactivar = $this->hikvision_service->desactivarUsuario($usuario['usuario']->toArray(), $enable);
+
+        return $this->apiResponse($desactivar);
     }
 }
