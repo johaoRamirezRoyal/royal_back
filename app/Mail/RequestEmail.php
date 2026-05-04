@@ -22,12 +22,11 @@ class RequestEmail extends Mailable
      */
     public function __construct(
         public string $email,
+        public string $token,
         public string $verificationCode
     )
     {
-        $this->url = config('app.frontend_url') . "/admissions?" . http_build_query([
-            'email' => $this->email
-        ]);
+        $this->url = config('app.frontend_url') . "/admissions";
     }
 
     /**

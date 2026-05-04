@@ -18,7 +18,7 @@ class SendRequestEmailAdmission
      */
     public function handle(RequestEmailAdmission $event): void
     {
-        Mail::to($event->email)->send(new RequestEmail($event->email, $event->verificationCode));
+        Mail::to($event->email)->send(new RequestEmail($event->email, $event->token, $event->verificationCode));
     }
 
     public function failed(RequestEmailAdmission $event, \Throwable $e): void

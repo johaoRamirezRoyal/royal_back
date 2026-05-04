@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Admissions;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class VerificationCodeRequest extends FormRequest
@@ -15,20 +14,20 @@ class VerificationCodeRequest extends FormRequest
     public function rules(): array
     {
         return [
-             'email' => 'required|email|min:10|max:140',
-            'verificationCode' => 'required|digits:5'
+            'token' => ['required', 'string', 'size:64'],
+            'code' => 'required|digits:5',
         ];
     }
 
-    public function messages() {
+    public function messages()
+    {
         return [
-                'email.required' => 'El correo es un campo obligatorio.',
-                'email.email' => 'El correo no tiene un formato valido.',
-                'email.min' => 'El correo debe tener al menos 10 caracteres',
-                'email.max' => 'El correo no puede superar los 140 caracteres',
+            'token.required' => 'El token es obligatorio.',
+            'token.string' => 'El token debe ser una cadena válida.',
+            'token.size' => 'El token no es válido.',
 
-                'verificationCode.required' => 'El codigo de verificacion es obligatorio',
-                'verificationCode.digits' => 'El codigo debe de ser solamente de 5 digitos y numeros'
+            'code.required' => 'El codigo de verificacion es obligatorio',
+            'code.digits' => 'El codigo debe de ser solamente de 5 digitos y numeros',
         ];
     }
 }

@@ -18,6 +18,6 @@ class RequestEmailAdmission
     /**
      * Create a new event instance.
      */
-    public function __construct(public string $email, public string $verificationCode)
+    public function __construct(public string $email, public string $token, public string $verificationCode)
     {}
 }

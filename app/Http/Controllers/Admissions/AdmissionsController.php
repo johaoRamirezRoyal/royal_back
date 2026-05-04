@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\Admissions;
 
-use Illuminate\Support\Facades\Cache;
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
-class AdmissionsController extends Controller {
-    function requestVerification(Request $request) {
+class AdmissionsController extends Controller
+{
+    public function requestVerification(Request $request)
+    {
         $request->validate([
             'email' => 'required|email|min:10|max:140',
         ],
@@ -20,33 +23,84 @@ class AdmissionsController extends Controller {
                 'email.max' => 'El correo no puede superar los 140 caracteres',
             ]);
 
+        $email = $request->email;
 
-        $codigo = str_pad(random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+        $key = "send_{$email}";
+        $attempts = Cache::increment($key);
 
-        event(new RequestEmailAdmission($request->email, $codigo));
+        if ($attempts === 1) {
+            Cache::put($key, 1, now()->addMinutes(5));
+        }
 
-        Cache::put("verificacion_{$request->email}", $codigo, now()->addMinutes(30));
+        if ($attempts > 3) {
+            return $this->error('Demasiadas solicitudes', 429);
+        }
 
-        return $this->success('Codigo enviado!');
+        $token = Cache::get("email_token_{$email}") ?? Str::random(64);
+
+        $code = str_pad(random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+
+        Cache::put("verificacion_{$token}", [
+            'code' => $code,
+            'email' => $email,
+        ], now()->addMinutes(5));
+
+        Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
+
+        event(new RequestEmailAdmission($email, $token, $code));
+
+        return $this->success('Codigo enviado!', [
+            'token' => $token,
+        ]);
     }
 
-    function validateVerificationCode(VerificationCodeRequest $request) {
-        $codigoGuardado = Cache::get("verificacion_{$request->email}");
+    public function validateVerificationCode(Request $request)
+    {
+        $token = $request->token;
 
-        if (!$codigoGuardado || $codigoGuardado !== $request->codigo) {
-            return response()->json(['message' => 'Código inválido o expirado'], 422);
+        $data = Cache::get("verificacion_{$token}");
+
+        if (! $data) {
+            return $this->error('Sesion inválida o expirada', 400);
         }
 
         return $this->success('Verificacion exitosa');
     }
 
-    function forgetVerificationCode(VerificationCodeRequest $request) {
-        $codigoGuardado = Cache::get("verificacion_{$request->email}");
+    public function forgetVerificationCode(VerificationCodeRequest $request)
+    {
+        $token = $request->token;
 
-        if (!$codigoGuardado || $codigoGuardado !== $request->codigo) {
-            return response()->json(['message' => 'Código inválido o expirado'], 422);
+        $key = "verificacion_{$token}";
+        $attemptsKey = "attempts_{$token}";
+
+        $data = Cache::get($key);
+
+        if (! $data) {
+            return $this->error('Token invalido o expirado', 400);
         }
 
-        Cache::forget("verificacion_{$request->email}");
+        $attempts = Cache::increment($attemptsKey);
+
+        if ($attempts === 1) {
+            Cache::put($attemptsKey, 1, now()->addMinutes(5));
+        }
+
+        if ($attempts > 5) {
+            Cache::forget("verify_{$request->token}");
+            Cache::forget($attemptsKey);
+
+            return $this->error('Demasiados intentos', 429);
+        }
+
+        if ($data['code'] !== $request->code) {
+            return $this->error('Código inválido', 400);
+        }
+
+        Cache::forget($attemptsKey);
+        Cache::forget($key);
+        Cache::forget("email_token_{$data['email']}");
+
+        return $this->success('Correo valido!');
     }
 }

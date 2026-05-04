@@ -9,7 +9,7 @@
         # {{ $verificationCode }}
     </x-mail::panel>
 
-    Este código es **válido por 15 minutos**. Si no solicitaste este código, ignora este mensaje.
+    Este código es **válido por 5 minutos**. Si no solicitaste este código, ignora este mensaje.
 
     <x-mail::button :url="$url">
         Verificar mi correo
