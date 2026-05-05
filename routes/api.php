@@ -38,6 +38,7 @@ Route::prefix('admissions')->group(function () {
     Route::post('request-validation', [AdmissionsController::class, 'requestVerification']);
     Route::post('validate-session', [AdmissionsController::class, 'validateVerificationCode']);
     Route::post('validate-code', [AdmissionsController::class, 'forgetVerificationCode']);
+    Route::post('register-guardian', [AdmissionsController::class, 'familyRegister']);
 });
 
 // RUTAS PROTEGIDAS
