@@ -3,6 +3,7 @@
 namespace App\Models\Admisiones;
 
 use App\Enums\ViveCon;
+use App\Models\AnioEscolar\Anio;
 use Illuminate\Database\Eloquent\Model;
 
 class Aspirante extends Model
@@ -46,5 +47,11 @@ class Aspirante extends Model
         'edad' => 'integer',
         'vive_con' => ViveCon::class,
     ];
+
+    public function anioAcademico()
+    {
+        return $this->belongsTo(Anio::class, 'anio_academico', 'id');
+    }
+    
     
 }

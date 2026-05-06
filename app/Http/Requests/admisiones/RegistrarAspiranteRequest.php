@@ -16,9 +16,16 @@ class RegistrarAspiranteRequest extends FormRequest
 
     public function rules(): array
     {
+
+        $isRequired = $this->isMethod('put') || $this->isMethod('patch');
+
         return [
             // Información básica
-            'nombre_completo' => ['required', 'string', 'max:255'],
+            'nombre_completo' => [
+                $isRequired ? 'sometimes' : 'required', 
+                'string', 
+                'max:255'
+                ],
             'lugar_nacimiento' => ['nullable', 'string', 'max:150'],
             'fecha_nacimiento' => ['nullable', 'date', 'before:today'],
             'edad' => ['nullable', 'integer', 'min:0', 'max:100'],
@@ -40,8 +47,16 @@ class RegistrarAspiranteRequest extends FormRequest
 
             // Historial y aplicación
             'antecedentes_escolares' => ['nullable', 'string'],
-            'grado_aplica' => ['required', 'string', 'max:50'],
-            'anio_academico' => ['required', 'string', 'max:20'],
+            'grado_aplica' => [
+                $isRequired ? 'sometimes' : 'required', 
+                'string', 
+                'max:50'
+                ],
+            'anio_academico' => [
+                $isRequired ? 'sometimes' : 'required',
+                 'integer', 
+                 'exists:anio_escolar,id'
+                ],
 
             // Metadatos
             'fecha_registro' => ['nullable', 'date'],
@@ -76,7 +91,7 @@ class RegistrarAspiranteRequest extends FormRequest
             'lengua_materna.max' => 'La lengua materna no puede superar los 100 caracteres.',
             'religion.max' => 'La religión no puede superar los 100 caracteres.',
             'grado_aplica.max' => 'El grado no puede superar los 50 caracteres.',
-            'anio_academico.max' => 'El año académico no puede superar los 20 caracteres.',
+            'anio_academico.exists' => 'El año académico seleccionado no es válido.',
 
             // Fechas
             'fecha_nacimiento.date' => 'La fecha de nacimiento debe ser una fecha válida.',
