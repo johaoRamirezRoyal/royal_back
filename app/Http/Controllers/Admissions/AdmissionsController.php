@@ -5,23 +5,27 @@ namespace App\Http\Controllers\Admissions;
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
+use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\Cloudinary\CloudinaryService;
+use App\Services\Auth\AuthServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class AdmissionsController extends Controller
 {
-
     protected AdmisionesServices $admisiones_services;
     protected $cloudinary_service;
 
-    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService)
+    protected AuthServices $service_auth;
+
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth)
     {
         $this->admisiones_services = $admisionesServices;
         $this->cloudinary_service = $cloudinaryService;
+        $this->service_auth = $service_auth;
     }
 
     public function requestVerification(Request $request)
@@ -69,6 +73,13 @@ class AdmissionsController extends Controller
 
     public function validateVerificationCode(Request $request)
     {
+        $request->validate([
+            'token' => 'required|string|size:64',
+        ],
+            ['token.required' => 'El token es obligatorio.',
+                'token.string' => 'El token debe ser una cadena válida.',
+                'token.size' => 'El token no es válido.']);
+
         $token = $request->token;
 
         $data = Cache::get("verificacion_{$token}");
@@ -114,7 +125,42 @@ class AdmissionsController extends Controller
         Cache::forget($key);
         Cache::forget("email_token_{$data['email']}");
 
-        return $this->success('Correo valido!');
+        $registerToken = Str::random(64);
+
+        Cache::put("register_session_{$registerToken}", [
+            'email' => $data['email'],
+        ], now()->addMinute(15));
+
+        return $this->success('Correo valido!', [
+            'register_token' => $registerToken,
+        ]);
+    }
+
+    public function familyRegister(FamilyRegisterRequest $request)
+    {
+        $token = $request->token;
+        $registerKey = "register_session_{$token}";
+
+        $validation = Cache::get($registerKey);
+        $data = $request->except('token');
+
+        if (! $validation) {
+            return $this->error('Tu sesión de registro ha expirado o no es válida. Inicia el proceso nuevamente.', 401);
+        }
+
+        if ($validation['email'] !== $request->email) {
+            return $this->error('El correo no coincide con la sesión de registro.', 403);
+        }
+
+        try {
+            $this->service_auth->registrarUsuario($data);
+
+            Cache::forget($registerKey);
+
+            return $this->success('Registro completado exitosamente.', 201);
+        } catch (\Exception $e) {
+            return $this->error('Ocurrió un error al procesar el registro. Intenta de nuevo.', 500);
+        }
     }
 
     public function registrarAspirante(RegistrarAspiranteRequest $request)
@@ -130,11 +176,11 @@ class AdmissionsController extends Controller
     {
         $id = $request->input('id');
 
-        if (!$id) {
+        if (! $id) {
             return response()->json([
                 'error' => true,
-                'message' => "Debe proporcionar un ID de aspirante válido",
-                'data' => []
+                'message' => 'Debe proporcionar un ID de aspirante válido',
+                'data' => [],
             ]);
         }
 
