@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 class AdmissionsController extends Controller
 {
     protected AdmisionesServices $admisiones_services;
-    protected $cloudinary_service;
+    protected CloudinaryService $cloudinary_service;
 
     protected AuthServices $service_auth;
 
