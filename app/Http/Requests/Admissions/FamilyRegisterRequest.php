@@ -3,12 +3,13 @@
 namespace App\Http\Requests\Admissions;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Override;
 
 class FamilyRegisterRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
         return true;
@@ -18,11 +19,11 @@ class FamilyRegisterRequest extends FormRequest
     {
         return [
             'token' => 'required|string|size:64',
-            'documento' => 'required|string|max:50',
+            'documento' => ['required', 'string', 'max:50', Rule::unique('usuarios', 'documento')],
             'nombre' => 'required|string|max:100',
             'apellido' => 'required|string|max:100',
-            'email' => 'required|email|max:140',
-            'telefono' => 'required|string|max:20',
+            'correo' => ['required', 'email', 'max:140', Rule::unique('usuarios', 'correo')],
+            'telefono' => ['required', 'string', 'max:20', Rule::unique('usuarios', 'telefono')],
         ];
     }
 
@@ -37,6 +38,7 @@ class FamilyRegisterRequest extends FormRequest
             // ── Documento ──
             'documento.required' => 'El número de documento es obligatorio.',
             'documento.string' => 'El documento debe ser una cadena de texto.',
+            'documento.unique' => 'Ya existe una cuenta registrada con este documento.',
             'documento.max' => 'El documento no debe superar los 50 caracteres.',
 
             // ── Nombre ──
@@ -50,14 +52,28 @@ class FamilyRegisterRequest extends FormRequest
             'apellido.max' => 'El apellido no debe superar los 100 caracteres.',
 
             // ── Email ──
-            'email.required' => 'El correo electrónico es obligatorio.',
-            'email.email' => 'El formato del correo electrónico no es válido.',
-            'email.max' => 'El correo no debe superar los 140 caracteres.',
-
+            'correo.required' => 'El correo electrónico es obligatorio.',
+            'correo.email' => 'El formato del correo electrónico no es válido.',
+            'correo.unique' => 'Ya existe una cuenta registrada con este correo.',
+            'correo.max' => 'El correo no debe superar los 140 caracteres.',
+            
             // ── Teléfono ──
             'telefono.required' => 'El teléfono de contacto es obligatorio.',
             'telefono.string' => 'El teléfono debe ser una cadena de texto.',
+            'telefono.unique' => 'Ya existe una cuenta registrada con este telefono.',
             'telefono.max' => 'El teléfono no debe superar los 20 caracteres.',
         ];
+    }
+
+    #[Override]
+    protected function failedValidation(Validator $validator): never
+    {
+        $errors = $validator->errors()->all();
+        $count = count($errors);
+
+        throw new HttpResponseException(response()->json([
+            'message' => $errors[0].($count > 1 ? " (y {$count} errores más)" : ''),
+            'errors' => $validator->errors(),
+        ], 422));
     }
 }
