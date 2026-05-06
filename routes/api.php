@@ -186,8 +186,42 @@ Route::middleware('auth:api')->group(function () {
     });
 
     Route::prefix('/admisiones')->group(function () {
+        /** Ejemplo JSON para actualizar datos de un aspirante:
+        {
+            "id": 2,
+            "lugar_nacimiento": "Bogotá, Colombia",
+            "fecha_nacimiento": "2015-05-20",
+            "edad": 9,
+            "sexo": "Femenino",
+            "lengua_materna": "Español",
+            "otros_idiomas": "Inglés básico",
+            "religion": "Católica",
+            "vive_con": "Ambos Padres", //-> Es un ENUM con los valores ["Padre", "Madre", "Ambos Padres", "Acudiente"]
+            "num_hermanos": 2,
+            "posicion_entre_hermanos": 1,
+            "tiene_hermanos_colegio": true,
+            "info_hermanos_colegio": "Su hermano mayor está en 5to grado.",
+            "antecedentes_escolares": "Viene del Jardín Infantil 'Los Pinos'."
+        }
+         */
+        Route::put('/', [AdmissionsController::class, 'actualizarRegistroAspirante']);
+
         Route::get('/', [AdmissionsController::class, 'mostrarInformacionAspiranteId']);
+
         Route::post('/', [AdmissionsController::class, 'registrarAspirante']);
+        /** Ejemplo JSON para agregar al aspirante (Datos minimos necesarios): 
+        {
+            "nombre_completo": "Juan Pérez García",
+            "grado_aplica": "Primero de Primaria",
+            "anio_academico": "2024-2025"
+        }
+         */
+
         Route::delete('/', [AdmissionsController::class, 'eliminarRegistroAspirante']);
+
+        Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
+
+        Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
+        Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
     });
 });

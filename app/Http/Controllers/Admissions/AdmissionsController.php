@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Services\Admisiones\AdmisionesServices;
+use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
@@ -15,10 +16,12 @@ class AdmissionsController extends Controller
 {
 
     protected AdmisionesServices $admisiones_services;
+    protected $cloudinary_service;
 
-    public function __construct(AdmisionesServices $admisionesServices)
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService)
     {
         $this->admisiones_services = $admisionesServices;
+        $this->cloudinary_service = $cloudinaryService;
     }
 
     public function requestVerification(Request $request)
@@ -145,5 +148,72 @@ class AdmissionsController extends Controller
         $resultado = $this->admisiones_services->eliminarRegistroAspirante($id);
 
         return $this->apiResponse($resultado);
+    }
+
+    public function testArchivoGuardar(Request $request)
+    {
+        $file = $request->file('archivo');
+
+        if(!$file){
+            return response()->json([
+                'error' => true,
+                'message' => 'No se ha proporcionado ningún archivo.',
+                'data' => []
+            ]);
+        }
+        $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/Test');
+        return $this->apiResponse($resultado);
+    }
+
+    public function testArchivoEliminar(Request $request)
+    {
+        $publicId = $request->input('public_id');
+
+        if(!$publicId){
+            return response()->json([
+                'error' => true,
+                'message' => 'No se ha proporcionado ningún public_id.',
+                'data' => []
+            ]);
+        }
+
+        $resultado = $this->cloudinary_service->deleteFile($publicId);
+        return $this->apiResponse($resultado);
+    }
+
+    public function actualizarRegistroAspirante(RegistrarAspiranteRequest $request){
+        $id = $request->input('id');
+        if(!$id){
+            return response()->json([
+                'error' => true,
+                'message' => "Debe proporcionar un ID de aspirante válido",
+                'data' => [],
+            ]);
+        }
+
+        $data = $request->validated();
+        $resultado = $this->admisiones_services->actualizarRegistroAspirante($id, $data);
+        return $this->apiResponse($resultado);
+    }
+
+    public function correoInformativoSolicitudInicial(Request $request){
+            $email = $request->input('email');
+            $id_solicitud = $request->input('id_solicitud');
+    
+            if(!$email || !$id_solicitud){
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Debe proporcionar un correo electrónico y un ID de solicitud.',
+                    'data' => []
+                ]);
+            }
+
+            $this->admisiones_services->correoInformativoSolicitudInicial($id_solicitud, $email);
+
+            return response()->json([
+                'error' => false,
+                'message' => 'Correo informativo enviado correctamente.',
+                'data' => []
+            ]);
     }
 }
