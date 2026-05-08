@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Admissions;
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
+use App\Http\Requests\Admisiones\RegistrarFamiliarRequest;
+use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Services\Admisiones\AdmisionesServices;
+use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Auth\AuthServices;
 use Illuminate\Http\Request;
@@ -18,14 +21,16 @@ class AdmissionsController extends Controller
 {
     protected AdmisionesServices $admisiones_services;
     protected CloudinaryService $cloudinary_service;
-
     protected AuthServices $service_auth;
 
-    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth)
+    protected AnioEscolarServices $anio_escolar_services;
+
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services)
     {
         $this->admisiones_services = $admisionesServices;
         $this->cloudinary_service = $cloudinaryService;
         $this->service_auth = $service_auth;
+        $this->anio_escolar_services = $anio_escolar_services;
     }
 
     public function requestVerification(Request $request)
@@ -163,6 +168,32 @@ class AdmissionsController extends Controller
         }
     }
 
+    public function registrarInscripcion(RegistrarInscripcionRequest $request){
+        $data = $request->validated();
+
+        $data['anio_academico'] = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
+
+        $resultado = $this->admisiones_services->registrarInscripcion($data);
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function obtenerInformacionCompletaDeInscripcionMedianteCodigo(Request $request){
+        $codigo = $request->input('codigo');
+
+        if(!$codigo){
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un código de inscripción válido.',
+                'data' => []
+            ]);
+        }
+
+        $resultado = $this->admisiones_services->obtenerInformacionCompletaDeInscripcionMedianteCodigo($codigo);
+
+        return $this->apiResponse($resultado);
+    }
+
     public function registrarAspirante(RegistrarAspiranteRequest $request)
     {
         $data = $request->validated();
@@ -261,5 +292,23 @@ class AdmissionsController extends Controller
                 'message' => 'Correo informativo enviado correctamente.',
                 'data' => []
             ]);
+    }
+
+    public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request){
+        $data = $request->validated();
+        $id_aspirante = $request->input('id_aspirante');
+
+        $response = $this->admisiones_services->agregarFamiliarAspirante($id_aspirante, $data);
+
+        return $this->apiResponse($response);
+    }    
+    
+    public function actualizarFamiliarAspirante(RegistrarFamiliarRequest $request){
+        $data = $request->validated();
+        $id_familiar = $request->input("id_familiar");
+
+        $response = $this->admisiones_services->actualizarFamiliarAspirante($id_familiar, $data);
+
+        return $this->apiResponse($response);
     }
 }

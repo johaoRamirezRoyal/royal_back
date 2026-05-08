@@ -186,7 +186,21 @@ Route::middleware('auth:api')->group(function () {
         Route::put("/desactivar", [HikvisionController::class, 'desactivarUsuario']);
     });
 
+    
     Route::prefix('/admisiones')->group(function () {
+
+        /** Ejemplo JSON para registrar una inscripcion:
+         * 
+        {
+            "estado": "PENDIENTE",
+            "id_usuario_registro": 3123,
+            "anio_academico": 8,
+            "fecha_inscripcion": "2026-08-15"
+        }
+         */
+        Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
+        Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
+
         /** Ejemplo JSON para actualizar datos de un aspirante:
         {
             "id": 2,
@@ -205,20 +219,57 @@ Route::middleware('auth:api')->group(function () {
             "antecedentes_escolares": "Viene del Jardín Infantil 'Los Pinos'."
         }
          */
-        Route::put('/', [AdmissionsController::class, 'actualizarRegistroAspirante']);
+        Route::put('/aspirante', [AdmissionsController::class, 'actualizarRegistroAspirante']);
 
-        Route::get('/', [AdmissionsController::class, 'mostrarInformacionAspiranteId']);
+        Route::get('/aspirante', [AdmissionsController::class, 'mostrarInformacionAspiranteId']);
 
-        Route::post('/', [AdmissionsController::class, 'registrarAspirante']);
         /** Ejemplo JSON para agregar al aspirante (Datos minimos necesarios): 
         {
             "nombre_completo": "Juan Pérez García",
             "grado_aplica": "Primero de Primaria",
-            "anio_academico": "2024-2025"
+            "id_inscripcion": 1,
+            "anio_academico": 8
+        }
+        */
+        Route::post('/aspirante', [AdmissionsController::class, 'registrarAspirante']);
+
+        Route::delete('/aspirante', [AdmissionsController::class, 'eliminarRegistroAspirante']);
+
+        /**
+         * Ejemplo JSON para registrar a un acudiente (Datos minimos):
+        {
+            "id_aspirante": 1,
+            "id_inscripcion": 1,
+            "tipo_parentesco": "Acudiente",
+            "nombre_completo": "María López"
         }
          */
+        Route::post('/acudiente', [AdmissionsController::class, 'agregarFamiliarAspirante']);
 
-        Route::delete('/', [AdmissionsController::class, 'eliminarRegistroAspirante']);
+        /**
+         * Ejemplo para actualizar a un acudiente completamente:
+        {
+            "id": 1,
+            "aspirante_id": 1,
+            "id_inscripcion": 1,
+            "tipo_parentesco": "Padre",
+            "nombre_completo": "María López",
+            "documento_identidad": "52456789",
+            "lugar_expedicion_doc": "Medellín",
+            "estado_civil": "Casada",
+            "idiomas": "Español",
+            "direccion_residencia": "Calle 45 # 20 - 10",
+            "telefono_fijo": "6044589632",
+            "celular": "3001234567",
+            "email": "laura.gomez@gmail.com",
+            "profesion": "Psicóloga",
+            "empresa_labora": "Centro Integral Familiar",
+            "cargo_ocupacion": "Psicóloga Clínica",
+            "telefono_oficina": "6047894563",
+            "fecha_registro": "2026-05-08T10:40:42.000000Z"
+        }
+         */
+        Route::put("/acudiente", [AdmissionsController::class, 'actualizarFamiliarAspirante']);
 
         Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
 

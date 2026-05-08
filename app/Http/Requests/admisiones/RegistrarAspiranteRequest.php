@@ -21,6 +21,11 @@ class RegistrarAspiranteRequest extends FormRequest
 
         return [
             // Información básica
+            'id_inscripcion' => [
+                $isRequired ? 'sometimes' : 'required',
+                'integer',
+                'exists:admisiones_inscripciones,id'
+            ],
             'nombre_completo' => [
                 $isRequired ? 'sometimes' : 'required', 
                 'string', 
@@ -35,7 +40,7 @@ class RegistrarAspiranteRequest extends FormRequest
             'religion' => ['nullable', 'string', 'max:100'],
 
             // Entorno familiar
-            'vive_con' => ['nullable', new Enum(ViveCon::class)],
+            'vive_con' => ['nullable', 'required|in:Padre,Madre,Acudiente'],
             'num_hermanos' => ['nullable', 'integer', 'min:0'],
             'posicion_entre_hermanos' => ['nullable', 'integer', 'min:1'],
             'tiene_hermanos_colegio' => ['nullable', 'boolean'],
@@ -53,7 +58,6 @@ class RegistrarAspiranteRequest extends FormRequest
                 'max:50'
                 ],
             'anio_academico' => [
-                $isRequired ? 'sometimes' : 'required',
                  'integer', 
                  'exists:anio_escolar,id'
                 ],
@@ -67,9 +71,9 @@ class RegistrarAspiranteRequest extends FormRequest
     {
         return [
             // Requeridos
+            'inscripcion_id.required' => 'El ID de inscripción es obligatorio.',
             'nombre_completo.required' => 'El nombre completo es obligatorio.',
             'grado_aplica.required' => 'El grado al que aplica es obligatorio.',
-            'anio_academico.required' => 'El año académico es obligatorio.',
             'info_hermanos_colegio.required_if' => 'La información de hermanos en el colegio es obligatoria cuando hay hermanos en el colegio.',
 
             // Tipos
