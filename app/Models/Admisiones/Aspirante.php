@@ -15,6 +15,7 @@ class Aspirante extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'id_inscripcion',
         'nombre_completo',
         'lugar_nacimiento',
         'fecha_nacimiento',
@@ -53,5 +54,11 @@ class Aspirante extends Model
         return $this->belongsTo(Anio::class, 'anio_academico', 'id');
     }
     
-    
+    public function familiares(){
+        return $this->hasMany(Familiares::class, 'aspirante_id', 'id');
+    }
+
+    public function inscripcion(){
+        return $this->belongsTo(Inscripcion::class, 'inscripcion_id', 'id');
+    }
 }
