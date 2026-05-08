@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Auth\AuthServices;
+use App\Services\JwtService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\GoogleProvider;
 use Tymon\JWTAuth\Facades\JWTAuth;
-use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -22,7 +24,7 @@ class AuthController extends Controller
 
     protected $service_auth;
 
-    public function __construct(UsuariosServices $usuariosServices, AuthServices $service_auth)
+    public function __construct(UsuariosServices $usuariosServices, AuthServices $service_auth, private JwtService $jwt)
     {
         $this->service_usuarios = $usuariosServices;
         $this->service_auth = $service_auth;
@@ -186,11 +188,6 @@ class AuthController extends Controller
             ], 403);
         }
 
-        return $this->responseWithCookie($token);
-    }
-
-    private function responseWithCookie(string $token)
-    {
         return response()
             ->json(['Message' => 'Login Exitoso'])
             ->withCookie($this->makeCookie($token));
@@ -206,16 +203,35 @@ class AuthController extends Controller
     public function check()
     {
         try {
+            $admissionsToken = request()->cookie('admissions_token');
+
+            if ($admissionsToken) {
+                try {
+                    // 👇 Sin Crypt, el JWT viene directo
+                    $user = JWTAuth::setToken($admissionsToken)->authenticate();
+
+                    return response()->json([
+                        'active' => true,
+                        'system' => 'admissions',
+                        'usuario' => $user,
+                    ]);
+
+                } catch (\Exception $e) {
+                    Log::error('admissions token inválido: '.$e->getMessage());
+
+                    return response()->json(['active' => false], 401);
+                }
+            }
+
             $user = auth('api')->user();
 
             if (! $user) {
-                return response()->json([
-                    'active' => false,
-                ], 401);
+                return response()->json(['active' => false], 401);
             }
 
             return response()->json([
                 'active' => true,
+                'system' => 'general',
                 'usuario' => $user,
             ]);
 

@@ -3,13 +3,27 @@
 namespace App\Services\Usuarios;
 
 use App\Models\Usuarios\Usuario;
+use Illuminate\Database\QueryException;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-use function Laravel\Prompts\search;
-
 class UsuariosServices
 {
+    public function userExistWhitEmail(string $email)
+    {
+        return Usuario::query()
+            ->where('correo', $email)
+            ->exists();
+    }
+
+    public function infoUserWhitEmail(string $email)
+    {
+        return Usuario::query()
+            ->where('correo', $email)
+            ->firstOrFail();
+    }
+
     public function mostrarTodosUsuariosActivos()
     {
         return DB::select("SELECT id_user, documento, CONCAT(nombre, ' ', apellido) AS nom_user, 
@@ -20,8 +34,9 @@ class UsuariosServices
 
     /**
      * Summary of mostrarTodosUsuariosActivoPaginado
-     * @param mixed $perPage
-     * @return \Illuminate\Pagination\LengthAwarePaginator
+     *
+     * @param  mixed  $perPage
+     * @return LengthAwarePaginator
      */
     public function mostrarTodosUsuariosActivoPaginado($perPage)
     {
@@ -42,40 +57,41 @@ class UsuariosServices
                 'fechareg'
             )
             ->where('estado', 'activo')
-            ->groupBy("nombre")
+            ->groupBy('nombre')
             ->whereNotIn('perfil', [17, 16, 6])
             ->paginate($perPage);
     }
 
     /**
      * Summary of mostrarUsuariosPorPerfil
-     * @param int $id_perfil
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function mostrarUsuariosPorPerfil(int $id_perfil){
-        try{
+    public function mostrarUsuariosPorPerfil(int $id_perfil)
+    {
+        try {
             $usuarios = Usuario::where('perfil', $id_perfil)
-                                ->where('estado', 'activo')        
-                                ->get();
-            if($usuarios->isEmpty()){
+                ->where('estado', 'activo')
+                ->get();
+            if ($usuarios->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No hay usuarios en ese nivel especificado",
+                    'message' => 'No hay usuarios en ese nivel especificado',
                     'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Usuarios obtenidos",
+                'message' => 'Usuarios obtenidos',
                 'data' => $usuarios->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("No se obtubieron a los usuarios del perfil: " . $e->getMessage());
+        } catch (\Exception $e) {
+            Log::error('No se obtubieron a los usuarios del perfil: '.$e->getMessage());
 
             return [
                 'error' => true,
-                'message' => "Error obteniendo a los usuarios: " . $e->getMessage(),
+                'message' => 'Error obteniendo a los usuarios: '.$e->getMessage(),
                 'data' => [],
             ];
         }
@@ -99,10 +115,10 @@ class UsuariosServices
                 'user_log',
                 'fechareg',
                 'fecha_activo',
-                'fecha_editado'
+                'fecha_editado',
             ])->with([
                 'perfilRelacion:id_perfil,nombre',
-                'nivelRelacion:id,nombre'
+                'nivelRelacion:id,nombre',
             ])->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nombre', 'LIKE', "%$search%")
@@ -121,19 +137,22 @@ class UsuariosServices
                 })
                 ->whereNotIn('perfil', [17, 16, 6]);
 
-            if (!empty($sort)) $usuarios
-                ->orderBy($sort, $dir);
+            if (! empty($sort)) {
+                $usuarios
+                    ->orderBy($sort, $dir);
+            }
 
             $usuarios = $usuarios
                 ->paginate((int) $perPage);
+
             return [
                 'error' => false,
-                'data' => $usuarios
+                'data' => $usuarios,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -151,7 +170,7 @@ class UsuariosServices
                 ->exists();
 
             return ['permiso' => $permiso, 'error' => false];
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
     }
@@ -169,15 +188,15 @@ class UsuariosServices
                 'id_nivel',
                 'id_curso',
                 'id_grupo',
-                'estado'
+                'estado',
             ])
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
                     'nivelRelacion:id,nombre',
-                    'cursoRelacion:id,nombre'
+                    'cursoRelacion:id,nombre',
                 ])
-                ->orderBy("nombre")
-                ->orderBy("documento")
+                ->orderBy('nombre')
+                ->orderBy('documento')
                 ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
 
@@ -185,7 +204,7 @@ class UsuariosServices
                 'error' => false,
                 'data' => $usuarios,
             ];
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             return [
                 'error' => true,
                 'data' => $e->getMessage(),
@@ -205,7 +224,7 @@ class UsuariosServices
                 'perfil',
                 'id_nivel',
                 'id_grupo',
-                'estado'
+                'estado',
             ])
                 ->with('perfilRelacion')
                 ->whereNotIn('perfil', [17, 16, 6])
@@ -228,16 +247,16 @@ class UsuariosServices
         try {
             $usuario_info = Usuario::with('perfilRelacion')->find($id_usuario);
 
-            if (!$usuario_info) {
+            if (! $usuario_info) {
                 return [
                     'error' => true,
-                    'usuario' => null
+                    'usuario' => null,
                 ];
             }
 
             return [
                 'error' => false,
-                'usuario' => $usuario_info
+                'usuario' => $usuario_info,
             ];
         } catch (\Exception $e) {
             return [
@@ -247,15 +266,17 @@ class UsuariosServices
         }
     }
 
-    public function agregarUsuario(array $data){
+    public function agregarUsuario(array $data)
+    {
         try {
             $usuario = Usuario::create($data);
+
             return [
                 'error' => false,
-                'usuario' => $usuario
+                'usuario' => $usuario,
             ];
 
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
@@ -268,10 +289,10 @@ class UsuariosServices
     {
         $usuario_info = Usuario::find($id_usuario);
 
-        if (!$usuario_info) {
+        if (! $usuario_info) {
             return [
                 'error' => true,
-                'usuario' => null
+                'usuario' => null,
             ];
         }
 
@@ -283,28 +304,29 @@ class UsuariosServices
 
             return [
                 'error' => false,
-                'usuario' => $usuario_return
+                'usuario' => $usuario_return,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
 
-    public function actualizarEstadoUsuarios(array $id_usuarios, string $estado){
-        try{
+    public function actualizarEstadoUsuarios(array $id_usuarios, string $estado)
+    {
+        try {
             Usuario::whereIn('id_user', $id_usuarios)->update(['estado' => $estado]);
 
             return [
                 'error' => false,
-                'message' => 'Usuarios actualizados correctamente'
+                'message' => 'Usuarios actualizados correctamente',
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
