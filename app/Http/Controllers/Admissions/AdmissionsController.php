@@ -10,23 +10,30 @@ use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
+use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Auth\AuthServices;
+use App\Services\Cloudinary\CloudinaryService;
+use App\Services\JwtService;
+use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class AdmissionsController extends Controller
 {
+    use HasAuthCookie;
+
     protected AdmisionesServices $admisiones_services;
+
     protected CloudinaryService $cloudinary_service;
     protected AuthServices $service_auth;
 
     protected AnioEscolarServices $anio_escolar_services;
 
-    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services)
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, JwtService $jwt)
     {
         $this->admisiones_services = $admisionesServices;
         $this->cloudinary_service = $cloudinaryService;
@@ -127,14 +134,26 @@ class AdmissionsController extends Controller
             return $this->error('Código inválido', 400);
         }
 
+        $email = $data['email'];
+
         Cache::forget($attemptsKey);
         Cache::forget($key);
-        Cache::forget("email_token_{$data['email']}");
+        Cache::forget("email_token_{$email}");
+
+        $userExists = $this->usuarios_services->infoUserWhitEmail($email);
+
+        if ($userExists) {
+            return response()
+                ->json([])
+                ->withCookie(
+                    $this->makeCookie($this->jwt->generateAdmissionsToken($userExists), 'admissions_token')
+                );
+        }
 
         $registerToken = Str::random(64);
 
         Cache::put("register_session_{$registerToken}", [
-            'email' => $data['email'],
+            'email' => $email,
         ], now()->addMinute(15));
 
         return $this->success('Correo valido!', [
@@ -154,7 +173,7 @@ class AdmissionsController extends Controller
             return $this->error('Tu sesión de registro ha expirado o no es válida. Inicia el proceso nuevamente.', 401);
         }
 
-        if ($validation['email'] !== $request->email) {
+        if ($validation['email'] !== $request->correo) {
             return $this->error('El correo no coincide con la sesión de registro.', 403);
         }
 
@@ -232,14 +251,15 @@ class AdmissionsController extends Controller
     {
         $file = $request->file('archivo');
 
-        if(!$file){
+        if (! $file) {
             return response()->json([
                 'error' => true,
                 'message' => 'No se ha proporcionado ningún archivo.',
-                'data' => []
+                'data' => [],
             ]);
         }
         $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/Test');
+
         return $this->apiResponse($resultado);
     }
 
@@ -247,52 +267,56 @@ class AdmissionsController extends Controller
     {
         $publicId = $request->input('public_id');
 
-        if(!$publicId){
+        if (! $publicId) {
             return response()->json([
                 'error' => true,
                 'message' => 'No se ha proporcionado ningún public_id.',
-                'data' => []
+                'data' => [],
             ]);
         }
 
         $resultado = $this->cloudinary_service->deleteFile($publicId);
+
         return $this->apiResponse($resultado);
     }
 
-    public function actualizarRegistroAspirante(RegistrarAspiranteRequest $request){
+    public function actualizarRegistroAspirante(RegistrarAspiranteRequest $request)
+    {
         $id = $request->input('id');
-        if(!$id){
+        if (! $id) {
             return response()->json([
                 'error' => true,
-                'message' => "Debe proporcionar un ID de aspirante válido",
+                'message' => 'Debe proporcionar un ID de aspirante válido',
                 'data' => [],
             ]);
         }
 
         $data = $request->validated();
         $resultado = $this->admisiones_services->actualizarRegistroAspirante($id, $data);
+
         return $this->apiResponse($resultado);
     }
 
-    public function correoInformativoSolicitudInicial(Request $request){
-            $email = $request->input('email');
-            $id_solicitud = $request->input('id_solicitud');
-    
-            if(!$email || !$id_solicitud){
-                return response()->json([
-                    'error' => true,
-                    'message' => 'Debe proporcionar un correo electrónico y un ID de solicitud.',
-                    'data' => []
-                ]);
-            }
+    public function correoInformativoSolicitudInicial(Request $request)
+    {
+        $email = $request->input('email');
+        $id_solicitud = $request->input('id_solicitud');
 
-            $this->admisiones_services->correoInformativoSolicitudInicial($id_solicitud, $email);
-
+        if (! $email || ! $id_solicitud) {
             return response()->json([
-                'error' => false,
-                'message' => 'Correo informativo enviado correctamente.',
-                'data' => []
+                'error' => true,
+                'message' => 'Debe proporcionar un correo electrónico y un ID de solicitud.',
+                'data' => [],
             ]);
+        }
+
+        $this->admisiones_services->correoInformativoSolicitudInicial($id_solicitud, $email);
+
+        return response()->json([
+            'error' => false,
+            'message' => 'Correo informativo enviado correctamente.',
+            'data' => [],
+        ]);
     }
 
     public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request){

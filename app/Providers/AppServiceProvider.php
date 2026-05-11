@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Events\PasswordRestore;
 use App\Listeners\SendPasswordRestore;
+use App\Services\JwtService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -18,6 +19,9 @@ class AppServiceProvider extends ServiceProvider
             PasswordRestore::class,
             SendPasswordRestore::class
         );
+
+        // JWTService
+        $this->app->singleton(JwtService::class);
     }
 
     /**
