@@ -186,7 +186,7 @@ Route::middleware('auth:api')->group(function () {
         Route::put("/desactivar", [HikvisionController::class, 'desactivarUsuario']);
     });
 
-    
+    // ADMISIONES 
     Route::prefix('/admisiones')->group(function () {
 
         /** Ejemplo JSON para registrar una inscripcion:
@@ -272,6 +272,10 @@ Route::middleware('auth:api')->group(function () {
         Route::put("/acudiente", [AdmissionsController::class, 'actualizarFamiliarAspirante']);
 
         Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
+
+        Route::post("/informacionMedica", [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
+        Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
+        Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
 
         Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
         Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);

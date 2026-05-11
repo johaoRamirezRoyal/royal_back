@@ -3,6 +3,7 @@
 namespace App\Models\Admisiones;
 
 use App\Enums\ViveCon;
+use App\Models\Admisiones\InformacionMedica;
 use App\Models\AnioEscolar\Anio;
 use Illuminate\Database\Eloquent\Model;
 
@@ -60,5 +61,9 @@ class Aspirante extends Model
 
     public function inscripcion(){
         return $this->belongsTo(Inscripcion::class, 'inscripcion_id', 'id');
+    }
+
+    public function informacionMedica(){
+        return $this->hasMany(InformacionMedica::class, 'aspirante_id', 'id');
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Requests\Admisiones\RegistrarFamiliarRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
+use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Cloudinary\CloudinaryService;
@@ -308,6 +309,37 @@ class AdmissionsController extends Controller
         $id_familiar = $request->input("id_familiar");
 
         $response = $this->admisiones_services->actualizarFamiliarAspirante($id_familiar, $data);
+
+        return $this->apiResponse($response);
+    }
+
+    public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request){
+        $id_aspirante = $request->input('aspirante_id');
+        $id_inscripcion = $request->input('id_inscripcion');
+
+        $data = $request->safe()->except([
+            'aspirante_id',
+            'id_inscripcion'
+        ]);
+
+        $response = $this->admisiones_services->agregarInformacionMedicaAspirante($id_aspirante, $id_inscripcion, $data);
+        return $this->apiResponse($response);
+    }
+
+    public function actualizarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request){
+        $id_informacion = $request->input('id_informacion');
+        $data = $request->safe()->except('id_informacion');
+
+        $response = $this->admisiones_services->actualizarInformacionMedicaAspirante($id_informacion, $data);
+
+        return $this->apiResponse($response);
+    }
+
+
+    public function eliminarInformacionMedicaAspirante(Request $request){
+        $id_informacion = $request->input("id_informacion");
+
+        $response = $this->admisiones_services->eliminarInformacionMedicaAspirante($id_informacion);
 
         return $this->apiResponse($response);
     }

@@ -5,8 +5,8 @@ namespace App\Services\Admisiones;
 use App\Mail\GenericMail;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\Familiares;
+use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
-use App\Services\AnioEscolar\AnioEscolarServices;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -89,7 +89,8 @@ class AdmisionesServices
             $inscripcion = Inscripcion::with([
                 'anioAcademico',
                 'aspirante',
-                'aspirante.familiares'
+                'aspirante.familiares',
+                'aspirante.informacionMedica'
             ])
                 ->where('codigo', $codigo)
                 ->first();
@@ -425,6 +426,123 @@ class AdmisionesServices
             return [
                 'error' => true,
                 'message' => "No se puede eliminar al familiar del aspirante, comuniquese con soporte.",
+                'data' => []
+            ];
+        }
+    }
+
+    // ========================================= INFORMACIÓN MEDICA SERVICES =========================================
+    /**
+     * Crear o agregar información médica de un aspirante
+     * @param int $id_aspirante
+     * @param int $id_inscripcion
+     * @param array $data
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function agregarInformacionMedicaAspirante(int $id_aspirante, int $id_inscripcion, array $data): array{
+        try {
+            if(!isset($id_aspirante) || !isset($id_inscripcion)){
+                return [
+                    'error' => true,
+                    'message' => "Se necesita el ID del aspirante y el ID de la inscripción",
+                    'data' => $data
+                ];
+            }
+
+            $informacionMedica = InformacionMedica::create([
+                ...$data,
+                'aspirante_id' => $id_aspirante,
+                'id_inscripcion' => $id_inscripcion,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "Información medica guardada",
+                'data' => $informacionMedica->toArray(),
+            ];
+        }catch(\Exception $e){
+            Log::error("Error creando la información medica: ", ["err" => $e->getMessage()]);
+            return [
+                'error' => true,
+                'message' => "Error en el servidor creando la información medica",
+                'data' => $data,
+            ];
+        }
+    }
+
+    /**
+     * Actualizar la información del aspirante, con el id y la información en un array
+     * @param int $id_informacion
+     * @param array $data
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function actualizarInformacionMedicaAspirante(int $id_informacion, array $data): array {
+        try {
+            $informacionMedica = InformacionMedica::find($id_informacion);
+            
+            if(!$informacionMedica){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró esa información",
+                    'data' => $informacionMedica->toArray(),
+                ];
+            }
+
+            $informacionMedica->update($data);
+
+            return [
+                'error' => false,
+                'message' => 'Información médica actualizada correctamente',
+                'data' => $informacionMedica->fresh()->toArray(),
+            ];
+
+        }catch(\Exception $e){
+            Log::error(
+                'No se pudo actualizar la información médica',
+                [
+                    'id_informacion' => $id_informacion,
+                    'error' => $e->getMessage(),
+                ]
+            );
+            return [
+                'error' => true,
+                'message' => "Error en el servidor, no se pudo guardar la información médica.",
+                'data' => $data,
+            ];
+        }
+    }
+
+    /**
+     * eliminar información medica con el id de la información medica
+     * @param int $id_informacion
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function eliminarInformacionMedicaAspirante(int $id_informacion): array {
+        try{
+            $informacion = InformacionMedica::find($id_informacion);
+
+            if(!$informacion){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró la información a eliminar",
+                    'data' => $informacion->toArray(),
+                ];
+            }
+
+            $dataEliminada = $informacion->toArray();
+
+            $informacion->delete();
+
+            return [
+                'error' => false,
+                'message' => 'Se eliminó completamente la información médica',
+                'data' => $dataEliminada,
+            ];
+        }catch(\Exception $e){
+            Log::error("Error al eliminar la información medica: ", ["err" => $e->getMessage()]);
+            return[
+                'error' => true,
+                'message' => "Error en el servidor al eliminar la información medica",
                 'data' => []
             ];
         }
