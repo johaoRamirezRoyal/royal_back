@@ -4,6 +4,7 @@ namespace App\Services\Admisiones;
 
 use App\Mail\GenericMail;
 use App\Models\Admisiones\Aspirante;
+use App\Models\Admisiones\Documento;
 use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
@@ -89,6 +90,7 @@ class AdmisionesServices
             $inscripcion = Inscripcion::with([
                 'anioAcademico',
                 'aspirante',
+                'documento',
                 'aspirante.familiares',
                 'aspirante.informacionMedica'
             ])
@@ -126,7 +128,7 @@ class AdmisionesServices
         }
     }
 
-    /* =================================================================== ASPIRANTES SERVICES =================================================================== */
+    /* =================================================================== ASPIRANTE SERVICES =================================================================== */
     /**
      * Summary of registrarAspirante
      * @param array $data
@@ -544,6 +546,31 @@ class AdmisionesServices
                 'error' => true,
                 'message' => "Error en el servidor al eliminar la información medica",
                 'data' => []
+            ];
+        }
+    }
+
+    // ========================================= SOLICITUD DE DOCUMENTOS SERVICES =========================================
+    /**
+     * Subir documentos necesarios para la inscripción
+     * @param int $id_inscripcion
+     * @param array $data
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function subirDocumentoInscripcion(int $id_inscripcion, array $data): array {
+        try{
+            $documento = Documento::create([...$data, 'id_inscripcion' => $id_inscripcion]);
+            return [
+                'error' => false,
+                'message' => "Documento guardado correctamente",
+                'data' => $documento->toArray(),
+            ];
+        }catch(\Exception $e){
+            Log::error("Error añadiendo el archivo: ", ["err" => $e->getMessage()]);
+            return [
+                'error' => true,
+                'message' => "No se pudo añadir el archivo",
+                'data' => $data
             ];
         }
     }

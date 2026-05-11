@@ -34,7 +34,6 @@ class Aspirante extends Model
 
         'antecedentes_escolares',
         'grado_aplica',
-        'anio_academico',
 
         'fecha_registro'
 

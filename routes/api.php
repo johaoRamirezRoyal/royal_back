@@ -11,6 +11,7 @@ use App\Http\Controllers\PasswordReset\PasswordResetController;
 use App\Http\Controllers\Permisos\PermisosController;
 use App\Http\Controllers\Usuarios\UsuariosController;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\Mime\DependencyInjection\AddMimeTypeGuesserPass;
 
 Route::get('/', function () {
     return response()->json([
@@ -276,6 +277,8 @@ Route::middleware('auth:api')->group(function () {
         Route::post("/informacionMedica", [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
         Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
         Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
+
+        Route::post("/admincionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
         Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
         Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);

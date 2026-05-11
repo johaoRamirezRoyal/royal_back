@@ -10,12 +10,12 @@ use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
+use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Auth\AuthServices;
-use App\Services\Cloudinary\CloudinaryService;
 use App\Services\JwtService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
@@ -30,10 +30,9 @@ class AdmissionsController extends Controller
 
     protected CloudinaryService $cloudinary_service;
     protected AuthServices $service_auth;
-
     protected AnioEscolarServices $anio_escolar_services;
 
-    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, JwtService $jwt)
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, private JwtService $jwt, private UsuariosServices $usuarios_services)
     {
         $this->admisiones_services = $admisionesServices;
         $this->cloudinary_service = $cloudinaryService;
@@ -154,7 +153,7 @@ class AdmissionsController extends Controller
 
         Cache::put("register_session_{$registerToken}", [
             'email' => $email,
-        ], now()->addMinute(15));
+        ], now()->addMinute());
 
         return $this->success('Correo valido!', [
             'register_token' => $registerToken,
@@ -217,6 +216,8 @@ class AdmissionsController extends Controller
     public function registrarAspirante(RegistrarAspiranteRequest $request)
     {
         $data = $request->validated();
+
+        $data['anio_academico'] = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
 
         $resultado = $this->admisiones_services->registrarAspirante($data);
 
@@ -364,6 +365,44 @@ class AdmissionsController extends Controller
         $id_informacion = $request->input("id_informacion");
 
         $response = $this->admisiones_services->eliminarInformacionMedicaAspirante($id_informacion);
+
+        return $this->apiResponse($response);
+    }
+
+    public function subirDocumentoInscripcion(AdmisionesDocumentoRequest $request)
+    {
+        $file = $request->file('archivo');
+
+        if (!$file) {
+            return response()->json([
+                'error' => true,
+                'message' => 'No se ha proporcionado ningún archivo.',
+                'data' => [],
+            ]);
+        }
+
+        $id_inscripcion = $request->input('id_inscripcion');
+
+        $data = $request->safe()->except(['archivo']);
+
+        $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/documentos');
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        $cloudinary = $resultado['data'];
+
+        $response = $this->admisiones_services->subirDocumentoInscripcion($id_inscripcion,
+                [
+                    ...$data,
+                    'nombre_original' => $file->getClientOriginalName(),
+                    'url_archivo' => $cloudinary['url'],
+                    'public_id' => $cloudinary['public_id'],
+                    'formato' => $cloudinary['format'],
+                    'peso' => $cloudinary['size'],
+                ]
+            );
 
         return $this->apiResponse($response);
     }

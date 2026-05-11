@@ -16,7 +16,7 @@ class Inscripcion extends Model
     /**
      * Summary of fillable
      * @var array
-     * @var array<estado> Debe ser un array del tipo: 
+     * @var array Debe ser un array del tipo: 
         'BORRADOR',
         'PENDIENTE',
         'EN_REVISION',
@@ -44,5 +44,9 @@ class Inscripcion extends Model
 
     public function anioAcademico(){
         return $this->belongsTo(Anio::class, 'anio_academico', 'id');
+    }
+
+    public function documento(){
+        return $this->hasMany(Documento::class, 'id_inscripcion', 'id');
     }
 }
