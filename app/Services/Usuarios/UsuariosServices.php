@@ -21,7 +21,7 @@ class UsuariosServices
     {
         return Usuario::query()
             ->where('correo', $email)
-            ->firstOrFail();
+            ->first();
     }
 
     public function mostrarTodosUsuariosActivos()
