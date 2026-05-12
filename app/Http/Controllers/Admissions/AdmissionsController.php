@@ -416,4 +416,14 @@ class AdmissionsController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    public function actualizarEstadoDeInscripcionAspirante(Request $request){
+        $id_inscripcion = $request->input('id_inscripcion');
+        $estado = $request->input("estado");
+        $correo_acudiente = $request->input("email") ?? null;
+
+        $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante($id_inscripcion, $estado, $correo_acudiente);
+
+        return $this->apiResponse($response);
+    }
 }

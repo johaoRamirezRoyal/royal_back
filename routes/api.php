@@ -201,6 +201,7 @@ Route::middleware('auth:api')->group(function () {
          */
         Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
         Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
+        Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
 
         /** Ejemplo JSON para actualizar datos de un aspirante:
         {
@@ -278,7 +279,7 @@ Route::middleware('auth:api')->group(function () {
         Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
         Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
 
-        Route::post("/admincionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
+        Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
         Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
         Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
