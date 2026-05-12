@@ -4,18 +4,18 @@ namespace App\Http\Controllers\Admissions;
 
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
 use App\Http\Requests\Admisiones\RegistrarFamiliarRequest;
+use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
-use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
-use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
-use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Auth\AuthServices;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\JwtService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
@@ -29,7 +29,9 @@ class AdmissionsController extends Controller
     protected AdmisionesServices $admisiones_services;
 
     protected CloudinaryService $cloudinary_service;
+
     protected AuthServices $service_auth;
+
     protected AnioEscolarServices $anio_escolar_services;
 
     public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, private JwtService $jwt, private UsuariosServices $usuarios_services)
@@ -142,8 +144,9 @@ class AdmissionsController extends Controller
         $userExists = $this->usuarios_services->infoUserWhitEmail($email);
 
         if ($userExists) {
-            return response()
-                ->json([])
+            return $this->success('Cuenta existente. Redirigiendo...', [
+                'cookie_token' => true,
+            ])
                 ->withCookie(
                     $this->makeCookie($this->jwt->generateAdmissionsToken($userExists), 'admissions_token')
                 );
@@ -153,7 +156,7 @@ class AdmissionsController extends Controller
 
         Cache::put("register_session_{$registerToken}", [
             'email' => $email,
-        ], now()->addMinute());
+        ], now()->addMinute(15));
 
         return $this->success('Correo valido!', [
             'register_token' => $registerToken,
@@ -187,7 +190,8 @@ class AdmissionsController extends Controller
         }
     }
 
-    public function registrarInscripcion(RegistrarInscripcionRequest $request){
+    public function registrarInscripcion(RegistrarInscripcionRequest $request)
+    {
         $data = $request->validated();
 
         $data['anio_academico'] = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
@@ -197,14 +201,15 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function obtenerInformacionCompletaDeInscripcionMedianteCodigo(Request $request){
+    public function obtenerInformacionCompletaDeInscripcionMedianteCodigo(Request $request)
+    {
         $codigo = $request->input('codigo');
 
-        if(!$codigo){
+        if (! $codigo) {
             return response()->json([
                 'error' => true,
                 'message' => 'Debe proporcionar un código de inscripción válido.',
-                'data' => []
+                'data' => [],
             ]);
         }
 
@@ -320,38 +325,43 @@ class AdmissionsController extends Controller
         ]);
     }
 
-    public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request){
+    public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request)
+    {
         $data = $request->validated();
         $id_aspirante = $request->input('id_aspirante');
 
         $response = $this->admisiones_services->agregarFamiliarAspirante($id_aspirante, $data);
 
         return $this->apiResponse($response);
-    }    
-    
-    public function actualizarFamiliarAspirante(RegistrarFamiliarRequest $request){
+    }
+
+    public function actualizarFamiliarAspirante(RegistrarFamiliarRequest $request)
+    {
         $data = $request->validated();
-        $id_familiar = $request->input("id_familiar");
+        $id_familiar = $request->input('id_familiar');
 
         $response = $this->admisiones_services->actualizarFamiliarAspirante($id_familiar, $data);
 
         return $this->apiResponse($response);
     }
 
-    public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request){
+    public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request)
+    {
         $id_aspirante = $request->input('aspirante_id');
         $id_inscripcion = $request->input('id_inscripcion');
 
         $data = $request->safe()->except([
             'aspirante_id',
-            'id_inscripcion'
+            'id_inscripcion',
         ]);
 
         $response = $this->admisiones_services->agregarInformacionMedicaAspirante($id_aspirante, $id_inscripcion, $data);
+
         return $this->apiResponse($response);
     }
 
-    public function actualizarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request){
+    public function actualizarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request)
+    {
         $id_informacion = $request->input('id_informacion');
         $data = $request->safe()->except('id_informacion');
 
@@ -360,9 +370,9 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-
-    public function eliminarInformacionMedicaAspirante(Request $request){
-        $id_informacion = $request->input("id_informacion");
+    public function eliminarInformacionMedicaAspirante(Request $request)
+    {
+        $id_informacion = $request->input('id_informacion');
 
         $response = $this->admisiones_services->eliminarInformacionMedicaAspirante($id_informacion);
 
@@ -373,7 +383,7 @@ class AdmissionsController extends Controller
     {
         $file = $request->file('archivo');
 
-        if (!$file) {
+        if (! $file) {
             return response()->json([
                 'error' => true,
                 'message' => 'No se ha proporcionado ningún archivo.',
@@ -394,15 +404,15 @@ class AdmissionsController extends Controller
         $cloudinary = $resultado['data'];
 
         $response = $this->admisiones_services->subirDocumentoInscripcion($id_inscripcion,
-                [
-                    ...$data,
-                    'nombre_original' => $file->getClientOriginalName(),
-                    'url_archivo' => $cloudinary['url'],
-                    'public_id' => $cloudinary['public_id'],
-                    'formato' => $cloudinary['format'],
-                    'peso' => $cloudinary['size'],
-                ]
-            );
+            [
+                ...$data,
+                'nombre_original' => $file->getClientOriginalName(),
+                'url_archivo' => $cloudinary['url'],
+                'public_id' => $cloudinary['public_id'],
+                'formato' => $cloudinary['format'],
+                'peso' => $cloudinary['size'],
+            ]
+        );
 
         return $this->apiResponse($response);
     }
