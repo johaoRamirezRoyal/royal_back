@@ -275,10 +275,39 @@ Route::middleware('auth:api')->group(function () {
 
         Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
 
+
+        /**
+         * JSON Para añadir información médica
+            {
+                "aspirante_id": 125,
+                "id_inscripcion": 450,
+                "medico_nombre": "Dr. Camilo Andrés Pérez",
+                "medico_telefono": "+57 300 123 4567",
+                "tiene_alergias": true,
+                "detalle_alergias": "Alérgico a la penicilina y al polen de flores primaverales.",
+                "necesita_cuidados": false,
+                "detalle_cuidados": null,
+                "recibe_ayuda": true,
+                "terapia_ocupacional": true,
+                "terapia_lenguaje": false,
+                "terapia_psicologica": true,
+                "fonoaudiologia": false,
+                "terapia_otros": false,
+                "profesional_nombre": "Lic. Martha Lucía Gómez",
+                "profesional_telefono": "601 234 5678"
+            }
+         */
         Route::post("/informacionMedica", [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
         Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
         Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
 
+        /**
+         * JSON Para subir documentos, evidentemente es necesario el file.
+        {
+            "id_inscripcion": 1025,
+            "tipo_documento": "registro_civil"
+        }
+        */
         Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
         Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
