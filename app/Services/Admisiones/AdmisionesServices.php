@@ -128,6 +128,87 @@ class AdmisionesServices
         }
     }
 
+    public function actualizarEstadoDeInscripcionAspirante(
+        int $id_inscripcion,
+        string $estado,
+        ?string $correo_acudiente = null
+    ): array {
+
+        try {
+
+            $inscripcion = Inscripcion::with('aspirante')
+                ->find($id_inscripcion);
+
+            if (!$inscripcion) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa inscripción',
+                    'data' => []
+                ];
+            }
+
+            if ($inscripcion->estado === $estado) {
+                return [
+                    'error' => false,
+                    'message' => 'La inscripción ya tiene ese estado',
+                    'data' => $inscripcion->toArray()
+                ];
+            }
+
+            $estadoAnterior = $inscripcion->estado;
+
+            $inscripcion->update([
+                'estado' => $estado
+            ]);
+
+            $mailTo = collect($this->mailTo ?? [])
+                ->push($correo_acudiente)
+                ->toArray();
+
+            $titulo = "Actualización de estado de inscripción | {$inscripcion->codigo}";
+
+            $contenido = "
+            Hola,
+
+            Se ha actualizado el estado de la inscripción con código {$inscripcion->codigo}.
+
+            Estado anterior: {$estadoAnterior}
+            Nuevo estado: {$estado}
+
+            Aspirante: " . optional($inscripcion->aspirante)->nombre_completo . "
+
+            Fecha de actualización: " . now()->format('Y-m-d H:i:s');
+
+            if (!empty($mailTo)) {
+
+                Mail::to($mailTo)
+                    ->send(new GenericMail($titulo, $contenido));
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Estado actualizado correctamente',
+                'data' => $inscripcion->fresh()->toArray()
+            ];
+        } catch (\Throwable $e) {
+
+            Log::error('Error al actualizar estado de inscripción', [
+                'id_inscripcion' => $id_inscripcion,
+                'estado' => $estado,
+                'correo_acudiente' => $correo_acudiente,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
+            ]);
+
+            return [
+                'error' => true,
+                'message' => 'No se pudo actualizar el estado de la inscripción',
+                'data' => []
+            ];
+        }
+    }
+
     /* =================================================================== ASPIRANTE SERVICES =================================================================== */
     /**
      * Summary of registrarAspirante
@@ -574,4 +655,6 @@ class AdmisionesServices
             ];
         }
     }
+
+    // ========================================= SOLICITUD DE DOCUMENTOS SERVICES =========================================
 }
