@@ -200,6 +200,14 @@ Route::middleware('auth:api')->group(function () {
         }
          */
         Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
+
+        /**
+         * JSON para mostrar inscripciones de acudiente:
+        {
+            "id_acudiente": 3123
+        }
+         */
+        Route::get('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
         Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
         Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
 

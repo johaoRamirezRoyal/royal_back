@@ -8,7 +8,7 @@ use App\Models\Admisiones\Documento;
 use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
-use App\Models\Usuarios\Usuario;
+use App\Models\Admisiones\ReferenciasFamiliares;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -41,6 +41,38 @@ class AdmisionesServices
             return [
                 'error' => true,
                 'message' => 'Error al registrar la inscripción: '.$e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    public function mostrarTodasIncripcionesAcudiente(int $id_acudiente): array
+    {
+        try {
+            $inscripciones = Inscripcion::with([
+                'anioAcademico',
+            ])
+                ->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
+
+            if ($inscripciones->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró ninguna inscripción para ese usuario',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Inscripciones seleccionadas',
+                'data' => $inscripciones->toArray(),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error al mostrar inscripciones: ', ['err' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()]);
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor para encontrar las inscripciones del usuario',
                 'data' => [],
             ];
         }
@@ -97,6 +129,7 @@ class AdmisionesServices
                 'anioAcademico',
                 'aspirante',
                 'documento',
+                'referenciaFamiliares',
                 'aspirante.familiares',
                 'aspirante.informacionMedica',
             ])
@@ -598,7 +631,6 @@ class AdmisionesServices
                 'message' => 'Información médica actualizada correctamente',
                 'data' => $informacionMedica->fresh()->toArray(),
             ];
-
         } catch (\Exception $e) {
             Log::error(
                 'No se pudo actualizar la información médica',
@@ -681,24 +713,133 @@ class AdmisionesServices
         }
     }
 
-    // ========================================= SOLICITUD DE DOCUMENTOS SERVICES =========================================
-
-    // Consultas adicionales. Validacion de datos existentes.
-
-    public function hasRegistration(string $email)
+    // ========================================= SOLICITUD DE REFERENCIAS FAMILIARES SERVICES =========================================
+    /**
+     * Subir referencias familiares a una inscripción.
+     *
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array
     {
         try {
-            return Usuario::query()
-                ->where('correo', $email)
-                ->whereHas('admisiones_inscripciones')
-                ->exists();
+            $inscripcion = Inscripcion::find($id_inscripcion);
+
+            if (! $inscripcion) {
+                return [
+                    'error' => true,
+                    'message' => 'La inscripción no existe',
+                    'data' => [],
+                ];
+            }
+
+            $referencia = ReferenciasFamiliares::create([...$data, 'id_inscripcion' => $id_inscripcion]);
+
+            return [
+                'error' => false,
+                'message' => 'Referencia familiar agregada',
+                'data' => $referencia->toArray(),
+            ];
         } catch (\Exception $e) {
-            Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
+            Log::error('Error al subir referencias familiares: ', [
+                'err' => $e->getMessage(),
+                'data' => $data,
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
 
             return [
                 'error' => true,
-                'message' => 'Ha ocurrido un error en la consulta de datos',
-                'data' => $e->getMessage(),
+                'message' => 'No se pudo agregar la referencia familiar',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Actualizar referencia familiar existente
+     *
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function actualizarReferenciasFamiliaresAspirante(int $id_referencia_familiar, array $data): array
+    {
+        try {
+            $referencia = ReferenciasFamiliares::find($id_referencia_familiar);
+            if (! $referencia) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa referencia',
+                    'data' => [],
+                ];
+            }
+
+            $referencia->update($data);
+
+            return [
+                'error' => false,
+                'message' => 'Referencia actualizada',
+                'data' => $referencia->fresh()->toArray(),
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar la referencia: ', [
+                'err' => $e->getMessage(),
+                'data' => [
+                    ...$data,
+                    'id_referencia_familiar' => $id_referencia_familiar,
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
+                ],
+            ]);
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la referencia',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Metodo para eliminar una referencia familiar con el id de dicha referencia
+     *
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function eliminarReferenciaFamiliarAspirante(int $id_referencia_familiar): array
+    {
+        try {
+            $referencia = ReferenciasFamiliares::find($id_referencia_familiar);
+            $referencia_data = $referencia->toArray();
+            if (! $referencia) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa referencia a eliminar!',
+                    'data' => [],
+                ];
+            }
+
+            $borrado = $referencia->delete();
+            if (! $borrado) {
+                return [
+                    'error' => true,
+                    'message' => 'No se borró la referencia... ',
+                    'data' => $referencia_data,
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Referencia eliminada correctamente',
+                'data' => $referencia->toArray(),
+            ];
+        } catch (\Exception $e) {
+            Log::error(
+                'Error al eliminar la referencia: ',
+                ['id' => $id_referencia_familiar, 'err' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]
+            );
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar la referencia',
+                'data' => [],
             ];
         }
     }
