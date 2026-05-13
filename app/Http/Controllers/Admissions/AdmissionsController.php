@@ -201,6 +201,14 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function mostrarTodasIncripcionesAcudiente(Request $request){
+        $id_acudiente = $request->input("id_acudiente");
+
+        $response = $this->admisiones_services->mostrarTodasIncripcionesAcudiente($id_acudiente);
+
+        return $this->apiResponse($response);
+    }
+
     public function obtenerInformacionCompletaDeInscripcionMedianteCodigo(Request $request)
     {
         $codigo = $request->input('codigo');

@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Models\Admisiones;
+
 use App\Models\Admisiones\Aspirante;
 use App\Models\AnioEscolar\Anio;
 use App\Models\Usuarios\Usuario;
@@ -42,11 +44,18 @@ class Inscripcion extends Model
         return $this->belongsTo(Usuario::class, 'id_usuario_registro', 'id_user');
     }
 
-    public function anioAcademico(){
+    public function anioAcademico()
+    {
         return $this->belongsTo(Anio::class, 'anio_academico', 'id');
     }
 
-    public function documento(){
+    public function documento()
+    {
         return $this->hasMany(Documento::class, 'id_inscripcion', 'id');
+    }
+
+    public function referenciaFamiliares()
+    {
+        return $this->hasMany(ReferenciasFamiliares::class, 'id_inscripcion');
     }
 }
