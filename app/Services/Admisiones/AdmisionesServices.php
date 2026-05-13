@@ -8,6 +8,8 @@ use App\Models\Admisiones\Documento;
 use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
+use App\Models\Usuarios\Usuario;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -15,15 +17,16 @@ class AdmisionesServices
 {
     /**
      * Summary of mailTo
-     * @var array
      */
     private array $mailTo = [
-        'hernando.ramirez@royalschool.edu.co'
+        'hernando.ramirez@royalschool.edu.co',
     ];
+
     /* =================================================================== INSCRIPCION SERVICES =================================================================== */
-    public function registrarInscripcion(array $data): array{
+    public function registrarInscripcion(array $data): array
+    {
         try {
-            $unique_code = 'ROYAL-' . strtoupper(uniqid());
+            $unique_code = 'ROYAL-'.strtoupper(uniqid());
             $data['codigo'] = $unique_code;
             $inscripcion = Inscripcion::create($data);
 
@@ -32,34 +35,36 @@ class AdmisionesServices
                 'message' => 'Inscripción registrada exitosamente.',
                 'data' => $inscripcion->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error('Error al registrar la inscripción: ' . $e->getMessage(), ['data' => $data]);
+        } catch (\Exception $e) {
+            Log::error('Error al registrar la inscripción: '.$e->getMessage(), ['data' => $data]);
+
             return [
                 'error' => true,
-                'message' => 'Error al registrar la inscripción: ' . $e->getMessage(),
-                'data' => []
+                'message' => 'Error al registrar la inscripción: '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
 
     /**
      * Mostrar la información de la inscripción en base al id
-     * @param int $id
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function mostrarInformacionInscripcionId(int $id): array{
+    public function mostrarInformacionInscripcionId(int $id): array
+    {
         try {
             $inscripcion = Inscripcion::with([
                 'anioAcademico',
                 'aspirante',
-                'aspirante.familiares'
+                'aspirante.familiares',
             ])->find($id);
 
-            if(!$inscripcion){
-                return[
+            if (! $inscripcion) {
+                return [
                     'error' => true,
                     'message' => 'No se encontró la inscripción con el ID proporcionado.',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -68,19 +73,20 @@ class AdmisionesServices
                 'message' => 'Información de la inscripción obtenida exitosamente.',
                 'data' => $inscripcion->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("Error al obtener información de la inscripción: ", ["id" => $id, "error" => $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Error al obtener información de la inscripción: ', ['id' => $id, 'error' => $e->getMessage()]);
+
             return [
                 'error' => true,
-                'message' => "Error al obtener la información de la inscripción",
-                'data' => []
+                'message' => 'Error al obtener la información de la inscripción',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Obtener información completa de una inscripción con el codigo, incluyendo el año académico, el aspirante y los familiares del aspirante.
-     * @param string $codigo
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function obtenerInformacionCompletaDeInscripcionMedianteCodigo(string $codigo): array
@@ -92,16 +98,16 @@ class AdmisionesServices
                 'aspirante',
                 'documento',
                 'aspirante.familiares',
-                'aspirante.informacionMedica'
+                'aspirante.informacionMedica',
             ])
                 ->where('codigo', $codigo)
                 ->first();
 
-            if (!$inscripcion) {
+            if (! $inscripcion) {
                 return [
                     'error' => true,
                     'message' => 'No se encontró la inscripción con el código proporcionado.',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -116,14 +122,14 @@ class AdmisionesServices
                 'Error al obtener información de la inscripción',
                 [
                     'codigo' => $codigo,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]
             );
 
             return [
                 'error' => true,
                 'message' => 'Error al obtener la información de la inscripción.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -139,11 +145,11 @@ class AdmisionesServices
             $inscripcion = Inscripcion::with('aspirante')
                 ->find($id_inscripcion);
 
-            if (!$inscripcion) {
+            if (! $inscripcion) {
                 return [
                     'error' => true,
                     'message' => 'No se encontró esa inscripción',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -151,14 +157,14 @@ class AdmisionesServices
                 return [
                     'error' => false,
                     'message' => 'La inscripción ya tiene ese estado',
-                    'data' => $inscripcion->toArray()
+                    'data' => $inscripcion->toArray(),
                 ];
             }
 
             $estadoAnterior = $inscripcion->estado;
 
             $inscripcion->update([
-                'estado' => $estado
+                'estado' => $estado,
             ]);
 
             $mailTo = collect($this->mailTo ?? [])
@@ -175,11 +181,11 @@ class AdmisionesServices
             Estado anterior: {$estadoAnterior}
             Nuevo estado: {$estado}
 
-            Aspirante: " . optional($inscripcion->aspirante)->nombre_completo . "
+            Aspirante: ".optional($inscripcion->aspirante)->nombre_completo.'
 
-            Fecha de actualización: " . now()->format('Y-m-d H:i:s');
+            Fecha de actualización: '.now()->format('Y-m-d H:i:s');
 
-            if (!empty($mailTo)) {
+            if (! empty($mailTo)) {
 
                 Mail::to($mailTo)
                     ->send(new GenericMail($titulo, $contenido));
@@ -188,7 +194,7 @@ class AdmisionesServices
             return [
                 'error' => false,
                 'message' => 'Estado actualizado correctamente',
-                'data' => $inscripcion->fresh()->toArray()
+                'data' => $inscripcion->fresh()->toArray(),
             ];
         } catch (\Throwable $e) {
 
@@ -198,13 +204,13 @@ class AdmisionesServices
                 'correo_acudiente' => $correo_acudiente,
                 'error' => $e->getMessage(),
                 'line' => $e->getLine(),
-                'file' => $e->getFile()
+                'file' => $e->getFile(),
             ]);
 
             return [
                 'error' => true,
                 'message' => 'No se pudo actualizar el estado de la inscripción',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -212,13 +218,14 @@ class AdmisionesServices
     /* =================================================================== ASPIRANTE SERVICES =================================================================== */
     /**
      * Summary of registrarAspirante
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string|array{data: Aspirante, error: bool, message: string}}
      */
-    public function registrarAspirante(array $data): array{
+    public function registrarAspirante(array $data): array
+    {
         try {
 
-            if(!empty($data['fecha_nacimiento']) && empty($data['edad'])){
+            if (! empty($data['fecha_nacimiento']) && empty($data['edad'])) {
                 $data['edad'] = now()->parse($data['fecha_nacimiento'])->age;
             }
 
@@ -229,27 +236,28 @@ class AdmisionesServices
                 'message' => 'Aspirante registrado exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error('Error al registrar aspirante: ' . $e->getMessage(), ['data' => $data]);
+        } catch (\Exception $e) {
+            Log::error('Error al registrar aspirante: '.$e->getMessage(), ['data' => $data]);
+
             return [
                 'error' => true,
-                'message' => 'Error al registrar al aspirante: ' . $e->getMessage(),
-                'data' => []
+                'message' => 'Error al registrar al aspirante: '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
 
     /**
      * Funcionalidad para actualizar la información de un aspirante existente.
-     * @param int $id
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string|array{data: array, error: bool, message: string}}
      */
-    public function actualizarRegistroAspirante(int $id, array $data): array{
-        try{
+    public function actualizarRegistroAspirante(int $id, array $data): array
+    {
+        try {
             $aspirante = Aspirante::findOrFail($id);
 
-            if(!empty($data['fecha_nacimiento']) && empty($data['edad'])){
+            if (! empty($data['fecha_nacimiento']) && empty($data['edad'])) {
                 $data['edad'] = now()->parse($data['fecha_nacimiento'])->age;
             }
 
@@ -260,50 +268,56 @@ class AdmisionesServices
                 'message' => 'Aspirante actualizado exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error('Error al actualizar aspirante: ' . $e->getMessage(), ['id' => $id, 'data' => $data]);
-            return[
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar aspirante: '.$e->getMessage(), ['id' => $id, 'data' => $data]);
+
+            return [
                 'error' => true,
                 'message' => 'No se pudo actualizar al aspirante.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
 
-    public function mostrarInformacionAspiranteId(int $id): array{
+    public function mostrarInformacionAspiranteId(int $id): array
+    {
         try {
             $aspirante = Aspirante::findOrFail($id)->with('anioAcademico')->first();
+
             return [
                 'error' => false,
                 'message' => 'Información del aspirante obtenida exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error('Error al obtener información del aspirante: ' . $e->getMessage(), ['id' => $id]);
+        } catch (\Exception $e) {
+            Log::error('Error al obtener información del aspirante: '.$e->getMessage(), ['id' => $id]);
+
             return [
                 'error' => true,
-                'message' => 'Error al obtener la información del aspirante: ' . $e->getMessage(),
-                'data' => []
+                'message' => 'Error al obtener la información del aspirante: '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
 
-    public function eliminarRegistroAspirante(int $id): array {
-        try{
+    public function eliminarRegistroAspirante(int $id): array
+    {
+        try {
             $aspirante = Aspirante::findOrFail($id);
             $aspirante->delete();
 
-            return [ 
+            return [
                 'error' => false,
                 'message' => 'Aspirante eliminado exitosamente.',
-                'data' => $aspirante->toArray()
+                'data' => $aspirante->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error('Error al eliminar aspirante: ' . $e->getMessage(), ['id' => $id]);
+        } catch (\Exception $e) {
+            Log::error('Error al eliminar aspirante: '.$e->getMessage(), ['id' => $id]);
+
             return [
                 'error' => true,
-                'message' => 'Error al eliminar al aspirante: ' . $e->getMessage(),
-                'data' => []
+                'message' => 'Error al eliminar al aspirante: '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
@@ -315,29 +329,30 @@ class AdmisionesServices
         if ($informacion['error'] || empty($informacion['data'])) {
             Log::error('No se pudo obtener la información del aspirante para enviar el correo', [
                 'id_solicitud' => $id_solicitud,
-                'detalle'      => $informacion['message'] ?? 'Data vacía'
+                'detalle' => $informacion['message'] ?? 'Data vacía',
             ]);
+
             return [
-                'error'   => true,
+                'error' => true,
                 'message' => 'No se pudo obtener la información para el correo.',
-                'data'    => []
+                'data' => [],
             ];
         }
 
         $aspirante = $informacion['data'];
         try {
-            $titulo = "Notificación | Registro de Aspirante Actualizado";
+            $titulo = 'Notificación | Registro de Aspirante Actualizado';
 
-            $anioEscolar = "N/A";
+            $anioEscolar = 'N/A';
 
-            if (!empty($aspirante['anio_academico'])) {
+            if (! empty($aspirante['anio_academico'])) {
                 $aa = $aspirante['anio_academico'];
 
                 if (is_array($aa)) {
                     // Verificamos que existan las llaves antes de concatenar
                     $inicio = $aa['anio_inicio'] ?? '';
                     $fin = $aa['anio_fin'] ?? '';
-                    $anioEscolar = trim("$inicio - $fin", " -");
+                    $anioEscolar = trim("$inicio - $fin", ' -');
                 } elseif (is_object($aa)) {
                     $anioEscolar = "{$aa->anio_inicio} - {$aa->anio_fin}";
                 } elseif (is_string($aa)) {
@@ -351,30 +366,30 @@ class AdmisionesServices
             $contenido .= "• Nombre completo: {$aspirante['nombre_completo']}\n";
             $contenido .= "• Grado al que aplica: {$aspirante['grado_aplica']}\n";
             $contenido .= "• Año Académico: {$anioEscolar}\n";
-            $contenido .= "• Edad: " . ($aspirante['edad'] ?? 'N/A') . " años\n";
-            $contenido .= "• Sexo: " . ($aspirante['sexo'] ?? 'N/A') . "\n";
+            $contenido .= '• Edad: '.($aspirante['edad'] ?? 'N/A')." años\n";
+            $contenido .= '• Sexo: '.($aspirante['sexo'] ?? 'N/A')."\n";
 
             $contenido .= "\nDetalles de Convivencia:\n";
             $contenido .= "• Vive con: {$viveCon}\n";
-            $contenido .= "• Lugar de nacimiento: " . ($aspirante['lugar_nacimiento'] ?? 'N/A') . "\n";
+            $contenido .= '• Lugar de nacimiento: '.($aspirante['lugar_nacimiento'] ?? 'N/A')."\n";
 
-            if (!empty($aspirante['tiene_hermanos_colegio'])) {
+            if (! empty($aspirante['tiene_hermanos_colegio'])) {
                 $contenido .= "• Hermanos en el colegio: Sí\n";
-                $contenido .= "• Detalle hermanos: " . ($aspirante['info_hermanos_colegio'] ?? 'N/A') . "\n";
+                $contenido .= '• Detalle hermanos: '.($aspirante['info_hermanos_colegio'] ?? 'N/A')."\n";
             } else {
                 $contenido .= "• Hermanos en el colegio: No\n";
             }
 
             $contenido .= "\nInformación Adicional:\n";
-            $contenido .= "• Antecedentes: " . ($aspirante['antecedentes_escolares'] ?? 'Ninguno') . "\n";
-            $contenido .= "• Religión: " . ($aspirante['religion'] ?? 'N/A') . "\n";
+            $contenido .= '• Antecedentes: '.($aspirante['antecedentes_escolares'] ?? 'Ninguno')."\n";
+            $contenido .= '• Religión: '.($aspirante['religion'] ?? 'N/A')."\n";
 
             // CORRECCIÓN: Parse de fecha con Carbon
-            $fechaReg = !empty($aspirante['fecha_registro'])
-                ? \Carbon\Carbon::parse($aspirante['fecha_registro'])->format('d/m/Y H:i')
+            $fechaReg = ! empty($aspirante['fecha_registro'])
+                ? Carbon::parse($aspirante['fecha_registro'])->format('d/m/Y H:i')
                 : now()->format('d/m/Y H:i');
 
-            $contenido .= "\n---\nFecha de registro: " . $fechaReg;
+            $contenido .= "\n---\nFecha de registro: ".$fechaReg;
 
             $this->mailTo = [$correo_acudiente];
 
@@ -383,19 +398,20 @@ class AdmisionesServices
                 ->send(new GenericMail($titulo, $contenido));
 
             return [
-                'error'   => false,
+                'error' => false,
                 'message' => 'Correo informativo enviado exitosamente.',
-                'data'    => []
+                'data' => [],
             ];
         } catch (\Exception $e) {
-            Log::error('Error al enviar correo informativo: ' . $e->getMessage(), [
+            Log::error('Error al enviar correo informativo: '.$e->getMessage(), [
                 'id_solicitud' => $id_solicitud,
-                'trace'        => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return [
-                'error'   => true,
-                'message' => 'Error al enviar correo: ' . $e->getMessage(),
-                'data'    => []
+                'error' => true,
+                'message' => 'Error al enviar correo: '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
@@ -404,14 +420,14 @@ class AdmisionesServices
 
     /**
      * Summary of agregarFamiliarAspirante
-     * @param int $aspirante_id
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarFamiliarAspirante(int $aspirante_id, array $data): array {
+    public function agregarFamiliarAspirante(int $aspirante_id, array $data): array
+    {
         try {
             $aspirante = Aspirante::findOrFail($aspirante_id);
-            Log::info("Informacion del aspirante: ", ['aspirante' => $aspirante->toArray()]);
+            Log::info('Informacion del aspirante: ', ['aspirante' => $aspirante->toArray()]);
             $familiar = $aspirante->familiares()->create($data);
 
             return [
@@ -419,29 +435,30 @@ class AdmisionesServices
                 'message' => 'Familiar agregado exitosamente.',
                 'data' => $familiar->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("Error al agregar al familiar del aspirante: {$aspirante['nombre_completo']}" .  $e->getMessage());
+        } catch (\Exception $e) {
+            Log::error("Error al agregar al familiar del aspirante: {$aspirante['nombre_completo']}".$e->getMessage());
+
             return [
                 'error' => true,
-                'message' => "No se pudo agregar al familiar del aspirante, intente nuevamente.",
-                'data' => []
+                'message' => 'No se pudo agregar al familiar del aspirante, intente nuevamente.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Función para actualizar la información, recibe un array que debe haber pasado por la Request.
-     * @param int $id_familiar
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function actualizarFamiliarAspirante(int $id_familiar, array $data): array {
+    public function actualizarFamiliarAspirante(int $id_familiar, array $data): array
+    {
         try {
-            if(!$id_familiar){
+            if (! $id_familiar) {
                 return [
                     'error' => true,
-                    'message' => "El ID del familiar es obligatorio para la actualización.",
-                    'data' => []
+                    'message' => 'El ID del familiar es obligatorio para la actualización.',
+                    'data' => [],
                 ];
             }
 
@@ -449,11 +466,11 @@ class AdmisionesServices
 
             $familiar->update($data);
 
-            if(!$familiar->wasChanged()){
+            if (! $familiar->wasChanged()) {
                 return [
                     'error' => true,
-                    'message' => "No se realizaron cambios en la información del familiar.",
-                    'data' => $familiar->toArray()
+                    'message' => 'No se realizaron cambios en la información del familiar.',
+                    'data' => $familiar->toArray(),
                 ];
             }
 
@@ -462,54 +479,57 @@ class AdmisionesServices
                 'message' => 'Familiar actualizado exitosamente.',
                 'data' => $familiar->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("Error al actualizar al familiar del aspirante: ", ["error" => $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Error al actualizar al familiar del aspirante: ', ['error' => $e->getMessage()]);
+
             return [
                 'error' => true,
-                'message' => "No se pudo actualizar al familiar del aspirante, comuniquese con soporte.",
-                'data' => []
+                'message' => 'No se pudo actualizar al familiar del aspirante, comuniquese con soporte.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Eliminar al familiar del aspirante por su ID.
-     * @param int $id_familiar
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function eliminarFamiliarAspirante(int $id_familiar): array{
+    public function eliminarFamiliarAspirante(int $id_familiar): array
+    {
         try {
             $familiar = Familiares::find($id_familiar);
 
-            if (!$familiar){
+            if (! $familiar) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el familiar con el ID proporcionado.",
-                    'data' => []
+                    'message' => 'No se encontró el familiar con el ID proporcionado.',
+                    'data' => [],
                 ];
             }
 
             $eliminado = $familiar->delete();
 
-            if(!$eliminado){
+            if (! $eliminado) {
                 return [
                     'error' => true,
-                    'message' => "No se pudo eliminar al familiar, intente nuevamente.",
-                    'data' => []
+                    'message' => 'No se pudo eliminar al familiar, intente nuevamente.',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Familiar eliminado exitosamente.",
-                'data' => []
+                'message' => 'Familiar eliminado exitosamente.',
+                'data' => [],
             ];
-        }catch(\Exception $e){
-            Log::error("Error al eliminar al familiar del aspirante: ", ["error" => $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Error al eliminar al familiar del aspirante: ', ['error' => $e->getMessage()]);
+
             return [
                 'error' => true,
-                'message' => "No se puede eliminar al familiar del aspirante, comuniquese con soporte.",
-                'data' => []
+                'message' => 'No se puede eliminar al familiar del aspirante, comuniquese con soporte.',
+                'data' => [],
             ];
         }
     }
@@ -517,18 +537,17 @@ class AdmisionesServices
     // ========================================= INFORMACIÓN MEDICA SERVICES =========================================
     /**
      * Crear o agregar información médica de un aspirante
-     * @param int $id_aspirante
-     * @param int $id_inscripcion
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarInformacionMedicaAspirante(int $id_aspirante, int $id_inscripcion, array $data): array{
+    public function agregarInformacionMedicaAspirante(int $id_aspirante, int $id_inscripcion, array $data): array
+    {
         try {
-            if(!isset($id_aspirante) || !isset($id_inscripcion)){
+            if (! isset($id_aspirante) || ! isset($id_inscripcion)) {
                 return [
                     'error' => true,
-                    'message' => "Se necesita el ID del aspirante y el ID de la inscripción",
-                    'data' => $data
+                    'message' => 'Se necesita el ID del aspirante y el ID de la inscripción',
+                    'data' => $data,
                 ];
             }
 
@@ -540,14 +559,15 @@ class AdmisionesServices
 
             return [
                 'error' => false,
-                'message' => "Información medica guardada",
+                'message' => 'Información medica guardada',
                 'data' => $informacionMedica->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("Error creando la información medica: ", ["err" => $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Error creando la información medica: ', ['err' => $e->getMessage()]);
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor creando la información medica",
+                'message' => 'Error en el servidor creando la información medica',
                 'data' => $data,
             ];
         }
@@ -555,18 +575,18 @@ class AdmisionesServices
 
     /**
      * Actualizar la información del aspirante, con el id y la información en un array
-     * @param int $id_informacion
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function actualizarInformacionMedicaAspirante(int $id_informacion, array $data): array {
+    public function actualizarInformacionMedicaAspirante(int $id_informacion, array $data): array
+    {
         try {
             $informacionMedica = InformacionMedica::find($id_informacion);
-            
-            if(!$informacionMedica){
+
+            if (! $informacionMedica) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró esa información",
+                    'message' => 'No se encontró esa información',
                     'data' => $informacionMedica->toArray(),
                 ];
             }
@@ -579,7 +599,7 @@ class AdmisionesServices
                 'data' => $informacionMedica->fresh()->toArray(),
             ];
 
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             Log::error(
                 'No se pudo actualizar la información médica',
                 [
@@ -587,9 +607,10 @@ class AdmisionesServices
                     'error' => $e->getMessage(),
                 ]
             );
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor, no se pudo guardar la información médica.",
+                'message' => 'Error en el servidor, no se pudo guardar la información médica.',
                 'data' => $data,
             ];
         }
@@ -597,17 +618,18 @@ class AdmisionesServices
 
     /**
      * eliminar información medica con el id de la información medica
-     * @param int $id_informacion
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function eliminarInformacionMedicaAspirante(int $id_informacion): array {
-        try{
+    public function eliminarInformacionMedicaAspirante(int $id_informacion): array
+    {
+        try {
             $informacion = InformacionMedica::find($id_informacion);
 
-            if(!$informacion){
+            if (! $informacion) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró la información a eliminar",
+                    'message' => 'No se encontró la información a eliminar',
                     'data' => $informacion->toArray(),
                 ];
             }
@@ -621,12 +643,13 @@ class AdmisionesServices
                 'message' => 'Se eliminó completamente la información médica',
                 'data' => $dataEliminada,
             ];
-        }catch(\Exception $e){
-            Log::error("Error al eliminar la información medica: ", ["err" => $e->getMessage()]);
-            return[
+        } catch (\Exception $e) {
+            Log::error('Error al eliminar la información medica: ', ['err' => $e->getMessage()]);
+
+            return [
                 'error' => true,
-                'message' => "Error en el servidor al eliminar la información medica",
-                'data' => []
+                'message' => 'Error en el servidor al eliminar la información medica',
+                'data' => [],
             ];
         }
     }
@@ -634,27 +657,49 @@ class AdmisionesServices
     // ========================================= SOLICITUD DE DOCUMENTOS SERVICES =========================================
     /**
      * Subir documentos necesarios para la inscripción
-     * @param int $id_inscripcion
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
-    public function subirDocumentoInscripcion(int $id_inscripcion, array $data): array {
-        try{
+    public function subirDocumentoInscripcion(int $id_inscripcion, array $data): array
+    {
+        try {
             $documento = Documento::create([...$data, 'id_inscripcion' => $id_inscripcion]);
+
             return [
                 'error' => false,
-                'message' => "Documento guardado correctamente",
+                'message' => 'Documento guardado correctamente',
                 'data' => $documento->toArray(),
             ];
-        }catch(\Exception $e){
-            Log::error("Error añadiendo el archivo: ", ["err" => $e->getMessage()]);
+        } catch (\Exception $e) {
+            Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
+
             return [
                 'error' => true,
-                'message' => "No se pudo añadir el archivo",
-                'data' => $data
+                'message' => 'No se pudo añadir el archivo',
+                'data' => $data,
             ];
         }
     }
 
     // ========================================= SOLICITUD DE DOCUMENTOS SERVICES =========================================
+
+    // Consultas adicionales. Validacion de datos existentes.
+
+    public function hasRegistration(string $email)
+    {
+        try {
+            return Usuario::query()
+                ->where('correo', $email)
+                ->whereHas('admisiones_inscripciones')
+                ->exists();
+        } catch (\Exception $e) {
+            Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
+
+            return [
+                'error' => true,
+                'message' => 'Ha ocurrido un error en la consulta de datos',
+                'data' => $e->getMessage(),
+            ];
+        }
+    }
 }
