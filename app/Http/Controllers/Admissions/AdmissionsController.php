@@ -169,7 +169,9 @@ class AdmissionsController extends Controller
         $registerKey = "register_session_{$token}";
 
         $validation = Cache::get($registerKey);
+
         $data = $request->except('token');
+        $data['perfil'] = 6;
 
         if (! $validation) {
             return $this->error('Tu sesión de registro ha expirado o no es válida. Inicia el proceso nuevamente.', 401);
@@ -180,9 +182,20 @@ class AdmissionsController extends Controller
         }
 
         try {
-            $this->service_auth->registrarUsuario($data);
+            $userCreated = $this->service_auth->registrarUsuario($data);
 
             Cache::forget($registerKey);
+
+            $lastYear = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
+            $userId = $userCreated['data']->id;
+
+            $this->admisiones_services->registrarInscripcion([
+                'id_usuario_registro' => $userId,
+                'anio_academico' => $lastYear,
+        ]);
+
+        $data['anio_academico'] = '';
+        $data['id_usuario_registro'] = 0;
 
             return $this->success('Registro completado exitosamente.', 201);
         } catch (\Exception $e) {
@@ -425,10 +438,11 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function actualizarEstadoDeInscripcionAspirante(Request $request){
+    public function actualizarEstadoDeInscripcionAspirante(Request $request)
+    {
         $id_inscripcion = $request->input('id_inscripcion');
-        $estado = $request->input("estado");
-        $correo_acudiente = $request->input("email") ?? null;
+        $estado = $request->input('estado');
+        $correo_acudiente = $request->input('email') ?? null;
 
         $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante($id_inscripcion, $estado, $correo_acudiente);
 
