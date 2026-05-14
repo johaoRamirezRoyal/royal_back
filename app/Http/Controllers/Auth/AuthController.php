@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Auth\AuthServices;
 use App\Services\JwtService;
@@ -190,7 +191,7 @@ class AuthController extends Controller
 
         return response()
             ->json(['Message' => 'Login Exitoso'])
-            ->withCookie($this->makeCookie($token));
+            ->withCookie('token', $this->jwt->generateToken($usuario));
     }
 
     public function me()
@@ -207,13 +208,12 @@ class AuthController extends Controller
 
             if ($admissionsToken) {
                 try {
-                    // 👇 Sin Crypt, el JWT viene directo
                     $user = JWTAuth::setToken($admissionsToken)->authenticate();
 
                     return response()->json([
                         'active' => true,
                         'system' => 'admissions',
-                        'usuario' => $user,
+                        'usuario' => new UsuarioResource($user),
                     ]);
 
                 } catch (\Exception $e) {
@@ -232,7 +232,7 @@ class AuthController extends Controller
             return response()->json([
                 'active' => true,
                 'system' => 'general',
-                'usuario' => $user,
+                'usuario' => new UsuarioResource($user),
             ]);
 
         } catch (\Exception $e) {

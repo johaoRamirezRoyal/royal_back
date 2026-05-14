@@ -9,7 +9,7 @@ class JwtService
 {
     public function generateToken(Authenticatable $user): string
     {
-        return JWTAuth::fromUser($user);
+        return JWTAuth::claims(['system' => 'general'])->fromUser($user);
     }
 
     public function generateAdmissionsToken(Authenticatable $user): string

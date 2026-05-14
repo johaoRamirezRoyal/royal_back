@@ -9,6 +9,7 @@ use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
+use App\Models\Usuarios\Usuario;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -28,12 +29,36 @@ class AdmisionesServices
         try {
             $unique_code = 'ROYAL-'.strtoupper(uniqid());
             $data['codigo'] = $unique_code;
+
+            Log::info('debug registrarInscripcion', [
+                'data' => $data,
+            ]);
+
             $inscripcion = Inscripcion::create($data);
+
+            $inscripcion->load([
+                'codigo',
+                'estado',
+                'id_usuario_registrado',
+                'fecha_inscripcion',
+                'anioAcademico'
+            ]);
+
+            $anio = $inscripcion->anioAcademico;
+
+            $academicYear = $anio
+                ? "{$anio->anio_inicio} - {$anio->anio_fin}"
+                : null;
 
             return [
                 'error' => false,
                 'message' => 'Inscripción registrada exitosamente.',
-                'data' => $inscripcion->toArray(),
+                'data' => [
+                    'codigo' => $inscripcion->codigo,
+                    'estado' => $inscripcion->estado,
+                    'fecha_inscripcion' => $inscripcion->fecha_inscripcion,
+                    'anio_academico' => $academicYear,
+                ],
             ];
         } catch (\Exception $e) {
             Log::error('Error al registrar la inscripción: '.$e->getMessage(), ['data' => $data]);
@@ -840,6 +865,27 @@ class AdmisionesServices
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar la referencia',
                 'data' => [],
+            ];
+        }
+    }
+
+    // Metodo para validar si el correo de un acudiente se encuentra registrado
+    // y cuenta con al menos UNA isncripcion
+
+    public function hasRegistration(string $email)
+    {
+        try {
+            return Usuario::query()
+                ->where('correo', $email)
+                ->whereHas('admisiones_inscripciones')
+                ->exists();
+        } catch (\Exception $e) {
+            Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
+
+            return [
+                'error' => true,
+                'message' => 'Ha ocurrido un error en la consulta de datos',
+                'data' => $e->getMessage(),
             ];
         }
     }

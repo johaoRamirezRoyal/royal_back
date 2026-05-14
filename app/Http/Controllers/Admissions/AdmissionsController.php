@@ -21,6 +21,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class AdmissionsController extends Controller
 {
@@ -187,15 +188,13 @@ class AdmissionsController extends Controller
             Cache::forget($registerKey);
 
             $lastYear = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
-            $userId = $userCreated['data']->id;
+
+            $userId = $userCreated['data']->id_user;
 
             $this->admisiones_services->registrarInscripcion([
                 'id_usuario_registro' => $userId,
                 'anio_academico' => $lastYear,
-        ]);
-
-        $data['anio_academico'] = '';
-        $data['id_usuario_registro'] = 0;
+            ]);
 
             return $this->success('Registro completado exitosamente.', 201);
         } catch (\Exception $e) {
@@ -214,8 +213,9 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function mostrarTodasIncripcionesAcudiente(Request $request){
-        $id_acudiente = $request->input("id_acudiente");
+    public function mostrarTodasIncripcionesAcudiente(Request $request)
+    {
+        $id_acudiente = $request->input('id_acudiente');
 
         $response = $this->admisiones_services->mostrarTodasIncripcionesAcudiente($id_acudiente);
 
