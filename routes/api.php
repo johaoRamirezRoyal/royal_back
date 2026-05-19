@@ -1,17 +1,5 @@
 <?php
-
-use App\Http\Controllers\Admissions\AdmissionsController;
-use App\Http\Controllers\Areas\AreasController;
-use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\Categorias\CategoriasController;
-use App\Http\Controllers\Cursos\CursosController;
-use App\Http\Controllers\Hikvision\HikvisionController;
-use App\Http\Controllers\Inventarios\InventariosController;
-use App\Http\Controllers\PasswordReset\PasswordResetController;
-use App\Http\Controllers\Permisos\PermisosController;
-use App\Http\Controllers\Usuarios\UsuariosController;
 use Illuminate\Support\Facades\Route;
-use Symfony\Component\Mime\DependencyInjection\AddMimeTypeGuesserPass;
 
 Route::get('/', function () {
     return response()->json([
@@ -21,7 +9,7 @@ Route::get('/', function () {
     ]);
 });
 
-// 🔓 RUTAS PÚBLICAS (sin tok   en)
+// RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
     require __DIR__ . '/api/auth.php';
 });
@@ -69,7 +57,7 @@ Route::middleware('auth:api')->group(function () {
         require __DIR__ . '/api/categorias.php';
     });
 
-    //HIKVISION
+    // HIKVISION
     Route::prefix('/hikvision')->group(function () {
         require __DIR__ . '/api/hikvision.php';
     });

@@ -402,40 +402,78 @@ class AdmissionsController extends Controller
 
     public function subirDocumentoInscripcion(AdmisionesDocumentoRequest $request)
     {
-        $file = $request->file('archivo');
+        // Obtenemos el arreglo de documentos (cada uno con su archivo y datos)
+        $documentos = $request->input('documentos');
+        $id_inscripcion = $request->input('id_inscripcion');
 
-        if (! $file) {
+        if (!is_array($documentos) || empty($documentos)) {
             return response()->json([
                 'error' => true,
-                'message' => 'No se ha proporcionado ningún archivo.',
+                'message' => 'No se ha proporcionado ningún documento.',
                 'data' => [],
             ]);
         }
 
-        $id_inscripcion = $request->input('id_inscripcion');
+        $respuestas_archivos = [];
 
-        $data = $request->safe()->except(['archivo']);
+        // Recorremos el arreglo usando el índice ($key) para poder extraer el archivo correcto
+        foreach ($documentos as $key => $datos_documento) {
 
-        $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/documentos');
+            // Recuperamos el archivo binario usando la llave del array
+            // Ejemplo en el request: documentos[archivo], documentos[archivo]
+            $file = $request->file("documentos.{$key}.archivo");
 
-        if ($resultado['error']) {
-            return $this->apiResponse($resultado);
+            if (!$file) {
+                $respuestas_archivos[] = [
+                    'estado' => 'error',
+                    'detalle' => "No se encontró el archivo físico para el elemento indexado en {$key}."
+                ];
+                continue;
+            }
+
+            // 1. Subir archivo a Cloudinary
+            $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/documentos');
+
+            if ($resultado['error']) {
+                $respuestas_archivos[] = [
+                    'nombre_original' => $file->getClientOriginalName(),
+                    'estado' => 'error',
+                    'detalle' => $resultado['message'] ?? 'Error al subir a Cloudinary'
+                ];
+                continue;
+            }
+
+            $cloudinary = $resultado['data'];
+
+            // Limpiamos los datos de este documento específico para no enviar el archivo binario al servicio
+            // Esto remueve el objeto del archivo y te deja solo con la metadata (ej: tipo_doc, descripcion, etc.)
+            unset($datos_documento['archivo']);
+
+            // 2. Guardar en la base de datos combinando la metadata específica de este archivo
+            $response = $this->admisiones_services->subirDocumentoInscripcion(
+                $id_inscripcion,
+                [
+                    ...$datos_documento, // Aquí van los datos únicos de ESTE archivo
+                    'nombre_original' => $file->getClientOriginalName(),
+                    'url_archivo' => $cloudinary['url'],
+                    'public_id' => $cloudinary['public_id'],
+                    'formato' => $cloudinary['format'],
+                    'peso' => $cloudinary['size'],
+                ]
+            );
+
+            $respuestas_archivos[] = [
+                'nombre_original' => $file->getClientOriginalName(),
+                'estado' => 'exito',
+                'detalle' => $response
+            ];
         }
 
-        $cloudinary = $resultado['data'];
-
-        $response = $this->admisiones_services->subirDocumentoInscripcion($id_inscripcion,
-            [
-                ...$data,
-                'nombre_original' => $file->getClientOriginalName(),
-                'url_archivo' => $cloudinary['url'],
-                'public_id' => $cloudinary['public_id'],
-                'formato' => $cloudinary['format'],
-                'peso' => $cloudinary['size'],
-            ]
-        );
-
-        return $this->apiResponse($response);
+        return response()->json([
+            'error' => false,
+            'message' => 'Procesamiento de documentos finalizado.',
+            'data' => $respuestas_archivos
+        ]);
     }
 
     public function actualizarEstadoDeInscripcionAspirante(Request $request)

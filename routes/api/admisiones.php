@@ -1,5 +1,9 @@
 <?php
 
+
+use App\Http\Controllers\Admissions\AdmissionsController;
+use Illuminate\Support\Facades\Route;
+
 /** Ejemplo JSON para registrar una inscripcion:
  * 
         {
@@ -8,11 +12,7 @@
             "anio_academico": 8,
             "fecha_inscripcion": "2026-08-15"
         }
- */
-
-use App\Http\Controllers\Admissions\AdmissionsController;
-use Illuminate\Support\Facades\Route;
-
+        */
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
 /**
