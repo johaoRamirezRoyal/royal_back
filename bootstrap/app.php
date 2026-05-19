@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\JwtFromCookie;
+use App\Http\Middleware\ValidateSystem;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prependToGroup('api', JwtFromCookie::class);
         $middleware->alias([
             'auth' => Authenticate::class,
+            'system' => ValidateSystem::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

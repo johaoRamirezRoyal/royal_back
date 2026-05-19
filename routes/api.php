@@ -11,59 +11,62 @@ Route::get('/', function () {
 
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
-    require __DIR__ . '/api/auth.php';
+    require __DIR__.'/api/auth.php';
 });
 
 Route::group(['prefix' => 'admissions'], function () {
-    require __DIR__ . '/api/admissions.php';
+    require __DIR__.'/api/admissions.php';
 });
 
-// RUTAS PROTEGIDAS
-Route::middleware('auth:api')->group(function () {
+// Ruta protegida de la pagina de admisiones
+Route::middleware(['auth:api', 'system:admissions'])->group(function () {
+    // ADMISIONES
+    Route::prefix('/admisiones')->group(function () {
+        require __DIR__.'/api/admisiones.php';
+    });
+});
+
+// RUTAS PROTEGIDAS (pagina principal | administracion)
+Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // AUTH
     Route::group(['prefix' => 'auth'], function () {
-        require __DIR__ . '/api/auth-protected.php';
+        require __DIR__.'/api/auth-protected.php';
     });
 
     // USUARIOS
     Route::group(['prefix' => 'usuarios'], function () {
-        require __DIR__ . '/api/usuarios.php';
+        require __DIR__.'/api/usuarios.php';
     });
-
 
     // CURSOS
     Route::group(['prefix' => 'cursos'], function () {
-        require __DIR__ . '/api/cursos.php';
+        require __DIR__.'/api/cursos.php';
     });
 
     // PERMISOS
     Route::prefix('permisos')->group(function () {
-        require __DIR__ . '/api/permisos.php';
+        require __DIR__.'/api/permisos.php';
     });
 
     // AREAS
     Route::prefix('areas')->group(function () {
-        require __DIR__ . '/api/areas.php';
+        require __DIR__.'/api/areas.php';
     });
 
     // INVENTARIO
     Route::prefix('inventario')->group(function () {
-        require __DIR__ . '/api/inventario.php';
+        require __DIR__.'/api/inventario.php';
     });
 
     // CATEGORIAS
     Route::prefix('categorias')->group(function () {
-        require __DIR__ . '/api/categorias.php';
+        require __DIR__.'/api/categorias.php';
     });
 
     // HIKVISION
+    // HIKVISION
     Route::prefix('/hikvision')->group(function () {
-        require __DIR__ . '/api/hikvision.php';
-    });
-
-    // ADMISIONES 
-    Route::prefix('/admisiones')->group(function () {
-        require __DIR__ . '/api/admisiones.php';
+        require __DIR__.'/api/hikvision.php';
     });
 });

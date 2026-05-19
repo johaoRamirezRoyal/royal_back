@@ -15,13 +15,15 @@ use Illuminate\Support\Facades\Route;
         */
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
+Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion']);
+
 /**
  * JSON para mostrar inscripciones de acudiente:
         {
             "id_acudiente": 3123
         }
  */
-Route::get('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
+Route::post('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
 Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
 Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
 
