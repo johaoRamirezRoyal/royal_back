@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
+Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion']);
+
 /**
  * JSON para mostrar inscripciones de acudiente:
         {

@@ -250,6 +250,23 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function eliminarInscripcion(Request $request)
+    {
+        $id_inscripcion = $request->input('id');
+
+        if (! $id_inscripcion) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un ID de inscripción válido.',
+                'data' => [],
+            ]);
+        }
+
+        $resultado = $this->admisiones_services->eliminarInscripcion($id_inscripcion);
+
+        return $this->apiResponse($resultado);
+    }
+
     public function mostrarInformacionAspiranteId(Request $request)
     {
         $id = $request->input('id');
@@ -267,8 +284,18 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function eliminarRegistroAspirante(int $id)
+    public function eliminarRegistroAspirante(Request $request)
     {
+        $id = $request->input('id');
+
+        if (! $id) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un ID de aspirante válido',
+                'data' => [],
+            ]);
+        }
+
         $resultado = $this->admisiones_services->eliminarRegistroAspirante($id);
 
         return $this->apiResponse($resultado);

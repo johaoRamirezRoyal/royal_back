@@ -9,6 +9,7 @@ return [
         'http://localhost:3000', // React CRA
         'http://localhost:5173', // Vite (MUY IMPORTANTE)
         'http://localhost:5174', // Vite (MUY IMPORTANTE)
+        'http://localhost:4000', // Vite (MUY IMPORTANTE)
     ],
 
     'allowed_origins_patterns' => [],
