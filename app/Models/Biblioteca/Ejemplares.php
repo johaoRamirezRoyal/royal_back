@@ -3,7 +3,7 @@
 namespace App\Models\Biblioteca;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class Ejemplares extends Model
 {

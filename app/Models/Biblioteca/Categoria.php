@@ -2,6 +2,7 @@
 namespace App\Models\Biblioteca;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Categoria extends Model
 {
@@ -26,4 +27,13 @@ class Categoria extends Model
         return $this->hasMany(Libro::class, 'id_categoria');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scopes
+    |--------------------------------------------------------------------------
+    */
+
+    public function scopeActivo(Builder $query){
+        return $query->where("activo", 1);
+    }
 }
