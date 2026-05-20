@@ -3,6 +3,7 @@
 namespace App\Models\Biblioteca;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder;
 
 class Ejemplares extends Model
 {
@@ -19,6 +20,13 @@ class Ejemplares extends Model
         'fecha_inactivo'
     ];
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relaciones
+    |--------------------------------------------------------------------------
+    */
+
     public function libro(){
         return $this->belongsTo(Libro::class, 'id_libro');
     }
@@ -26,4 +34,14 @@ class Ejemplares extends Model
     public function prestamos(){
         return $this->hasMany(PrestamosEjemplar::class, 'id_ejemplar');
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scopes
+    |--------------------------------------------------------------------------
+    */
+    public function scopeActivo(Builder $query){
+        return $query->where('estado', 1);
+    }            
 }

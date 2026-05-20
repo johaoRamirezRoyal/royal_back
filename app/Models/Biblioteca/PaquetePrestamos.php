@@ -5,14 +5,14 @@ namespace App\Models\Biblioteca;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
-class PrestamosEjemplar extends Model
+class PaquetePrestamos extends Model
 {
-    protected $table = 'biblioteca_prestamos';
+    protected $table = 'biblioteca_paquete_prestamo';
 
     public $timestamps = false;
 
     protected $fillable = [
-        'id_ejemplar',
+        'id_paquete',
         'id_usuario',
         'fecha_prestamo',
         'fecha_devolucion',
@@ -29,14 +29,8 @@ class PrestamosEjemplar extends Model
         'fecha_devuelto' => 'datetime'
     ];
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | Relaciones
-    |--------------------------------------------------------------------------
-    */
-    public function ejemplar(){
-        return $this->belongsTo(Ejemplares::class, 'id_ejemplar');
+    public function paquete(){
+        return $this->belongsTo(Paquetes::class, 'id_paquete');
     }
 
     public function usuario(){

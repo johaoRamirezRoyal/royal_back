@@ -3,6 +3,7 @@
 namespace App\Models\Biblioteca;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class Libro extends Model
 {
@@ -37,4 +38,33 @@ class Libro extends Model
     public function ejemplares(){
         return $this->hasMany(Ejemplares::class, 'id_libro');
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scopes
+    |--------------------------------------------------------------------------
+    */
+
+    public function scopeActivos(Builder $query)
+    {
+        return $query->where('activo', 1);
+    }
+
+    public function scopeCategoria(Builder $query, int $id_categoria)
+    {
+        return $query->where(
+            'id_categoria',
+            $id_categoria
+        );
+    }
+
+    public function scopeAutor(Builder $query, string $autor)
+    {
+        return $query->where(
+            'autor',
+            'like',
+            "%{$autor}%"
+        );
+    }
+
 }
