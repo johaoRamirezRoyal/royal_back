@@ -1,181 +1,269 @@
 <?php
+
 namespace App\Services\Cloudinary;
 
+use Cloudinary\Api\Upload\UploadApi;
+use Cloudinary\Configuration\Configuration;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
-use Cloudinary\Configuration\Configuration;
-use Cloudinary\Api\Upload\UploadApi;
 
 class CloudinaryService
 {
-
-    protected $uploadApi;
+    protected UploadApi $uploadApi;
 
     public function __construct()
     {
-        // Inicializamos la configuración manualmente usando lo que ya tienes en el config
-        $config = Configuration::instance(config('cloudinary.cloud_url'));
-        $this->uploadApi = new UploadApi($config);
+        /**
+         * Configuración Cloudinary
+         */
+        Configuration::instance([
+            'cloud' => [
+                'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
+                'api_key' => env('CLOUDINARY_API_KEY'),
+                'api_secret' => env('CLOUDINARY_API_SECRET'),
+            ],
+            'url' => [
+                'secure' => true,
+            ],
+        ]);
+
+        $this->uploadApi = new UploadApi;
     }
 
     /**
-     * Summary of uploadFile
-     * @param UploadedFile $file
-     * @param string $folder
-     * @return array{data: array, error: bool, message: string|array{data: array, error: mixed, message: mixed}|array{data: array{format: mixed, public_id: mixed, size: mixed, url: mixed}, error: bool, message: string}}
+     * Subir archivo a Cloudinary
+     *
+     * @return array{
+     *     error: bool,
+     *     message: string,
+     *     data: array
+     * }
      */
-    public function uploadFile(UploadedFile $file, string $folder = "uploads"): array
-    {
-        try{
-            // 1. Verifica que la validación no devuelva null
+    public function uploadFile(
+        UploadedFile $file,
+        string $folder = 'uploads'
+    ): array {
+        try {
+
+            /**
+             * Validar archivo
+             */
             $validation = $this->validateFile($file);
 
-            if (!$validation || (isset($validation['error']) && $validation['error'])) {
+            if ($validation['error']) {
                 return [
                     'error' => true,
-                    'message' => $validation['message'] ?? 'Error de validación interna',
-                    'data' => []
+                    'message' => $validation['message'],
+                    'data' => [],
                 ];
             }
 
-            // 2. Limpieza de folder y tipo de recurso
-            $resourceType = $this->getResourceType($file) ?? 'auto'; // Fallback a auto
-            $folder = preg_replace('/[^A-Za-z0-9_\-\/]/', '', $folder);
+            /**
+             * Sanitizar folder
+             */
+            $folder = preg_replace(
+                '/[^A-Za-z0-9_\-\/]/',
+                '',
+                $folder
+            );
 
-            // 3. Ejecución de la subida
-            $uploadedFile = $this->uploadApi->upload($file->getRealPath(), [
-                'folder'          => $folder,
-                'resource_type'   => $resourceType,
-                'use_filename'    => false,
-                'unique_filename' => true,
-            ]);
+            /**
+             * Tipo de recurso
+             */
+            $resourceType = $this->getResourceType($file);
 
-            // VERIFICACIÓN CRÍTICA:
-            if (!$uploadedFile) {
-                throw new \Exception("Cloudinary devolvió una respuesta vacía (null).");
+            /**
+             * Upload y Estructuración de Nombres
+             */
+            // 1. Obtenemos la extensión limpia directamente del archivo original
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            // 2. Obtenemos el nombre base original de forma segura
+            $originalName = $file->getClientOriginalName();
+
+            // 3. Quitamos la extensión (.pdf, .jpg, etc) y posibles rastros de .tmp del nombre base
+            $originalName = preg_replace('/\.'.preg_quote($extension, '/').'$/i', '', $originalName);
+            $originalName = preg_replace('/\.tmp$/i', '', $originalName);
+
+            // 4. Reemplazamos cualquier carácter extraño por guiones bajos
+            $originalName = preg_replace('/[^A-Za-z0-9\-_]/', '_', $originalName);
+
+            /**
+             * Si es un recurso 'raw', el public_id DEBE incluir la extensión pura (.pdf)
+             */
+            if ($resourceType === 'raw') {
+                $publicIdWithExtension = $originalName.'.'.$extension;
+            } else {
+                $publicIdWithExtension = $originalName;
             }
 
-            $resultado = [
-                'public_id' => $uploadedFile['public_id'],
-                'url'       => $uploadedFile['secure_url'],
-                'format'    => $uploadedFile['format'] ?? null,
-                'size'      => $uploadedFile['bytes'],
+            $options = [
+                'folder' => $folder,
+                'resource_type' => $resourceType,
+                'use_filename' => true,
+                'unique_filename' => false,
+                'overwrite' => true,
+                'public_id' => $publicIdWithExtension,
             ];
-    
+
+            $response = $this->uploadApi->upload(
+                $file->getRealPath(),
+                $options
+            );
+
+            if (! $response) {
+                throw new \Exception(
+                    'Cloudinary devolvió una respuesta vacía.'
+                );
+            }
+
             return [
                 'error' => false,
-                'message' => 'Archivo subido correctamente',
-                'data' => $resultado,
+                'message' => 'Archivo subido correctamente.',
+                'data' => [
+                    'public_id' => $response['public_id'],
+                    'url' => $response['secure_url'],
+                    'format' => $extension,
+                    'size' => $response['bytes'] ?? null,
+                    'resource_type' => $response['resource_type'] ?? null,
+                ],
             ];
 
         } catch (\Throwable $e) {
-            Log::error('Cloudinary Service Error: ' . $e->getMessage(), [
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
 
-            // Handle the exception (log it, throw a custom exception, etc.)
+            Log::error(
+                'Cloudinary Upload Error',
+                [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
+            );
+
             return [
                 'error' => true,
-                'message' => 'Error en el servidor: ' . $e->getMessage(),
+                'message' => 'Error al subir archivo: '.$e->getMessage(),
                 'data' => [],
             ];
         }
     }
 
     /**
-     * Eliminar el archivo en cloudinary usando el public_id
-     * @param string $publicId
-     * @return array{error: bool, message: string}
+     * Eliminar archivo de Cloudinary
      */
-    public function deleteFile(string $publicId): array
-    {
-        try{
-            if(empty($publicId)){
+    public function deleteFile(
+        string $publicId,
+        string $resourceType = 'raw'
+    ): array {
+        try {
+
+            if (empty($publicId)) {
                 return [
                     'error' => true,
                     'message' => 'El public_id no puede estar vacío.',
                 ];
             }
 
-            $result = $this->uploadApi->destroy($publicId);
-            if(($result['result'] ?? null) !== 'ok'){
+            $result = $this->uploadApi->destroy(
+                $publicId,
+                [
+                    'resource_type' => $resourceType,
+                ]
+            );
+
+            if (($result['result'] ?? null) !== 'ok') {
                 return [
                     'error' => true,
-                    'message' => 'Error al eliminar el archivo: ' . ($result['result'] ?? 'Desconocido'),
+                    'message' => 'Error al eliminar archivo.',
                 ];
             }
 
-            return[
+            return [
                 'error' => false,
-                'message' => 'Archivo Eliminado Correctamente',
+                'message' => 'Archivo eliminado correctamente.',
             ];
-        }catch(\Exception $e){
-            Log::error('Cloudinary delete error: ' . $e->getMessage());
-            // Handle the exception (log it, throw a custom exception, etc.)
+
+        } catch (\Throwable $e) {
+
+            Log::error(
+                'Cloudinary Delete Error',
+                [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]
+            );
+
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => 'Error al eliminar archivo: '.$e->getMessage(),
             ];
         }
     }
 
     /**
-     * Obtener el tipo de archivo subido (image, video, raw, auto) basado en su MIME type o extensión
-     * @param UploadedFile $file
-     * @return string
+     * Obtener tipo de recurso
      */
     private function getResourceType(UploadedFile $file): string
     {
         $mime = $file->getMimeType();
         $extension = strtolower($file->getClientOriginalExtension());
 
-        if (str_contains($mime, 'image')) return 'image';
-        if (str_contains($mime, 'video')) return 'video';
-        if (str_contains($mime, 'application/pdf')) return 'pdf';
+        if (str_contains($mime, 'image')) {
+            return 'image';
+        }
 
-        if(in_array($extension, ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'])){
+        if (str_contains($mime, 'video')) {
+            return 'video';
+        }
+
+        /**
+         * PDFs y Documentos (CORREGIDO)
+         * Se cambia 'auto' por 'raw' para obligar a Cloudinary a mantenerlo como binario
+         */
+        if ($extension === 'pdf') {
             return 'raw';
         }
 
-        // PDFs, Word, Excel, etc., entran en 'raw' o 'auto'
-        return 'auto';
+        if (
+            in_array(
+                $extension,
+                ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']
+            )
+        ) {
+            return 'raw';
+        }
+
+        return 'raw';
     }
 
     /**
-     * Validación del archivo (Tamaño y Extensión)
-     * @param UploadedFile $file
-     * @return array{error: bool, message: string}
+     * Validar archivo
      */
-    private function validateFile(UploadedFile $file): array {
-        $maxSize = 10 * 1024 * 1024; // 10 MB
+    private function validateFile(UploadedFile $file): array
+    {
+        $maxSize = 10 * 1024 * 1024;
 
-        if($file->getSize() > $maxSize){
+        if ($file->getSize() > $maxSize) {
             return [
                 'error' => true,
-                'message' => 'El archivo excede el tamaño máximo permitido de 10 MB.'
+                'message' => 'El archivo excede 10MB.',
             ];
         }
 
-        $allowedMimeTypes = [
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-            'application/pdf'
-        ];
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        $extension = strtolower($file->getClientOriginalExtension());
 
-        if(!in_array($file->getMimeType(), $allowedMimeTypes)){
+        if (! in_array($extension, $allowedExtensions)) {
             return [
                 'error' => true,
-                'message' => 'Tipo de archivo no permitido. Solo se permiten JPEG, PNG, WEBP y PDF.'
+                'message' => 'Tipo de archivo no permitido.',
             ];
         }
 
         return [
             'error' => false,
-            'message' => 'Archivo válido.'
+            'message' => 'Archivo válido.',
         ];
-
     }
 }
-
