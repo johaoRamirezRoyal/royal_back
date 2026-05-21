@@ -132,8 +132,9 @@ class CloudinaryService
 
         if (str_contains($mime, 'image')) return 'image';
         if (str_contains($mime, 'video')) return 'video';
+        if (str_contains($mime, 'application/pdf')) return 'pdf';
 
-        if(in_array($extension, ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'])){
+        if(in_array($extension, ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'])){
             return 'raw';
         }
 

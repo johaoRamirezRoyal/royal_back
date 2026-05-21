@@ -3,6 +3,7 @@
 namespace App\Services\Biblioteca;
 
 use App\Models\Biblioteca\Categoria;
+use App\Models\Biblioteca\Libro;
 use App\Models\Biblioteca\Subcategoria;
 use App\Services\Service;
 
@@ -53,10 +54,11 @@ class BibliotecaServices extends Service
      * @param array $data
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarCategoriaBiblioteca(array $data): array {
+    public function agregarCategoriaBiblioteca(array $data): array
+    {
         try {
 
-            if(empty($data)){
+            if (empty($data)) {
                 return [
                     'error' => true,
                     'message' => "No llegaron datos al servidor",
@@ -65,7 +67,7 @@ class BibliotecaServices extends Service
             }
 
             $nueva_categoria = Categoria::create($data);
-            if(!$nueva_categoria){
+            if (!$nueva_categoria) {
                 return [
                     "error" => true,
                     "message" => "No se pudo crear la nueva categoria",
@@ -78,7 +80,7 @@ class BibliotecaServices extends Service
                 'message' => "Categoria creada",
                 "data" => $nueva_categoria->toArray(),
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             $this->sendError($e, "Error en el servidor al tratar de crear una categoria");
             return [
                 'error' => true,
@@ -94,11 +96,12 @@ class BibliotecaServices extends Service
      * @param int $estado
      * @return array{data: array, error: bool, message: string}
      */
-    public function cambiarEstadoCategoriaBiblioteca(int $id_categoria, int $estado){
+    public function cambiarEstadoCategoriaBiblioteca(int $id_categoria, int $estado)
+    {
         try {
             $categoria = Categoria::find($id_categoria);
 
-            if(!$categoria){
+            if (!$categoria) {
                 return [
                     "error" => true,
                     "message" => "No se ha encontrado la categoria con ID: " . $id_categoria,
@@ -116,7 +119,7 @@ class BibliotecaServices extends Service
 
             $categoriaUpdate = $categoria->update(["activo" => $estado]);
 
-            if(!$categoriaUpdate){
+            if (!$categoriaUpdate) {
                 return [
                     "error" => true,
                     "message" => "Error al tratar de actualizar la categoria",
@@ -129,8 +132,7 @@ class BibliotecaServices extends Service
                 "message" => "Se cambió el estado de la categoria correctamente",
                 "data" => $categoria->refresh()->toArray(),
             ];
-
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             $this->sendError($e, "Error al cambiar el estado de la categoria.");
             return [
                 "error" => true,
@@ -152,7 +154,7 @@ class BibliotecaServices extends Service
                 ->categoria($id_categoria)
                 ->with('categoria')
                 ->get();
-                
+
             if ($subcategorias->isEmpty()) {
                 return [
                     'error' => true,
@@ -181,9 +183,10 @@ class BibliotecaServices extends Service
      * @param array $data
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarSubcategoriaBiblioteca(array $data){
+    public function agregarSubcategoriaBiblioteca(array $data)
+    {
         try {
-            if(empty($data)){
+            if (empty($data)) {
                 return [
                     "error" => true,
                     "message" => "No llegaron los datos al servicio",
@@ -193,7 +196,7 @@ class BibliotecaServices extends Service
 
             $subcategoriaNueva = Subcategoria::create($data);
 
-            if(!$subcategoriaNueva){
+            if (!$subcategoriaNueva) {
                 return [
                     "error" => true,
                     "message" => "No se ha podido crear la nueva subcategoria",
@@ -206,7 +209,7 @@ class BibliotecaServices extends Service
                 "message" => "Subcategoria creada con éxito",
                 'data' => $subcategoriaNueva->toArray(),
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             $this->sendError($e, "Error al crear la subcategoria: ");
             return [
                 "error" => true,
@@ -229,8 +232,8 @@ class BibliotecaServices extends Service
                 ];
             }
 
-            if(!in_array($estado, [0, 1])){
-                return[
+            if (!in_array($estado, [0, 1])) {
+                return [
                     "error" => true,
                     "message" => "Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo",
                     "data" => $subcategoria->toArray()
@@ -258,6 +261,132 @@ class BibliotecaServices extends Service
                 "error" => true,
                 "message" => "Error en el servidor al cambiar el estado de la categoria.",
                 "data" => [],
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |                   LIBROS 
+    |
+    -------------------------------------------------
+    */
+
+    /**
+     * Método para obtener todos los libros de forma filtrada y páginada
+     * @param mixed $categoria
+     * @param mixed $subcategoria
+     * @param mixed $estado
+     * @param int $perpage
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function obtenerTodosLosLibrosBiblioteca(?string $search = null, ?array $categoria = null, ?array $subcategoria = null, ?int $estado = 1, int $perpage): array
+    {
+        try {
+
+            $libros = Libro::query()
+                ->where('activo', $estado)
+
+                ->with([
+                    'categoria:id,nombre',
+                    'subcategoria:id,nombre'
+                ])
+
+                ->when(
+                    !empty($categoria),
+                    fn($q) => $q->whereIn(
+                        'id_categoria',
+                        $categoria
+                    )
+                )
+
+                ->when(
+                    !empty($subcategoria),
+                    fn($q) => $q->whereIn(
+                        'id_subcategoria',
+                        $subcategoria
+                    )
+                )
+
+                ->when(
+                    !empty($search), 
+                    fn($q) => $q
+                                ->where('titulo', 'LIKE', "%$search%")
+                                ->orWhere('autor', 'LIKE', "%$search%")
+                                ->orWhere('editorial', 'LIKE', "%$search%")
+                )
+
+                ->paginate($perpage);
+
+            if ($libros->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontraron libros',
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Libros listados',
+                'data' => $libros->toArray()
+            ];
+        } catch (\Exception $e) {
+
+            $this->sendError(
+                $e,
+                'Error al listar libros'
+            );
+
+            return [
+                'error' => true,
+                'message' => 'Error del servidor',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Método para añadir un nuevo libro
+     * @param array $data
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function agregarNuevoLibroBiblioteca(array $data)
+    {
+        try {
+            if (empty($data)) {
+                return [
+                    "error" => true,
+                    "message" => "No ha llegado datos al servidor",
+                    "data" => [],
+                ];
+            }
+
+            $libro = Libro::create($data);
+
+            if (!$libro) {
+                return [
+                    'error' => true,
+                    "message" => "No se pudo crear el libro",
+                    "data" => $data,
+                ];
+            }
+
+            return [
+                "error" => false,
+                "message" => "Libro creado exitosamente",
+                "data" => $libro->load([
+                    'categoria:id,nombre',
+                    'subcategoria:id,nombre'
+                ])->toArray(),
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al crear el libro");
+            return [
+                "error" => true,
+                "message" => "Error en el servidor al tratar de crear el libro",
+                "data" => []
             ];
         }
     }
