@@ -89,6 +89,58 @@ class BibliotecaServices extends Service
     }
 
     /**
+     * Metodo para actualizar el estado de una categoria
+     * @param int $id_categoria
+     * @param int $estado
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function cambiarEstadoCategoriaBiblioteca(int $id_categoria, int $estado){
+        try {
+            $categoria = Categoria::find($id_categoria);
+
+            if(!$categoria){
+                return [
+                    "error" => true,
+                    "message" => "No se ha encontrado la categoria con ID: " . $id_categoria,
+                    "data" => []
+                ];
+            }
+
+            if (!in_array($estado, [0, 1])) {
+                return [
+                    "error" => true,
+                    "message" => "Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo",
+                    "data" => $categoria->toArray()
+                ];
+            }
+
+            $categoriaUpdate = $categoria->update(["activo" => $estado]);
+
+            if(!$categoriaUpdate){
+                return [
+                    "error" => true,
+                    "message" => "Error al tratar de actualizar la categoria",
+                    "data" => $categoria->toArray(),
+                ];
+            }
+
+            return [
+                "error" => false,
+                "message" => "Se cambió el estado de la categoria correctamente",
+                "data" => $categoria->refresh()->toArray(),
+            ];
+
+        }catch(\Exception $e){
+            $this->sendError($e, "Error al cambiar el estado de la categoria.");
+            return [
+                "error" => true,
+                "message" => "Error en el servidor al cambiar el estado de la categoria.",
+                "data" => [],
+            ];
+        }
+    }
+
+    /**
      * Mostrar subcategoria de biblioteca
      * @param mixed $id_categoria
      * @return array{data: array, error: bool, message: string}
@@ -159,6 +211,52 @@ class BibliotecaServices extends Service
             return [
                 "error" => true,
                 "message" => "Error en el servidor al crear la subcategoria",
+                "data" => [],
+            ];
+        }
+    }
+
+    public function cambiarEstadoSubcategoriaBiblioteca(int $id_subcategoria, int $estado)
+    {
+        try {
+            $subcategoria = Subcategoria::find($id_subcategoria);
+
+            if (!$subcategoria) {
+                return [
+                    "error" => true,
+                    "message" => "No se ha encontrado la categoria con ID: " . $id_subcategoria,
+                    "data" => []
+                ];
+            }
+
+            if(!in_array($estado, [0, 1])){
+                return[
+                    "error" => true,
+                    "message" => "Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo",
+                    "data" => $subcategoria->toArray()
+                ];
+            }
+
+            $categoriaUpdate = $subcategoria->update(["activo" => $estado]);
+
+            if (!$categoriaUpdate) {
+                return [
+                    "error" => true,
+                    "message" => "Error al tratar de actualizar la categoria",
+                    "data" => $subcategoria->toArray(),
+                ];
+            }
+
+            return [
+                "error" => false,
+                "message" => "Se cambió el estado de la categoria correctamente",
+                "data" => $subcategoria->refresh()->toArray(),
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al cambiar el estado de la categoria.");
+            return [
+                "error" => true,
+                "message" => "Error en el servidor al cambiar el estado de la categoria.",
                 "data" => [],
             ];
         }

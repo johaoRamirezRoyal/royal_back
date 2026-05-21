@@ -29,7 +29,12 @@ class Subcategoria extends Model
 
     public function scopeActivo(Builder $query)
     {
-        return $query->where("activo", 1);
+        return $query
+            ->where('activo', 1)
+            ->whereHas('categoria', function ($q) {
+                $q->activo();
+            })
+            ->with('categoria');
     }
 
     public function scopeCategoria(Builder $query, ?int $id_categoria = null)
