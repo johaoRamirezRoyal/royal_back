@@ -91,11 +91,7 @@ class CloudinaryService
             /**
              * Si es un recurso 'raw', el public_id DEBE incluir la extensión pura (.pdf)
              */
-            if ($resourceType === 'raw') {
-                $publicIdWithExtension = $originalName.'.'.$extension;
-            } else {
-                $publicIdWithExtension = $originalName;
-            }
+            $publicIdWithExtension = $originalName;
 
             $options = [
                 'folder' => $folder,
