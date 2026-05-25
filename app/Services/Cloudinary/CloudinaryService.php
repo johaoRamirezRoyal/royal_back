@@ -143,7 +143,7 @@ class CloudinaryService
     /**
      * Obtener URL de un archivo por su public_id
      */
-    public function getFileUrl(string $publicId, string $resourceType = 'raw'): array
+    public function getFileUrl(string $publicId, string $format = ''): array
     {
         try {
             if (empty($publicId)) {
@@ -152,6 +152,13 @@ class CloudinaryService
                     'message' => 'El public_id no puede estar vacío.',
                     'data' => [],
                 ];
+            }
+
+            $images = ["png", "jpg", "jpeg", "webp"];
+            if(in_array($format, $images)){
+                $resourceType = "image";
+            }else{
+                $resourceType = "raw";
             }
 
             $cloudName = env('CLOUDINARY_CLOUD_NAME');

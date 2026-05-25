@@ -89,14 +89,14 @@ class BibliotecaController extends Controller
     public function agregarNuevoLibroBiblioteca(LibroRequest $request){
         $body = $request->validated();
 
-        if ($request->hasFile('imagen')) {
+        if ($request->hasFile('foto')) {
 
-            $archivo = $this->file_storage_service->guardar(
-                $request->file('imagen'),
+            $archivo = $this->file_storage_service->uploadFile(
+                $request->file('foto'),
                 'biblioteca'
             );
 
-            $body['imagen'] = $archivo['ruta'];
+            $body['foto'] = $archivo['ruta'];
         }
 
         $response = $this->biblioteca_services->agregarNuevoLibroBiblioteca($body);
