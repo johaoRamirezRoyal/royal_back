@@ -59,11 +59,6 @@ class LibroRequest extends FormRequest
                 'string'
             ],
 
-            'foto' => [
-                'nullable',
-                'string'
-            ],
-
             'activo' => [
                 'nullable',
                 'integer',

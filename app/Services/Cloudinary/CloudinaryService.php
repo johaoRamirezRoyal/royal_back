@@ -44,10 +44,6 @@ class CloudinaryService
         string $folder = 'uploads'
     ): array {
         try {
-
-            /**
-             * Validar archivo
-             */
             $validation = $this->validateFile($file);
 
             if ($validation['error']) {
@@ -58,40 +54,31 @@ class CloudinaryService
                 ];
             }
 
-            /**
-             * Sanitizar folder
-             */
-            $folder = preg_replace(
-                '/[^A-Za-z0-9_\-\/]/',
-                '',
-                $folder
-            );
-
-            /**
-             * Tipo de recurso
-             */
+            $folder = preg_replace('/[^A-Za-z0-9_\-\/]/', '', $folder);
             $resourceType = $this->getResourceType($file);
 
-            /**
-             * Upload y Estructuración de Nombres
-             */
-            // 1. Obtenemos la extensión limpia directamente del archivo original
+            // Obtener nombre y extensión
+            $originalNameComplete = $file->getClientOriginalName();
             $extension = strtolower($file->getClientOriginalExtension());
 
-            // 2. Obtenemos el nombre base original de forma segura
-            $originalName = $file->getClientOriginalName();
+            if ($extension === 'tmp' || empty($extension)) {
+                $extension = strtolower(pathinfo($originalNameComplete, PATHINFO_EXTENSION));
+            }
 
-            // 3. Quitamos la extensión (.pdf, .jpg, etc) y posibles rastros de .tmp del nombre base
-            $originalName = preg_replace('/\.'.preg_quote($extension, '/').'$/i', '', $originalName);
-            $originalName = preg_replace('/\.tmp$/i', '', $originalName);
+            if (empty($extension) || $extension === 'tmp') {
+                $extension = 'pdf';
+            }
 
-            // 4. Reemplazamos cualquier carácter extraño por guiones bajos
+            $originalName = pathinfo($originalNameComplete, PATHINFO_FILENAME);
             $originalName = preg_replace('/[^A-Za-z0-9\-_]/', '_', $originalName);
 
-            /**
-             * Si es un recurso 'raw', el public_id DEBE incluir la extensión pura (.pdf)
-             */
-            $publicIdWithExtension = $originalName;
+            // SOLUCIÓN: Para RAW files, NO incluir extensión en public_id
+            // Cloudinary la añade automáticamente basado en el Content-Type
+            if ($resourceType === 'raw') {
+                $publicId = $originalName;
+            } else {
+                $publicId = $originalName;
+            }
 
             $options = [
                 'folder' => $folder,
@@ -99,7 +86,11 @@ class CloudinaryService
                 'use_filename' => true,
                 'unique_filename' => false,
                 'overwrite' => true,
-                'public_id' => $publicIdWithExtension,
+                'public_id' => $publicId,
+                // IMPORTANTE: Forzar el tipo MIME correcto
+                'type' => 'upload',
+                // Para PDFs específicamente
+                //'format' => $extension,
             ];
 
             $response = $this->uploadApi->upload(
@@ -107,38 +98,82 @@ class CloudinaryService
                 $options
             );
 
-            if (! $response) {
-                throw new \Exception(
-                    'Cloudinary devolvió una respuesta vacía.'
-                );
+            if (!$response) {
+                throw new \Exception('Cloudinary devolvió una respuesta vacía.');
             }
+
+            // Obtener el public_id real de Cloudinary (puede tener .tmp)
+            $returnedPublicId = $response['public_id'] ?? '';
+
+            // Limpiar .tmp si existe
+            $cleanPublicId = preg_replace('/\.tmp$/i', '', $returnedPublicId);
 
             return [
                 'error' => false,
                 'message' => 'Archivo subido correctamente.',
                 'data' => [
-                    'public_id' => $response['public_id'],
+                    'public_id' => $cleanPublicId,
+                    'public_id_with_extension' => $cleanPublicId . '.' . $extension,
                     'url' => $response['secure_url'],
+                    'url_with_extension' => str_replace(
+                        '/' . $returnedPublicId,
+                        '/' . $cleanPublicId . '.' . $extension,
+                        $response['secure_url']
+                    ),
                     'format' => $extension,
                     'size' => $response['bytes'] ?? null,
                     'resource_type' => $response['resource_type'] ?? null,
                 ],
             ];
-
         } catch (\Throwable $e) {
-
-            Log::error(
-                'Cloudinary Upload Error',
-                [
-                    'message' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                ]
-            );
+            Log::error('Cloudinary Upload Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
 
             return [
                 'error' => true,
-                'message' => 'Error al subir archivo: '.$e->getMessage(),
+                'message' => 'Error al subir archivo: ' . $e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Obtener URL de un archivo por su public_id
+     */
+    public function getFileUrl(string $publicId, string $resourceType = 'raw'): array
+    {
+        try {
+            if (empty($publicId)) {
+                return [
+                    'error' => true,
+                    'message' => 'El public_id no puede estar vacío.',
+                    'data' => [],
+                ];
+            }
+
+            $cloudName = env('CLOUDINARY_CLOUD_NAME');
+            $url = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$publicId}";
+
+            return [
+                'error' => false,
+                'message' => 'URL generada correctamente.',
+                'data' => [
+                    'url' => $url,
+                    'public_id' => $publicId,
+                ],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Cloudinary GetUrl Error', [
+                'message' => $e->getMessage(),
+                'public_id' => $publicId,
+            ]);
+
+            return [
+                'error' => true,
+                'message' => 'Error al generar la URL: ' . $e->getMessage(),
                 'data' => [],
             ];
         }
@@ -178,7 +213,6 @@ class CloudinaryService
                 'error' => false,
                 'message' => 'Archivo eliminado correctamente.',
             ];
-
         } catch (\Throwable $e) {
 
             Log::error(
@@ -192,7 +226,7 @@ class CloudinaryService
 
             return [
                 'error' => true,
-                'message' => 'Error al eliminar archivo: '.$e->getMessage(),
+                'message' => 'Error al eliminar archivo: ' . $e->getMessage(),
             ];
         }
     }

@@ -11,7 +11,7 @@ class FileStorageService
     /**
      * Guardar archivo
      */
-    public function guardar(UploadedFile $archivo, string $carpeta = 'uploads', string $disk = 'public'): array {
+    public function uploadFile(UploadedFile $archivo, string $carpeta = 'uploads', string $disk = 'public'): array {
         $nombre = Str::uuid() . '.' . $archivo->getClientOriginalExtension();
 
         $ruta = $archivo->storeAs($carpeta, $nombre, $disk);
@@ -45,7 +45,7 @@ class FileStorageService
     public function reemplazar(UploadedFile $nuevoArchivo, ?string $archivoAnterior, string $carpeta = 'uploads', string $disk = 'public'): array {
         $this->eliminar($archivoAnterior, $disk);
 
-        return $this->guardar(
+        return $this->uploadFile(
             $nuevoArchivo,
             $carpeta,
             $disk
