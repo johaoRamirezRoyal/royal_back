@@ -42,6 +42,6 @@ class Ejemplares extends Model
     |--------------------------------------------------------------------------
     */
     public function scopeActivo(Builder $query){
-        return $query->where('estado', 1);
+        return $query->whereNotIn('estado', [4]);
     }            
 }

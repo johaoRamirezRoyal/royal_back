@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Biblioteca;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Biblioteca\CategoriaRequest;
+use App\Http\Requests\Biblioteca\EjemplaresRequest;
 use App\Http\Requests\Biblioteca\LibroRequest;
 use App\Http\Requests\Biblioteca\SubcategoriaRequest;
 use App\Services\Biblioteca\BibliotecaServices;
@@ -101,6 +102,51 @@ class BibliotecaController extends Controller
 
         $response = $this->biblioteca_services->agregarNuevoLibroBiblioteca($body);
 
+        return $this->apiResponse($response);
+    }
+
+    public function agregarEjemplarLibroBiblioteca(EjemplaresRequest $request){
+        $body = $request->validated();
+
+        $cantidad = $body['cantidad'];
+
+        unset($body['cantidad']);
+
+        $response = $this->biblioteca_services->agregarEjemplarLibroBiblioteca($body, $cantidad);
+
+        return $this->apiResponse($response);
+    }
+
+    public function verEjemplaresLibroBiblioteca(Request $request){
+        $response = $this->biblioteca_services->verEjemplaresLibroBiblioteca(
+            $request->input("id_libro"),
+            $request->input("autor"),
+            $request->input("perpage")
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function cambiarEstadoEjemplarBiblioteca(Request $request){
+        $response = $this->biblioteca_services->cambiarEstadoEjemplarBiblioteca(
+            $request->input('ids_ejemplares'),
+            $request->input('estado', 4)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function verPrestamosDeEjemplar(Request $request){
+        $id_ejemplar = $request->input("id_ejemplar");
+        
+        $response = $this->biblioteca_services->verPrestamosDeEjemplar($id_ejemplar);
+        return $this->apiResponse($response);
+    }
+
+    public function verPrestamosLibro(Request $request){
+        $id_libro = $request->input("id_libro");
+        
+        $response = $this->biblioteca_services->verPrestamosLibro($id_libro);
         return $this->apiResponse($response);
     }
 }

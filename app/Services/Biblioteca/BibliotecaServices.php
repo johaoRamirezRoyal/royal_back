@@ -3,9 +3,12 @@
 namespace App\Services\Biblioteca;
 
 use App\Models\Biblioteca\Categoria;
+use App\Models\Biblioteca\Ejemplares;
 use App\Models\Biblioteca\Libro;
+use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
 use App\Services\Service;
+use Illuminate\Support\Facades\DB;
 
 class BibliotecaServices extends Service
 {
@@ -310,11 +313,11 @@ class BibliotecaServices extends Service
                 )
 
                 ->when(
-                    !empty($search), 
+                    !empty($search),
                     fn($q) => $q
-                                ->where('titulo', 'LIKE', "%$search%")
-                                ->orWhere('autor', 'LIKE', "%$search%")
-                                ->orWhere('editorial', 'LIKE', "%$search%")
+                        ->where('titulo', 'LIKE', "%$search%")
+                        ->orWhere('autor', 'LIKE', "%$search%")
+                        ->orWhere('editorial', 'LIKE', "%$search%")
                 )
 
                 ->paginate($perpage);
@@ -387,6 +390,352 @@ class BibliotecaServices extends Service
                 "error" => true,
                 "message" => "Error en el servidor al tratar de crear el libro",
                 "data" => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |                   EJEMPLARES 
+    |
+    -------------------------------------------------
+    */
+    public function agregarEjemplarLibroBiblioteca(array $data, int $cantidad): array
+    {
+        try {
+            DB::beginTransaction();
+
+            $ultimo = Ejemplares::max('id') ?? 0;
+
+            $ejemplares = [];
+
+            for ($i = 1; $i <= $cantidad; $i++) {
+                $ultimo++;
+                $ejemplares[] = [
+                    "id_libro" => $data['id_libro'],
+                    "codigo" => 'EJ-' . str_pad($ultimo, 4, '0', STR_PAD_LEFT),
+                    "estado" => $data['estado'] ?? 1,
+                    "id_log" => $data['id_log'],
+                ];
+            }
+
+            Ejemplares::insert($ejemplares);
+            DB::commit();
+
+            return [
+                "error" => false,
+                "message" => "{$cantidad} ejemplares creados correctamente",
+                "data" => []
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            $this->sendError($e, "Error al tratar de crear un ejemplar");
+            return [
+                "error" => true,
+                "message" => "Error en el servidor al crear el ejemplar",
+                "data" => []
+            ];
+        }
+    }
+
+    /**
+     * Metodo para ver los ejemplares de un libro, puede ser filtrado
+     * @param mixed $id_libro
+     * @param mixed $autor
+     * @param mixed $perpage
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function verEjemplaresLibroBiblioteca(?int $id_libro = null, ?string $autor = null, ?int $perpage = 10)
+    {
+        try {
+            $ejemplares = Ejemplares::query()
+                ->activo()
+                ->with([
+                    'libro:id,titulo,autor,editorial,foto',
+                    'prestamos:id,id_ejemplar,id_usuario,fecha_prestamo,fecha_devolucion,observacion,id_devuelto,fecha_devuelto',
+                    'prestamos.usuario:id_user,nombre,apellido,correo'
+                ])
+                ->when(
+                    !empty($id_libro),
+                    fn($q) => $q->where('id_libro', $id_libro)
+                )
+                ->when(
+                    !empty($autor),
+                    fn($q) => $q->whereHas(
+                        'libro',
+                        fn($sub) => $sub->where(
+                            'autor',
+                            'LIKE',
+                            "%$autor%"
+                        )
+                    )
+                )
+                ->paginate($perpage);
+
+            if ($ejemplares->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontraron ejemplares",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Ejemplares listados correctamente",
+                'data' => $ejemplares->toArray(),
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error en el servidor al tratar de listar los ejemplares");
+            return [
+                'error' => true,
+                "message" => "Error en el servidor al listar ejemplares",
+                'data' => []
+            ];
+        }
+    }
+
+    public function cambiarEstadoEjemplarBiblioteca(?array $ids_ejemplares, ?int $estado = 4): array
+    {
+        if (empty($ids_ejemplares)) {
+            return [
+                'error' => true,
+                'message' => "No han llegado los ids de los ejemplares a cambiar estado",
+                'data' => []
+            ];
+        }
+
+        try {
+            $estado = $estado ?? 4;
+
+            $cantidadActualizados = Ejemplares::whereIn('id', $ids_ejemplares)
+                ->update([
+                    'estado'         => $estado,
+                    'fecha_inactivo' => $estado == 1 ? null : now()->toDateTimeString()
+                ]);
+
+            return [
+                'error' => false,
+                'message' => "Se han actualizado los {$cantidadActualizados} ejemplar(es)",
+                'data' => []
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error en el servidor al actualizar el estado de los ejemplares");
+            return [
+                'error' => true,
+                'message' => "Ha ocurrido un error en el servidor al momento de actualizar el estado de los ejemplares",
+                'data' => []
+            ];
+        }
+    }
+
+
+    /*
+    -------------------------------------------------
+    |
+    |             BIBLIOTECA PRESTAMOS 
+    |
+    -------------------------------------------------
+    */
+
+    /**
+     * Método para ver los prestamos de un ejemplar
+     * @param int $id_ejemplar
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function verPrestamosDeEjemplar(int $id_ejemplar): array
+    {
+        try {
+
+            $prestamos = PrestamosEjemplar::query()
+                ->where("id_ejemplar", $id_ejemplar)
+
+                ->with("ejemplar:id,id_libro,codigo,estado")
+
+                ->with(
+                    "ejemplar.libro:id,
+                titulo,
+                autor,
+                editorial,
+                edicion,
+                foto,
+                id_categoria,
+                id_subcategoria"
+                )
+
+                ->with("ejemplar.libro.categoria:id,nombre")
+
+                ->with("ejemplar.libro.subcategoria:id,nombre")
+
+                ->with("usuario:id_user,nombre,apellido,correo")
+
+                ->orderByDesc("fecha_prestamo")
+
+                ->get();
+
+            if ($prestamos->isEmpty()) {
+                return [
+                    'error' => false,
+                    'message' => "No se encontraron prestamos para el ejemplar",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Prestamos obtenidos",
+                'data' => $prestamos
+            ];
+        } catch (\Exception $e) {
+
+            $this->sendError(
+                $e,
+                "Error en el servidor al tratar de listar los prestamos del ejemplar"
+            );
+
+            return [
+                'error' => true,
+                'message' => "Ha ocurrido un error inesperado al listar los prestamos del ejemplar",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Ver prestamos de un libro y los respectivos ejemplares
+     * @param int $id_libro
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function verPrestamosLibro(int $id_libro): array
+    {
+        if(!$id_libro){
+            return [
+                'error' => true,
+                'message' => "No se envío el ID del libro",
+                'data' => []
+            ];
+        }
+        try {
+
+            $prestamos = PrestamosEjemplar::query()
+
+                ->whereHas(
+                    'ejemplar',
+                    fn($q) => $q->where(
+                        'id_libro',
+                        $id_libro
+                    )
+                )
+
+                ->with([
+
+                    'usuario:id_user,nombre,apellido,correo',
+
+                    'ejemplar:id,id_libro,codigo,estado',
+
+                    'ejemplar.libro:id,titulo,autor,editorial,edicion,foto,id_categoria,id_subcategoria',
+
+                    'ejemplar.libro.categoria:id,nombre',
+
+                    'ejemplar.libro.subcategoria:id,nombre'
+                ])
+
+                ->orderByDesc('fecha_prestamo')
+
+                ->get();
+
+            if ($prestamos->isEmpty()) {
+                return [
+                    'error' => false,
+                    'message' => 'No se encontraron préstamos',
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Préstamos encontrados',
+                'data' => $prestamos->toArray(),
+            ];
+        } catch (\Exception $e) {
+
+            $this->sendError(
+                $e,
+                "Error al listar préstamos del libro"
+            );
+
+            return [
+                'error' => true,
+                'message' => 'Error inesperado',
+                'data' => []
+            ];
+        }
+    }
+
+    public function prestarEjemplarBiblioteca(array $datos): array {
+        try {
+
+            DB::beginTransaction();
+            
+            $datos["fecha_prestamo"] = now();
+            
+            $ejemplar = Ejemplares::find($datos['id_ejemplar']);
+
+            if(!$ejemplar){
+                return [
+                    'error' => true,
+                    'message' => "Ese ejemplar no existe en la Base de Datos",
+                    'data' => $datos,
+                ];
+            }
+
+            if($ejemplar->estado != 1){
+                return [
+                    'error' => true,
+                    'message' => "El ejemplar seleccionado no se encuentra disponible para realizar prestamos",
+                    'data' => $datos
+                ];
+            }
+
+            $prestamo_activo = PrestamosEjemplar::where('id_ejemplar', $datos['id_ejemplar'])
+            ->whereNull('fecha_devuelto')->exists();
+
+            if($prestamo_activo){
+                return [
+                    'error' => true,
+                    'message' => "Este ejemplar ya se encuentra prestado y no lo han devuelto...",
+                    'data' => $datos
+                ];
+            }
+
+
+            
+            $prestamo = PrestamosEjemplar::create($datos)->toArray();
+
+            if(empty($prestamo)){
+                return [
+                    'error' => true,
+                    'message' => "El prestamo no pudo ser realizado",
+                    'data' => $datos
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Prestamo realizado correctamente",
+                'data' => $prestamo
+            ];
+        }catch(\Exception $e){
+            DB::rollBack();
+
+            $this->sendError($e, "Error en realizar prestamo de ejemplar:");
+
+            return [
+                'error' => true,
+                'message' => "Ha ocurrido un error inesperado al realizar el prestamo...",
+                'data' => $datos
             ];
         }
     }
