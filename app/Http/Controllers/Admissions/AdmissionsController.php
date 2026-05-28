@@ -11,6 +11,7 @@ use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
+use App\Http\Requests\ReferenciaFamiliarRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -21,7 +22,6 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
 
 class AdmissionsController extends Controller
 {
@@ -432,7 +432,7 @@ class AdmissionsController extends Controller
         $documentos = $request->input('documentos');
         $id_inscripcion = $request->input('id_inscripcion');
 
-        if (!is_array($documentos) || empty($documentos)) {
+        if (! is_array($documentos) || empty($documentos)) {
             return response()->json([
                 'error' => true,
                 'message' => 'No se ha proporcionado ningún documento.',
@@ -449,11 +449,12 @@ class AdmissionsController extends Controller
             // Ejemplo en el request: documentos[archivo], documentos[archivo]
             $file = $request->file("documentos.{$key}.archivo");
 
-            if (!$file) {
+            if (! $file) {
                 $respuestas_archivos[] = [
                     'estado' => 'error',
-                    'detalle' => "No se encontró el archivo físico para el elemento indexado en {$key}."
+                    'detalle' => "No se encontró el archivo físico para el elemento indexado en {$key}.",
                 ];
+
                 continue;
             }
 
@@ -464,8 +465,9 @@ class AdmissionsController extends Controller
                 $respuestas_archivos[] = [
                     'nombre_original' => $file->getClientOriginalName(),
                     'estado' => 'error',
-                    'detalle' => $resultado['message'] ?? 'Error al subir a Cloudinary'
+                    'detalle' => $resultado['message'] ?? 'Error al subir a Cloudinary',
                 ];
+
                 continue;
             }
 
@@ -491,14 +493,14 @@ class AdmissionsController extends Controller
             $respuestas_archivos[] = [
                 'nombre_original' => $file->getClientOriginalName(),
                 'estado' => 'exito',
-                'detalle' => $response
+                'detalle' => $response,
             ];
         }
 
         return response()->json([
             'error' => false,
             'message' => 'Procesamiento de documentos finalizado.',
-            'data' => $respuestas_archivos
+            'data' => $respuestas_archivos,
         ]);
     }
 
@@ -507,16 +509,46 @@ class AdmissionsController extends Controller
         $publicId = $request->input('public_id');
         $format = $request->input('format');
 
-            if (! $publicId || ! $format) {
-                return response()->json([
-                    'error' => true,
-                    'message' => 'Debe proporcionar un ID de inscripción válido.',
-                    'data' => [],
-                ]);
-            }
-
+        if (! $publicId || ! $format) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un ID de inscripción válido.',
+                'data' => [],
+            ]);
+        }
 
         $response = $this->cloudinary_service->getFileUrl($publicId, $format);
+
+        return $this->apiResponse($response);
+    }
+
+    public function subirReferenciasFamiliaresAspirante(ReferenciaFamiliarRequest $request)
+    {
+        $id_inscripcion = $request->input('id_inscripcion');
+        $body = $request->validated();
+
+        unset($body['id_inscripcion']);
+
+        $response = $this->admisiones_services->subirReferenciasFamiliaresAspirante($id_inscripcion, $body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function actualizarReferenciasFamiliaresAspirante(ReferenciaFamiliarRequest $request)
+    {
+        $id_referencia_familiar = $request->input('id');
+        $body = $request->validated();
+        unset($body['id']);
+
+        $response = $this->admisiones_services->actualizarReferenciasFamiliaresAspirante($id_referencia_familiar, $body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function eliminarReferenciaFamiliarAspirante(Request $request)
+    {
+        $id_referencia = $request->input('id_referencia');
+        $response = $this->admisiones_services->eliminarReferenciaFamiliarAspirante($id_referencia);
 
         return $this->apiResponse($response);
     }

@@ -39,3 +39,28 @@ Route::get("/libros", [BibliotecaController::class, "obtenerTodosLosLibrosBiblio
     }
  */
 Route::post("/libro", [BibliotecaController::class, "agregarNuevoLibroBiblioteca"]);
+
+
+/**
+ * JSON para añadir ejemplares de un libro
+    {
+        "id_libro": 2479,
+        "cantidad": 6,
+        "id_log": 3123
+     }
+ */
+Route::post("/ejemplares", [BibliotecaController::class, "agregarEjemplarLibroBiblioteca"]);
+/**
+ * JSON para filtrar ejemplares de libros
+    {
+        "id_libro": "2479",
+        "autor": "Johao",
+        "page": 1   
+    }
+ */
+Route::get("/ejemplares", [BibliotecaController::class, "verEjemplaresLibroBiblioteca"]);
+Route::put("/ejemplares", [BibliotecaController::class, 'cambiarEstadoEjemplarBiblioteca']);
+Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplarBiblioteca']);
+Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
+Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
+Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);
