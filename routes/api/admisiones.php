@@ -1,6 +1,5 @@
 <?php
 
-
 use App\Http\Controllers\Admissions\AdmissionsController;
 use Illuminate\Support\Facades\Route;
 
@@ -96,10 +95,9 @@ Route::post('/acudiente', [AdmissionsController::class, 'agregarFamiliarAspirant
         "fecha_registro": "2026-05-08T10:40:42.000000Z"
     }
  */
-Route::put("/acudiente", [AdmissionsController::class, 'actualizarFamiliarAspirante']);
+Route::put('/acudiente', [AdmissionsController::class, 'actualizarFamiliarAspirante']);
 
 Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
-
 
 /**
  * JSON Para añadir información médica
@@ -122,9 +120,9 @@ Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformati
         "profesional_telefono": "601 234 5678"
     }
  */
-Route::post("/informacionMedica", [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
-Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
-Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
+Route::post('/informacionMedica', [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
+Route::put('/informacionMedica', [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
+Route::delete('/informacionMedica', [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
 
 /**
  * JSON Para subir documentos, evidentemente es necesario el file.
@@ -133,7 +131,7 @@ Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInfor
         "tipo_documento": "registro_civil"
     }
  */
-Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
+Route::post('/adminsionDocumentos', [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
 /**
  * JSON para agregar una referencia familiar:
@@ -164,3 +162,4 @@ Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaF
 
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
 Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
+Route::get('/visualizarDocumento', [AdmissionsController::class, 'visualizarDocumentosInscripcion']);
