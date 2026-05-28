@@ -4,14 +4,14 @@ use App\Http\Controllers\Admissions\AdmissionsController;
 use Illuminate\Support\Facades\Route;
 
 /** Ejemplo JSON para registrar una inscripcion:
-*
+ *
 {
     "estado": "PENDIENTE",
     "id_usuario_registro": 3123,
     "anio_academico": 8,
     "fecha_inscripcion": "2026-08-15"
 }
-*/
+ */
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
 Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion']);
@@ -64,10 +64,26 @@ Route::delete('/aspirante', [AdmissionsController::class, 'eliminarRegistroAspir
 /**
  * Ejemplo JSON para registrar a un acudiente (Datos minimos):
     {
-        "id_aspirante": 1,
-        "id_inscripcion": 1,
-        "tipo_parentesco": "Acudiente",
-        "nombre_completo": "María López"
+        "familiares": [
+            {
+            "id_inscripcion": 1,
+            "tipo_parentesco": "Padre",
+            "nombre_completo": "Carlos Ramirez",
+            "documento_identidad": "12345678",
+            "celular": "3001234567",
+            "email": "padre@gmail.com",
+            "profesion": "Ingeniero"
+            },
+            {
+            "id_inscripcion": 1,
+            "tipo_parentesco": "Madre",
+            "nombre_completo": "Maria Lopez",
+            "documento_identidad": "87654321",
+            "celular": "3019876543",
+            "email": "madre@gmail.com",
+            "profesion": "Docente"
+            }
+        ]
     }
  */
 Route::post('/acudiente', [AdmissionsController::class, 'agregarFamiliarAspirante']);
