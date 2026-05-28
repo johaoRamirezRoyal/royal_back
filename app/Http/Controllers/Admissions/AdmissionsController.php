@@ -11,7 +11,7 @@ use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
-use App\Http\Requests\ReferenciaFamiliarRequest;
+use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -22,7 +22,6 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Log;
 
 class AdmissionsController extends Controller
 {
@@ -158,7 +157,7 @@ class AdmissionsController extends Controller
 
         Cache::put("register_session_{$registerToken}", [
             'email' => $email,
-        ], now()->addMinute(15));
+        ], now()->addMinutes(15));
 
         return $this->success('Correo valido!', [
             'register_token' => $registerToken,

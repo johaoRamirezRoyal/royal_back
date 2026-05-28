@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Admisiones;
 
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -19,7 +19,7 @@ class ReferenciaFamiliarRequest extends FormRequest
             'id_inscripcion' => [
                 $requireRule,
                 'integer',
-                'exists:inscripciones,id'
+                'exists:admisiones_inscripciones,id'
             ],
 
             'nombre' => [

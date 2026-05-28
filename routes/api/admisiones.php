@@ -135,8 +135,31 @@ Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInfor
  */
 Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
+/**
+ * JSON para agregar una referencia familiar:
+    {
+        "id_inscripcion": 1,
+        "nombre": "María Elena Rodríguez",
+        "parentesco": "Tía",
+        "direccion_residencia": "Cra 45 # 72 - 15, Barranquilla",
+        "telefono_residencia": "6053852147",
+        "recomendacion_colegio": "Considero que el colegio ofrece una excelente formación académica y humana.",
+        "motivo_ingreso": "Deseamos que el estudiante tenga acceso a una educación integral con altos valores y buen nivel académico."
+    }
+ */
 Route::post("/referencias", [AdmissionsController::class, "subirReferenciasFamiliaresAspirante"]);
+
+/**
+ * JSON para actualizar una referencia familiar
+    {
+        "id": 1, -> Debe ser el ID de la referencia familiar...
+        "nombre": "María Elena Rodríguez Ramirez",
+        "parentesco": "Tía/Prima"
+    }
+ */
 Route::put("/referencias", [AdmissionsController::class, "actualizarReferenciasFamiliaresAspirante"]);
+
+//Solo debe pasarse el ID de la referencia
 Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaFamiliarAspirante"]);
 
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
