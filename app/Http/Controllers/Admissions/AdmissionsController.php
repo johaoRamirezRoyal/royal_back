@@ -268,6 +268,14 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function eliminarDatoInscripcion(Request $request){
+        $id_inscripcion = $request->input('id');
+        
+        $response = $this->admisiones_services->eliminarDatoInscripcion($id_inscripcion);
+
+        return $this->apiResponse($response);
+    }
+
     public function mostrarInformacionAspiranteId(Request $request)
     {
         $id = $request->input('id');

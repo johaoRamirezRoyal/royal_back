@@ -12,6 +12,7 @@ use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -84,6 +85,77 @@ class AdmisionesServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error al eliminar la inscripción: '.$e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    public function eliminarDatoInscripcion(int $id): array
+    {
+        DB::beginTransaction();
+
+        try {
+
+            $inscripcion = Inscripcion::find($id);
+
+            if (! $inscripcion) {
+                return [
+                    'error' => true,
+                    'message' => 'La inscripción no existe.',
+                    'data' => [],
+                ];
+            }
+
+            // Eliminar relaciones
+
+            ReferenciasFamiliares::where(
+                'id_inscripcion',
+                $id
+            )->delete();
+
+            Aspirante::where(
+                'id_inscripcion',
+                $id
+            )->delete();
+
+            Documento::where(
+                'id_inscripcion',
+                $id
+            )->delete();
+
+            InformacionMedica::where(
+                'id_inscripcion',
+                $id
+            )->delete();
+
+            Familiares::where(
+                'id_inscripcion',
+                $id
+            )->delete();
+
+            DB::commit();
+
+            return [
+                'error' => false,
+                'message' => 'Inscripción eliminada exitosamente.',
+                'data' => [],
+            ];
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            Log::error(
+                'Error al eliminar la inscripción: ' . $e->getMessage(),
+                [
+                    'id' => $id,
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
+                ]
+            );
+
+            return [
+                'error' => true,
+                'message' => 'Error al eliminar la inscripción.',
                 'data' => [],
             ];
         }
