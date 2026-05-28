@@ -32,7 +32,7 @@ class Ejemplares extends Model
     }
 
     public function prestamos(){
-        return $this->hasMany(PrestamosEjemplar::class, 'id_ejemplar');
+        return $this->hasMany(PrestamosEjemplar::class, 'id_ejemplar')->orderByDesc('fecha_prestamo');
     }
 
 

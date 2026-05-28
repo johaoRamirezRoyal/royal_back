@@ -762,7 +762,7 @@ class AdmisionesServices
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array
+    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array //TODO CONTROLLER Y ENDPOINT
     {
         try {
             $inscripcion = Inscripcion::find($id_inscripcion);

@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Biblioteca\CategoriaRequest;
 use App\Http\Requests\Biblioteca\EjemplaresRequest;
 use App\Http\Requests\Biblioteca\LibroRequest;
+use App\Http\Requests\Biblioteca\PrestamoEjemplarRequest;
 use App\Http\Requests\Biblioteca\SubcategoriaRequest;
 use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
@@ -147,6 +148,25 @@ class BibliotecaController extends Controller
         $id_libro = $request->input("id_libro");
         
         $response = $this->biblioteca_services->verPrestamosLibro($id_libro);
+        return $this->apiResponse($response);
+    }
+
+    public function prestarEjemplarBiblioteca(PrestamoEjemplarRequest $request){
+        $body = $request->validated();
+
+        $response = $this->biblioteca_services->prestarEjemplarBiblioteca($body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function devolverPrestamoEjemplarBiblioteca(Request $request){
+        $body = [
+            "codigo_ejemplar" => $request->input("codigo_ejemplar"),
+            "id_log" => $request->input("id_log")
+        ];
+
+        $response = $this->biblioteca_services->devolverPrestamoEjemplarBiblioteca($body);
+
         return $this->apiResponse($response);
     }
 }

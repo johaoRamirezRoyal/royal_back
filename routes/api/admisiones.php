@@ -135,5 +135,9 @@ Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInfor
  */
 Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
+Route::post("/referencias", [AdmissionsController::class, "subirReferenciasFamiliaresAspirante"]);
+Route::put("/referencias", [AdmissionsController::class, "actualizarReferenciasFamiliaresAspirante"]);
+Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaFamiliarAspirante"]);
+
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
 Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);

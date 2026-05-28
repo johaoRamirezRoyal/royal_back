@@ -11,6 +11,7 @@ use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
+use App\Http\Requests\ReferenciaFamiliarRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -501,6 +502,31 @@ class AdmissionsController extends Controller
             'message' => 'Procesamiento de documentos finalizado.',
             'data' => $respuestas_archivos
         ]);
+    }
+
+    public function subirReferenciasFamiliaresAspirante(ReferenciaFamiliarRequest $request){
+        $id_inscripcion  = $request->input("id_inscripcion");
+        $body = $request->validated();
+
+        unset($body["id_inscripcion"]);
+
+        $response = $this->admisiones_services->subirReferenciasFamiliaresAspirante($id_inscripcion, $body);
+        return $this->apiResponse($response);
+    }
+
+    public function actualizarReferenciasFamiliaresAspirante(ReferenciaFamiliarRequest $request){
+        $id_referencia_familiar = $request->input("id");
+        $body = $request->validated();
+        unset($body["id"]);
+
+        $response = $this->admisiones_services->actualizarReferenciasFamiliaresAspirante($id_referencia_familiar, $body);
+        return $this->apiResponse($response);
+    }
+
+    public function eliminarReferenciaFamiliarAspirante(Request $request){
+        $id_referencia = $request->input("id_referencia");
+        $response = $this->admisiones_services->eliminarReferenciaFamiliarAspirante($id_referencia);
+        return $this->apiResponse($response);
     }
 
     public function actualizarEstadoDeInscripcionAspirante(Request $request)

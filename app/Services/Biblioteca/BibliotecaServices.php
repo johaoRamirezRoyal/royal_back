@@ -8,6 +8,7 @@ use App\Models\Biblioteca\Libro;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
 use App\Services\Service;
+use Exception;
 use Illuminate\Support\Facades\DB;
 
 class BibliotecaServices extends Service
@@ -610,60 +611,75 @@ class BibliotecaServices extends Service
      */
     public function verPrestamosLibro(int $id_libro): array
     {
-        if(!$id_libro){
+        if (!$id_libro) {
             return [
                 'error' => true,
-                'message' => "No se envío el ID del libro",
+                'message' => 'No se envió el ID del libro',
                 'data' => []
             ];
         }
+
         try {
 
-            $prestamos = PrestamosEjemplar::query()
+            $libro = Libro::query()
 
-                ->whereHas(
-                    'ejemplar',
-                    fn($q) => $q->where(
-                        'id_libro',
-                        $id_libro
-                    )
-                )
+                ->where('id', $id_libro)
 
                 ->with([
 
-                    'usuario:id_user,nombre,apellido,correo',
+                    'categoria:id,nombre',
 
-                    'ejemplar:id,id_libro,codigo,estado',
+                    'subcategoria:id,nombre',
 
-                    'ejemplar.libro:id,titulo,autor,editorial,edicion,foto,id_categoria,id_subcategoria',
+                    'ejemplares:id,id_libro,codigo,estado',
 
-                    'ejemplar.libro.categoria:id,nombre',
+                    'ejemplares.prestamos:id,id_ejemplar,id_usuario,fecha_prestamo,fecha_devolucion,observacion,id_devuelto,fecha_devuelto',
 
-                    'ejemplar.libro.subcategoria:id,nombre'
+                    'ejemplares.prestamos.usuario:id_user,nombre,apellido,correo',
+
+                    'ejemplares.prestamos.ejemplar:id,id_libro,codigo,estado'
+
                 ])
 
-                ->orderByDesc('fecha_prestamo')
+                ->first();
 
-                ->get();
-
-            if ($prestamos->isEmpty()) {
+            if (!$libro) {
                 return [
-                    'error' => false,
-                    'message' => 'No se encontraron préstamos',
+                    'error' => true,
+                    'message' => 'Libro no encontrado',
                     'data' => []
                 ];
             }
 
+            $prestamos = $libro
+                ->ejemplares
+                ->flatMap(fn($e) => $e->prestamos)
+                ->values();
+
             return [
                 'error' => false,
                 'message' => 'Préstamos encontrados',
-                'data' => $prestamos->toArray(),
+                'data' => [
+
+                    'libro' => [
+                        'id' => $libro->id,
+                        'titulo' => $libro->titulo,
+                        'autor' => $libro->autor,
+                        'editorial' => $libro->editorial,
+                        'edicion' => $libro->edicion,
+                        'foto' => $libro->foto,
+                        'categoria' => $libro->categoria,
+                        'subcategoria' => $libro->subcategoria,
+                    ],
+
+                    'prestamos' => $prestamos
+                ]
             ];
         } catch (\Exception $e) {
 
             $this->sendError(
                 $e,
-                "Error al listar préstamos del libro"
+                "Error al listar préstamos"
             );
 
             return [
@@ -674,16 +690,21 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function prestarEjemplarBiblioteca(array $datos): array {
+    /**
+     * Prestar un ejemplar de un libro usando el codigo de dicho ejemplar.
+     * @param array $datos
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function prestarEjemplarBiblioteca(array $datos): array
+    {
         try {
 
-            DB::beginTransaction();
-            
-            $datos["fecha_prestamo"] = now();
-            
-            $ejemplar = Ejemplares::find($datos['id_ejemplar']);
 
-            if(!$ejemplar){
+            $datos["fecha_prestamo"] = now();
+
+            $ejemplar = Ejemplares::where('codigo', $datos['codigo_ejemplar'])->first();
+
+            if (!$ejemplar) {
                 return [
                     'error' => true,
                     'message' => "Ese ejemplar no existe en la Base de Datos",
@@ -691,7 +712,7 @@ class BibliotecaServices extends Service
                 ];
             }
 
-            if($ejemplar->estado != 1){
+            if ($ejemplar->estado != 1) {
                 return [
                     'error' => true,
                     'message' => "El ejemplar seleccionado no se encuentra disponible para realizar prestamos",
@@ -699,10 +720,12 @@ class BibliotecaServices extends Service
                 ];
             }
 
-            $prestamo_activo = PrestamosEjemplar::where('id_ejemplar', $datos['id_ejemplar'])
-            ->whereNull('fecha_devuelto')->exists();
 
-            if($prestamo_activo){
+            $prestamo_activo = PrestamosEjemplar::where('id_ejemplar', $ejemplar->id)
+                ->whereNull('fecha_devuelto')->exists();
+
+            if ($prestamo_activo) {
+                DB::rollBack();
                 return [
                     'error' => true,
                     'message' => "Este ejemplar ya se encuentra prestado y no lo han devuelto...",
@@ -710,11 +733,16 @@ class BibliotecaServices extends Service
                 ];
             }
 
-
+            DB::beginTransaction();
             
-            $prestamo = PrestamosEjemplar::create($datos)->toArray();
+            $datos['id_ejemplar'] = $ejemplar->id;
+            unset($datos['codigo_ejemplar']);
 
-            if(empty($prestamo)){
+            $prestamo = PrestamosEjemplar::create($datos);
+            $ejemplar->update(['estado' => 2]);
+
+            if (empty($prestamo)) {
+                DB::rollBack();
                 return [
                     'error' => true,
                     'message' => "El prestamo no pudo ser realizado",
@@ -722,12 +750,14 @@ class BibliotecaServices extends Service
                 ];
             }
 
+            DB::commit();
+
             return [
                 'error' => false,
                 'message' => "Prestamo realizado correctamente",
-                'data' => $prestamo
+                'data' => $prestamo->toArray()
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             DB::rollBack();
 
             $this->sendError($e, "Error en realizar prestamo de ejemplar:");
@@ -736,6 +766,63 @@ class BibliotecaServices extends Service
                 'error' => true,
                 'message' => "Ha ocurrido un error inesperado al realizar el prestamo...",
                 'data' => $datos
+            ];
+        }
+    }
+
+    public function devolverPrestamoEjemplarBiblioteca(array $data): array
+    {
+        if (!$data['codigo_ejemplar']) {
+            return [
+                'error' => true,
+                'message' => "Es necesario el código del ejemplar para poder realizar la devolución",
+                'data' => $data
+            ];
+        }
+        try {
+            DB::beginTransaction();
+
+            $ejemplar = Ejemplares::where('codigo', $data['codigo_ejemplar'])->first();
+
+            if (!$ejemplar) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el ejemplar con ese código",
+                    'data' => $data
+                ];
+            }
+
+            $prestamo = PrestamosEjemplar::where('id_ejemplar', $ejemplar->id)
+                ->whereNull('fecha_devuelto')
+                ->first();
+
+            if (!$prestamo) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => "Este ejemplar no se encuentra en prestamo",
+                    'data' => $data
+                ];
+            }
+
+            $ejemplar->update(['estado' => 1]);
+            $prestamo->update(['id_devuelto' => $data['id_log'], 'fecha_devuelto' => now()]);
+
+            DB::commit();
+
+            return [
+                'error' => false,
+                'message' => "Ejemplar devuelto exitosamente",
+                'data' => $data
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->sendError($e, "Error en el servidor al tratar de devolver el prestamo:");
+            return [
+                'error' => true,
+                'message' => "Error inesperado al devolver el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
+                'data' => $data
             ];
         }
     }

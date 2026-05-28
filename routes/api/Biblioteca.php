@@ -60,5 +60,7 @@ Route::post("/ejemplares", [BibliotecaController::class, "agregarEjemplarLibroBi
  */
 Route::get("/ejemplares", [BibliotecaController::class, "verEjemplaresLibroBiblioteca"]);
 Route::put("/ejemplares", [BibliotecaController::class, 'cambiarEstadoEjemplarBiblioteca']);
+Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplarBiblioteca']);
+Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
 Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);

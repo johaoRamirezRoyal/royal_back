@@ -15,11 +15,11 @@ class PrestamoEjemplarRequest extends FormRequest
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
         return [
-            'id_ejemplar' => $isRequired . '|integer|exists:biblioteca_ejemplares,id',
+            'codigo_ejemplar' => $isRequired . '|string|exists:biblioteca_ejemplares,codigo',
 
-            'id_usuario' => $isRequired . '|integer|exists:usuarios,id',
+            'id_usuario' => $isRequired . '|integer|exists:usuarios,id_user',
 
-            'fecha_prestamo' => $isRequired . '|date',
+            //'fecha_prestamo' => $isRequired . '|date',
 
             'fecha_devolucion' => $isRequired . '|date|after_or_equal:fecha_prestamo',
 
