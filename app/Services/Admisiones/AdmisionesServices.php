@@ -10,11 +10,12 @@ use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
+use App\Services\Service;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-class AdmisionesServices
+class AdmisionesServices extends Service
 {
     /**
      * Summary of mailTo
@@ -513,14 +514,20 @@ class AdmisionesServices
     public function agregarFamiliarAspirante(array $data): array
     {
         try {
-            $familiar = Familiares::create($data);
+            $familiares = [];
+
+            foreach($data['familiares'] as $familiarData){
+                $familiares[] = Familiares::create($familiarData);
+            }
+
 
             return [
                 'error' => false,
                 'message' => 'Familiar agregado exitosamente.',
-                'data' => $familiar->toArray(),
+                'data' => $familiares,
             ];
         } catch (\Exception $e) {
+            $this->sendError($e, "error en familiar agregar");
             return [
                 'error' => true,
                 'message' => 'No se pudo agregar al familiar del aspirante, intente nuevamente.',

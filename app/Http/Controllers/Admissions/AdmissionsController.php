@@ -12,6 +12,7 @@ use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
+use App\Http\Requests\Admisiones\RegistrarFamiliaresRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -373,7 +374,7 @@ class AdmissionsController extends Controller
         ]);
     }
 
-    public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request)
+    public function agregarFamiliarAspirante(RegistrarFamiliaresRequest $request)
     {
         $data = $request->validated();
 
@@ -382,7 +383,7 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function actualizarFamiliarAspirante(RegistrarFamiliarRequest $request)
+    public function actualizarFamiliarAspirante(RegistrarFamiliaresRequest $request)
     {
         $data = $request->validated();
         $id_familiar = $request->input('id_familiar');

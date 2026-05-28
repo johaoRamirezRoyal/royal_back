@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Biblioteca\CategoriaRequest;
 use App\Http\Requests\Biblioteca\EjemplaresRequest;
 use App\Http\Requests\Biblioteca\LibroRequest;
+use App\Http\Requests\Biblioteca\PaqueteRequest;
 use App\Http\Requests\Biblioteca\PrestamoEjemplarRequest;
 use App\Http\Requests\Biblioteca\SubcategoriaRequest;
 use App\Services\Biblioteca\BibliotecaServices;
@@ -166,6 +167,22 @@ class BibliotecaController extends Controller
         ];
 
         $response = $this->biblioteca_services->devolverPrestamoEjemplarBiblioteca($body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function listarPaquetesBiblioteca(Request $request){
+        $body = $request->input("search");
+
+        $response = $this->biblioteca_services->listarPaquetesBiblioteca($body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function crearNuevoPaqueteBiblioteca(PaqueteRequest $request){
+        $body = $request->validated();
+
+        $response = $this->biblioteca_services->crearNuevoPaqueteBiblioteca($body);
 
         return $this->apiResponse($response);
     }

@@ -5,6 +5,7 @@ namespace App\Services\Biblioteca;
 use App\Models\Biblioteca\Categoria;
 use App\Models\Biblioteca\Ejemplares;
 use App\Models\Biblioteca\Libro;
+use App\Models\Biblioteca\Paquetes;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
 use App\Services\Service;
@@ -734,7 +735,7 @@ class BibliotecaServices extends Service
             }
 
             DB::beginTransaction();
-            
+
             $datos['id_ejemplar'] = $ejemplar->id;
             unset($datos['codigo_ejemplar']);
 
@@ -823,6 +824,88 @@ class BibliotecaServices extends Service
                 'error' => true,
                 'message' => "Error inesperado al devolver el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
                 'data' => $data
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |             BIBLIOTECA PAQUETES 
+    |
+    -------------------------------------------------
+    */
+
+    /**
+     * Metodo para listar los paquetes y su respectivo contenido
+     * @param mixed $search
+     * @param mixed $perpage
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function listarPaquetesBiblioteca(?string $search = null, ?int $perpage = 10): array
+    {
+        try {
+            $paquetes = Paquetes::with(
+                ['contenidos']
+            )
+                ->when(!empty($search), fn($q) => $q->where("nombre", 'LIKE', "%$search%"))
+                ->paginate($perpage);
+
+            if ($paquetes->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => "No hay paquetes a listar",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Paquetes listados completamente",
+                'data' => $paquetes->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error en el servidor al tratar de listar los paquetes");
+            return [
+                'error' => true,
+                'message' => "Ha ocurrido un error inesperado al tratar de listar los paquetes.",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Metodo para crear un nuevo paquete
+     * @param array $data
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function crearNuevoPaqueteBiblioteca(array $data): array
+    {
+        try {
+            $ultimo_paquete = (Paquetes::max('id') ?? 0) + 1;
+            $data['codigo'] = 'PACK-' . str_pad($ultimo_paquete, 4, '0', STR_PAD_LEFT);
+
+            $paquete_nuevo = Paquetes::create($data);
+
+            if (!$paquete_nuevo) {
+                return [
+                    'error' => true,
+                    'message' => "No se creo el paquete nuevo",
+                    'data' => $data
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Paquete creado éxitosamente!",
+                'data' => $paquete_nuevo->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al crear el nuevo paquete");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de crear un nuevo paquete",
+                'data' => []
             ];
         }
     }
