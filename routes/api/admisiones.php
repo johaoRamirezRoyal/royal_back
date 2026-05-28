@@ -1,18 +1,19 @@
 <?php
 
-
 use App\Http\Controllers\Admissions\AdmissionsController;
 use Illuminate\Support\Facades\Route;
 
 /** Ejemplo JSON para registrar una inscripcion:
- * 
+ *
         {
             "estado": "PENDIENTE",
             "id_usuario_registro": 3123,
             "anio_academico": 8,
             "fecha_inscripcion": "2026-08-15"
         }
-        */
+ */
+Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
+
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
 Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion']);
@@ -24,7 +25,6 @@ Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion
         }
  */
 Route::post('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
-Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
 Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
 
 /** Ejemplo JSON para actualizar datos de un aspirante:
@@ -49,10 +49,10 @@ Route::put('/aspirante', [AdmissionsController::class, 'actualizarRegistroAspira
 
 Route::get('/aspirante', [AdmissionsController::class, 'mostrarInformacionAspiranteId']);
 
-/** Ejemplo JSON para agregar al aspirante (Datos minimos necesarios): 
+/** Ejemplo JSON para agregar al aspirante (Datos minimos necesarios):
         {
             "nombre_completo": "Juan Pérez García",
-            "grado_aplica": "Primero de Primaria",
+            "   ": "Primero de Primaria",
             "id_inscripcion": 1,
             "anio_academico": 8
         }
@@ -95,10 +95,9 @@ Route::post('/acudiente', [AdmissionsController::class, 'agregarFamiliarAspirant
             "fecha_registro": "2026-05-08T10:40:42.000000Z"
         }
  */
-Route::put("/acudiente", [AdmissionsController::class, 'actualizarFamiliarAspirante']);
+Route::put('/acudiente', [AdmissionsController::class, 'actualizarFamiliarAspirante']);
 
 Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
-
 
 /**
  * JSON Para añadir información médica
@@ -121,9 +120,9 @@ Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformati
                 "profesional_telefono": "601 234 5678"
             }
  */
-Route::post("/informacionMedica", [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
-Route::put("/informacionMedica", [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
-Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
+Route::post('/informacionMedica', [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
+Route::put('/informacionMedica', [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
+Route::delete('/informacionMedica', [AdmissionsController::class, 'eliminarInformacionMedicaAspirante']);
 
 /**
  * JSON Para subir documentos, evidentemente es necesario el file.
@@ -132,7 +131,8 @@ Route::delete("/informacionMedica", [AdmissionsController::class, 'eliminarInfor
             "tipo_documento": "registro_civil"
         }
  */
-Route::post("/adminsionDocumentos", [AdmissionsController::class, 'subirDocumentoInscripcion']);
+Route::post('/adminsionDocumentos', [AdmissionsController::class, 'subirDocumentoInscripcion']);
 
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
 Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
+Route::get('/visualizarDocumento', [AdmissionsController::class, 'visualizarDocumentosInscripcion']);

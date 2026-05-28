@@ -58,4 +58,13 @@ class Inscripcion extends Model
     {
         return $this->hasMany(ReferenciasFamiliares::class, 'id_inscripcion');
     }
+
+    public function informacionMedica()
+    {
+        return $this->hasOne(InformacionMedica::class, 'id_inscripcion', 'id');
+    }
+
+    public function familiares(){
+        return $this->hasMany(Familiares::class, 'id_inscripcion', 'id');
+    }
 }

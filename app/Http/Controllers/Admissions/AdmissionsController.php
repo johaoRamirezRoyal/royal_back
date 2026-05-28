@@ -376,9 +376,8 @@ class AdmissionsController extends Controller
     public function agregarFamiliarAspirante(RegistrarFamiliarRequest $request)
     {
         $data = $request->validated();
-        $id_aspirante = $request->input('id_aspirante');
 
-        $response = $this->admisiones_services->agregarFamiliarAspirante($id_aspirante, $data);
+        $response = $this->admisiones_services->agregarFamiliarAspirante($data);
 
         return $this->apiResponse($response);
     }
@@ -501,6 +500,25 @@ class AdmissionsController extends Controller
             'message' => 'Procesamiento de documentos finalizado.',
             'data' => $respuestas_archivos
         ]);
+    }
+
+    public function visualizarDocumentosInscripcion(Request $request)
+    {
+        $publicId = $request->input('public_id');
+        $format = $request->input('format');
+
+            if (! $publicId || ! $format) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Debe proporcionar un ID de inscripción válido.',
+                    'data' => [],
+                ]);
+            }
+
+
+        $response = $this->cloudinary_service->getFileUrl($publicId, $format);
+
+        return $this->apiResponse($response);
     }
 
     public function actualizarEstadoDeInscripcionAspirante(Request $request)

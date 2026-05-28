@@ -90,12 +90,19 @@ class CloudinaryService
                 // IMPORTANTE: Forzar el tipo MIME correcto
                 'type' => 'upload',
                 // Para PDFs específicamente
-                //'format' => $extension,
+                'format' => $extension,
             ];
 
             $response = $this->uploadApi->upload(
                 $file->getRealPath(),
                 $options
+            );
+
+            log::alert('Cloudinary Upload Response',
+                [
+                    'response' => $response,
+                    'options' => $options,
+                ]
             );
 
             if (!$response) {
@@ -162,7 +169,7 @@ class CloudinaryService
             }
 
             $cloudName = env('CLOUDINARY_CLOUD_NAME');
-            $url = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$publicId}";
+            $url = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$publicId}.{$format}";
 
             return [
                 'error' => false,
@@ -170,12 +177,14 @@ class CloudinaryService
                 'data' => [
                     'url' => $url,
                     'public_id' => $publicId,
+                    'format' => $format,
                 ],
             ];
         } catch (\Throwable $e) {
             Log::error('Cloudinary GetUrl Error', [
                 'message' => $e->getMessage(),
                 'public_id' => $publicId,
+                'format' => $format,
             ]);
 
             return [
@@ -259,7 +268,7 @@ class CloudinaryService
          * Se cambia 'auto' por 'raw' para obligar a Cloudinary a mantenerlo como binario
          */
         if ($extension === 'pdf') {
-            return 'raw';
+            return 'image';
         }
 
         if (

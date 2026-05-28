@@ -18,12 +18,6 @@ class RegistrarFamiliarRequest extends FormRequest
         
         return [
 
-            'id_aspirante' => [
-                $isRequired ? 'sometimes' : 'required',
-                'integer',
-                'exists:admisiones_aspirantes,id'
-            ],
-
             'id_inscripcion' => [
                 $isRequired ? 'sometimes' : 'required',
                 'integer',
@@ -80,7 +74,7 @@ class RegistrarFamiliarRequest extends FormRequest
             'celular' => [
                 'nullable',
                 'string',
-                'max:20'
+                'max:150'
             ],
 
             'email' => [
@@ -125,16 +119,13 @@ class RegistrarFamiliarRequest extends FormRequest
         return [
 
             // Requeridos
-            'aspirante_id.required' => 'El aspirante es obligatorio.',
             'id_inscripcion.required' => 'No puedes continuar si no cuentas con un registro de inscripción.',
             'tipo_parentesco.required' => 'El tipo de familiar es obligatorio.',
             'nombre_completo.required' => 'El nombre completo es obligatorio.',
 
             // Exists
-            'aspirante_id.exists' => 'El aspirante seleccionado no existe.',
             'id_inscripcion.exists' => 'La inscripción seleccionada no existe.',
             // Tipos
-            'aspirante_id.integer' => 'El ID del aspirante debe ser un número entero.',
             'id_inscripcion.integer' => 'El ID de la inscripción debe ser un número entero.',
             'email.email' => 'El correo electrónico debe ser válido.',
             'fecha_registro.date' => 'La fecha de registro debe ser válida.',

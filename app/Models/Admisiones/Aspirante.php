@@ -59,7 +59,7 @@ class Aspirante extends Model
     }
 
     public function inscripcion(){
-        return $this->belongsTo(Inscripcion::class, 'inscripcion_id', 'id');
+        return $this->belongsTo(Inscripcion::class, 'id_inscripcion', 'id');
     }
 
     public function informacionMedica(){
