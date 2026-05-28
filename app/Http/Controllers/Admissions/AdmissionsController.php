@@ -270,7 +270,7 @@ class AdmissionsController extends Controller
 
     public function eliminarDatoInscripcion(Request $request){
         $id_inscripcion = $request->input('id');
-        
+
         $response = $this->admisiones_services->eliminarDatoInscripcion($id_inscripcion);
 
         return $this->apiResponse($response);
@@ -401,6 +401,14 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function eliminarFamiliarAspirante(Request $request){
+        $id_familiar = $request->input("id_acudiente");
+
+        $response = $this->admisiones_services->eliminarFamiliarAspirante($id_familiar);
+
+        return $this->apiResponse($response);
+    }
+
     public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request)
     {
         $id_aspirante = $request->input('aspirante_id');
@@ -433,6 +441,50 @@ class AdmissionsController extends Controller
         $response = $this->admisiones_services->eliminarInformacionMedicaAspirante($id_informacion);
 
         return $this->apiResponse($response);
+    }
+
+    public function eliminarDocumentos(Request $request)
+    {
+        $ids = $request->input('ids');
+
+        if (empty($ids) || !is_array($ids)) {
+            return $this->apiResponse([
+                'error' => true,
+                'message' => 'Debe enviar un arreglo de IDs',
+                'data' => []
+            ]);
+        }
+
+        $documentos = $this->admisiones_services
+            ->verInfoDocumentos($ids);
+
+        if ($documentos['error']) {
+            return $this->apiResponse($documentos);
+        }
+
+        foreach ($documentos['data'] as $docs) {
+
+            if (!empty($docs['public_id'])) {
+
+                $eliminar_cloud = $this->cloudinary_service
+                    ->deleteFile($docs['public_id']);
+
+                if ($eliminar_cloud['error']) {
+                    return $this->apiResponse([
+                        'error' => true,
+                        'message' => 'Error eliminando archivo en Cloudinary',
+                        'data' => [
+                            'documento' => $docs
+                        ]
+                    ]);
+                }
+            }
+        }
+
+        $eliminar_db = $this->admisiones_services
+            ->eliminarDocumentos($ids);
+
+        return $this->apiResponse($eliminar_db);
     }
 
     public function subirDocumentoInscripcion(AdmisionesDocumentoRequest $request)

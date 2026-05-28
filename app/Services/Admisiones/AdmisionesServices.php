@@ -12,6 +12,7 @@ use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -838,6 +839,68 @@ class AdmisionesServices extends Service
                 'error' => true,
                 'message' => 'No se pudo añadir el archivo',
                 'data' => $data,
+            ];
+        }
+    }
+
+    public function verInfoDocumentos(array $ids){
+        try {
+            $eliminados = Documento::whereIn('id', $ids)->get();
+
+            if ($eliminados->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => "No existen documentos con esos IDS",
+                    'data' => $ids
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Se eliminaron todos los documentos",
+                'data' => $eliminados->toArray()
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "ERror al borrar los documentos de la base de datos");
+
+            return [
+                'error' => true,
+                'message' => "Error inesperado",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Función para eliminar varios documentos a la vez
+     * @param array $ids
+     * @return array{data: array, error: bool, message: string|array{data: bool|int|mixed|null, error: bool, message: string}}
+     */
+    public function eliminarDocumentos(array $ids){
+        try {
+            $eliminados = Documento::whereIn('id', $ids)->delete();
+
+            if($eliminados === 0){
+                return [
+                    'error' => true,
+                    'message' => "No existen documentos con esos IDS",
+                    'data' => $ids
+                ];
+            }
+            
+            return [
+                'error' => false,
+                'message' => "Se eliminaron todos los documentos",
+                'data' => $eliminados
+            ];
+            
+        }catch(Exception $e){
+            $this->sendError($e, "ERror al borrar los documentos de la base de datos");
+
+            return [
+                'error' => true,
+                'message' => "Error inesperado",
+                'data' => []
             ];
         }
     }

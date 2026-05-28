@@ -114,6 +114,7 @@ Route::post('/acudiente', [AdmissionsController::class, 'agregarFamiliarAspirant
     }
  */
 Route::put('/acudiente', [AdmissionsController::class, 'actualizarFamiliarAspirante']);
+Route::delete("/acudiente", [AdmissionsController::class, 'eliminarFamiliarAspirante']);
 
 Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformativoSolicitudInicial']);
 
@@ -150,6 +151,7 @@ Route::delete('/informacionMedica', [AdmissionsController::class, 'eliminarInfor
     }
  */
 Route::post('/adminsionDocumentos', [AdmissionsController::class, 'subirDocumentoInscripcion']);
+Route::delete('/adminsionDocumentos', [AdmissionsController::class, 'eliminarDocumentos']);
 
 /**
  * JSON para agregar una referencia familiar:
