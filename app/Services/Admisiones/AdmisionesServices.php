@@ -58,7 +58,7 @@ class AdmisionesServices extends Service
                         : 'N/A',
                 ],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al registrar la inscripción: '.$e->getMessage(), ['data' => $data]);
 
             return [
@@ -80,7 +80,7 @@ class AdmisionesServices extends Service
                 'message' => 'Inscripción eliminada exitosamente.',
                 'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al eliminar la inscripción: '.$e->getMessage(), ['id' => $id]);
 
             return [
@@ -141,12 +141,12 @@ class AdmisionesServices extends Service
                 'message' => 'Inscripción eliminada exitosamente.',
                 'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
 
             DB::rollBack();
 
             Log::error(
-                'Error al eliminar la inscripción: ' . $e->getMessage(),
+                'Error al eliminar la inscripción: '.$e->getMessage(),
                 [
                     'id' => $id,
                     'line' => $e->getLine(),
@@ -168,6 +168,7 @@ class AdmisionesServices extends Service
             $inscripciones = Inscripcion::with([
                 'anioAcademico',
                 'aspirante:id,id_inscripcion,nombre_completo',
+                'documento:id,id_inscripcion,nombre_original,url_archivo,tipo_documento',
             ])->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
 
             Log::info('Info de la inscripcion: ', ['data' => $inscripciones]);
@@ -185,7 +186,7 @@ class AdmisionesServices extends Service
                 'message' => 'Inscripciones seleccionadas',
                 'data' => $inscripciones->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al mostrar inscripciones: ', ['err' => $e->getMessage(), 'line' => $e->getLine(), 'file' => $e->getFile()]);
 
             return [
@@ -223,7 +224,7 @@ class AdmisionesServices extends Service
                 'message' => 'Información de la inscripción obtenida exitosamente.',
                 'data' => $inscripcion->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al obtener información de la inscripción: ', ['id' => $id, 'error' => $e->getMessage()]);
 
             return [
@@ -397,7 +398,7 @@ class AdmisionesServices extends Service
                 'message' => 'Aspirante registrado exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al registrar aspirante: '.$e->getMessage(), ['data' => $data]);
 
             return [
@@ -429,7 +430,7 @@ class AdmisionesServices extends Service
                 'message' => 'Aspirante actualizado exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al actualizar aspirante: '.$e->getMessage(), ['id' => $id, 'data' => $data]);
 
             return [
@@ -450,7 +451,7 @@ class AdmisionesServices extends Service
                 'message' => 'Información del aspirante obtenida exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al obtener información del aspirante: '.$e->getMessage(), ['id' => $id]);
 
             return [
@@ -472,7 +473,7 @@ class AdmisionesServices extends Service
                 'message' => 'Aspirante eliminado exitosamente.',
                 'data' => $aspirante->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al eliminar aspirante: '.$e->getMessage(), ['id' => $id]);
 
             return [
@@ -563,7 +564,7 @@ class AdmisionesServices extends Service
                 'message' => 'Correo informativo enviado exitosamente.',
                 'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al enviar correo informativo: '.$e->getMessage(), [
                 'id_solicitud' => $id_solicitud,
                 'trace' => $e->getTraceAsString(),
@@ -589,18 +590,18 @@ class AdmisionesServices extends Service
         try {
             $familiares = [];
 
-            foreach($data['familiares'] as $familiarData){
+            foreach ($data['familiares'] as $familiarData) {
                 $familiares[] = Familiares::create($familiarData);
             }
-
 
             return [
                 'error' => false,
                 'message' => 'Familiar agregado exitosamente.',
                 'data' => $familiares,
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "error en familiar agregar");
+        } catch (Exception $e) {
+            $this->sendError($e, 'error en familiar agregar');
+
             return [
                 'error' => true,
                 'message' => 'No se pudo agregar al familiar del aspirante, intente nuevamente.',
@@ -625,9 +626,14 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $familiar = Familiares::findOrFail($id_familiar);
+            $payload = isset($data['familiares']) && is_array($data['familiares'])
+            ? $data['familiares'][0]
+            : $data;
 
-            $familiar->update($data);
+            unset($payload['id'], $payload['id_inscripcion']);
+
+            $familiar = Familiares::findOrFail($id_familiar);
+            $familiar->update($payload);
 
             if (! $familiar->wasChanged()) {
                 return [
@@ -642,7 +648,7 @@ class AdmisionesServices extends Service
                 'message' => 'Familiar actualizado exitosamente.',
                 'data' => $familiar->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al actualizar al familiar del aspirante: ', ['error' => $e->getMessage()]);
 
             return [
@@ -686,7 +692,7 @@ class AdmisionesServices extends Service
                 'message' => 'Familiar eliminado exitosamente.',
                 'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al eliminar al familiar del aspirante: ', ['error' => $e->getMessage()]);
 
             return [
@@ -725,7 +731,7 @@ class AdmisionesServices extends Service
                 'message' => 'Información medica guardada',
                 'data' => $informacionMedica->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error creando la información medica: ', ['err' => $e->getMessage()]);
 
             return [
@@ -761,7 +767,7 @@ class AdmisionesServices extends Service
                 'message' => 'Información médica actualizada correctamente',
                 'data' => $informacionMedica->fresh()->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error(
                 'No se pudo actualizar la información médica',
                 [
@@ -805,7 +811,7 @@ class AdmisionesServices extends Service
                 'message' => 'Se eliminó completamente la información médica',
                 'data' => $dataEliminada,
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al eliminar la información medica: ', ['err' => $e->getMessage()]);
 
             return [
@@ -832,7 +838,7 @@ class AdmisionesServices extends Service
                 'message' => 'Documento guardado correctamente',
                 'data' => $documento->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
 
             return [
@@ -843,64 +849,66 @@ class AdmisionesServices extends Service
         }
     }
 
-    public function verInfoDocumentos(array $ids){
+    public function verInfoDocumentos(array $ids)
+    {
         try {
             $eliminados = Documento::whereIn('id', $ids)->get();
 
             if ($eliminados->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No existen documentos con esos IDS",
-                    'data' => $ids
+                    'message' => 'No existen documentos con esos IDS',
+                    'data' => $ids,
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Se eliminaron todos los documentos",
-                'data' => $eliminados->toArray()
+                'message' => 'Se eliminaron todos los documentos',
+                'data' => $eliminados->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "ERror al borrar los documentos de la base de datos");
+            $this->sendError($e, 'ERror al borrar los documentos de la base de datos');
 
             return [
                 'error' => true,
-                'message' => "Error inesperado",
-                'data' => []
+                'message' => 'Error inesperado',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Función para eliminar varios documentos a la vez
-     * @param array $ids
+     *
      * @return array{data: array, error: bool, message: string|array{data: bool|int|mixed|null, error: bool, message: string}}
      */
-    public function eliminarDocumentos(array $ids){
+    public function eliminarDocumentos(array $ids)
+    {
         try {
             $eliminados = Documento::whereIn('id', $ids)->delete();
 
-            if($eliminados === 0){
+            if ($eliminados === 0) {
                 return [
                     'error' => true,
-                    'message' => "No existen documentos con esos IDS",
-                    'data' => $ids
+                    'message' => 'No existen documentos con esos IDS',
+                    'data' => $ids,
                 ];
             }
-            
+
             return [
                 'error' => false,
-                'message' => "Se eliminaron todos los documentos",
-                'data' => $eliminados
+                'message' => 'Se eliminaron todos los documentos',
+                'data' => $eliminados,
             ];
-            
-        }catch(Exception $e){
-            $this->sendError($e, "ERror al borrar los documentos de la base de datos");
+
+        } catch (Exception $e) {
+            $this->sendError($e, 'ERror al borrar los documentos de la base de datos');
 
             return [
                 'error' => true,
-                'message' => "Error inesperado",
-                'data' => []
+                'message' => 'Error inesperado',
+                'data' => [],
             ];
         }
     }
@@ -911,7 +919,7 @@ class AdmisionesServices extends Service
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array //TODO CONTROLLER Y ENDPOINT
+    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array // TODO CONTROLLER Y ENDPOINT
     {
         try {
             $inscripcion = Inscripcion::find($id_inscripcion);
@@ -931,7 +939,7 @@ class AdmisionesServices extends Service
                 'message' => 'Referencia familiar agregada',
                 'data' => $referencia->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al subir referencias familiares: ', [
                 'err' => $e->getMessage(),
                 'data' => $data,
@@ -971,7 +979,7 @@ class AdmisionesServices extends Service
                 'message' => 'Referencia actualizada',
                 'data' => $referencia->fresh()->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error al actualizar la referencia: ', [
                 'err' => $e->getMessage(),
                 'data' => [
@@ -1022,7 +1030,7 @@ class AdmisionesServices extends Service
                 'message' => 'Referencia eliminada correctamente',
                 'data' => $referencia->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error(
                 'Error al eliminar la referencia: ',
                 ['id' => $id_referencia_familiar, 'err' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]
@@ -1046,7 +1054,7 @@ class AdmisionesServices extends Service
                 ->where('correo', $email)
                 ->whereHas('admisiones_inscripciones')
                 ->exists();
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error añadiendo el archivo: ', ['err' => $e->getMessage()]);
 
             return [
