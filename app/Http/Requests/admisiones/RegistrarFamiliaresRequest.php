@@ -14,16 +14,20 @@ class RegistrarFamiliaresRequest extends FormRequest
 
     public function rules(): array
     {
+
+        $isRequired = ($this->isMethod('POST')) ? "required" : "sometimes";
+        $inscriptionIsRequire = ($this->isMethod('POST')) ? "required" : "sometimes";
+
         return [
 
             'familiares' => [
-                'required',
+                $isRequired,
                 'array',
                 'min:1'
             ],
 
             'familiares.*.id_inscripcion' => [
-                'required',
+                $inscriptionIsRequire,
                 'integer',
                 'exists:admisiones_inscripciones,id'
             ],
@@ -78,7 +82,7 @@ class RegistrarFamiliaresRequest extends FormRequest
             'familiares.*.celular' => [
                 'nullable',
                 'string',
-                'max:20'
+                'max:150'
             ],
 
             'familiares.*.email' => [

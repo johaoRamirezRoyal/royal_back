@@ -57,10 +57,6 @@ class RegistrarAspiranteRequest extends FormRequest
                 'string', 
                 'max:50'
                 ],
-            'anio_academico' => [
-                 'integer', 
-                 'exists:anio_escolar,id'
-                ],
 
             // Metadatos
             'fecha_registro' => ['nullable', 'date'],
