@@ -920,10 +920,11 @@ class AdmisionesServices extends Service
     // ========================================= SOLICITUD DE REFERENCIAS FAMILIARES SERVICES =========================================
     /**
      * Subir referencias familiares a una inscripción.
+     * Acepta tanto un único registro (campos en la raíz) como un batch (clave "referencias" con el array).
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array // TODO CONTROLLER Y ENDPOINT
+    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array
     {
         try {
             $inscripcion = Inscripcion::find($id_inscripcion);
@@ -936,12 +937,24 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $referencia = ReferenciasFamiliares::create([...$data, 'id_inscripcion' => $id_inscripcion]);
+            $referenciasInput = (array_key_exists('referencias', $data) && is_array($data['referencias']) && ! empty($data['referencias']))
+                ? $data['referencias']
+                : [$data];
+
+            $creadas = [];
+            foreach ($referenciasInput as $ref) {
+                $creadas[] = ReferenciasFamiliares::create([...$ref, 'id_inscripcion' => $id_inscripcion])->toArray();
+            }
+
+            $cantidad = count($creadas);
+            $message = $cantidad === 1
+                ? 'Referencia familiar agregada'
+                : "Se agregaron {$cantidad} referencias familiares";
 
             return [
                 'error' => false,
-                'message' => 'Referencia familiar agregada',
-                'data' => $referencia->toArray(),
+                'message' => $message,
+                'data' => $creadas,
             ];
         } catch (Exception $e) {
             Log::error('Error al subir referencias familiares: ', [
@@ -953,7 +966,7 @@ class AdmisionesServices extends Service
 
             return [
                 'error' => true,
-                'message' => 'No se pudo agregar la referencia familiar',
+                'message' => 'No se pudieron agregar las referencias familiares',
                 'data' => [],
             ];
         }

@@ -171,6 +171,27 @@ Route::delete('/adminsionDocumentos', [AdmissionsController::class, 'eliminarDoc
         "recomendacion_colegio": "Considero que el colegio ofrece una excelente formación académica y humana.",
         "motivo_ingreso": "Deseamos que el estudiante tenga acceso a una educación integral con altos valores y buen nivel académico."
     }
+ * JSON para agregar varias referencias familiares a la vez (batch):
+    {
+        "id_inscripcion": 1,
+        "referencias": [
+            {
+                "nombre": "María Elena Rodríguez",
+                "parentesco": "Tía",
+                "direccion_residencia": "Cra 45 # 72 - 15, Barranquilla",
+                "telefono_residencia": "6053852147",
+                "recomendacion_colegio": "Considero que el colegio ofrece una excelente formación académica y humana.",
+                "motivo_ingreso": "Deseamos que el estudiante tenga acceso a una educación integral con altos valores y buen nivel académico."
+            },
+            {
+                "nombre": "Carlos Pérez Gómez",
+                "parentesco": "Abuelo",
+                "direccion_residencia": "Calle 10 # 20 - 30, Medellín",
+                "telefono_residencia": "6041234567"
+            }
+        ]
+    }
+ * Nota: no se permite enviar "nombre" en la raíz y "referencias" al mismo tiempo.
  */
 Route::post("/referencias", [AdmissionsController::class, "subirReferenciasFamiliaresAspirante"]);
 
