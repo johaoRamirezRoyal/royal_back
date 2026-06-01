@@ -138,6 +138,13 @@ Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformati
         "profesional_nombre": "Lic. Martha Lucía Gómez",
         "profesional_telefono": "601 234 5678"
     }
+ * JSON Para añadir información médica en batch (varios registros a la vez)
+    {
+        "informacion_medica": [
+            { "aspirante_id": 1, "id_inscripcion": 10, "medico_nombre": "Dr. A", "tiene_alergias": true, "detalle_alergias": "Polen" },
+            { "aspirante_id": 1, "id_inscripcion": 10, "profesional_nombre": "Psic. B", "terapia_psicologica": true }
+        ]
+    }
  */
 Route::post('/informacionMedica', [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
 Route::put('/informacionMedica', [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);

@@ -19,13 +19,42 @@ class RegistrarInformacionMedicaRequest extends FormRequest
      */
     public function rules(): array
     {
-        $requiredRule = $this->isMethod('post')
-            ? 'required'
-            : 'sometimes';
-        return [
+        if ($this->isMethod('post')) {
+            return [
+                'informacion_medica' => [
+                    'required',
+                    'array',
+                    'min:1',
+                ],
 
-            'aspirante_id' => $requiredRule . '|integer|exists:admisiones_aspirantes,id',
-            'id_inscripcion' => $requiredRule .  '|integer|exists:admisiones_inscripciones,id',
+                'informacion_medica.*.aspirante_id' => 'required|integer|exists:admisiones_aspirantes,id',
+                'informacion_medica.*.id_inscripcion' => 'required|integer|exists:admisiones_inscripciones,id',
+
+                'informacion_medica.*.medico_nombre' => 'nullable|string|max:150',
+                'informacion_medica.*.medico_telefono' => 'nullable|string|max:20',
+
+                'informacion_medica.*.tiene_alergias' => 'nullable|boolean',
+                'informacion_medica.*.detalle_alergias' => 'nullable|string',
+
+                'informacion_medica.*.necesita_cuidados' => 'nullable|boolean',
+                'informacion_medica.*.detalle_cuidados' => 'nullable|string',
+
+                'informacion_medica.*.recibe_ayuda' => 'nullable|boolean',
+
+                'informacion_medica.*.terapia_ocupacional' => 'nullable|boolean',
+                'informacion_medica.*.terapia_lenguaje' => 'nullable|boolean',
+                'informacion_medica.*.terapia_psicologica' => 'nullable|boolean',
+                'informacion_medica.*.fonoaudiologia' => 'nullable|boolean',
+                'informacion_medica.*.terapia_otros' => 'nullable|boolean',
+
+                'informacion_medica.*.profesional_nombre' => 'nullable|string|max:150',
+                'informacion_medica.*.profesional_telefono' => 'nullable|string|max:20',
+            ];
+        }
+
+        return [
+            'aspirante_id' => 'sometimes|integer|exists:admisiones_aspirantes,id',
+            'id_inscripcion' => 'sometimes|integer|exists:admisiones_inscripciones,id',
 
             'medico_nombre' => 'nullable|string|max:150',
             'medico_telefono' => 'nullable|string|max:20',
@@ -55,11 +84,23 @@ class RegistrarInformacionMedicaRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'informacion_medica.required' => 'Debe enviar al menos un registro de información médica.',
+            'informacion_medica.array' => 'El formato de información médica es inválido.',
+            'informacion_medica.min' => 'Debe enviar al menos un registro de información médica.',
 
-            'aspirante_id.required' => 'El ID del aspirante es obligatorio.',
+            'informacion_medica.*.aspirante_id.required' => 'El ID del aspirante es obligatorio.',
+            'informacion_medica.*.aspirante_id.exists' => 'El aspirante no existe.',
+
+            'informacion_medica.*.id_inscripcion.required' => 'El ID de la inscripción es obligatorio.',
+            'informacion_medica.*.id_inscripcion.exists' => 'La inscripción no existe.',
+
+            'informacion_medica.*.medico_nombre.max' => 'El nombre del médico no puede superar 150 caracteres.',
+            'informacion_medica.*.medico_telefono.max' => 'El teléfono del médico no puede superar 20 caracteres.',
+
+            'informacion_medica.*.profesional_nombre.max' => 'El nombre del profesional no puede superar 150 caracteres.',
+            'informacion_medica.*.profesional_telefono.max' => 'El teléfono del profesional no puede superar 20 caracteres.',
+
             'aspirante_id.exists' => 'El aspirante no existe.',
-
-            'id_inscripcion.required' => 'El ID de la inscripción es obligatorio.',
             'id_inscripcion.exists' => 'La inscripción no existe.',
 
             'medico_nombre.max' => 'El nombre del médico no puede superar 150 caracteres.',
@@ -75,15 +116,46 @@ class RegistrarInformacionMedicaRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        $this->merge([
-            'tiene_alergias' => filter_var($this->tiene_alergias, FILTER_VALIDATE_BOOLEAN),
-            'necesita_cuidados' => filter_var($this->necesita_cuidados, FILTER_VALIDATE_BOOLEAN),
-            'recibe_ayuda' => filter_var($this->recibe_ayuda, FILTER_VALIDATE_BOOLEAN),
-            'terapia_ocupacional' => filter_var($this->terapia_ocupacional, FILTER_VALIDATE_BOOLEAN),
-            'terapia_lenguaje' => filter_var($this->terapia_lenguaje, FILTER_VALIDATE_BOOLEAN),
-            'terapia_psicologica' => filter_var($this->terapia_psicologica, FILTER_VALIDATE_BOOLEAN),
-            'fonoaudiologia' => filter_var($this->fonoaudiologia, FILTER_VALIDATE_BOOLEAN),
-            'terapia_otros' => filter_var($this->terapia_otros, FILTER_VALIDATE_BOOLEAN),
-        ]);
+        $booleanFields = [
+            'tiene_alergias',
+            'necesita_cuidados',
+            'recibe_ayuda',
+            'terapia_ocupacional',
+            'terapia_lenguaje',
+            'terapia_psicologica',
+            'fonoaudiologia',
+            'terapia_otros',
+        ];
+
+        if ($this->isMethod('post') && is_array($this->input('informacion_medica'))) {
+            $items = $this->input('informacion_medica');
+
+            foreach ($items as $index => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                foreach ($booleanFields as $field) {
+                    if (array_key_exists($field, $item)) {
+                        $items[$index][$field] = filter_var($item[$field], FILTER_VALIDATE_BOOLEAN);
+                    }
+                }
+            }
+
+            $this->merge(['informacion_medica' => $items]);
+
+            return;
+        }
+
+        $normalized = [];
+        foreach ($booleanFields as $field) {
+            if ($this->has($field)) {
+                $normalized[$field] = filter_var($this->input($field), FILTER_VALIDATE_BOOLEAN);
+            }
+        }
+
+        if (! empty($normalized)) {
+            $this->merge($normalized);
+        }
     }
 }

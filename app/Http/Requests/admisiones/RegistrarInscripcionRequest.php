@@ -37,6 +37,12 @@ class RegistrarInscripcionRequest extends FormRequest
                 'exists:usuarios,id_user'
             ],
 
+            'updated_by' => [
+                'sometimes',
+                'integer',
+                'exists:usuarios,id_user'
+            ],
+
             'anio_academico' => [
                 'sometimes',
                 'integer',
@@ -74,6 +80,9 @@ class RegistrarInscripcionRequest extends FormRequest
 
             // In
             'estado.in' => 'El estado seleccionado no es válido.',
+
+            'updated_by.exists' => 'El usuario que ha actualizado la inscripción no existe.',
+            'updated_by.integer' => 'El campo de updated_by debe ser un número entero.'
         ];
     }
 

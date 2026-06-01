@@ -244,6 +244,8 @@ class AdmisionesServices extends Service
         try {
 
             $inscripcion = Inscripcion::with([
+                'usuarioRegistro:id_user,nombre,apellido',
+                'updatedBy:id_user,nombre,apellido',
                 'anioAcademico',
                 'aspirante',
                 'informacionMedica',
@@ -288,7 +290,8 @@ class AdmisionesServices extends Service
     public function actualizarEstadoDeInscripcionAspirante(
         int $id_inscripcion,
         string $estado,
-        ?string $correo_acudiente = null
+        ?string $correo_acudiente = null,
+        ?int $updated_by = null
     ): array {
 
         try {
@@ -316,6 +319,7 @@ class AdmisionesServices extends Service
 
             $inscripcion->update([
                 'estado' => $estado,
+                'updated_by' => $updated_by,
             ]);
 
             $mailTo = collect($this->mailTo ?? [])
@@ -699,31 +703,31 @@ class AdmisionesServices extends Service
 
     // ========================================= INFORMACIÓN MEDICA SERVICES =========================================
     /**
-     * Crear o agregar información médica de un aspirante
+     * Crear o agregar uno o varios registros de información médica de un aspirante
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarInformacionMedicaAspirante(int $id_aspirante, int $id_inscripcion, array $data): array
+    public function agregarInformacionMedicaAspirante(array $data): array
     {
         try {
-            if (! isset($id_aspirante) || ! isset($id_inscripcion)) {
+            if (empty($data['informacion_medica']) || ! is_array($data['informacion_medica'])) {
                 return [
                     'error' => true,
-                    'message' => 'Se necesita el ID del aspirante y el ID de la inscripción',
-                    'data' => $data,
+                    'message' => 'Debe enviar al menos un registro de información médica.',
+                    'data' => [],
                 ];
             }
 
-            $informacionMedica = InformacionMedica::create([
-                ...$data,
-                'aspirante_id' => $id_aspirante,
-                'id_inscripcion' => $id_inscripcion,
-            ]);
+            $registros = [];
+
+            foreach ($data['informacion_medica'] as $informacion) {
+                $registros[] = InformacionMedica::create($informacion)->toArray();
+            }
 
             return [
                 'error' => false,
                 'message' => 'Información medica guardada',
-                'data' => $informacionMedica->toArray(),
+                'data' => $registros,
             ];
         } catch (\Exception $e) {
             Log::error('Error creando la información medica: ', ['err' => $e->getMessage()]);
