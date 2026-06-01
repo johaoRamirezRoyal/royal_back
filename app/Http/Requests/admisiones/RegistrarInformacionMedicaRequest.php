@@ -23,8 +23,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
             ? 'required'
             : 'sometimes';
         return [
-
-            'aspirante_id' => $requiredRule . '|integer|exists:admisiones_aspirantes,id',
             'id_inscripcion' => $requiredRule .  '|integer|exists:admisiones_inscripciones,id',
 
             'medico_nombre' => 'nullable|string|max:150',
@@ -55,9 +53,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
     public function messages(): array
     {
         return [
-
-            'aspirante_id.required' => 'El ID del aspirante es obligatorio.',
-            'aspirante_id.exists' => 'El aspirante no existe.',
 
             'id_inscripcion.required' => 'El ID de la inscripción es obligatorio.',
             'id_inscripcion.exists' => 'La inscripción no existe.',

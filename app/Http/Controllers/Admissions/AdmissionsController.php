@@ -411,7 +411,6 @@ class AdmissionsController extends Controller
 
     public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request)
     {
-        $id_aspirante = $request->input('aspirante_id');
         $id_inscripcion = $request->input('id_inscripcion');
 
         $data = $request->safe()->except([
@@ -419,7 +418,7 @@ class AdmissionsController extends Controller
             'id_inscripcion',
         ]);
 
-        $response = $this->admisiones_services->agregarInformacionMedicaAspirante($id_aspirante, $id_inscripcion, $data);
+        $response = $this->admisiones_services->agregarInformacionMedicaAspirante($id_inscripcion, $data);
 
         return $this->apiResponse($response);
     }

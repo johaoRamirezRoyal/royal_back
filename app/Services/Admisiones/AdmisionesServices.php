@@ -709,10 +709,10 @@ class AdmisionesServices extends Service
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarInformacionMedicaAspirante(int $id_aspirante, int $id_inscripcion, array $data): array
+    public function agregarInformacionMedicaAspirante(int $id_inscripcion, array $data): array
     {
         try {
-            if (! isset($id_aspirante) || ! isset($id_inscripcion)) {
+            if (! isset($id_inscripcion)) {
                 return [
                     'error' => true,
                     'message' => 'Se necesita el ID del aspirante y el ID de la inscripción',
@@ -722,7 +722,6 @@ class AdmisionesServices extends Service
 
             $informacionMedica = InformacionMedica::create([
                 ...$data,
-                'aspirante_id' => $id_aspirante,
                 'id_inscripcion' => $id_inscripcion,
             ]);
 
