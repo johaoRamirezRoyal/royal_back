@@ -245,6 +245,8 @@ class AdmisionesServices extends Service
         try {
 
             $inscripcion = Inscripcion::with([
+                'usuarioRegistro:id_user,nombre,apellido',
+                'updatedBy:id_user,nombre,apellido',
                 'anioAcademico',
                 'aspirante',
                 'informacionMedica',
@@ -289,7 +291,8 @@ class AdmisionesServices extends Service
     public function actualizarEstadoDeInscripcionAspirante(
         int $id_inscripcion,
         string $estado,
-        ?string $correo_acudiente = null
+        ?string $correo_acudiente = null,
+        ?int $updated_by = null
     ): array {
 
         try {
@@ -317,6 +320,7 @@ class AdmisionesServices extends Service
 
             $inscripcion->update([
                 'estado' => $estado,
+                'updated_by' => $updated_by,
             ]);
 
             $mailTo = collect($this->mailTo ?? [])
@@ -705,30 +709,31 @@ class AdmisionesServices extends Service
 
     // ========================================= INFORMACIÓN MEDICA SERVICES =========================================
     /**
-     * Crear o agregar información médica de un aspirante
+     * Crear o agregar uno o varios registros de información médica de un aspirante
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function agregarInformacionMedicaAspirante(int $id_inscripcion, array $data): array
+    public function agregarInformacionMedicaAspirante(array $data): array
     {
         try {
-            if (! isset($id_inscripcion)) {
+            if (empty($data['informacion_medica']) || ! is_array($data['informacion_medica'])) {
                 return [
                     'error' => true,
-                    'message' => 'Se necesita el ID del aspirante y el ID de la inscripción',
-                    'data' => $data,
+                    'message' => 'Debe enviar al menos un registro de información médica.',
+                    'data' => [],
                 ];
             }
 
-            $informacionMedica = InformacionMedica::create([
-                ...$data,
-                'id_inscripcion' => $id_inscripcion,
-            ]);
+            $registros = [];
+
+            foreach ($data['informacion_medica'] as $informacion) {
+                $registros[] = InformacionMedica::create($informacion)->toArray();
+            }
 
             return [
                 'error' => false,
                 'message' => 'Información medica guardada',
-                'data' => $informacionMedica->toArray(),
+                'data' => $registros,
             ];
         } catch (Exception $e) {
             Log::error('Error creando la información medica: ', ['err' => $e->getMessage()]);
@@ -915,10 +920,11 @@ class AdmisionesServices extends Service
     // ========================================= SOLICITUD DE REFERENCIAS FAMILIARES SERVICES =========================================
     /**
      * Subir referencias familiares a una inscripción.
+     * Acepta tanto un único registro (campos en la raíz) como un batch (clave "referencias" con el array).
      *
      * @return array{data: array, error: bool, message: string}
      */
-    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array // TODO CONTROLLER Y ENDPOINT
+    public function subirReferenciasFamiliaresAspirante(int $id_inscripcion, array $data): array
     {
         try {
             $inscripcion = Inscripcion::find($id_inscripcion);
@@ -931,12 +937,24 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $referencia = ReferenciasFamiliares::create([...$data, 'id_inscripcion' => $id_inscripcion]);
+            $referenciasInput = (array_key_exists('referencias', $data) && is_array($data['referencias']) && ! empty($data['referencias']))
+                ? $data['referencias']
+                : [$data];
+
+            $creadas = [];
+            foreach ($referenciasInput as $ref) {
+                $creadas[] = ReferenciasFamiliares::create([...$ref, 'id_inscripcion' => $id_inscripcion])->toArray();
+            }
+
+            $cantidad = count($creadas);
+            $message = $cantidad === 1
+                ? 'Referencia familiar agregada'
+                : "Se agregaron {$cantidad} referencias familiares";
 
             return [
                 'error' => false,
-                'message' => 'Referencia familiar agregada',
-                'data' => $referencia->toArray(),
+                'message' => $message,
+                'data' => $creadas,
             ];
         } catch (Exception $e) {
             Log::error('Error al subir referencias familiares: ', [
@@ -948,7 +966,7 @@ class AdmisionesServices extends Service
 
             return [
                 'error' => true,
-                'message' => 'No se pudo agregar la referencia familiar',
+                'message' => 'No se pudieron agregar las referencias familiares',
                 'data' => [],
             ];
         }

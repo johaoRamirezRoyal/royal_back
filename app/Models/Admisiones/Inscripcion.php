@@ -31,7 +31,8 @@ class Inscripcion extends Model
         'estado',
         'anio_academico',
         'id_usuario_registro',
-        'fecha_inscripcion'
+        'fecha_inscripcion',
+        'updated_by'
     ];
 
     public function aspirante()
@@ -42,6 +43,11 @@ class Inscripcion extends Model
     public function usuarioRegistro()
     {
         return $this->belongsTo(Usuario::class, 'id_usuario_registro', 'id_user');
+    }
+
+    public function updatedBy()
+    {
+        return $this->belongsTo(Usuario::class, 'updated_by', 'id_user');
     }
 
     public function anioAcademico()
@@ -61,7 +67,7 @@ class Inscripcion extends Model
 
     public function informacionMedica()
     {
-        return $this->hasOne(InformacionMedica::class, 'id_inscripcion', 'id');
+        return $this->hasMany(InformacionMedica::class, 'id_inscripcion', 'id');
     }
 
     public function familiares(){

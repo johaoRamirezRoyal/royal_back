@@ -138,6 +138,13 @@ Route::post('/correoInformativo', [AdmissionsController::class, 'correoInformati
         "profesional_nombre": "Lic. Martha Lucía Gómez",
         "profesional_telefono": "601 234 5678"
     }
+ * JSON Para añadir información médica en batch (varios registros a la vez)
+    {
+        "informacion_medica": [
+            { "aspirante_id": 1, "id_inscripcion": 10, "medico_nombre": "Dr. A", "tiene_alergias": true, "detalle_alergias": "Polen" },
+            { "aspirante_id": 1, "id_inscripcion": 10, "profesional_nombre": "Psic. B", "terapia_psicologica": true }
+        ]
+    }
  */
 Route::post('/informacionMedica', [AdmissionsController::class, 'agregarInformacionMedicaAspirante']);
 Route::put('/informacionMedica', [AdmissionsController::class, 'actualizarInformacionMedicaAspirante']);
@@ -164,6 +171,27 @@ Route::delete('/adminsionDocumentos', [AdmissionsController::class, 'eliminarDoc
         "recomendacion_colegio": "Considero que el colegio ofrece una excelente formación académica y humana.",
         "motivo_ingreso": "Deseamos que el estudiante tenga acceso a una educación integral con altos valores y buen nivel académico."
     }
+ * JSON para agregar varias referencias familiares a la vez (batch):
+    {
+        "id_inscripcion": 1,
+        "referencias": [
+            {
+                "nombre": "María Elena Rodríguez",
+                "parentesco": "Tía",
+                "direccion_residencia": "Cra 45 # 72 - 15, Barranquilla",
+                "telefono_residencia": "6053852147",
+                "recomendacion_colegio": "Considero que el colegio ofrece una excelente formación académica y humana.",
+                "motivo_ingreso": "Deseamos que el estudiante tenga acceso a una educación integral con altos valores y buen nivel académico."
+            },
+            {
+                "nombre": "Carlos Pérez Gómez",
+                "parentesco": "Abuelo",
+                "direccion_residencia": "Calle 10 # 20 - 30, Medellín",
+                "telefono_residencia": "6041234567"
+            }
+        ]
+    }
+ * Nota: no se permite enviar "nombre" en la raíz y "referencias" al mismo tiempo.
  */
 Route::post("/referencias", [AdmissionsController::class, "subirReferenciasFamiliaresAspirante"]);
 

@@ -411,14 +411,9 @@ class AdmissionsController extends Controller
 
     public function agregarInformacionMedicaAspirante(RegistrarInformacionMedicaRequest $request)
     {
-        $id_inscripcion = $request->input('id_inscripcion');
+        $data = $request->validated();
 
-        $data = $request->safe()->except([
-            'aspirante_id',
-            'id_inscripcion',
-        ]);
-
-        $response = $this->admisiones_services->agregarInformacionMedicaAspirante($id_inscripcion, $data);
+        $response = $this->admisiones_services->agregarInformacionMedicaAspirante($data);
 
         return $this->apiResponse($response);
     }
@@ -618,8 +613,17 @@ class AdmissionsController extends Controller
         $id_inscripcion = $request->input('id_inscripcion');
         $estado = $request->input('estado');
         $correo_acudiente = $request->input('email') ?? null;
+        $updated_by = $request->input('updated_by');
 
-        $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante($id_inscripcion, $estado, $correo_acudiente);
+        if($updated_by === null){
+            return response()->json([
+                'error' => true,
+                'message' => 'El campo updated_by es obligatorio.',
+                'data' => [],
+            ], 400);
+        }
+
+        $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante($id_inscripcion, $estado, $correo_acudiente, $updated_by);
 
         return $this->apiResponse($response);
     }
