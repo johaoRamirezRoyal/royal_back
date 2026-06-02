@@ -27,7 +27,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
                     'min:1',
                 ],
 
-                'informacion_medica.*.aspirante_id' => 'required|integer|exists:admisiones_aspirantes,id',
                 'informacion_medica.*.id_inscripcion' => 'required|integer|exists:admisiones_inscripciones,id',
 
                 'informacion_medica.*.medico_nombre' => 'nullable|string|max:150',
@@ -53,7 +52,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
         }
 
         return [
-            'aspirante_id' => 'sometimes|integer|exists:admisiones_aspirantes,id',
             'id_inscripcion' => 'sometimes|integer|exists:admisiones_inscripciones,id',
 
             'medico_nombre' => 'nullable|string|max:150',
@@ -88,9 +86,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
             'informacion_medica.array' => 'El formato de información médica es inválido.',
             'informacion_medica.min' => 'Debe enviar al menos un registro de información médica.',
 
-            'informacion_medica.*.aspirante_id.required' => 'El ID del aspirante es obligatorio.',
-            'informacion_medica.*.aspirante_id.exists' => 'El aspirante no existe.',
-
             'informacion_medica.*.id_inscripcion.required' => 'El ID de la inscripción es obligatorio.',
             'informacion_medica.*.id_inscripcion.exists' => 'La inscripción no existe.',
 
@@ -100,7 +95,6 @@ class RegistrarInformacionMedicaRequest extends FormRequest
             'informacion_medica.*.profesional_nombre.max' => 'El nombre del profesional no puede superar 150 caracteres.',
             'informacion_medica.*.profesional_telefono.max' => 'El teléfono del profesional no puede superar 20 caracteres.',
 
-            'aspirante_id.exists' => 'El aspirante no existe.',
             'id_inscripcion.exists' => 'La inscripción no existe.',
 
             'medico_nombre.max' => 'El nombre del médico no puede superar 150 caracteres.',
