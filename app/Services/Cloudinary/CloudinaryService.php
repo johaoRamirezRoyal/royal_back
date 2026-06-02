@@ -215,19 +215,35 @@ class CloudinaryService
                 $publicId,
                 [
                     'resource_type' => $resourceType,
+                    'type' => 'upload',
+                    'invalidate' => true,
                 ]
             );
 
-            if (($result['result'] ?? null) !== 'ok') {
+            Log::info('Cloudinary Destroy Response', [
+                'public_id' => $publicId,
+                'resource_type' => $resourceType,
+                'result' => $result,
+            ]);
+
+            $apiResult = $result['result'] ?? null;
+
+            if ($apiResult === 'ok' || $apiResult === 'not found') {
                 return [
-                    'error' => true,
-                    'message' => 'Error al eliminar archivo.',
+                    'error' => false,
+                    'message' => $apiResult === 'not found'
+                        ? 'El archivo no existía en Cloudinary, se omite.'
+                        : 'Archivo eliminado correctamente.',
+                    'data' => [
+                        'public_id' => $publicId,
+                        'cloudinary_result' => $apiResult,
+                    ],
                 ];
             }
 
             return [
-                'error' => false,
-                'message' => 'Archivo eliminado correctamente.',
+                'error' => true,
+                'message' => 'Error al eliminar archivo: ' . ($apiResult ?? 'respuesta desconocida'),
             ];
         } catch (\Throwable $e) {
 
@@ -237,6 +253,8 @@ class CloudinaryService
                     'message' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
+                    'public_id' => $publicId,
+                    'resource_type' => $resourceType,
                 ]
             );
 

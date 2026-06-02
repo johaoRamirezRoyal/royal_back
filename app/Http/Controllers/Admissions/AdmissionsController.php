@@ -456,19 +456,26 @@ class AdmissionsController extends Controller
             return $this->apiResponse($documentos);
         }
 
+        $imageFormats = ['png', 'jpg', 'jpeg', 'webp'];
+
         foreach ($documentos['data'] as $docs) {
 
             if (!empty($docs['public_id'])) {
 
+                $resourceType = in_array(strtolower($docs['formato'] ?? ''), $imageFormats, true)
+                    ? 'image'
+                    : 'raw';
+
                 $eliminar_cloud = $this->cloudinary_service
-                    ->deleteFile($docs['public_id']);
+                    ->deleteFile($docs['public_id'], $resourceType);
 
                 if ($eliminar_cloud['error']) {
                     return $this->apiResponse([
                         'error' => true,
-                        'message' => 'Error eliminando archivo en Cloudinary',
+                        'message' => $eliminar_cloud['message'] ?? 'Error eliminando archivo en Cloudinary',
                         'data' => [
-                            'documento' => $docs
+                            'documento' => $docs,
+                            'resource_type_usado' => $resourceType,
                         ]
                     ]);
                 }
