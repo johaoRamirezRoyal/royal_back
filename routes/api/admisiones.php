@@ -154,7 +154,7 @@ Route::delete('/informacionMedica', [AdmissionsController::class, 'eliminarInfor
  * JSON Para subir documentos, evidentemente es necesario el file.
     {
         "id_inscripcion": 1025,
-        "tipo_documento": "registro_civil"
+        "id_tipo_documento": 1
     }
  */
 Route::post('/adminsionDocumentos', [AdmissionsController::class, 'subirDocumentoInscripcion']);

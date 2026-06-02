@@ -13,21 +13,33 @@ class JwtFromCookie
     {
         $token = null;
 
-        if ($request->is('api/admisiones/*')) {
+        if ($request->is('api/admisiones/*') || $request->is('api/tipos-documentos/*')) {
 
             $token = $request->cookie('admissions_token');
+
+            Log::debug('JwtFromCookie: ruta admisiones/tipos-documentos', [
+                'path' => $request->path(),
+                'admissions_token_exists' => !is_null($token),
+                'admissions_token_length' => $token ? strlen($token) : 0,
+            ]);
 
         } else {
 
             $token = $request->cookie('token');
 
+            Log::debug('JwtFromCookie: ruta general', [
+                'path' => $request->path(),
+                'token_exists' => !is_null($token),
+            ]);
         }
 
         if ($token && ! $request->headers->has('Authorization')) {
 
             try {
 
-                JWTAuth::setToken($token)->getPayload();
+                $payload = JWTAuth::setToken($token)->getPayload();
+
+                Log::debug('JwtFromCookie: token válido, system=' . ($payload->get('system') ?? 'sin system'));
 
                 $request->headers->set(
                     'Authorization',
@@ -40,6 +52,11 @@ class JwtFromCookie
                     'Token JWT inválido: '.$e->getMessage()
                 );
             }
+        } else {
+            Log::debug('JwtFromCookie: no se setea Authorization', [
+                'token_is_null' => is_null($token),
+                'has_authorization' => $request->headers->has('Authorization'),
+            ]);
         }
 
         return $next($request);

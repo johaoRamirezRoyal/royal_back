@@ -2,6 +2,7 @@
 
 namespace App\Models\Admisiones;
 
+use App\Models\TipoDocumento\TipoDocumento;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -17,7 +18,7 @@ class Documento extends Model
 
     protected $fillable = [
         'id_inscripcion',
-        'tipo_documento',
+        'id_tipo_documento',
         'nombre_original',
         'url_archivo',
         'public_id',
@@ -39,6 +40,15 @@ class Documento extends Model
         return $this->belongsTo(
             Inscripcion::class,
             'id_inscripcion',
+            'id'
+        );
+    }
+
+    public function tipoDocumento()
+    {
+        return $this->belongsTo(
+            TipoDocumento::class,
+            'id_tipo_documento',
             'id'
         );
     }

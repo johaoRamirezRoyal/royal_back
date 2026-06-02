@@ -168,7 +168,8 @@ class AdmisionesServices extends Service
             $inscripciones = Inscripcion::with([
                 'anioAcademico',
                 'aspirante:id,id_inscripcion,nombre_completo',
-                'documento:id,id_inscripcion,nombre_original,url_archivo,tipo_documento',
+                'documento:id,id_inscripcion,nombre_original,url_archivo,id_tipo_documento',
+                'documento.tipoDocumento:id,nombre',
             ])->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
 
             Log::info('Info de la inscripcion: ', ['data' => $inscripciones]);
@@ -253,6 +254,7 @@ class AdmisionesServices extends Service
                 'familiares',
                 'referenciaFamiliares',
                 'documento',
+                'documento.tipoDocumento:id,nombre',
             ])
                 ->where('codigo', $codigo)
                 ->first();

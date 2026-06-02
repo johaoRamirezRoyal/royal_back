@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Admisiones;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class AdmisionesDocumentoRequest extends FormRequest
 {
@@ -35,24 +34,10 @@ class AdmisionesDocumentoRequest extends FormRequest
             'documentos.*.archivo' => $requiredRule . '|file|mimes:pdf,jpg,png,jpeg|max:5120', // Máx 5MB por archivo
 
             // Validamos el tipo de documento específico para cada archivo del array
-            'documentos.*.tipo_documento' => [
+            'documentos.*.id_tipo_documento' => [
                 $requiredRule,
-                'string',
-                'max:255',
-                Rule::in([
-                    'solicitud',
-                    'registro_civil',
-                    'tarjeta_identidad',
-                    'constancia_estudio',
-                    'certificados_notas',
-                    'foto_aspirante',
-                    'foto_padres',
-                    'carta_recomendacion',
-                    'recomendacion_psicologo',
-                    'carta_laboral',
-                    'declaracion_renta',
-                    'cedula_padres',
-                ])
+                'integer',
+                'exists:tipo_doc,id',
             ]
         ];
     }
@@ -77,8 +62,9 @@ class AdmisionesDocumentoRequest extends FormRequest
             'documentos.*.archivo.mimes'           => 'Solo se permiten archivos en formato PDF, JPG, PNG o JPEG.',
             'documentos.*.archivo.max'             => 'El archivo no puede pesar más de 5MB.',
 
-            'documentos.*.tipo_documento.required' => 'El tipo de documento es obligatorio.',
-            'documentos.*.tipo_documento.in'       => 'El tipo de documento seleccionado no es válido.',
+            'documentos.*.id_tipo_documento.required' => 'El tipo de documento es obligatorio.',
+            'documentos.*.id_tipo_documento.exists'  => 'El tipo de documento seleccionado no es válido.',
+            'documentos.*.id_tipo_documento.integer' => 'El tipo de documento debe ser un ID válido.',
         ];
     }
 }
