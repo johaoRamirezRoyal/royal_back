@@ -218,8 +218,6 @@ class AuthController extends Controller
 
                 } catch (\Exception $e) {
                     Log::error('admissions token inválido: '.$e->getMessage());
-
-                    return response()->json(['active' => false], 401);
                 }
             }
 

@@ -5,8 +5,9 @@ namespace App\Services\Permisos;
 use App\Models\PermisosAutorizaciones\Opcion;
 use App\Models\PermisosAutorizaciones\Permiso;
 use App\Models\Usuarios\Perfil;
+use App\Services\Service;
 
-class PermisosService
+class PermisosService extends Service
 {
 
 
@@ -28,7 +29,7 @@ class PermisosService
                 ];
             }
 
-            Permiso::create([
+            $creado = Permiso::create([
                 'id_opcion' => $id_opcion,
                 'id_perfil' => $id_perfil,
                 'user_log' => $user_log,
@@ -38,12 +39,55 @@ class PermisosService
 
             return [
                 'error' => false,
-                'message' => 'Permiso creado'
+                'message' => 'Permiso creado',
+                'data' => $creado->toArray()
             ];
         } catch (\Exception $ex) {
+            $this->sendError($ex, 'Error al crear el permiso');
             return [
                 'error' => true,
-                'message' => $ex->getMessage()
+                'message' => $ex->getMessage(),
+                'data' => $datos
+            ];
+        }
+    }
+
+    /**
+     * Metodo para eliminar un permiso en base a la opcion y el perfil.
+     * @param array $datos
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function eliminarPermiso(array $datos) : array
+    {
+        $id_opcion = $datos['id_opcion'];
+        $id_perfil = $datos['id_perfil'];
+
+        try {
+            $permiso = Permiso::where('id_opcion', $id_opcion)
+                ->where('id_perfil', $id_perfil)
+                ->first();
+
+            if (!$permiso) {
+                return [
+                    'error' => true,
+                    'message' => 'El permiso no existe',
+                    'data' => []
+                ];
+            }
+
+            $permiso->delete();
+
+            return [
+                'error' => false,
+                'message' => 'Permiso eliminado',
+                'data' => $permiso->toArray()
+            ];
+        } catch (\Exception $ex) {
+            $this->sendError($ex, "error al eliminar el permiso");
+            return [
+                'error' => true,
+                'message' => $ex->getMessage(),
+                'data' => $datos
             ];
         }
     }
@@ -100,6 +144,58 @@ class PermisosService
             return [
                 'error' => true,
                 'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function verOpcionesPorPerfil(?array $id_perfil = null)
+    {
+        try {
+            $perfiles = !empty($id_perfil)
+                ? Perfil::whereIn('id_perfil', $id_perfil)->get()
+                : Perfil::all();
+
+            $opciones = Opcion::with('modulo')->orderBy('id_modulo')->get();
+
+            $data = [];
+            foreach ($perfiles as $perfil) {
+                $permisos = Permiso::where('id_perfil', $perfil->id_perfil)
+                    ->get()
+                    ->keyBy('id_opcion');
+
+                $opcionesData = [];
+                
+                foreach ($opciones as $opcion) {
+                    $permiso = $permisos->get($opcion->id);
+                    $opcionesData[] = [
+                        'id' => $opcion->id,
+                        'nombre' => $opcion->nombre,
+                        'modulo' => $opcion->modulo ? [
+                            'id' => $opcion->modulo->id,
+                            'nombre' => $opcion->modulo->nombre,
+                        ] : null,
+                        'activa' => $permiso ? (bool) $permiso->activo : false,
+                        'permiso_id' => $permiso ? $permiso->id : null,
+                    ];
+                }
+
+                $data[] = [
+                    'perfil' => [
+                        'id' => $perfil->id_perfil,
+                        'nombre' => $perfil->nombre,
+                    ],
+                    'opciones' => $opcionesData,
+                ];
+            }
+
+            return [
+                'error' => false,
+                'data' => $data,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
             ];
         }
     }

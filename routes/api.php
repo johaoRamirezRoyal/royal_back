@@ -19,6 +19,7 @@ Route::group(['prefix' => 'admissions'], function () {
     require __DIR__.'/api/admissions.php';
 });
 
+
 // Ruta protegida de la pagina de admisiones
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     // ADMISIONES
@@ -27,9 +28,10 @@ Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     });
 
     // TIPOS DE DOCUMENTOS
-    Route::prefix('/tipos-documentos')->group(function() {
+    Route::prefix('admissions/tipos-documentos')->group(function () {
         require __DIR__ . '/api/TipoDocumentos.php';
     });
+
 });
 
 // RUTAS PROTEGIDAS (pagina principal | administracion)
@@ -85,8 +87,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/anioAcademico.php';
     });
 
-    // TIPOS DE DOCUMENTOS
-    // Route::prefix('/tipos-documentos')->group(function() {
-    //     require __DIR__ . '/api/TipoDocumentos.php';
-    // });
+    //TIPOS DE DOCUMENTOS
+    Route::prefix('/tipos-documentos')->group(function() {
+        require __DIR__ . '/api/TipoDocumentos.php';
+    });
 });

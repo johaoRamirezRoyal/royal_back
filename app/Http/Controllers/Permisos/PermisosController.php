@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Permisos;
 
 use App\Services\Permisos\PermisosService;
@@ -15,10 +16,11 @@ class PermisosController extends Controller
         $this->services_permisos = $services_permisos;
     }
 
-    public function verPermisosPorPerfil(Request $request){
+    public function verPermisosPorPerfil(Request $request)
+    {
         $id_perfil = $request->input("perfil");
 
-        if(!$id_perfil){
+        if (!$id_perfil) {
             return response()->json([
                 'error' => true,
                 'message' => 'Debe tener un perfil para la visualización de permisos'
@@ -27,15 +29,30 @@ class PermisosController extends Controller
 
         $datos = $this->services_permisos->verPermisosActivosPorPerfil($id_perfil);
 
-        return response()->json($datos,200);
+        return response()->json($datos, 200);
     }
 
-    public function verTodosLosPermisosOpciones(){
+    public function verOpcionesPorPerfil(Request $request)
+    {
+        $validated = $request->validate([
+            'perfiles' => 'nullable|array',
+            'perfiles.*' => 'integer|exists:perfiles,id_perfil'
+        ]);
+
+        $perfiles = $validated['perfiles'] ?? null;
+
+        $response = $this->services_permisos->verOpcionesPorPerfil($perfiles);
+
+        return $this->apiResponse($response);
+    }
+
+    public function verTodosLosPermisosOpciones()
+    {
         $datos = $this->services_permisos->verPermisosOpciones();
 
-        if($datos['error']){
+        if ($datos['error']) {
             return response()->json([
-                'error'=> true,
+                'error' => true,
                 'message' => $datos['message']
             ]);
         }
