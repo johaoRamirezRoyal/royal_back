@@ -33,16 +33,17 @@ Route::post('/', [UsuariosController::class, 'agregarUsuario']);
  * Ejemplo de JSON para agregar usuario:
  *
  *
-        {
-            "documento": 10203040,
-            "nombre": "Pepito",
-            "apellido": "Pérez",
-            "correo": "pepito_perez@royalschool.edu.co",
-            "perfil": 2,
-            "id_nivel": 1,
-            "user": "aperez2026",
-            "pass": "secret123",
-            "grupo": 1,
-            "curso": 5
-        }
+{
+    "documento": 10203040,
+    "nombre": "Pepito",
+    "apellido": "Pérez",
+    "correo": "pepito_perez@royalschool.edu.co",
+    "perfil": 2,
+    "id_nivel": 1,
+    "user": "aperez2026",
+    "pass": "secret123",
+    "grupo": 1,
+    "curso": 5
+}
  */
+Route::get('inscripcionesUsuarios', [UsuariosController::class, 'mostrarUsuariosConInscripciones']);

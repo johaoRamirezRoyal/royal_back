@@ -330,4 +330,19 @@ class UsuariosServices
             ];
         }
     }
+
+    public function mostrarUsuariosConInscripciones($perPage)
+    {
+        try {
+            $data = Usuario::with([
+                'inscripciones.anioAcademico',
+            ])
+                ->has('inscripciones')
+                ->get();
+
+            return ["error" => false, "message" => "Se han obtenido correctamente los datos solicitados", "data" => $data];
+        } catch (\Exception $e) {
+            return ["error" => true, "message" => $e->getMessage()];
+        }
+    }
 }

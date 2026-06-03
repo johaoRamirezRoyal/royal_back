@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 
 abstract class Controller
 {
@@ -35,17 +37,17 @@ abstract class Controller
 
     /**
      * Summary of apiResponse
-     * @param array $response
-     * @return \Illuminate\Http\JsonResponse
+     *
+     * @return JsonResponse
      */
     protected function apiResponse(array $response)
     {
         $status = match (true) {
-            $response['error'] && str_contains($response['message'], "SQL") => 500,
+            $response['error'] && str_contains($response['message'], 'SQL') => 500,
             $response['error'] => 400,
             default => 200,
         };
-
+        
         return response()->json($response, $status);
     }
 }
