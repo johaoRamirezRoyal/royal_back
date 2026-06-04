@@ -6,7 +6,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Foundation\Bus\DispatchesJobs;
 use Illuminate\Foundation\Validation\ValidatesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\ResourceCollection;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 abstract class Controller
 {
@@ -23,6 +23,33 @@ abstract class Controller
             $status
         )
             ->header('Accept', 'application/json');
+    }
+
+    protected function paginatedResponse(
+        string $message,
+        LengthAwarePaginator $paginator,
+        ?string $resourceClass = null
+    ): JsonResponse {
+        if ($resourceClass) {
+            $resource = $resourceClass::collection($paginator)
+                ->response()
+                ->getData(true);
+
+            $data = $resource['data'];
+        } else {
+            $data = $paginator->items();
+        }
+
+        return $this->apiResponse([
+            'error' => false,
+            'message' => $message,
+            'data' => [
+                'data' => $data,
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+                'current_page' => $paginator->currentPage(),
+            ],
+        ]);
     }
 
     public function error(array|string $message = ['message' => 'ERROR'], int $status = 500)
@@ -47,7 +74,7 @@ abstract class Controller
             $response['error'] => 400,
             default => 200,
         };
-        
+
         return response()->json($response, $status);
     }
 }

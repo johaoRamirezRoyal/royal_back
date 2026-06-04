@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
+use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
 use App\Services\Usuarios\UsuariosServices;
@@ -41,20 +42,30 @@ class UsuariosController extends Controller
     public function mostrarTodosUsuariosActivoPaginado(Request $request)
     {
         $per_page = $request->input('per-page', 10);
+        $response = $this->service_usuarios->mostrarTodosUsuariosActivoPaginado($per_page);
 
-        return response()->json(
-            $this->service_usuarios->mostrarTodosUsuariosActivoPaginado($per_page),
-            200
+        if ($response['error']) {
+            return $this->error($response['message']);
+        }
+
+        return $this->paginatedResponse(
+            $response['message'],
+            $response['data']
         );
     }
 
     public function mostrarTodosUsuariosPaginado(Request $request)
     {
         $per_page = $request->input('per-page', 10);
+        $response = $this->service_usuarios->mostrarTodosUsuariosPaginado($per_page);
 
-        return response()->json(
-            $this->service_usuarios->mostrarTodosUsuariosPaginado($per_page),
-            200
+        if ($response['error']) {
+            return $this->error($response['message']);
+        }
+
+        return $this->paginatedResponse(
+            $response['message'],
+            $response['data']
         );
     }
 
@@ -249,21 +260,19 @@ class UsuariosController extends Controller
         ], 200);
     }
 
-    // -------------------- CONSULTAR USUARIOS Y SUS INSCRIPCIONES ========================
     public function mostrarUsuariosConInscripciones(Request $request)
     {
         $per_page = $request->input('per-page', 10);
-
         $response = $this->service_usuarios->mostrarUsuariosConInscripciones($per_page);
 
         if ($response['error']) {
-            return $this->apiResponse($response);
+            return $this->error($response['message']);
         }
 
-        return $this->apiResponse([
-            'error' => $response['error'],
-            'message' => $response['message'],
-            'data' => UsuarioInscripcionResource::collection($response['data']),
-        ]);
+        return $this->paginatedResponse(
+            $response['message'],
+            $response['data'],
+            UsuarioInscripcionResource::class
+        );
     }
 }

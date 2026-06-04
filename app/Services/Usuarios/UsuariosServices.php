@@ -40,26 +40,32 @@ class UsuariosServices
      */
     public function mostrarTodosUsuariosActivoPaginado($perPage)
     {
-        return DB::table('usuarios')
-            ->select(
-                'id_user',
-                'documento',
-                DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"),
-                'correo',
-                'telefono',
-                'asignatura',
-                'user',
-                'perfil',
-                'estado',
-                'id_nivel',
-                'id_curso',
-                'id_grupo',
-                'fechareg'
-            )
-            ->where('estado', 'activo')
-            ->groupBy('nombre')
-            ->whereNotIn('perfil', [17, 16, 6])
-            ->paginate($perPage);
+        try {
+            $data = DB::table('usuarios')
+                ->select(
+                    'id_user',
+                    'documento',
+                    DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"),
+                    'correo',
+                    'telefono',
+                    'asignatura',
+                    'user',
+                    'perfil',
+                    'estado',
+                    'id_nivel',
+                    'id_curso',
+                    'id_grupo',
+                    'fechareg'
+                )
+                ->where('estado', 'activo')
+                ->groupBy('nombre')
+                ->whereNotIn('perfil', [17, 16, 6])
+                ->paginate($perPage);
+
+            return ['error' => false, 'message' => 'Datos obtenidos correctamente', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
     }
 
     /**
@@ -202,11 +208,13 @@ class UsuariosServices
 
             return [
                 'error' => false,
+                'message' => 'Datos obtenidos satisfactoriamente',
                 'data' => $usuarios,
             ];
         } catch (QueryException $e) {
             return [
                 'error' => true,
+                'message' => 'Ha ocurrido un error inesperado',
                 'data' => $e->getMessage(),
             ];
         }
@@ -338,11 +346,15 @@ class UsuariosServices
                 'inscripciones.anioAcademico',
             ])
                 ->has('inscripciones')
-                ->get();
+                ->paginate($perPage);
 
-            return ["error" => false, "message" => "Se han obtenido correctamente los datos solicitados", "data" => $data];
+            return [
+                'error' => false,
+                'message' => 'Se han obtenido correctamente los datos solicitados',
+                'data' => $data,
+            ];
         } catch (\Exception $e) {
-            return ["error" => true, "message" => $e->getMessage()];
+            return ['error' => true, 'message' => $e->getMessage()];
         }
     }
 }
