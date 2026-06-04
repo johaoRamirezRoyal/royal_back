@@ -201,10 +201,42 @@ class AuthController extends Controller
         ]);
     }
 
-    public function check()
+    public function check(Request $request)
     {
+        $system = $request->query('system');
+
         try {
-            $admissionsToken = request()->cookie('admissions_token');
+            if ($system === 'admissions') {
+                $token = $request->cookie('admissions_token');
+
+                if (! $token) {
+                    return response()->json(['active' => false], 401);
+                }
+
+                $user = JWTAuth::setToken($token)->authenticate();
+
+                return response()->json([
+                    'active' => true,
+                    'system' => 'admissions',
+                    'usuario' => new UsuarioResource($user),
+                ]);
+            }
+
+            if ($system === 'general') {
+                $user = auth('api')->user();
+
+                if (! $user) {
+                    return response()->json(['active' => false], 401);
+                }
+
+                return response()->json([
+                    'active' => true,
+                    'system' => 'general',
+                    'usuario' => new UsuarioResource($user),
+                ]);
+            }
+
+            $admissionsToken = $request->cookie('admissions_token');
 
             if ($admissionsToken) {
                 try {
@@ -241,15 +273,23 @@ class AuthController extends Controller
         }
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
         try {
-            auth()->guard('api')->logout();
+            $system = $request->query('system', 'general');
+
+            $cookieName = $system === 'admissions' ? 'admissions_token' : 'token';
+
+            $token = $request->cookie($cookieName);
+
+            if ($token) {
+                JWTAuth::setToken($token)->invalidate();
+            }
 
             return response()->json([
                 'error' => false,
                 'message' => 'Sesión cerrada correctamente',
-            ])->withCookie(cookie()->forget('token'));
+            ])->withCookie(cookie()->forget($cookieName));
 
         } catch (\Exception $e) {
             return response()->json([
