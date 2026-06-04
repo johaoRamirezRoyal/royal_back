@@ -35,7 +35,7 @@ class PermisosController extends Controller
     public function crearPermiso(Request $request)
     {
         $validated = $request->validate([
-            'id_opcion' => 'required|integer|exists:opciones,id_opcion',
+            'id_opcion' => 'required|integer|exists:cron_opciones,id',
             'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
             'user_log' => 'required|integer|exists:usuarios,id_user'
         ]);
@@ -55,7 +55,7 @@ class PermisosController extends Controller
     public function eliminarPermiso(Request $request)
     {
         $validated = $request->validate([
-            'id_opcion' => 'required|integer|exists:opciones,id',
+            'id_opcion' => 'required|integer|exists:cron_opciones,id',
             'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
         ]);
 
