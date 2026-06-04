@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Resources;
+namespace App\Http\Resources\Usuarios;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -16,6 +16,7 @@ class UsuarioResource extends JsonResource
     {
         return [
             'id' => $this->id_user,
+            'perfil' => $this->perfil,
             'nombre' => $this->nombre,
             'apellido' => $this->apellido,
             'correo' => $this->correo

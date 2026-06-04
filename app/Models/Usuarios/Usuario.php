@@ -3,6 +3,7 @@
 namespace App\Models\Usuarios;
 
 use App\Models\Areas\Cursos;
+use App\Models\Admisiones\Inscripcion;
 use App\Models\Inventario\Reportes;
 use App\Models\Notificacion;
 use Tymon\JWTAuth\Contracts\JWTSubject;
@@ -49,6 +50,10 @@ class Usuario extends Authenticatable implements JWTSubject
 
     public function cursoRelacion(){
         return $this->belongsTo(Cursos::class, 'id_curso', 'id');
+    }
+
+    public function inscripciones(){
+        return $this->hasMany(Inscripcion::class, 'id_usuario_registro', 'id_user');
     }
 
     public function reportes(){

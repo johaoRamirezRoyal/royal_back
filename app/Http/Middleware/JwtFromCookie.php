@@ -13,7 +13,7 @@ class JwtFromCookie
     {
         $token = null;
 
-        if ($request->is('api/admisiones/*') || $request->is('api/tipos-documentos/*')) {
+        if ($request->is('api/admisiones/*')) {
 
             $token = $request->cookie('admissions_token');
 

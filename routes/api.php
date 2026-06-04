@@ -28,7 +28,7 @@ Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     });
 
     // TIPOS DE DOCUMENTOS
-    Route::prefix('admissions/tipos-documentos')->group(function () {
+    Route::prefix('/admisiones/tipos-documentos')->group(function () {
         require __DIR__ . '/api/TipoDocumentos.php';
     });
 
