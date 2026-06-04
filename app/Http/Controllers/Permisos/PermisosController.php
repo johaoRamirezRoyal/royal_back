@@ -32,6 +32,43 @@ class PermisosController extends Controller
         return response()->json($datos, 200);
     }
 
+    public function crearPermiso(Request $request)
+    {
+        $validated = $request->validate([
+            'id_opcion' => 'required|integer|exists:opciones,id_opcion',
+            'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
+            'user_log' => 'required|integer|exists:usuarios,id_user'
+        ]);
+
+        $datos = [
+            'id_opcion' => $validated['id_opcion'],
+            'id_perfil' => $validated['id_perfil'],
+            'user_log' => $validated['user_log'],
+            'activo' => 1
+        ];
+
+        $response = $this->services_permisos->crearPermiso($datos);
+
+        return $this->apiResponse($response);
+    }
+
+    public function eliminarPermiso(Request $request)
+    {
+        $validated = $request->validate([
+            'id_opcion' => 'required|integer|exists:opciones,id',
+            'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
+        ]);
+
+        $datos = [
+            'id_opcion' => $validated['id_opcion'],
+            'id_perfil' => $validated['id_perfil']
+        ];
+
+        $response = $this->services_permisos->eliminarPermiso($datos);
+
+        return $this->apiResponse($response);
+    }
+
     public function verOpcionesPorPerfil(Request $request)
     {
         $validated = $request->validate([
