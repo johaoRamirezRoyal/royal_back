@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
-use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
 use App\Services\Usuarios\UsuariosServices;
@@ -170,7 +169,7 @@ class UsuariosController extends Controller
     public function actualizarUsuarios(ActualizarUsuarioRequest $request, $id)
     {
         $usuario_id = $id;
-        $data = $request->toUsuarioFormatUpdate();
+        $data = $request->toUsuarioFormatCreate();
 
         if (empty($usuario_id)) {
             return response()->json([

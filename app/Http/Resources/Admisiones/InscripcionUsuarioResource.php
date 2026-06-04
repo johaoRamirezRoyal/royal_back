@@ -19,6 +19,8 @@ class InscripcionUsuarioResource extends JsonResource
                 $this->whenLoaded('anioAcademico')
             ),
 
+            'aspirante' => $this->whenLoaded('aspirante', fn () => $this->aspirante?->toArray()),
+
             'fecha_inscripcion' => $this->fecha_inscripcion,
             'fecha_actualizacion' => $this->fecha_actualizacion,
         ];
