@@ -36,11 +36,11 @@ class TokenExchangeController extends Controller
         }
 
         // 3. Verificar rol o correo permitido
-        $role  = $adminPayload->get('nombre_perfil');
+        $role  = $adminPayload->get('perfil');
         $email = $adminPayload->get('correo');
 
         $tienePermiso =
-            in_array($role, $this->rolesPermitidos) ||
+            in_array(strtolower($role), $this->rolesPermitidos) ||
             in_array($email, $this->correosPermitidos);
 
         if (!$tienePermiso) {
@@ -53,7 +53,7 @@ class TokenExchangeController extends Controller
         }
 
         // 4. Obtener el usuario y emitir token de ADMISIONES
-        $userId = $adminPayload->get('id');
+        $userId = $adminPayload->get('user_id');
         $user   = Usuario::findOrFail($userId);
 
         // Claims extra que identifican este token como exchange
