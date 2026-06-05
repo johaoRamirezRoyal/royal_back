@@ -173,6 +173,8 @@ class AdmissionsController extends Controller
         $validation = Cache::get($registerKey);
 
         $data = $request->except('token');
+
+        // Se asigna el perfil de "Acudiente"
         $data['perfil'] = 6;
 
         if (! $validation) {
