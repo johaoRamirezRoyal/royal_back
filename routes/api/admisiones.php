@@ -208,6 +208,8 @@ Route::put("/referencias", [AdmissionsController::class, "actualizarReferenciasF
 //Solo debe pasarse el ID de la referencia
 Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaFamiliarAspirante"]);
 
+Route::get("/estadosIncripcion", [AdmissionsController::class, "mostrarTodosLosEstadosDeInscripcion"]);
+
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
 Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
 Route::get('/visualizarDocumento', [AdmissionsController::class, 'visualizarDocumentosInscripcion']);

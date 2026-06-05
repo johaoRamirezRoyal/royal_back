@@ -15,17 +15,6 @@ class Inscripcion extends Model
 
     public $timestamps = false;
 
-    /**
-     * Summary of fillable
-     * @var array
-     * @var array Debe ser un array del tipo: 
-        'BORRADOR',
-        'PENDIENTE',
-        'EN_REVISION',
-        'APROBADO',
-        'RECHAZADO',
-        'CANCELADO'
-     */
     protected $fillable = [
         'codigo',
         'estado',
@@ -38,6 +27,11 @@ class Inscripcion extends Model
     public function aspirante()
     {
         return $this->hasOne(Aspirante::class, 'id_inscripcion', 'id');
+    }
+
+    public function estadoInscripcion()
+    {
+        return $this->belongsTo(Estado::class, 'estado', 'id');
     }
 
     public function usuarioRegistro()

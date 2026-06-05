@@ -5,6 +5,7 @@ namespace App\Services\Admisiones;
 use App\Mail\GenericMail;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\Documento;
+use App\Models\Admisiones\Estado;
 use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
@@ -1080,6 +1081,129 @@ class AdmisionesServices extends Service
                 'error' => true,
                 'message' => 'Ha ocurrido un error en la consulta de datos',
                 'data' => $e->getMessage(),
+            ];
+        }
+    }
+
+    // ========================================= ESTADO DE INSCRIPCIONES SERVICES =========================================
+    
+    /**
+     * Summary of mostrarTodosLosEstadosDeInscripcion
+     * @param mixed $estado
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function mostrarTodosLosEstadosDeInscripcion(?bool $activo = null): array
+    {
+        try {
+            $estado = Estado::query();
+            
+            if(!is_null($estado)){
+                $estado->where('estado', $activo);
+            }
+
+            $estados = $estado->get();
+
+            if($estados->isEmpty()){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró ningún estado para las inscripciones",
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Estados de inscripciones obtenidos correctamente",
+                'data' => $estados->toArray(),
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al obtener los datos de los estados de las inscripciones");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al obtener los estados de las inscripciones",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Summary of mostrarEstadoDeInscripcionId
+     * @param int $id
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function mostrarEstadoDeInscripcionId(int $id): array
+    {
+        try {
+            $estado = Estado::find($id);
+
+            if(!$estado){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el estado de inscripción con el ID proporcionado",
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Estado de inscripción obtenido correctamente",
+                'data' => $estado->toArray()
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al obtener el estado de inscripción por ID");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al obtener el estado de inscripción.",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Summary of cambiarEstadoDeEstadoInscripcion
+     * @param int $id
+     * @param bool $estado
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function cambiarEstadoDeEstadoInscripcion(int $id, bool $estado): array
+    {
+        try {
+            $estado = Estado::find($id);
+            if(!$estado){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el estado de inscripción con el ID proporcionado.",
+                    'data' => []
+                ];
+            }
+
+            if($estado->estado === $estado){
+                return [
+                    'error' => true,
+                    'message' => "El estado de inscripción ya se encuentra en ese estado.",
+                    'data' => $estado->toArray()
+                ];
+            }
+
+            $estado_actualizado = $estado->update(['estado' => $estado]);
+            if(!$estado_actualizado){
+                return [
+                    'error' => true,
+                    'message' => "No se pudo actualizar el estado de inscripción, intente nuevamente.",
+                    'data' => []
+                ];
+            }
+            return [
+                'error' => false,
+                'message' => "Estado de inscripción actualizado correctamente",
+                'data' => $estado->fresh()->toArray()
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al cambiar el estado del estado de inscripción");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al actualizar el estado de inscripción.",
+                'data' => []
             ];
         }
     }

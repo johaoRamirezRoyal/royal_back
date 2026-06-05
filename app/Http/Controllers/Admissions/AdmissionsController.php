@@ -615,23 +615,32 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function actualizarEstadoDeInscripcionAspirante(Request $request)
-    {
-        $id_inscripcion = $request->input('id_inscripcion');
-        $estado = $request->input('estado');
-        $correo_acudiente = $request->input('email') ?? null;
-        $updated_by = $request->input('updated_by');
+    public function mostrarTodosLosEstadosDeInscripcion(Request $request){
+        $activo = $request->input('activo');
 
-        if($updated_by === null){
-            return response()->json([
-                'error' => true,
-                'message' => 'El campo updated_by es obligatorio.',
-                'data' => [],
-            ], 400);
-        }
-
-        $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante($id_inscripcion, $estado, $correo_acudiente, $updated_by);
+        $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($request->input('activo'));
 
         return $this->apiResponse($response);
     }
+
+    public function actualizarEstadoDeInscripcionAspirante(Request $request)
+    {
+        $data = $request->validate([
+            'estado' => 'required|integer|exists:admisiones_estados,id',
+            'id_inscripcion' => 'required|integer|exists:admisiones_inscripciones,id',
+            'updated_by' => 'required|integer|exists:usuarios,id_user',
+            'email' => 'nullable|email',
+        ]);
+
+        $response = $this->admisiones_services->actualizarEstadoDeInscripcionAspirante(
+            $data['id_inscripcion'],
+            $data['estado'],
+            $data['email'] ?? null,
+            $data['updated_by']
+        );
+
+        return $this->apiResponse($response);
+    }
+
+
 }
