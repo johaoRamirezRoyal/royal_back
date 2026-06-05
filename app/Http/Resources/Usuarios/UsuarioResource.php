@@ -17,9 +17,14 @@ class UsuarioResource extends JsonResource
         return [
             'id' => $this->id_user,
             'perfil' => $this->perfil,
+            'nombre_perfil' => $this->whenLoaded('perfilRelacion', fn () => $this->perfilRelacion->nombre),
             'nombre' => $this->nombre,
             'apellido' => $this->apellido,
-            'correo' => $this->correo
+            'estado' => $this->estado,
+            'id_nivel' => $this->id_nivel,
+            'nombre_nivel' => $this->whenLoaded('nivelRelacion', fn () => $this->nivelRelacion->nombre),
+            'foto_carnet' => $this->foto_carnet,
+            'correo' => $this->correo,
         ];
     }
 }

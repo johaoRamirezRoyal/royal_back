@@ -344,6 +344,7 @@ class UsuariosServices
         try {
             $data = Usuario::with([
                 'inscripciones.anioAcademico',
+                'inscripciones.aspirante'
             ])
                 ->has('inscripciones')
                 ->paginate($perPage);
