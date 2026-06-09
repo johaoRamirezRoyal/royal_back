@@ -9,7 +9,6 @@ use App\Services\Auth\AuthServices;
 use App\Services\JwtService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -225,6 +224,8 @@ class AuthController extends Controller
             if ($system === 'general') {
                 $user = auth('api')->user();
 
+                $user->load('perfilRelacion', 'nivelRelacion');
+
                 if (! $user) {
                     return response()->json(['active' => false], 401);
                 }
@@ -258,6 +259,8 @@ class AuthController extends Controller
             if (! $user) {
                 return response()->json(['active' => false], 401);
             }
+
+            $user->load('perfilRelacion', 'nivelRelacion');
 
             return response()->json([
                 'active' => true,

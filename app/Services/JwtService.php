@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Usuarios\Usuario;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
@@ -9,7 +10,18 @@ class JwtService
 {
     public function generateToken(Authenticatable $user): string
     {
-        return JWTAuth::claims(['system' => 'general'])->fromUser($user);
+        /** @var Usuario $user */
+
+        $user->loadMissing('perfilRelacion');
+
+        return JWTAuth::claims([
+            'system' => 'general',
+            'user_id' => $user->id_user,
+            'nombre' => $user->nombre,
+            'apellido' => $user->apellido,
+            'correo' => $user->correo,
+            'perfil' => $user->perfilRelacion?->nombre ?? $user->perfil,
+        ])->fromUser($user);
     }
 
     public function generateAdmissionsToken(Authenticatable $user): string
