@@ -22,6 +22,7 @@ use App\Services\JwtService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AdmissionsController extends Controller
@@ -618,9 +619,13 @@ class AdmissionsController extends Controller
     }
 
     public function mostrarTodosLosEstadosDeInscripcion(Request $request){
-        $activo = $request->input('activo');
 
-        $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($request->input('activo'));
+        $activo = $request->input('activo');
+        $activo_bool = (!is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null; 
+        
+        Log::info("Estado Request: ", ['estado' => $activo]);
+
+        $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($activo_bool);
 
         return $this->apiResponse($response);
     }

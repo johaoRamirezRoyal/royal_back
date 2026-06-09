@@ -2,6 +2,7 @@
 
 namespace App\Models\Admisiones;
 
+use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
 class Estado extends Model
@@ -23,5 +24,14 @@ class Estado extends Model
 
     public function inscripcion(){
         return $this->hasMany(Inscripcion::class, 'estado', 'id');
+    }
+    
+    public function usuario()
+    {
+        return $this->belongsTo(
+            Usuario::class,
+            'id_log',
+            'id_user'
+        );
     }
 }

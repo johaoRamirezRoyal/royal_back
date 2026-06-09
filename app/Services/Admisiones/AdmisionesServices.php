@@ -1096,8 +1096,12 @@ class AdmisionesServices extends Service
     {
         try {
             $estado = Estado::query();
-            
-            if(!is_null($estado)){
+
+
+            Log::info("Estado: ", ['info: ', $activo]);
+            Log::info("Estado: ", ['Query Object: ', $estado]);
+
+            if(!is_null($activo)){
                 $estado->where('estado', $activo);
             }
 
