@@ -13,7 +13,12 @@ class InscripcionUsuarioResource extends JsonResource
         return [
             'id' => $this->id,
             'codigo' => $this->codigo,
-            'estado' => $this->estado,
+            'estado_usuario' => $this->estado,
+
+            'estado_inscripcion' => $this->whenLoaded('estadoInscripcion', fn () => [
+                'id' => $this->estadoInscripcion->id,
+                'nombre' => $this->estadoInscripcion->nombre,
+            ]),
 
             'anio_academico' => new AnioAcademicoResource(
                 $this->whenLoaded('anioAcademico')

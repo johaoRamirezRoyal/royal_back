@@ -27,7 +27,6 @@ Route::delete('/inscripcionDatos', [AdmissionsController::class, 'eliminarDatoIn
 Route::post('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
 
 Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
-Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
 
 /** Ejemplo JSON para actualizar datos de un aspirante:
     {
@@ -208,7 +207,6 @@ Route::put("/referencias", [AdmissionsController::class, "actualizarReferenciasF
 //Solo debe pasarse el ID de la referencia
 Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaFamiliarAspirante"]);
 
-Route::get("/estadosIncripcion", [AdmissionsController::class, "mostrarTodosLosEstadosDeInscripcion"]);
 
 Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
 Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);

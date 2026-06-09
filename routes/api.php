@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admissions\AdmissionsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -13,6 +14,12 @@ Route::get('/', function () {
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
     require __DIR__.'/api/auth.php';
+});
+
+// ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
+Route::middleware(['auth:api'])->prefix('/admisiones')->group(function () {
+    Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
+    Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {
@@ -91,8 +98,4 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/TipoDocumentos.php';
     });
 
-    // ADMISIONES (acciones admin)
-    Route::prefix('/admisiones')->group(function () {
-        Route::put('/inscripcion/estado', [\App\Http\Controllers\Admissions\AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
-    });
 });
