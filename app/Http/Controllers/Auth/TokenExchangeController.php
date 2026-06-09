@@ -23,7 +23,6 @@ class TokenExchangeController extends Controller
         }
 
         try {
-            // Validar el token admin con tymon
             $adminPayload = JWTAuth::setToken($adminToken)->getPayload();
         } catch (\Exception $e) {
             Log::error('TokenExchange: token admin inválido', ['error' => $e->getMessage()]);
@@ -52,35 +51,45 @@ class TokenExchangeController extends Controller
             return response()->json(['error' => 'No tienes permiso para acceder a admisiones'], 403);
         }
 
-        // 4. Obtener el usuario y emitir token de ADMISIONES
+        // 4. Validar acudiente_id si se proporciona
+        $acudienteId = $request->input('acudiente_id');
+
+        if ($acudienteId !== null) {
+            $request->validate([
+                'acudiente_id' => 'integer|exists:usuarios,id_user',
+            ]);
+        }
+
+        // 5. Obtener el usuario admin y emitir token de ADMISIONES
         $userId = $adminPayload->get('user_id');
         $user   = Usuario::findOrFail($userId);
 
-        // Claims extra que identifican este token como exchange
         $admisionesToken = JWTAuth::claims([
-            'system' => 'admissions',
-            'source' => 'token_exchange',
-            'role'   => 'readonly_admin',
+            'system'       => 'admissions',
+            'source'       => 'token_exchange',
+            'role'         => 'admin',
+            'acudiente_id' => $acudienteId,
         ])->fromUser($user);
 
         Log::info('TokenExchange: acceso concedido', [
-            'userId' => $userId,
-            'email'  => $email,
-            'ip'     => $request->ip(),
+            'adminId'     => $userId,
+            'email'       => $email,
+            'acudienteId' => $acudienteId,
+            'ip'          => $request->ip(),
         ]);
 
-        // 5. Setear la cookie admissions_token igual que lo hace tu sistema de admisiones
+        // 6. Cookie con la misma configuración que el sistema de admisiones
         return response()->json(['ok' => true])
             ->cookie(
                 'admissions_token',
                 $admisionesToken,
-                120,            // 2 horas en minutos
+                120,
                 '/',
                 null,
-                true,           // secure (HTTPS)
-                true,           // httpOnly
+                false,   // secure: igual que HasAuthCookie (false en dev)
+                true,    // httpOnly
                 false,
-                'Strict'        // sameSite
+                'Lax'    // sameSite: igual que HasAuthCookie
             );
     }
 

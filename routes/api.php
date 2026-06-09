@@ -90,4 +90,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/tipos-documentos')->group(function () {
         require __DIR__.'/api/TipoDocumentos.php';
     });
+
+    // ADMISIONES (acciones admin)
+    Route::prefix('/admisiones')->group(function () {
+        Route::put('/inscripcion/estado', [\App\Http\Controllers\Admissions\AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
+    });
 });
