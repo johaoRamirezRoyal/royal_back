@@ -622,8 +622,6 @@ class AdmissionsController extends Controller
 
         $activo = $request->input('activo');
         $activo_bool = (!is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null; 
-        
-        Log::info("Estado Request: ", ['estado' => $activo]);
 
         $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($activo_bool);
 
