@@ -248,6 +248,7 @@ class AdmisionesServices extends Service
 
             $inscripcion = Inscripcion::with([
                 'usuarioRegistro:id_user,nombre,apellido',
+                'estadoInscripcion:id,nombre',
                 'updatedBy:id_user,nombre,apellido',
                 'anioAcademico',
                 'aspirante',
