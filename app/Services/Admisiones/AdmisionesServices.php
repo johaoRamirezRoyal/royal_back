@@ -170,6 +170,7 @@ class AdmisionesServices extends Service
                 'anioAcademico',
                 'aspirante:id,id_inscripcion,nombre_completo',
                 'documento:id,id_inscripcion,nombre_original,url_archivo,id_tipo_documento',
+                'estadoInscripcion:id,nombre',
                 'documento.tipoDocumento:id,nombre',
             ])->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
 
