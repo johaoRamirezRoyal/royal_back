@@ -1089,7 +1089,7 @@ class AdmisionesServices extends Service
     // ========================================= ESTADO DE INSCRIPCIONES SERVICES =========================================
     
     /**
-     * Summary of mostrarTodosLosEstadosDeInscripcion
+     * Metodo para listar los estados de las inscripciones, se puede añadir el parametro $activo para filtrar por estado.
      * @param mixed $estado
      * @return array{data: array, error: bool, message: string}
      */
@@ -1128,7 +1128,7 @@ class AdmisionesServices extends Service
     }
 
     /**
-     * Summary of mostrarEstadoDeInscripcionId
+     * Metodo para mostrar un estado de inscripción.
      * @param int $id
      * @return array{data: array, error: bool, message: string}
      */

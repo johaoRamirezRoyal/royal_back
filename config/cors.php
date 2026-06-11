@@ -10,6 +10,8 @@ return [
         'http://localhost:5173', // Vite (MUY IMPORTANTE)
         'http://localhost:5174', // Vite (MUY IMPORTANTE)
         'http://localhost:4000', // Vite (MUY IMPORTANTE)
+        'https://frontend-new-s-a-m-i.vercel.app',
+        'https://frontend-new-s-a-m-8tnnuns5u-royal-s-projects11.vercel.app',
     ],
 
     'allowed_origins_patterns' => [],
