@@ -80,7 +80,12 @@ class AdmissionsController extends Controller
 
         Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
 
-        event(new RequestEmailAdmission($email, $token, $code));
+        try {
+            event(new RequestEmailAdmission($email, $token, $code));
+        } catch (\Exception $err) {
+            Log::alert("Ha ocurrido un error inesperado en el envio del correo", [ "Error" => $err ]);
+            return $this->error("Ha ocurrido un error inesperado en la peticion del correo");
+        }
 
         return $this->success('Codigo enviado!', [
             'token' => $token,
