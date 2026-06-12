@@ -89,7 +89,7 @@ class TokenExchangeController extends Controller
                 false,   // secure: igual que HasAuthCookie (false en dev)
                 true,    // httpOnly
                 false,
-                'Lax'    // sameSite: igual que HasAuthCookie
+                'None'    // sameSite: igual que HasAuthCookie
             );
     }
 

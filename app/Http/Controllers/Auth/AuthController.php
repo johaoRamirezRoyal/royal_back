@@ -89,9 +89,7 @@ class AuthController extends Controller
             }
 
             $token = JWTAuth::fromUser($userModel);
-            $cookie = $this->makeCookie($token);
-
-            return redirect("{$frontendUrl}/home")->withCookie($cookie);
+            return redirect("{$frontendUrl}/home")->withCookie("general", $token);
 
         } catch (\Exception $e) {
             $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
