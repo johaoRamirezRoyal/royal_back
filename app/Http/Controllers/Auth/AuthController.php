@@ -88,8 +88,7 @@ class AuthController extends Controller
                 return redirect("{$frontendUrl}/?error=usuario_inactivo");
             }
 
-            $token = JWTAuth::fromUser($userModel);
-            return redirect("{$frontendUrl}/home")->withCookie("general", $token);
+            return redirect("{$frontendUrl}/home")->withCookie("token", $this->jwt->generateToken($userModel));
 
         } catch (\Exception $e) {
             $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');

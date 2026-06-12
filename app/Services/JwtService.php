@@ -15,6 +15,7 @@ class JwtService
         $user->loadMissing('perfilRelacion');
 
         return JWTAuth::claims([
+            'active' => true,
             'system' => 'general',
             'user_id' => $user->id_user,
             'nombre' => $user->nombre,
