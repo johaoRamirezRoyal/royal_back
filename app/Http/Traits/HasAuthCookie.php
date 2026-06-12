@@ -16,7 +16,7 @@ trait HasAuthCookie
             minutes: $ttl / 60,
             path: '/',
             domain: null,
-            secure: false,
+            secure: true,
             httpOnly: true,
             sameSite: 'None',
         );

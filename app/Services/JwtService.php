@@ -27,7 +27,15 @@ class JwtService
 
     public function generateAdmissionsToken(Authenticatable $user): string
     {
-        return JWTAuth::claims(['system' => 'admissions'])->fromUser($user);
+        return JWTAuth::claims([
+            'active' => true,
+            'system' => 'admissions',
+            'user_id' => $user->id_user,
+            'nombre' => $user->nombre,
+            'apellido' => $user->apellido,
+            'correo' => $user->correo,
+            'perfil' => $user->perfilRelacion?->nombre ?? $user->perfil,
+            ])->fromUser($user);
     }
 
     public function refreshToken(string $token): string

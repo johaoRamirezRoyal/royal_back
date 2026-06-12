@@ -150,7 +150,9 @@ class AdmissionsController extends Controller
             return $this->success('Cuenta existente. Redirigiendo...', [
                 'cookie_token' => true,
             ])
-                ->withCookie('admissions_token', $this->jwt->generateAdmissionsToken($userExists));
+                ->withCookie(
+                    $this->makeCookie($this->jwt->generateAdmissionsToken($userExists), 'admissions_token')
+                );
         }
 
         $registerToken = Str::random(64);
