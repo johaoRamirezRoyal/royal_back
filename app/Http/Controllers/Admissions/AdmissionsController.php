@@ -5,13 +5,13 @@ namespace App\Http\Controllers\Admissions;
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
+use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
+use App\Http\Requests\Admisiones\RegistrarFamiliaresRequest;
 use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
-use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
-use App\Http\Requests\Admisiones\RegistrarFamiliaresRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -69,6 +69,8 @@ class AdmissionsController extends Controller
             return $this->error('Demasiadas solicitudes', 429);
         }
 
+        Log::info('Haciendo algo en la función requestVerification');
+
         $token = Cache::get("email_token_{$email}") ?? Str::random(64);
 
         $code = str_pad(random_int(0, 99999), 5, '0', STR_PAD_LEFT);
@@ -81,10 +83,12 @@ class AdmissionsController extends Controller
         Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
 
         try {
+            Log::info("Enviando correo de verificacion a {$email}");
             event(new RequestEmailAdmission($email, $token, $code));
         } catch (\Exception $err) {
-            Log::alert("Ha ocurrido un error inesperado en el envio del correo", [ "Error" => $err ]);
-            return $this->error("Ha ocurrido un error inesperado en la peticion del correo");
+            Log::alert('Ha ocurrido un error inesperado en el envio del correo', ['Error' => $err]);
+
+            return $this->error('Ha ocurrido un error inesperado en la peticion del correo');
         }
 
         return $this->success('Codigo enviado!', [
@@ -275,7 +279,8 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function eliminarDatoInscripcion(Request $request){
+    public function eliminarDatoInscripcion(Request $request)
+    {
         $id_inscripcion = $request->input('id');
 
         $response = $this->admisiones_services->eliminarDatoInscripcion($id_inscripcion);
@@ -408,8 +413,9 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function eliminarFamiliarAspirante(Request $request){
-        $id_familiar = $request->input("id_acudiente");
+    public function eliminarFamiliarAspirante(Request $request)
+    {
+        $id_familiar = $request->input('id_acudiente');
 
         $response = $this->admisiones_services->eliminarFamiliarAspirante($id_familiar);
 
@@ -448,11 +454,11 @@ class AdmissionsController extends Controller
     {
         $ids = $request->input('ids');
 
-        if (empty($ids) || !is_array($ids)) {
+        if (empty($ids) || ! is_array($ids)) {
             return $this->apiResponse([
                 'error' => true,
                 'message' => 'Debe enviar un arreglo de IDs',
-                'data' => []
+                'data' => [],
             ]);
         }
 
@@ -467,7 +473,7 @@ class AdmissionsController extends Controller
 
         foreach ($documentos['data'] as $docs) {
 
-            if (!empty($docs['public_id'])) {
+            if (! empty($docs['public_id'])) {
 
                 $resourceType = in_array(strtolower($docs['formato'] ?? ''), $imageFormats, true)
                     ? 'image'
@@ -483,7 +489,7 @@ class AdmissionsController extends Controller
                         'data' => [
                             'documento' => $docs,
                             'resource_type_usado' => $resourceType,
-                        ]
+                        ],
                     ]);
                 }
             }
@@ -622,10 +628,11 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function mostrarTodosLosEstadosDeInscripcion(Request $request){
+    public function mostrarTodosLosEstadosDeInscripcion(Request $request)
+    {
 
         $activo = $request->input('activo');
-        $activo_bool = (!is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null; 
+        $activo_bool = (! is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null;
 
         $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($activo_bool);
 
@@ -650,6 +657,4 @@ class AdmissionsController extends Controller
 
         return $this->apiResponse($response);
     }
-
-
 }

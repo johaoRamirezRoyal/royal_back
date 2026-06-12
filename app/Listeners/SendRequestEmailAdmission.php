@@ -9,21 +9,28 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-class SendRequestEmailAdmission
+class SendRequestEmailAdmission implements ShouldQueue
 {
-    public $queue = 'emails';
+    use InteractsWithQueue;
 
-    /**
-     * Handle the event.
-     */
+    public string $queue = 'emails';
+    public int $tries = 3;
+    public int $backoff = 60; // segundos entre reintentos
+
     public function handle(RequestEmailAdmission $event): void
     {
-        Mail::to($event->email)->send(new RequestEmail($event->email, $event->token, $event->verificationCode));
+        Log::info("Enviando correo de admisión", ['email' => $event->email]);
+
+        Mail::to($event->email)
+            ->send(new RequestEmail($event->email, $event->token, $event->verificationCode));
     }
 
     public function failed(RequestEmailAdmission $event, \Throwable $e): void
     {
-        // si falla los 3 intentos, puedes loggear o notificar
-        Log::error("Falló el envío de email a {$event->email}: {$e->getMessage()}");
+        Log::error("Falló el envío de email de admisión", [
+            'email'   => $event->email,
+            'error'   => $e->getMessage(),
+            'trace'   => $e->getTraceAsString(),
+        ]);
     }
 }

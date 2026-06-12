@@ -2,60 +2,40 @@
 
 namespace App\Mail;
 
-use App\Models\Usuarios\Usuario;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class RequestEmail extends Mailable
 {
-    public string $url;
-
     use Queueable, SerializesModels;
 
-    /**
-     * Create a new message instance.
-     */
+    public string $url;
+
     public function __construct(
-        public string $email,
-        public string $token,
-        public string $verificationCode
-    )
-    {
-        $this->url = config('app.frontend_url') . "/admissions";
+        public readonly string $email,
+        public readonly string $token,
+        public readonly string $verificationCode
+    ) {
+        Log::info("Enviando 'resource' de email");
+        $this->url = rtrim(config('app.frontend_url'), '/') . '/admissions';
     }
 
-    /**
-     * Get the message envelope.
-     */
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Confirmar correo',
+            to:      [$this->email],
+            subject: 'Verifica tu correo — Admisiones Royal School',
         );
     }
 
-    /**
-     * Get the message content definition.
-     */
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.sendRequestEmail',
+            view: 'emails.request-email',
         );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
     }
 }
