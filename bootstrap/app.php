@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prependToGroup('api', JwtFromCookie::class);
+        $middleware->encryptCookies(except: ['token', 'admissions_token']);
         $middleware->alias([
             'auth' => Authenticate::class,
             'system' => ValidateSystem::class,
