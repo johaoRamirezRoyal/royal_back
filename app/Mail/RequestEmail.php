@@ -45,17 +45,7 @@ class RequestEmail extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.sendRequestEmail',
+            view: 'emails.sendRequestEmail',
         );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, Attachment>
-     */
-    public function attachments(): array
-    {
-        return [];
     }
 }
