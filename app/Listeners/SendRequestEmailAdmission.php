@@ -7,13 +7,28 @@ use App\Mail\RequestEmail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-class SendRequestEmailAdmission
+class SendRequestEmailAdmission implements ShouldQueue
 {
+    use InteractsWithQueue;
+
+    public string $queue = 'emails';
+    public int $tries = 3;
+    public int $backoff = 60; // segundos entre reintentos
+
     public function handle(RequestEmailAdmission $event): void
     {
         Log::info("Enviando correo de admisión", ['email' => $event->email]);
 
         Mail::to($event->email)
             ->send(new RequestEmail($event->email, $event->token, $event->verificationCode));
+    }
+
+    public function failed(RequestEmailAdmission $event, \Throwable $e): void
+    {
+        Log::error("Falló el envío de email de admisión", [
+            'email'   => $event->email,
+            'error'   => $e->getMessage(),
+            'trace'   => $e->getTraceAsString(),
+        ]);
     }
 }
