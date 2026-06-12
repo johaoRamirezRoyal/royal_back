@@ -6,7 +6,6 @@ use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
-use App\Http\Requests\Admisiones\RegistrarFamiliarRequest;
 use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;

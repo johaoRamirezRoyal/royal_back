@@ -19,16 +19,8 @@ class RegistrarInscripcionRequest extends FormRequest
         return [
 
             'estado' => [
-                'sometimes',
-                'string',
-                Rule::in([
-                    'BORRADOR',
-                    'PENDIENTE',
-                    'EN_REVISION',
-                    'APROBADO',
-                    'RECHAZADO',
-                    'CANCELADO'
-                ])
+                'integer',
+                'exists:admisiones_estados,id'
             ],
 
             'id_usuario_registro' => [
