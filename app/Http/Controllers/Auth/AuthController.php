@@ -224,8 +224,6 @@ class AuthController extends Controller
             if ($system === 'general') {
                 $user = auth('api')->user();
 
-                $user->load('perfilRelacion', 'nivelRelacion');
-
                 if (! $user) {
                     return response()->json(['active' => false], 401);
                 }
