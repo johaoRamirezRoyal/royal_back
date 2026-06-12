@@ -35,7 +35,7 @@ class RequestEmail extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.request-email',
+            view: 'emails.sendRequestEmail',
         );
     }
 }
