@@ -85,7 +85,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // BIBLIOTECA
     Route::prefix('/biblioteca')->group(function () {
-        require __DIR__.'/api/biblioteca.php';
+        require __DIR__.'/api/Biblioteca.php';
     });
 
     // AÑO ACADÉMICO
