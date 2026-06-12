@@ -18,7 +18,7 @@ trait HasAuthCookie
             domain: null,
             secure: false,
             httpOnly: true,
-            sameSite: 'Lax',
+            sameSite: 'None',
         );
     }
 }
