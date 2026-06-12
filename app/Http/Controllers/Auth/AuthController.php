@@ -255,7 +255,7 @@ class AuthController extends Controller
                 return response()->json(['active' => false], 401);
             }
 
-            $user->load('perfilRelacion', 'nivelRelacion');
+            //$user->load('perfilRelacion', 'nivelRelacion');
 
             return response()->json([
                 'active' => true,
