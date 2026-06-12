@@ -50,7 +50,6 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
 
 - Mailables in `app/Mail/` (GenericMail, PasswordRestoreEmail, RequestEmail, RequestForm).
 - Templates in `resources/views/emails/`.
-- Listener `SendRequestEmailAdmission` queues on `emails` connection.
 - Password reset listener `SendPasswordRestore` has 3 retries.
 
 ## Hikvision
