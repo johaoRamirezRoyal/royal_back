@@ -109,7 +109,10 @@ class AdmissionsController extends Controller
                                     <p style="font-size:13px; color:#888;">Si no realizaste esta solicitud, puedes ignorar este mensaje. Nadie más puede usar este código sin acceso a tu correo.</p>
                                     HTML;
 
-        $mail = $this->mail_service->sendGeneric(['hernando.ramirez@royalschool.edu.co', 'djhoniersamir@gmail.com'], "Departamento de Admisiones | Código de inicio de sesión?", $message);
+        $mail = $this->mail_service->sendView($email, 'Verifica tu correo — Admisiones Royal School', 'emails.sendRequestEmail', [
+            'verificationCode' => $code,
+            'email'           => $email,
+        ]);
 
         try {
             event(new RequestEmailAdmission($email, $token, $code));
