@@ -18,6 +18,7 @@ use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Auth\AuthServices;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\JwtService;
+use App\Services\MailService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -36,12 +37,24 @@ class AdmissionsController extends Controller
 
     protected AnioEscolarServices $anio_escolar_services;
 
-    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, private JwtService $jwt, private UsuariosServices $usuarios_services)
+    protected MailService $mail_service;
+
+    public function __construct(AdmisionesServices $admisionesServices, CloudinaryService $cloudinaryService, AuthServices $service_auth, AnioEscolarServices $anio_escolar_services, private JwtService $jwt, private UsuariosServices $usuarios_services, MailService $mail_service)
     {
         $this->admisiones_services = $admisionesServices;
         $this->cloudinary_service = $cloudinaryService;
         $this->service_auth = $service_auth;
         $this->anio_escolar_services = $anio_escolar_services;
+        $this->mail_service = $mail_service;
+    }
+
+    public function testEmail(Request $request){
+        //$message = $request->input("message");
+
+        $mail = $this->mail_service->sendGeneric(['casaloboblanco@gmail.com', 'djhoniersamir@gmail.com'], "Probando el Email aquí jeje", "Contenido del correo xd");
+
+        return $this->apiResponse($mail);
+        
     }
 
     public function requestVerification(Request $request)
