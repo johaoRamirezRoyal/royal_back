@@ -432,8 +432,6 @@ class AdmisionesServices extends Service
             if (! empty($data['fecha_nacimiento']) && empty($data['edad'])) {
                 $data['edad'] = now()->parse($data['fecha_nacimiento'])->age;
             }
-                
-            $data['fecha_registro'] = now();
 
             $aspirante->update($data);
 
