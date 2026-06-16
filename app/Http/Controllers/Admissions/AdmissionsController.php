@@ -49,26 +49,28 @@ class AdmissionsController extends Controller
         $this->mail_service = $mail_service;
     }
 
-    public function testEmail(Request $request){
+    public function testEmail(Request $request)
+    {
         //$message = $request->input("message");
 
         $mail = $this->mail_service->sendGeneric(['casaloboblanco@gmail.com', 'djhoniersamir@gmail.com'], "Probando el Email aquí jeje", "Contenido del correo xd");
 
         return $this->apiResponse($mail);
-        
     }
 
     public function requestVerification(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email|min:10|max:140',
-        ],
+        $request->validate(
+            [
+                'email' => 'required|email|min:10|max:140',
+            ],
             [
                 'email.required' => 'El correo es un campo obligatorio.',
                 'email.email' => 'El correo no tiene un formato valido.',
                 'email.min' => 'El correo debe tener al menos 10 caracteres',
                 'email.max' => 'El correo no puede superar los 140 caracteres',
-            ]);
+            ]
+        );
 
         $email = $request->email;
 
@@ -94,10 +96,25 @@ class AdmissionsController extends Controller
 
         Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
 
+        $message = $message = <<<HTML
+                                    <p style="font-size:16px; color:#333; margin:0 0 16px;">Estimado acudiente,</p>
+                                    <p style="font-size:15px; color:#444; margin:0 0 16px;">Hemos recibido tu solicitud de admisión. Para continuar con el proceso, por favor verifica tu correo electrónico con el siguiente código:</p>
+
+                                    <div style="background:#f1f5f9; border-radius:8px; padding:20px; text-align:center; margin:20px 0;">
+                                        <p style="margin:0 0 8px; font-size:13px; color:#666;">Código de verificación</p>
+                                        <p style="margin:0; font-size:28px; font-weight:bold; color:#2563eb;">{$code}</p>
+                                        <p style="margin:8px 0 0; font-size:12px; color:#999;">Válido por 5 minutos</p>
+                                    </div>
+
+                                    <p style="font-size:13px; color:#888;">Si no realizaste esta solicitud, puedes ignorar este mensaje. Nadie más puede usar este código sin acceso a tu correo.</p>
+                                    HTML;
+
+        $mail = $this->mail_service->sendGeneric(['hernando.ramirez@royalschool.edu.co', 'djhoniersamir@gmail.com'], "Departamento de Admisiones | Código de inicio de sesión?", $message);
+
         try {
             event(new RequestEmailAdmission($email, $token, $code));
         } catch (\Exception $err) {
-            Log::alert("Ha ocurrido un error inesperado en el envio del correo", [ "Error" => $err ]);
+            Log::alert("Ha ocurrido un error inesperado en el envio del correo", ["Error" => $err]);
             return $this->error("Ha ocurrido un error inesperado en la peticion del correo");
         }
 
@@ -108,12 +125,16 @@ class AdmissionsController extends Controller
 
     public function validateVerificationCode(Request $request)
     {
-        $request->validate([
-            'token' => 'required|string|size:64',
-        ],
-            ['token.required' => 'El token es obligatorio.',
+        $request->validate(
+            [
+                'token' => 'required|string|size:64',
+            ],
+            [
+                'token.required' => 'El token es obligatorio.',
                 'token.string' => 'El token debe ser una cadena válida.',
-                'token.size' => 'El token no es válido.']);
+                'token.size' => 'El token no es válido.'
+            ]
+        );
 
         $token = $request->token;
 
@@ -289,7 +310,8 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function eliminarDatoInscripcion(Request $request){
+    public function eliminarDatoInscripcion(Request $request)
+    {
         $id_inscripcion = $request->input('id');
 
         $response = $this->admisiones_services->eliminarDatoInscripcion($id_inscripcion);
@@ -422,7 +444,8 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function eliminarFamiliarAspirante(Request $request){
+    public function eliminarFamiliarAspirante(Request $request)
+    {
         $id_familiar = $request->input("id_acudiente");
 
         $response = $this->admisiones_services->eliminarFamiliarAspirante($id_familiar);
@@ -636,10 +659,11 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function mostrarTodosLosEstadosDeInscripcion(Request $request){
+    public function mostrarTodosLosEstadosDeInscripcion(Request $request)
+    {
 
         $activo = $request->input('activo');
-        $activo_bool = (!is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null; 
+        $activo_bool = (!is_null($activo)) ? filter_var($activo, FILTER_VALIDATE_BOOL) : $activo_bool = null;
 
         $response = $this->admisiones_services->mostrarTodosLosEstadosDeInscripcion($activo_bool);
 
@@ -664,6 +688,4 @@ class AdmissionsController extends Controller
 
         return $this->apiResponse($response);
     }
-
-
 }
