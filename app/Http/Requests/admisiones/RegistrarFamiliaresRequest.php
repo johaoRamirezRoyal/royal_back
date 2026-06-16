@@ -37,6 +37,12 @@ class RegistrarFamiliaresRequest extends FormRequest
                 Rule::in(['Padre', 'Madre', 'Acudiente']),
             ],
 
+            'familiares.*.descripcion_parentesco' => [
+                'nullable',
+                'string',
+                'max:50'
+            ],
+
             'familiares.*.nombre_completo' => [
                 'required',
                 'string',

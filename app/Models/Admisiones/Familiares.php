@@ -17,6 +17,7 @@ class Familiares extends Model
         'aspirante_id',
         'id_inscripcion',
         'tipo_parentesco',
+        'descripcion_parentesco',
         'nombre_completo',
         'documento_identidad',
         'lugar_expedicion_doc',
