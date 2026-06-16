@@ -190,7 +190,6 @@
                     <p class="code-expiry">Válido por 5 minutos</p>
                 </div>
 
-                <a href="{{ $url }}" class="btn">Verificar mi correo electrónico</a>
 
                 <p class="note">Si no realizaste esta solicitud, puedes ignorar este mensaje. Nadie más puede usar
                     este código sin acceso a tu correo.</p>

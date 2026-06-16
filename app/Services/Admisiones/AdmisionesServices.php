@@ -2,7 +2,6 @@
 
 namespace App\Services\Admisiones;
 
-use App\Mail\GenericMail;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\Documento;
 use App\Models\Admisiones\Estado;
@@ -12,14 +11,18 @@ use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
+use App\Services\MailService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class AdmisionesServices extends Service
 {
+    public function __construct(
+        private MailService $mailService
+    ) {}
+
     /**
      * Summary of mailTo
      */
@@ -349,9 +352,7 @@ class AdmisionesServices extends Service
             Fecha de actualización: '.now()->format('Y-m-d H:i:s');
 
             if (! empty($mailTo)) {
-
-                Mail::to($mailTo)
-                    ->send(new GenericMail($titulo, $contenido));
+                $this->mailService->sendGeneric($mailTo, $titulo, $contenido);
             }
 
             return [
@@ -433,6 +434,8 @@ class AdmisionesServices extends Service
             if (! empty($data['fecha_nacimiento']) && empty($data['edad'])) {
                 $data['edad'] = now()->parse($data['fecha_nacimiento'])->age;
             }
+                
+            $data['fecha_registro'] = now();
 
             $aspirante->update($data);
 
@@ -564,11 +567,7 @@ class AdmisionesServices extends Service
 
             $contenido .= "\n---\nFecha de registro: ".$fechaReg;
 
-            $this->mailTo = [$correo_acudiente];
-
-            // Envío del correo
-            Mail::to($this->mailTo)
-                ->send(new GenericMail($titulo, $contenido));
+            $this->mailService->sendGeneric($correo_acudiente, $titulo, $contenido);
 
             return [
                 'error' => false,

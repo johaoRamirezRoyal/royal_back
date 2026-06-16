@@ -4,20 +4,26 @@ namespace App\Listeners;
 
 use App\Events\PasswordRestore;
 use App\Mail\PasswordRestoreEmail;
+use App\Services\MailService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class SendPasswordRestore
 {
     public int $tries = 3;        // reintentos si falla
     public int $backoff = 10;     // segundos entre reintentos
 
+    public function __construct(
+        private MailService $mailService
+    ) {}
+
      public function handle(PasswordRestore $event): void
     {
-        Mail::to($event->user->correo)  // ✅ $pass en lugar de $user
-            ->send(new PasswordRestoreEmail($event->user, $event->token));
+        $this->mailService->send(
+            $event->user->correo,
+            new PasswordRestoreEmail($event->user, $event->token)
+        );
     }
 
         public function failed(PasswordRestore $event, \Throwable $e): void

@@ -23,9 +23,9 @@
                     <!-- BODY -->
                     <tr>
                         <td style="padding:30px; color:#333;">
-                            <p style="font-size:15px; line-height:1.6;">
+                            <div style="font-size:15px; line-height:1.6;">
                                 {!! nl2br(e($contenido)) !!}
-                            </p>
+                            </div>
                         </td>
                     </tr>
 

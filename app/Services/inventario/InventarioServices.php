@@ -4,14 +4,16 @@ namespace App\Services\inventario;
 
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioDescontinuado;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\GenericMail;
 use App\Models\Inventario\InventarioLiberado;
+use App\Services\MailService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class InventarioServices
 {
+    public function __construct(
+        private MailService $mailService
+    ) {}
 
     /**
      * Summary of mailTo
@@ -176,8 +178,7 @@ class InventarioServices
                     $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
                 }
 
-                Mail::to($this->mailTo)
-                    ->send(new GenericMail($titulo, $contenido));
+                $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
             }
 
             return $result;
@@ -242,8 +243,7 @@ class InventarioServices
                     $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
                 }
 
-                Mail::to($this->mailTo)
-                    ->send(new GenericMail($titulo, $contenido));
+                $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
             }
 
             return $result;
@@ -295,8 +295,7 @@ class InventarioServices
                 $contenido .= "{$inv->descripcion} (Codigo: {$inv->id})\n";
             }
 
-            Mail::to($this->mailTo)
-                    ->send(new GenericMail($titulo, $contenido));
+            $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
 
             return [
                 'data' => $inventario_liberado->toArray(),
