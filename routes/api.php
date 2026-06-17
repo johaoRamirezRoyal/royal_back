@@ -20,6 +20,9 @@ Route::group(['prefix' => 'auth'], function () {
 Route::middleware(['auth:api'])->prefix('/admisiones')->group(function () {
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
+    Route::prefix('/anio-academico')->group(function () {
+        require __DIR__.'/api/anioAcademico.php';
+    });
 });
 
 Route::group(['prefix' => 'admissions'], function () {
@@ -86,11 +89,6 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // BIBLIOTECA
     Route::prefix('/biblioteca')->group(function () {
         require __DIR__.'/api/Biblioteca.php';
-    });
-
-    // AÑO ACADÉMICO
-    Route::prefix('/anio-academico')->group(function () {
-        require __DIR__.'/api/anioAcademico.php';
     });
 
     // TIPOS DE DOCUMENTOS
