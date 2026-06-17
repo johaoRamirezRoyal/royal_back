@@ -254,7 +254,9 @@ class AdmissionsController extends Controller
     {
         $data = $request->validated();
 
-        $data['anio_academico'] = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
+
+        $data['anio_academico'] = $data['anio_academico']
+            ?? $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
 
         $resultado = $this->admisiones_services->registrarInscripcion($data);
 
