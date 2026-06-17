@@ -115,7 +115,8 @@ class AdmissionsController extends Controller
         ]);
 
         try {
-            event(new RequestEmailAdmission($email, $token, $code));
+            Log::info("Enviando correo de verificacion a {$email}");
+            //event(new RequestEmailAdmission($email, $token, $code));
         } catch (\Exception $err) {
             Log::alert("Ha ocurrido un error inesperado en el envio del correo", ["Error" => $err]);
             return $this->error("Ha ocurrido un error inesperado en la peticion del correo");

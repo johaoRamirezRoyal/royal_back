@@ -336,8 +336,10 @@ class AdmisionesServices extends Service
 
         try {
 
-            $inscripcion = Inscripcion::with('aspirante')
-                ->find($id_inscripcion);
+            $inscripcion = Inscripcion::with([
+                'aspirante',
+                'estadoInscripcion'
+            ])->find($id_inscripcion);
 
             if (! $inscripcion) {
                 return [
@@ -355,12 +357,16 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $estadoAnterior = $inscripcion->estado;
+            $estadoAnterior = $inscripcion->estadoInscripcion?->nombre;
 
             $inscripcion->update([
                 'estado' => $estado,
                 'updated_by' => $updated_by,
             ]);
+
+            $inscripcion->refresh()->load('estadoInscripcion');
+
+            $estado_nuevo = $inscripcion->estadoInscripcion?->nombre;
 
             $mailTo = collect($this->mailTo ?? [])
                 ->push($correo_acudiente)
@@ -376,7 +382,7 @@ class AdmisionesServices extends Service
             Se ha actualizado el estado de la inscripción con código {$inscripcion->codigo}.
 
             Estado anterior: {$estadoAnterior}
-            Nuevo estado: {$estado}
+            Nuevo estado: {$estado_nuevo}
 
             Aspirante: ".optional($inscripcion->aspirante)->nombre_completo.'
 
