@@ -13,7 +13,17 @@ class JwtFromCookie
     {
         $token = null;
 
-        if ($request->is('api/admisiones/*')) {
+        if ($request->is('api/compartido/*')) {
+
+            $token = $request->cookie('admissions_token') ?? $request->cookie('token');
+
+            Log::debug('JwtFromCookie: ruta compartida', [
+                'path' => $request->path(),
+                'admissions_token_exists' => !is_null($request->cookie('admissions_token')),
+                'token_exists' => !is_null($request->cookie('token')),
+            ]);
+
+        } elseif ($request->is('api/admisiones/*')) {
 
             $token = $request->cookie('admissions_token');
 
