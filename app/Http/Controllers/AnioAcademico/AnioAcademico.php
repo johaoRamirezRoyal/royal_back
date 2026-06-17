@@ -7,7 +7,7 @@ use App\Services\AnioEscolar\AnioEscolarServices;
 
 class AnioAcademico extends Controller
 {
-    private function __construct(protected AnioEscolarServices $anioEscolarServices)
+    public function __construct(protected AnioEscolarServices $anioEscolarServices)
     {}
 
     public function obtenerAniosAcademicos()

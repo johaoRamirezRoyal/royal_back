@@ -10,6 +10,7 @@ use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
+use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Services\Service;
 use App\Services\MailService;
 use Carbon\Carbon;
@@ -58,8 +59,8 @@ class AdmisionesServices extends Service
                     'id_usuario_registro' => $inscripcion->id_usuario_registro,
                     'fecha_inscripcion' => $inscripcion->fecha_inscripcion,
                     'anio_academico' => $inscripcion->anioAcademico
-                        ? $inscripcion->anioAcademico->anio_inicio.' - '.$inscripcion->anioAcademico->anio_fin
-                        : 'N/A',
+                        ? new AnioAcademicoResource($inscripcion->anioAcademico)
+                        : null,
                 ],
             ];
         } catch (Exception $e) {
