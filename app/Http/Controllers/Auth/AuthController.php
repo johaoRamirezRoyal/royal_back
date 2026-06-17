@@ -210,6 +210,7 @@ class AuthController extends Controller
                 }
 
                 $user = JWTAuth::setToken($token)->authenticate();
+                $user->load('perfilRelacion', 'nivelRelacion');
 
                 return response()->json([
                     'active' => true,
@@ -225,6 +226,8 @@ class AuthController extends Controller
                     return response()->json(['active' => false], 401);
                 }
 
+                $user->load('perfilRelacion', 'nivelRelacion');
+
                 return response()->json([
                     'active' => true,
                     'system' => 'general',
@@ -237,6 +240,7 @@ class AuthController extends Controller
             if ($admissionsToken) {
                 try {
                     $user = JWTAuth::setToken($admissionsToken)->authenticate();
+                    $user->load('perfilRelacion', 'nivelRelacion');
 
                     return response()->json([
                         'active' => true,
@@ -255,7 +259,7 @@ class AuthController extends Controller
                 return response()->json(['active' => false], 401);
             }
 
-            //$user->load('perfilRelacion', 'nivelRelacion');
+            $user->load('perfilRelacion', 'nivelRelacion');
 
             return response()->json([
                 'active' => true,

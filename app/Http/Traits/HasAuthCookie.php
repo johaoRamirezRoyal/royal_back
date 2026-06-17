@@ -16,9 +16,9 @@ trait HasAuthCookie
             minutes: $ttl / 60,
             path: '/',
             domain: null,
-            secure: true,
+            secure: config('session.secure'),
             httpOnly: true,
-            sameSite: 'None',
+            sameSite: config('session.same_site'),
         );
     }
 }
