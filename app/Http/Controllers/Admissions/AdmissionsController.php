@@ -263,6 +263,20 @@ class AdmissionsController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function actualizarDatosInscripcion(Request $request)
+    {
+        $id = $request->input('id');
+        $data = $request->validate(
+            [
+                'anio_academico' => 'required|integer|exists:anio_escolar,id'
+            ]
+        );
+
+        $resultado = $this->admisiones_services->actualizarDatosInscripcion($id, $data);
+
+        return $this->apiResponse($resultado);
+    }
+
     public function mostrarTodasIncripcionesAcudiente(Request $request)
     {
         $id_acudiente = $request->input('id_acudiente');
