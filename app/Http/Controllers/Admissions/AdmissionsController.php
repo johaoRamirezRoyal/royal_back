@@ -254,9 +254,25 @@ class AdmissionsController extends Controller
     {
         $data = $request->validated();
 
-        $data['anio_academico'] = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
+
+        $data['anio_academico'] = $data['anio_academico']
+            ?? $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
 
         $resultado = $this->admisiones_services->registrarInscripcion($data);
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function actualizarDatosInscripcion(Request $request)
+    {
+        $id = $request->input('id');
+        $data = $request->validate(
+            [
+                'anio_academico' => 'required|integer|exists:anio_escolar,id'
+            ]
+        );
+
+        $resultado = $this->admisiones_services->actualizarDatosInscripcion($id, $data);
 
         return $this->apiResponse($resultado);
     }

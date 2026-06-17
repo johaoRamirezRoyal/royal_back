@@ -73,6 +73,36 @@ class AdmisionesServices extends Service
         }
     }
 
+    public function actualizarDatosInscripcion(int $id, array $data): array {
+        try {
+            $inscripcion = Inscripcion::find($id);
+
+            if(!$inscripcion){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró la inscripción con el ID proporcionado.",
+                    'data' => []
+                ];
+            }
+
+            $inscripcion->update($data);
+            
+            return [
+                'error' => false,
+                'message' => "Se ha actualizado la inscripción",
+                'data' => $inscripcion->refresh()->toArray()
+            ];
+            
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar la inscripción.");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de actualizar la inscripción.",
+                'data' => []
+            ];
+        }
+    }
+
     public function eliminarInscripcion(int $id)
     {
         try {

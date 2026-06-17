@@ -23,6 +23,7 @@ Route::middleware(['auth:api'])->prefix('/admisiones')->group(function () {
     Route::prefix('/anio-academico')->group(function () {
         require __DIR__.'/api/anioAcademico.php';
     });
+    Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {
