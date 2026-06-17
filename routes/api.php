@@ -17,10 +17,10 @@ Route::group(['prefix' => 'auth'], function () {
 });
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
-Route::middleware(['auth:api'])->prefix('/admisiones')->group(function () {
+Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
-    Route::prefix('/anio-academico')->group(function () {
+    Route::group(['prefix' => 'anio-academico'], function () {
         require __DIR__.'/api/anioAcademico.php';
     });
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
