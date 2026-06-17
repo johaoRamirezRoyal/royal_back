@@ -54,7 +54,7 @@ class MailService
         }
     }
 
-
+    
     public function sendGeneric(array|string $to, string $titulo, string $contenido): array
     {
         try {
