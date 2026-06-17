@@ -20,6 +20,7 @@ Route::group(['prefix' => 'auth'], function () {
 Route::middleware(['auth:api'])->prefix('/admisiones')->group(function () {
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
+    Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {

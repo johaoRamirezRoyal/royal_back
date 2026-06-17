@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
     "fecha_inscripcion": "2026-08-15"
 }
  */
+Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
 Route::post('/inscripcion', [AdmissionsController::class, 'registrarInscripcion']);
 
 Route::delete('/inscripcion', [AdmissionsController::class, 'eliminarInscripcion']);
