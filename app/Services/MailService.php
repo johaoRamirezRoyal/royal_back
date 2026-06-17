@@ -9,6 +9,53 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
+
+    public function sendView(array|string $to, string $subject, string $view, array $data = []): array
+    {
+        try {
+            $recipients = is_string($to) ? [$to] : $to;
+
+            if (empty($recipients)) {
+                Log::warning('Intento de envío de correo sin destinatarios.');
+                return [
+                    'error' => true,
+                    'message' => 'Intento de envío de correo sin destinatarios.',
+                    'data' => [],
+                ];
+            }
+
+            Mail::send($view, $data, function ($message) use ($recipients, $subject) {
+                $message->to($recipients)->subject($subject);
+            });
+
+            Log::info('Correo con plantilla enviado', [
+                'to' => $recipients,
+                'subject' => $subject,
+                'view' => $view,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Correo enviado correctamente',
+                'data' => [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Error al enviar correo con plantilla', [
+                'to' => $to,
+                'subject' => $subject,
+                'view' => $view,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'error' => true,
+                'message' => 'Correo NO enviado: ' . $e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    
     public function sendGeneric(array|string $to, string $titulo, string $contenido): array
     {
         try {

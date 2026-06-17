@@ -40,7 +40,7 @@ class RegistrarAspiranteRequest extends FormRequest
             'religion' => ['nullable', 'string', 'max:100'],
 
             // Entorno familiar
-            'vive_con' => ['nullable', 'required|in:Padre,Madre,Acudiente'],
+            'vive_con' => ['nullable'],
             'num_hermanos' => ['nullable', 'integer', 'min:0'],
             'posicion_entre_hermanos' => ['nullable', 'integer', 'min:1'],
             'tiene_hermanos_colegio' => ['nullable', 'boolean'],
