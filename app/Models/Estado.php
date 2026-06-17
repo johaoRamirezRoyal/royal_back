@@ -1,11 +1,12 @@
 <?php
 namespace App\Models;
 
+use App\Models\Admisiones\Inscripcion;
 use Illuminate\Database\Eloquent\Model;
 
 class Estado extends Model
 {
-    protected $table = "estado";
+    protected $table = "admisiones_estados";
 
     protected $primaryKey = 'id';
 
@@ -18,4 +19,8 @@ class Estado extends Model
     protected $dates = ['fechareg'];
 
     public $timestamps = false;
+
+    public function inscripcion(){
+        return $this->hasMany(Inscripcion::class, 'id_estado', 'id');
+    }
 }
