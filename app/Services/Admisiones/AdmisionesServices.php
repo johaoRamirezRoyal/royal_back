@@ -333,6 +333,8 @@ class AdmisionesServices extends Service
 
             $mailTo = collect($this->mailTo ?? [])
                 ->push($correo_acudiente)
+                ->filter()
+                ->values()
                 ->toArray();
 
             $titulo = "Actualización de estado de inscripción | {$inscripcion->codigo}";
