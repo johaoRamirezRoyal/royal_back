@@ -18,5 +18,11 @@ Artisan::command('clear', function () {
     $this->info('Limpiando cache...');
     Artisan::call('cache:clear');
 
+    $this->info('Optimize Clear... ');
+    Artisan::call('optimize:clear');
+
+    $this->info('Limpiando el cache de config... ');
+    Artisan::call('config:cache');
+
     $this->info('✅ Todo limpio correctamente');
 })->purpose('Limpia cache, rutas y configuración');
