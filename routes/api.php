@@ -25,6 +25,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     });
 
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
+    Route::get("/inscripcionesPsicologa", [AdmissionsController::class, "mostrarAspirantesAPsicologa"]);
 });
 
 Route::group(['prefix' => 'admissions'], function () {
