@@ -24,6 +24,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
         require __DIR__.'/api/anioAcademico.php';
     });
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
+    Route::get("/inscripcionesPsicologa", [AdmissionsController::class, "mostrarAspirantesAPsicologa"]);
 });
 
 Route::group(['prefix' => 'admissions'], function () {
