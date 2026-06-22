@@ -62,6 +62,16 @@ class HikvisionController extends Controller
         return $this->apiResponse($datos_usuario);
     }
 
+    public function obtenerAsistenciaEmpleado(Request $request){
+        $id_empleado = $request->input("id_empleado");
+        $start_date = $request->input("start_date", null);
+        $end_date = $request->input("end_date", null);
+
+        $response = $this->hikvision_service->obtenerAsistenciaEmpleado($id_empleado, $start_date, $end_date);
+
+        return $this->apiResponse($response);
+    }
+
     public function obtenerEmpleadosRegistradosPorPerfil(Request $request){
         $id_perfil = $request->input("id_perfil");
 

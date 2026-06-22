@@ -59,6 +59,13 @@ class LibroRequest extends FormRequest
                 'string'
             ],
 
+            'foto' => [
+                'nullable',
+                'image',
+                'mimes:jpeg,png,jpg,gif,webp,bmp',
+                'max:2048'
+            ],
+
             'activo' => [
                 'nullable',
                 'integer',

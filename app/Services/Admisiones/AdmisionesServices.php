@@ -1247,4 +1247,63 @@ class AdmisionesServices extends Service
             ];
         }
     }
+
+    /**
+     * Método para filtrar las inscripciones en base al curso.
+     * @param string $perfil_psicologa
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function mostrarAspirantesAPsicologa(int $perfil_psicologa): array {
+        
+        //Aquí irán los IDs de los perfiles de las psicologas en base a su nivel. 
+        $perfil_psicologa_preescolar = 21;
+        $perfil_psicologa_primaria = 24;
+        $perfil_psicologa_bachillerato = 25;
+
+        $niveles_cursos = [
+            $perfil_psicologa_preescolar => ["Stem", "Pre Kinder", "Kinder", "Transición"],
+            $perfil_psicologa_primaria => ["Primero de primaria", "Segundo de primaria", "Tercero de primaria", "Cuarto de primaria", "Quinto de primaria"],
+            $perfil_psicologa_bachillerato => ["Sexto de bachillerato", "Séptimo de bachillerato", "Octavo de bachillerato", "Noveno de bachillerato", "Décimo de bachillerato", "Undécimo de bachillerato"],
+        ];
+
+        $cursosPermitidos = $niveles_cursos[$perfil_psicologa] ?? [];
+     
+        try {
+            $inscripciones = Inscripcion::with([
+                'usuarioRegistro:id_user,nombre,apellido',
+                'estadoInscripcion:id,nombre',
+                'updatedBy:id_user,nombre,apellido',
+                'anioAcademico',
+                'aspirante',
+                'informacionMedica',
+                'familiares',
+                'referenciaFamiliares',
+                'documento',
+                'documento.tipoDocumento:id,nombre',
+            ])->whereHas('aspirante', function($query) use ($cursosPermitidos) {
+                $query->whereIn('grado_aplica', $cursosPermitidos);
+            })->get();
+
+            if ($inscripciones->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró ninguna inscripción para ese usuario',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Inscripciones seleccionadas',
+                'data' => $inscripciones->toArray(),
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al obtener las inscripciones de un psicologa");
+            return [
+                'error' => true,
+                'message' => "Error al obtener las inscripciones de un psicologa",
+                'data' => []
+            ];
+        }
+    }
 }

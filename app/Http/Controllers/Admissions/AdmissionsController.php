@@ -713,4 +713,20 @@ class AdmissionsController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    public function mostrarAspirantesAPsicologa(Request $request){
+        $perfil_psicologa = (int) $request->input('perfil');
+
+        if(!$perfil_psicologa){
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un perfil de psicologa válido',
+                'data' => []
+            ]);
+        }
+
+        $response = $this->admisiones_services->mostrarAspirantesAPsicologa($perfil_psicologa);
+
+        return $this->apiResponse($response);
+    }
 }
