@@ -47,10 +47,7 @@ class UsuariosController extends Controller
             return $this->error($response['message']);
         }
 
-        return $this->paginatedResponse(
-            $response['message'],
-            $response['data']
-        );
+        return $this->paginatedResponse($response);
     }
 
     public function mostrarTodosUsuariosPaginado(Request $request)
@@ -62,10 +59,7 @@ class UsuariosController extends Controller
             return $this->error($response['message']);
         }
 
-        return $this->paginatedResponse(
-            $response['message'],
-            $response['data']
-        );
+        return $this->paginatedResponse($response);
     }
 
     public function mostrarTodosUsuarios()
@@ -269,8 +263,7 @@ class UsuariosController extends Controller
         }
 
         return $this->paginatedResponse(
-            $response['message'],
-            $response['data'],
+            $response,
             UsuarioInscripcionResource::class
         );
     }
