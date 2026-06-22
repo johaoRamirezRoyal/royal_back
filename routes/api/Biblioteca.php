@@ -20,9 +20,21 @@ Route::put("/subcategorias/estado", [BibliotecaController::class, "cambiarEstado
         "subcategoria": [4],
         "activo": 1,
         "page": 3
-    }
+        }
  */
 Route::get("/libros", [BibliotecaController::class, "obtenerTodosLosLibrosBiblioteca"]);
+
+/**
+ * JSON para editar un libro
+        {
+          "id_libro": 2066,
+          "titulo": "Prueba imagen Libro de Johao actualizado",
+          "id_categoria": 2,
+          "autor": "Gabriel García Márquez",
+          "foto": "captura_png.png"
+        }
+ */
+Route::post("/libro/actualizar", [BibliotecaController::class, 'editarLibro']);
 
 /**
  * JSON para agregar un libro, con todos los datos: 
@@ -40,9 +52,12 @@ Route::get("/libros", [BibliotecaController::class, "obtenerTodosLosLibrosBiblio
  */
 Route::post("/libro", [BibliotecaController::class, "agregarNuevoLibroBiblioteca"]);
 
+Route::put("/libro/estado", [BibliotecaController::class, "cambiarEstadoLibro"]);
+
+
 
 /**
- * JSON para añadir ejemplares de un libro
+ *JSON para añadir ejemplares de un libro
     {
         "id_libro": 2479,
         "cantidad": 6,
@@ -66,4 +81,31 @@ Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolver
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
 Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);
 
+
+/**
+{
+  "perpage": 6,
+  "search": "Johao"
+}
+ */
 Route::get("/paquetes", [BibliotecaController::class, 'listarPaquetesBiblioteca']);
+
+/**
+{
+  "nombre": "Paquete de Johao :D",
+  "id_log": 3123
+}
+ */
+Route::post("/paquetes", [BibliotecaController::class, 'crearNuevoPaqueteBiblioteca']);
+
+/** 
+{
+  "ids": [33],
+  "estado": 0
+}
+ */
+Route::put("/paquetes", [BibliotecaController::class, 'cambiarEstadoPaqueteBiblioteca']);
+
+Route::post("/paquetes/contenido", [BibliotecaController::class, 'agregarContenidoPaqueteBiblioteca']);
+
+

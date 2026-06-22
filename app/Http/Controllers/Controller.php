@@ -26,10 +26,12 @@ abstract class Controller
     }
 
     protected function paginatedResponse(
-        string $message,
-        LengthAwarePaginator $paginator,
+        array $response,
         ?string $resourceClass = null
     ): JsonResponse {
+
+        $paginator = $response['data'];
+
         if ($resourceClass) {
             $resource = $resourceClass::collection($paginator)
                 ->response()
@@ -41,8 +43,8 @@ abstract class Controller
         }
 
         return $this->apiResponse([
-            'error' => false,
-            'message' => $message,
+            'error' => $response['error'],
+            'message' => $response['message'],
             'data' => [
                 'data' => $data,
                 'total' => $paginator->total(),

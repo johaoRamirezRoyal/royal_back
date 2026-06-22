@@ -5,12 +5,16 @@ namespace App\Services\Biblioteca;
 use App\Models\Biblioteca\Categoria;
 use App\Models\Biblioteca\Ejemplares;
 use App\Models\Biblioteca\Libro;
+use App\Models\Biblioteca\PaqueteContenido;
 use App\Models\Biblioteca\Paquetes;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
+use App\Services\FileStorageService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 
 class BibliotecaServices extends Service
 {
@@ -337,7 +341,7 @@ class BibliotecaServices extends Service
                 'message' => 'Libros listados',
                 'data' => $libros->toArray()
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
 
             $this->sendError(
                 $e,
@@ -396,6 +400,113 @@ class BibliotecaServices extends Service
         }
     }
 
+
+    public function editarLibro(array $data, int $id_libro){
+        try {
+            $libro = Libro::find($id_libro);
+
+            if(!$libro){
+                return [
+                    'error' => true,
+                    'message' => "No se ha encontrado el libro con el ID: ". $id_libro,
+                    'data' => []
+                ];
+            }
+
+            if (isset($data['foto'])) {
+
+                if ($libro->foto) {
+                    $rutaAbsoluta = storage_path('app/public/' . $libro->foto);
+                    File::delete($rutaAbsoluta);
+                }
+
+                $fileStorageService = app(FileStorageService::class);
+
+                $nuevaFoto = $fileStorageService->uploadFile(
+                    $data['foto'],
+                    'biblioteca'
+                );
+
+                if (!$nuevaFoto || !isset($nuevaFoto['ruta'])) {
+                    return [
+                        'error' => true,
+                        'message' => 'No fue posible actualizar la imagen',
+                        'data' => []
+                    ];
+                }
+
+                $data['foto'] = $nuevaFoto['ruta'];
+            }
+
+            $libroUpdate = $libro->update($data);
+
+            if(!$libroUpdate){
+                return [
+                    'error' => true,
+                    'message' => "Error al actualizar el libro",
+                    'data' => $libro->toArray()
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Libro actualizado correctamente",
+                'data' => $libro->refresh()->toArray()
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar la información del libro");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al actualizar la información del libro",
+                'data' => []
+            ];
+        }
+    }
+
+    public function cambiarEstadoLibro(array $id_libros, ?int $estado = 0){
+        try {
+            $libros = Libro::whereIn('id', $id_libros);
+
+            if(!$libros->exists()){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el libro para hacer el cambio de estado",
+                    'data' => []
+                ];
+            }
+
+            $libroUpdate = $libros->update(
+                [
+                    'activo' => $estado
+                ]
+            );
+
+            if (!$libroUpdate) {
+                return [
+                    'error' => true,
+                    'message' => "Error al cambiar el estado del libro",
+                    'data' => $libros->toArray()
+                ];
+            }
+
+            $librosActualizados = Libro::whereIn('id', $id_libros)->get();
+
+            return [
+                'error' => false,
+                'message' => "Libro actualizado correctamente",
+                'data' => $librosActualizados->toArray()
+            ];
+
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar la información del libro");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de actualizar el estado del libro",
+                'data' => []
+            ];
+        }
+    }
+
     /*
     -------------------------------------------------
     |
@@ -416,7 +527,7 @@ class BibliotecaServices extends Service
                 $ultimo++;
                 $ejemplares[] = [
                     "id_libro" => $data['id_libro'],
-                    "codigo" => 'EJ-' . str_pad($ultimo, 4, '0', STR_PAD_LEFT),
+                    "codigo" => 'EJEM-' . str_pad($ultimo, 4, '0', STR_PAD_LEFT),
                     "estado" => $data['estado'] ?? 1,
                     "id_log" => $data['id_log'],
                 ];
@@ -862,7 +973,7 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => "Paquetes listados completamente",
-                'data' => $paquetes->toArray(),
+                'data' => $paquetes,
             ];
         } catch (Exception $e) {
             $this->sendError($e, "Error en el servidor al tratar de listar los paquetes");
@@ -905,6 +1016,140 @@ class BibliotecaServices extends Service
             return [
                 'error' => true,
                 'message' => "Error en el servidor al tratar de crear un nuevo paquete",
+                'data' => []
+            ];
+        }
+    }
+
+    public function cambiarEstadoPaqueteBiblioteca(array $ids_paquetes, int $estado){
+        try {
+            $paquetes = Paquetes::whereIn('id', $ids_paquetes);
+
+            if (!in_array($estado, [0, 1])) {
+                return [
+                    'error' => true,
+                    'message' => 'Estado inválido',
+                    'data' => []
+                ];
+            }
+
+            if(!$paquetes->exists()){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el paquete para hacer el cambio de estado",
+                    'data' => []
+                ];
+            }
+
+            $filasAfectadas = $paquetes->update([
+                'activo' => $estado
+            ]);
+
+            if ($filasAfectadas === 0) {
+                return [
+                    'error' => true,
+                    'message' => 'No se actualizó ningún paquete',
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Se cambió el estado del paquete correctamente",
+                'data' => []
+            ];
+            
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar el estado del paquete");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de actualizar el estado de los paquetes",
+                'data' => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |         BIBLIOTECA CONTENIDO PAQUETES 
+    |
+    -------------------------------------------------
+    */
+
+    public function agregarContenidoPaqueteBiblioteca(array $data){
+        try {
+
+            $ultimoCodigo = PaqueteContenido::max('codigo');
+
+            $ultimoNumero = $ultimoCodigo
+                ? (int) str_replace('CONT-', '', $ultimoCodigo)
+                : 0;
+
+            $data['codigo'] = 'CONT-' . str_pad($ultimoNumero + 1, 4, '0', STR_PAD_LEFT);
+
+            $contenido = PaqueteContenido::create($data);
+
+            return [
+                'error' => false,
+                'message' => 'Contenido creado correctamente',
+                'data' => $contenido->fresh()->toArray()
+            ];
+
+        }catch(Exception $e){
+
+            $this->sendError($e, "Error al crear el contenido");
+
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al crear el contenido",
+                'data' => []
+            ];
+        }
+    }
+
+    public function cambiarEstadoContenidoPaqueteBiblioteca(array $ids, int $id_paquete, int $estado){
+        try {
+            $contenidos = PaqueteContenido::whereIn('id', $ids)->where('id_paquete', $id_paquete);
+
+            if(!$contenidos->exists()){
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el contenido para hacer el cambio de estado",
+                    'data' => []
+                ];
+            }
+
+            $updateData = [
+                'activo' => $estado
+            ];
+
+            if ($estado === 0) {
+                $updateData['fecha_inactivo'] = now();
+                $idUsuario = Auth::id();
+                $updateData['id_inactivo'] = $idUsuario;
+            }
+
+            $contenidosUpdate = $contenidos->update($updateData);
+
+            if ($contenidosUpdate === 0) {
+                return [
+                    'error' => true,
+                    'message' => "No se actualizó ningún contenido",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Se cambió el estado del contenido correctamente",
+                'data' => ["actualizado" => $contenidosUpdate],
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar el estado del contenido");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al actualizar el estado del contenido",
                 'data' => []
             ];
         }

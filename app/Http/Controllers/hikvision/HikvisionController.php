@@ -39,7 +39,7 @@ class HikvisionController extends Controller
     }
 
     public function obtenerEmpleadosRegistrados(Request $request){
-        $pageSize = $request->input('per-page');
+        $pageSize = $request->input('per-page', 30);
 
         $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize);
 
@@ -60,6 +60,16 @@ class HikvisionController extends Controller
         $datos_usuario = $this->hikvision_service->obtenerUnEmpleadoEspecifico($id_user);
 
         return $this->apiResponse($datos_usuario);
+    }
+
+    public function obtenerAsistenciaEmpleado(Request $request){
+        $id_empleado = $request->input("id_empleado");
+        $start_date = $request->input("start_date", null);
+        $end_date = $request->input("end_date", null);
+
+        $response = $this->hikvision_service->obtenerAsistenciaEmpleado($id_empleado, $start_date, $end_date);
+
+        return $this->apiResponse($response);
     }
 
     public function obtenerEmpleadosRegistradosPorPerfil(Request $request){
