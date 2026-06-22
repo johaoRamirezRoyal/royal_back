@@ -256,4 +256,12 @@ class BibliotecaController extends Controller
         
         return $this->apiResponse($response);
     }
+
+    public function editarDatosContenidoPaqueteBiblioteca(ContenidoPaqueteRequest $request){
+        $body = $request->validated();
+
+        $response = $this->biblioteca_services->editarDatosContenidoPaqueteBiblioteca($body, $request->input('id_contenido'));
+
+        return $this->apiResponse($response);
+    }
 }

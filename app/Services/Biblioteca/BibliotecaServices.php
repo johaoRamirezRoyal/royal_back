@@ -1156,4 +1156,41 @@ class BibliotecaServices extends Service
             ];
         }
     }
+
+    public function editarDatosContenidoPaqueteBiblioteca(array $data, int $id_contenido){
+        try {
+            $contenido = PaqueteContenido::find($id_contenido);
+
+            if(!$contenido){
+                return [
+                    'error' => true,
+                    'message' => "No se ha encontrado el contenido con el ID: " . $id_contenido,
+                    'data' => []
+                ];
+            }
+
+            $contenidoUpdate = $contenido->update($data);
+
+            if(!$contenidoUpdate){
+                return [
+                    'error' => true,
+                    'message' => "No se ha actualizado el contenido",
+                    'data' => $contenido->toArray()
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Contenido actualizado correctamente",
+                'data' => $contenido->refresh()->toArray()
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar el contenido");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de actualizar el contenido",
+                'data' => []
+            ];
+        }
+    }
 }

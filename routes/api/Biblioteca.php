@@ -122,6 +122,14 @@ Route::post("/paquetes/contenido", [BibliotecaController::class, 'agregarConteni
   "id_paquete": 33
 }
  */
-Route::put("/paquetes/contenido", [BibliotecaController::class, 'cambiarEstadoContenidoPaqueteBiblioteca']);
+Route::put("/paquetes/contenido/estado", [BibliotecaController::class, 'cambiarEstadoContenidoPaqueteBiblioteca']);
+
+/**
+{
+    "id_contenido": 553,
+    "titulo": "Nuevo titulo"
+}
+ */
+Route::put("/paquetes/contenido", [BibliotecaController::class, 'editarDatosContenidoPaqueteBiblioteca']);
 
 
