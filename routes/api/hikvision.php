@@ -10,3 +10,4 @@ Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosReg
 Route::get("/userInfo", [HikvisionController::class, 'obtenerUnEmpleadoEspecifico']);
 Route::delete("/perfil", [HikvisionController::class, 'eliminarUsuariosRegistrados']);
 Route::put("/desactivar", [HikvisionController::class, 'desactivarUsuario']);
+Route::get("/asistencia", [HikvisionController::class, 'obtenerAsistenciaEmpleado']);
