@@ -3,7 +3,8 @@
 use App\Http\Controllers\Hikvision\HikvisionController;
 use Illuminate\Support\Facades\Route;
 
-Route::post("/", [HikvisionController::class, 'registrarEmpleadosMasivoPerfil']);
+Route::post("/", [HikvisionController::class, 'registrarEmpleado']);
+Route::post("/masivo", [HikvisionController::class, 'registrarEmpleadosMasivoPerfil']);
 Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
 Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
 Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosRegistradosPorPerfil']);
