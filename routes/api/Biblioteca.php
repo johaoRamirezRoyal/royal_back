@@ -106,6 +106,30 @@ Route::post("/paquetes", [BibliotecaController::class, 'crearNuevoPaqueteBibliot
  */
 Route::put("/paquetes", [BibliotecaController::class, 'cambiarEstadoPaqueteBiblioteca']);
 
+/**
+{
+  "titulo": "Segundo contenido de paquete Johao",
+  "id_paquete": 33,
+  "id_log": 3123
+}
+*/
 Route::post("/paquetes/contenido", [BibliotecaController::class, 'agregarContenidoPaqueteBiblioteca']);
+
+/**
+{
+  "ids": [553],
+  "estado": 0,
+  "id_paquete": 33
+}
+ */
+Route::put("/paquetes/contenido/estado", [BibliotecaController::class, 'cambiarEstadoContenidoPaqueteBiblioteca']);
+
+/**
+{
+    "id_contenido": 553,
+    "titulo": "Nuevo titulo"
+}
+ */
+Route::put("/paquetes/contenido", [BibliotecaController::class, 'editarDatosContenidoPaqueteBiblioteca']);
 
 

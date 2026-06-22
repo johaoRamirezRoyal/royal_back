@@ -401,14 +401,15 @@ class BibliotecaServices extends Service
     }
 
 
-    public function editarLibro(array $data, int $id_libro){
+    public function editarLibro(array $data, int $id_libro)
+    {
         try {
             $libro = Libro::find($id_libro);
 
-            if(!$libro){
+            if (!$libro) {
                 return [
                     'error' => true,
-                    'message' => "No se ha encontrado el libro con el ID: ". $id_libro,
+                    'message' => "No se ha encontrado el libro con el ID: " . $id_libro,
                     'data' => []
                 ];
             }
@@ -440,7 +441,7 @@ class BibliotecaServices extends Service
 
             $libroUpdate = $libro->update($data);
 
-            if(!$libroUpdate){
+            if (!$libroUpdate) {
                 return [
                     'error' => true,
                     'message' => "Error al actualizar el libro",
@@ -453,7 +454,7 @@ class BibliotecaServices extends Service
                 'message' => "Libro actualizado correctamente",
                 'data' => $libro->refresh()->toArray()
             ];
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->sendError($e, "Error al actualizar la información del libro");
             return [
                 'error' => true,
@@ -463,11 +464,12 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function cambiarEstadoLibro(array $id_libros, ?int $estado = 0){
+    public function cambiarEstadoLibro(array $id_libros, ?int $estado = 0)
+    {
         try {
             $libros = Libro::whereIn('id', $id_libros);
 
-            if(!$libros->exists()){
+            if (!$libros->exists()) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el libro para hacer el cambio de estado",
@@ -496,8 +498,7 @@ class BibliotecaServices extends Service
                 'message' => "Libro actualizado correctamente",
                 'data' => $librosActualizados->toArray()
             ];
-
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->sendError($e, "Error al actualizar la información del libro");
             return [
                 'error' => true,
@@ -956,9 +957,9 @@ class BibliotecaServices extends Service
     public function listarPaquetesBiblioteca(?string $search = null, ?int $perpage = 10): array
     {
         try {
-            $paquetes = Paquetes::with(
-                ['contenidos']
-            )
+            $paquetes = Paquetes::with([
+                'contenidos' => fn($q) => $q->where('activo', 1)
+            ])->where('activo', 1)
                 ->when(!empty($search), fn($q) => $q->where("nombre", 'LIKE', "%$search%"))
                 ->paginate($perpage);
 
@@ -1021,7 +1022,8 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function cambiarEstadoPaqueteBiblioteca(array $ids_paquetes, int $estado){
+    public function cambiarEstadoPaqueteBiblioteca(array $ids_paquetes, int $estado)
+    {
         try {
             $paquetes = Paquetes::whereIn('id', $ids_paquetes);
 
@@ -1033,7 +1035,7 @@ class BibliotecaServices extends Service
                 ];
             }
 
-            if(!$paquetes->exists()){
+            if (!$paquetes->exists()) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el paquete para hacer el cambio de estado",
@@ -1058,8 +1060,7 @@ class BibliotecaServices extends Service
                 'message' => "Se cambió el estado del paquete correctamente",
                 'data' => []
             ];
-            
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->sendError($e, "Error al actualizar el estado del paquete");
             return [
                 'error' => true,
@@ -1077,7 +1078,8 @@ class BibliotecaServices extends Service
     -------------------------------------------------
     */
 
-    public function agregarContenidoPaqueteBiblioteca(array $data){
+    public function agregarContenidoPaqueteBiblioteca(array $data)
+    {
         try {
 
             $ultimoCodigo = PaqueteContenido::max('codigo');
@@ -1095,8 +1097,7 @@ class BibliotecaServices extends Service
                 'message' => 'Contenido creado correctamente',
                 'data' => $contenido->fresh()->toArray()
             ];
-
-        }catch(Exception $e){
+        } catch (Exception $e) {
 
             $this->sendError($e, "Error al crear el contenido");
 
@@ -1108,11 +1109,12 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function cambiarEstadoContenidoPaqueteBiblioteca(array $ids, int $id_paquete, int $estado){
+    public function cambiarEstadoContenidoPaqueteBiblioteca(array $ids, int $id_paquete, int $estado)
+    {
         try {
             $contenidos = PaqueteContenido::whereIn('id', $ids)->where('id_paquete', $id_paquete);
 
-            if(!$contenidos->exists()){
+            if (!$contenidos->exists()) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el contenido para hacer el cambio de estado",
@@ -1145,11 +1147,48 @@ class BibliotecaServices extends Service
                 'message' => "Se cambió el estado del contenido correctamente",
                 'data' => ["actualizado" => $contenidosUpdate],
             ];
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->sendError($e, "Error al actualizar el estado del contenido");
             return [
                 'error' => true,
                 'message' => "Error en el servidor al actualizar el estado del contenido",
+                'data' => []
+            ];
+        }
+    }
+
+    public function editarDatosContenidoPaqueteBiblioteca(array $data, int $id_contenido){
+        try {
+            $contenido = PaqueteContenido::find($id_contenido);
+
+            if(!$contenido){
+                return [
+                    'error' => true,
+                    'message' => "No se ha encontrado el contenido con el ID: " . $id_contenido,
+                    'data' => []
+                ];
+            }
+
+            $contenidoUpdate = $contenido->update($data);
+
+            if(!$contenidoUpdate){
+                return [
+                    'error' => true,
+                    'message' => "No se ha actualizado el contenido",
+                    'data' => $contenido->toArray()
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Contenido actualizado correctamente",
+                'data' => $contenido->refresh()->toArray()
+            ];
+        }catch(Exception $e){
+            $this->sendError($e, "Error al actualizar el contenido");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al tratar de actualizar el contenido",
                 'data' => []
             ];
         }

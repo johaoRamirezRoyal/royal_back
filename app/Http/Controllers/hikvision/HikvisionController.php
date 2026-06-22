@@ -108,6 +108,34 @@ class HikvisionController extends Controller
         return $this->apiResponse($info_usuarios);
     }
 
+    public function registrarEmpleado(Request $request){
+        $data = $request->all();
+        
+        $validator = Validator::make($data, [
+            'id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
+            'nombre' => ['required', 'string', 'max:30'],
+            'apellido' => ['required', 'string', 'max:30'],
+            'correo' => ['required', 'email', 'max:30'],
+            'perfil' => ['required', 'integer', 'exists:perfiles,id'],
+            'id_nivel' => ['required', 'integer', 'exists:niveles,id'],
+            'id_curso' => ['required', 'integer', 'exists:cursos,id'],
+            'telefono' => ['nullable', 'string', 'max:20'],
+            'id_grupo' => ['required', 'integer', 'exists:grupos,id'],
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+                ], 400);
+        }
+
+        $usuario = $this->hikvision_service->registrarEmpleado($data);
+
+        return $this->apiResponse($usuario);
+    }
+
     public function registrarEmpleadosMasivoPerfil(Request $request){
         $id_perfil = $request->input("id_perfil");
 
