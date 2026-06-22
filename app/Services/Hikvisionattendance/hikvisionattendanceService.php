@@ -417,6 +417,19 @@ class hikvisionattendanceService
                     : null;
 
                 $body = $response ? $response->getBody()->getContents() : null;
+                $bodyDecoded = $body ? json_decode($body, true) : null;
+
+                // El dispositivo ya tiene a este employeeNo (registrado por fuera de esta app,
+                // o por un intento previo a que existiera el flag asistenciaRegistrada).
+                // El objetivo real ("que esté en el dispositivo") ya se cumple, así que se trata como éxito.
+                if (($bodyDecoded['subStatusCode'] ?? null) === 'employeeNoAlreadyExist') {
+                    $result['success'][] = [
+                        'id_user' => $usuario['id_user'],
+                        'message' => 'Ya estaba registrado en el dispositivo',
+                    ];
+
+                    return;
+                }
 
                 Log::error('Hikvision FULL ERROR', [
                     'usuario' => $usuario,
@@ -715,6 +728,66 @@ class hikvisionattendanceService
             return [
                 'error' => true,
                 'message' => "Error al borrar: " . $errorMsg
+            ];
+        }
+    }
+
+    /**
+     * Elimina TODOS los empleados que el dispositivo reporta en este momento (vía
+     * obtenerEmpleadosRegistrados), sin filtrar por nuestra BD. Incluye cuentas
+     * manuales/admin que nunca pasaron por esta app. Acción destructiva e irreversible,
+     * pensada para limpiar registros erróneos — no para uso recurrente desde la UI.
+     */
+    public function eliminarTodosLosUsuariosDelDispositivo(): array
+    {
+        $listado = $this->obtenerEmpleadosRegistrados();
+
+        if ($listado['error']) {
+            return $listado;
+        }
+
+        $empleados = $listado['data'];
+
+        if (empty($empleados)) {
+            return ['error' => false, 'message' => 'El dispositivo no tiene usuarios registrados', 'data' => []];
+        }
+
+        $employeeNos = array_map(fn ($empleado) => (string) $empleado['employeeNo'], $empleados);
+
+        try {
+            // El dispositivo limita el tamaño del lote de borrado, igual que en la búsqueda paginada.
+            foreach (array_chunk($employeeNos, 30) as $lote) {
+                $this->client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept'       => 'application/json',
+                    ],
+                    'json' => [
+                        'UserInfoDelCond' => [
+                            'mode' => 'byEmployeeNo',
+                            'EmployeeNoList' => array_map(fn ($no) => ['employeeNo' => $no], $lote),
+                        ],
+                    ],
+                ]);
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Se eliminaron '.count($employeeNos).' usuarios del dispositivo',
+                'data' => ['employeeNos' => $employeeNos],
+            ];
+        } catch (\Exception $e) {
+            $errorMsg = $e->getMessage();
+
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorMsg = $e->getResponse()->getBody()->getContents();
+            }
+
+            Log::error('Error eliminando TODOS los usuarios en Hikvision: '.$errorMsg);
+
+            return [
+                'error' => true,
+                'message' => 'Error al borrar: '.$errorMsg,
             ];
         }
     }

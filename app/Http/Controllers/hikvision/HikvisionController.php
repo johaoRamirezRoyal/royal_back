@@ -145,7 +145,25 @@ class HikvisionController extends Controller
             return $this->apiResponse($usuarios);
         }
 
-        $registro_masivo = $this->hikvision_service->registrarEmpleadosMasivo($usuarios['data']);
+        $usuariosPendientes = array_values(array_filter(
+            $usuarios['data'],
+            fn ($usuario) => empty($usuario['asistenciaRegistrada'])
+        ));
+
+        if (empty($usuariosPendientes)) {
+            return $this->apiResponse([
+                'error' => false,
+                'message' => 'Todos los usuarios de este perfil ya estaban registrados en el dispositivo de asistencia',
+                'data' => ['success' => [], 'error' => []],
+            ]);
+        }
+
+        $registro_masivo = $this->hikvision_service->registrarEmpleadosMasivo($usuariosPendientes);
+
+        if (!$registro_masivo['error']) {
+            $idsExitosos = array_column($registro_masivo['data']['success'], 'id_user');
+            $this->usuario_services->actualizarAsistenciaRegistrada($idsExitosos, true);
+        }
 
         return $this->apiResponse($registro_masivo);
     }
@@ -155,11 +173,33 @@ class HikvisionController extends Controller
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
+        Log::info("usuarios obtenidos", [
+            "users" => $usuarios
+        ]);
+
         if($usuarios['error']){
             return $this->apiResponse($usuarios);
         }
 
-        $eliminacion_masiva = $this->hikvision_service->eliminarUsuariosRegistrados($usuarios['data']);
+        $usuariosRegistrados = array_values(array_filter(
+            $usuarios['data'],
+            fn ($usuario) => !empty($usuario['asistenciaRegistrada'])
+        ));
+
+        if (empty($usuariosRegistrados)) {
+            return $this->apiResponse([
+                'error' => true,
+                'message' => 'Ningún usuario de este perfil estaba registrado en el dispositivo de asistencia',
+                'data' => [],
+            ]);
+        }
+
+        $eliminacion_masiva = $this->hikvision_service->eliminarUsuariosRegistrados($usuariosRegistrados);
+
+        if (!$eliminacion_masiva['error']) {
+            $idsEliminados = array_column($usuariosRegistrados, 'id_user');
+            $this->usuario_services->actualizarAsistenciaRegistrada($idsEliminados, false);
+        }
 
         return $this->apiResponse($eliminacion_masiva);
     }
