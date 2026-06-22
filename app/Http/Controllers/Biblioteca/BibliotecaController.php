@@ -246,4 +246,14 @@ class BibliotecaController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    public function cambiarEstadoContenidoPaqueteBiblioteca(Request $request){
+        $ids = $request->input('ids');
+        $estado = $request->input('estado', 0);
+        $id_paquete = $request->input('id_paquete');
+
+        $response = $this->biblioteca_services->cambiarEstadoContenidoPaqueteBiblioteca($ids, $id_paquete, $estado);
+        
+        return $this->apiResponse($response);
+    }
 }

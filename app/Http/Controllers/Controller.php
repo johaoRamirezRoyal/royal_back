@@ -30,6 +30,10 @@ abstract class Controller
         ?string $resourceClass = null
     ): JsonResponse {
 
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
         $paginator = $response['data'];
 
         if ($resourceClass) {
@@ -43,7 +47,7 @@ abstract class Controller
         }
 
         return $this->apiResponse([
-            'error' => $response['error'],
+            'error' => false,
             'message' => $response['message'],
             'data' => [
                 'data' => $data,
