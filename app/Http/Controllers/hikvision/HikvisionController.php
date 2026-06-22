@@ -62,6 +62,28 @@ class HikvisionController extends Controller
         return $this->apiResponse($datos_usuario);
     }
 
+    public function obtenerImagenEmpleado(Request $request){
+        $path = $request->input('path');
+
+        if(!$path){
+            return response()->json([
+                'error' => true,
+                'message' => "Debe proporcionar la ruta de la imagen",
+                'data' => null
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->obtenerImagenEmpleado($path);
+
+        if($resultado['error']){
+            return response()->json($resultado, 400);
+        }
+
+        return response($resultado['data']['contenido'])
+            ->header('Content-Type', $resultado['data']['contentType'])
+            ->header('Cache-Control', 'private, max-age=300');
+    }
+
     public function obtenerAsistenciaEmpleado(Request $request){
         $id_empleado = $request->input("id_empleado");
         $start_date = $request->input("start_date", null);

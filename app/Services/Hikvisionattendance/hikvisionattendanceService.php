@@ -475,6 +475,13 @@ class hikvisionattendanceService
                 $offset += $pageSize;
             } while ($offset < $totalMatch);
 
+            foreach ($todosLosEmpleados as &$empleado) {
+                if (!empty($empleado['faceURL'])) {
+                    $empleado['faceURL'] = $this->proxyImagenUrl($empleado['faceURL']);
+                }
+            }
+            unset($empleado);
+
             return [
                 'error' => false,
                 'message' => "Usuarios registrados obtenidos",
@@ -488,6 +495,71 @@ class hikvisionattendanceService
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Descarga la imagen de un empleado desde el dispositivo Hikvision usando las
+     * credenciales del servidor (digest auth ya configuradas en $this->client),
+     * para que el frontend nunca necesite conocer la IP ni las credenciales del dispositivo.
+     *
+     * @param string $path Ruta relativa dentro del dispositivo (p. ej. "/LOCALS/pic/enrlFace/0/0000000001.jpg@WEB000000000002")
+     * @return array{error: bool, message: string, data: array{contenido: string, contentType: string}|null}
+     */
+    public function obtenerImagenEmpleado(string $path): array
+    {
+        try {
+            $rutaRelativa = $this->extraerRutaRelativa($path);
+
+            if (str_contains($rutaRelativa, '://')) {
+                throw new \InvalidArgumentException('Ruta de imagen inválida');
+            }
+
+            if (!str_starts_with($rutaRelativa, '/')) {
+                $rutaRelativa = '/' . $rutaRelativa;
+            }
+
+            $response = $this->client->get($rutaRelativa);
+
+            return [
+                'error' => false,
+                'message' => 'Imagen obtenida',
+                'data' => [
+                    'contenido' => $response->getBody()->getContents(),
+                    'contentType' => $response->getHeaderLine('Content-Type') ?: 'image/jpeg',
+                ],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error obteniendo imagen de empleado: ' . $e->getMessage());
+            return [
+                'error' => true,
+                'message' => 'No se pudo obtener la imagen del empleado',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Convierte la URL absoluta del dispositivo (faceURL) en una ruta proxy propia
+     * del backend, para que el frontend nunca reciba la IP ni las credenciales del dispositivo.
+     */
+    private function proxyImagenUrl(string $faceUrl): string
+    {
+        $rutaRelativa = $this->extraerRutaRelativa($faceUrl);
+
+        return '/api/hikvision/image?path=' . urlencode($rutaRelativa);
+    }
+
+    /**
+     * Elimina el protocolo + host del dispositivo de una URL absoluta, dejando
+     * solo la ruta relativa que se le puede pasar a $this->client (que ya trae el host configurado).
+     */
+    private function extraerRutaRelativa(string $path): string
+    {
+        if (str_starts_with($path, $this->baseUrl)) {
+            return substr($path, strlen($this->baseUrl));
+        }
+
+        return $path;
     }
 
     /**
