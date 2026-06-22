@@ -78,7 +78,8 @@ class UsuariosServices
         try {
             $usuarios = Usuario::where('perfil', $id_perfil)
                 ->where('estado', 'activo')
-                ->get();
+                ->get()
+                ->makeHidden('foto_digital');
             if ($usuarios->isEmpty()) {
                 return [
                     'error' => true,
@@ -101,6 +102,22 @@ class UsuariosServices
                 'data' => [],
             ];
         }
+    }
+
+    /**
+     * Actualiza la bandera `asistenciaRegistrada` de los usuarios indicados.
+     * true: ya quedaron registrados en el dispositivo de asistencia.
+     * false: se eliminaron del dispositivo (o nunca llegaron a registrarse).
+     *
+     * @param array<int> $idsUsuarios
+     */
+    public function actualizarAsistenciaRegistrada(array $idsUsuarios, bool $registrado): void
+    {
+        if (empty($idsUsuarios)) {
+            return;
+        }
+
+        Usuario::whereIn('id_user', $idsUsuarios)->update(['asistenciaRegistrada' => $registrado]);
     }
 
     public function filtrarUsuarios($datos, $search, $sort, $dir, $perPage)

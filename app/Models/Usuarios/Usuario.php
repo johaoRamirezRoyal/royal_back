@@ -115,6 +115,7 @@ class Usuario extends Authenticatable implements JWTSubject
         'estado'   => 'string',
         'curso_proximo_user' => 'integer',
         'firma_digital' => 'integer',
+        'asistenciaRegistrada' => 'boolean',
         'fechareg' => 'datetime',
         'fecha_activo' => 'datetime',
         'fecha_inactivo' => 'datetime',
