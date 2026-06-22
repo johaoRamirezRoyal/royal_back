@@ -46,6 +46,12 @@ class RegistrarUsuarioRequest extends FormRequest
                 'max:100',
             ],
 
+            "user" => [
+                'required',
+                'string',
+                'max:200'
+            ],
+
             "correo" => [
                 'required',
                 'email',
@@ -98,6 +104,9 @@ class RegistrarUsuarioRequest extends FormRequest
 
             'apellido.max' => 'El apellido no puede superar los 100 caracteres',
 
+            'user.required' => 'El nombre es obligatorio',
+            'user.max' => 'El nombre no puede superar los 100 caracteres',
+
             'correo.required' => 'El correo es obligatorio',
             'correo.email' => 'El correo no es válido',
             'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
@@ -122,6 +131,7 @@ class RegistrarUsuarioRequest extends FormRequest
             'documento' => $this->documento,
             'nombre' => $this->nombre,
             'apellido' => $this->apellido,
+            'user' => $this->user,
             'correo' => $this->correo,
             'perfil' => $this->perfil,
             'id_nivel' => $this->id_nivel,
@@ -133,6 +143,28 @@ class RegistrarUsuarioRequest extends FormRequest
         if ($this->filled('pass')) {
             $data['pass'] = bcrypt($this->pass);
         }
+
+        return $data;
+    }
+
+        public function toUsuarioFormatCreate(): array
+    {
+        $data = [];
+
+        if ($this->has('documento')) $data['documento'] = $this->documento;
+        if ($this->has('nombre')) $data['nombre'] = trim($this->nombre);
+        if ($this->has('apellido')) {
+            $data['apellido'] = $this->apellido ? trim($this->apellido) : null;
+        }
+        if ($this->has('user')) $data['user'] = $this->user;
+        if ($this->has('correo')) $data['correo'] = $this->correo;
+        if ($this->filled('pass')) $data['pass'] = $this->pass;
+        if ($this->has('perfil')) $data['perfil'] = $this->perfil;
+        if ($this->has('id_nivel')) $data['id_nivel'] = $this->id_nivel;
+        if ($this->has('id_curso')) $data['id_curso'] = $this->id_curso;
+        if ($this->has('telefono')) $data['telefono'] = $this->telefono;
+
+        $data['fecha_editado'] = now();
 
         return $data;
     }

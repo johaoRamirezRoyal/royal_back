@@ -39,7 +39,7 @@ class HikvisionController extends Controller
     }
 
     public function obtenerEmpleadosRegistrados(Request $request){
-        $pageSize = $request->input('per-page');
+        $pageSize = $request->input('per-page', 30);
 
         $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize);
 

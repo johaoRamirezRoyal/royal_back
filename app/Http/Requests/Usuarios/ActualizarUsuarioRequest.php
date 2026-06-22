@@ -83,23 +83,23 @@ class ActualizarUsuarioRequest extends FormRequest
         ];
     }
 
-    public function toUsuarioFormatCreate(): array
+    public function toUsuarioData(): array
     {
-        $data = [];
+        $data = [
+            'documento' => $this->documento,
+            'nombre' => $this->nombre,
+            'apellido' => $this->apellido,
+            'correo' => $this->correo,
+            'perfil' => $this->perfil,
+            'id_nivel' => $this->id_nivel,
+            'id_curso' => $this->id_curso,
+            'telefono' => $this->telefono,
+        ];
 
-        if ($this->has('documento')) $data['documento'] = $this->documento;
-        if ($this->has('nombre')) $data['nombre'] = trim($this->nombre);
-        if ($this->has('apellido')) {
-            $data['apellido'] = $this->apellido ? trim($this->apellido) : null;
+        // Solo agregar contraseña si viene (útil para update)
+        if ($this->filled('pass')) {
+            $data['pass'] = bcrypt($this->pass);
         }
-        if ($this->has('correo')) $data['correo'] = $this->correo;
-        if ($this->filled('pass')) $data['pass'] = $this->pass;
-        if ($this->has('perfil')) $data['perfil'] = $this->perfil;
-        if ($this->has('id_nivel')) $data['id_nivel'] = $this->id_nivel;
-        if ($this->has('id_curso')) $data['id_curso'] = $this->id_curso;
-        if ($this->has('telefono')) $data['telefono'] = $this->telefono;
-
-        $data['fecha_editado'] = now();
 
         return $data;
     }
