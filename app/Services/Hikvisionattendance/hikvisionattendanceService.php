@@ -1113,10 +1113,9 @@ class hikvisionattendanceService
                 'json' => [
                     'FingerPrintDelete' => [
                         'mode'             => 'byEmployeeNo',
-                        'employeeNo'       => $employeeNo,
-                        'fingerPrintID'    => $fingerPrintID,
                         'EmployeeNoDetail' => [
-                            'employeeNo' => $employeeNo,
+                            'employeeNo'   => $employeeNo,
+                            'fingerPrintID' => $fingerPrintID,
                         ],
                     ],
                 ],
