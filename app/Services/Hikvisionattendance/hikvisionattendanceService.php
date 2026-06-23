@@ -1098,11 +1098,13 @@ class hikvisionattendanceService
 
     /**
      * Elimina una huella registrada de un empleado en el dispositivo.
-     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con EmployeeNoDetail (singular,
-     * requerido por el dispositivo: "MessageParametersLack: EmployeeNoDetail" cuando
-     * se envió EmployeeNoList) + fingerPrintID como array a nivel de FingerPrintDelete
-     * (cuando fingerPrintID fue un entero escalar junto a EmployeeNoDetail, el
-     * dispositivo ignoraba el filtro y borraba todas las huellas del empleado).
+     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con mode "byFingerPrintID":
+     * el mode "byEmployeeNo" borra TODAS las huellas del empleado sin importar qué
+     * fingerPrintID se envíe (confirmado contra el equipo real: el filtro era
+     * ignorado en todas sus variantes mientras el mode fue "byEmployeeNo").
+     * EmployeeNoDetail (singular) es el campo requerido por el dispositivo para
+     * identificar al empleado ("MessageParametersLack: EmployeeNoDetail" al usar
+     * EmployeeNoList).
      *
      * @return array{error: bool, message: string, data: array}
      */
@@ -1116,7 +1118,7 @@ class hikvisionattendanceService
                 ],
                 'json' => [
                     'FingerPrintDelete' => [
-                        'mode' => 'byEmployeeNo',
+                        'mode' => 'byFingerPrintID',
                         'EmployeeNoDetail' => [
                             'employeeNo' => $employeeNo,
                         ],
