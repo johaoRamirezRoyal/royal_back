@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Route;
 Route::post("/", [HikvisionController::class, 'registrarEmpleado']);
 Route::post("/masivo", [HikvisionController::class, 'registrarEmpleadosMasivoPerfil']);
 Route::post("/fingerprint/enroll", [HikvisionController::class, 'registrarHuellaEmpleado']);
-Route::delete("/fingerprint/delete", [HikvisionController::class, 'eliminarHuellaEmpleado']);
+Route::post("/fingerprint/delete", [HikvisionController::class, 'eliminarHuellaEmpleado']);
 Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
 Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
 Route::get('/image', [HikvisionController::class, 'obtenerImagenEmpleado']);
