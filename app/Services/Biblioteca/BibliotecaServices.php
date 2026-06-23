@@ -6,6 +6,7 @@ use App\Models\Biblioteca\Categoria;
 use App\Models\Biblioteca\Ejemplares;
 use App\Models\Biblioteca\Libro;
 use App\Models\Biblioteca\PaqueteContenido;
+use App\Models\Biblioteca\PaquetePrestamos;
 use App\Models\Biblioteca\Paquetes;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
@@ -940,6 +941,43 @@ class BibliotecaServices extends Service
         }
     }
 
+    public function obtenerHistorialPrestamoEjemplarUsuario(int $id_usuario, bool $deuda = false)
+    {
+        try {
+            $historial = PrestamosEjemplar::with([
+                'ejemplar:id,codigo,id_libro',
+                'usuario:id_user,nombre,apellido,correo',
+                'ejemplar.libro:id,titulo,editorial,edicion,autor,id_categoria,id_subcategoria',
+                'ejemplar.libro.categoria:id,nombre',
+                'ejemplar.libro.subcategoria:id,nombre',
+            ])->where('id_usuario', $id_usuario)
+                ->when($deuda, fn($q) => $q->whereNull('id_devuelto'))->get();
+
+            if ($historial->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => $deuda
+                        ? "El usuario no tiene préstamos pendientes"
+                        : "No se encontraron historiales de préstamos",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Historial de prestamos obtenidos",
+                'data' => $historial->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al obtener el historial de prestamos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al obtener el historial de prestamos",
+                'data' => []
+            ];
+        }
+    }
+
     /*
     -------------------------------------------------
     |
@@ -1157,11 +1195,12 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function editarDatosContenidoPaqueteBiblioteca(array $data, int $id_contenido){
+    public function editarDatosContenidoPaqueteBiblioteca(array $data, int $id_contenido)
+    {
         try {
             $contenido = PaqueteContenido::find($id_contenido);
 
-            if(!$contenido){
+            if (!$contenido) {
                 return [
                     'error' => true,
                     'message' => "No se ha encontrado el contenido con el ID: " . $id_contenido,
@@ -1171,7 +1210,7 @@ class BibliotecaServices extends Service
 
             $contenidoUpdate = $contenido->update($data);
 
-            if(!$contenidoUpdate){
+            if (!$contenidoUpdate) {
                 return [
                     'error' => true,
                     'message' => "No se ha actualizado el contenido",
@@ -1184,11 +1223,162 @@ class BibliotecaServices extends Service
                 'message' => "Contenido actualizado correctamente",
                 'data' => $contenido->refresh()->toArray()
             ];
-        }catch(Exception $e){
+        } catch (Exception $e) {
             $this->sendError($e, "Error al actualizar el contenido");
             return [
                 'error' => true,
                 'message' => "Error en el servidor al tratar de actualizar el contenido",
+                'data' => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |   BIBLIOTECA CONTENIDO PAQUETES PRESTAMOS
+    |
+    -------------------------------------------------
+    */
+    public function mostrarHistorialPrestamosPaquetesUsuario(int $id_usuario, bool $deuda = false)
+    {
+        try {
+            $historial = PaquetePrestamos::with([
+                'usuario:id_user,nombre,apellido,correo',
+                'paquete:id,nombre,codigo',
+                'devuelto:id_user,nombre,apellido,correo'
+            ])
+                ->where('id_usuario', $id_usuario)
+                ->when($deuda, fn($q) => $q->whereNull('id_devuelto'))
+                ->get();
+
+            if ($historial->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => $deuda
+                        ? "El usuario no tiene préstamos pendientes"
+                        : "No se encontraron historiales de préstamos",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Historial de prestamos obtenidos",
+                'data' => $historial->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al obtener el historial de prestamos");
+
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al obtener el historial de prestamos",
+                'data' => []
+            ];
+        }
+    }
+
+    public function generarPrestamoPaqueteUsuario(int $id_usuario, int $id_paquete, string $fecha_devolucion, string $observacion)
+    {
+        try {
+
+            $prestamo = DB::transaction(function () use (
+                $id_usuario,
+                $id_paquete,
+                $fecha_devolucion,
+                $observacion
+            ) {
+                $paquete = Paquetes::lockForUpdate()->find($id_paquete);
+
+                if (!$paquete) {
+                    throw new Exception("No se encontro el paquete");
+                }
+
+                if ($paquete->estado == 2) {
+                    throw new Exception("El paquete ya se encuentra prestado");
+                }
+
+                $prestamo = PaquetePrestamos::create([
+                    'id_paquete'        => $id_paquete,
+                    'id_usuario'        => $id_usuario,
+                    'fecha_prestamo'    => now(),
+                    'fecha_devolucion'  => $fecha_devolucion,
+                    'observacion'       => $observacion,
+                    'id_log'            => Auth::id(),
+                ]);
+
+                $paquete->update([
+                    'estado' => 2
+                ]);
+
+                return $prestamo;
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Préstamo generado correctamente',
+                'data' => $prestamo->toArray()
+            ];
+        } catch (Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
+    }
+
+    public function devolverPrestamoPaqueteUsuario(int $id_prestamo, string $observacion)
+    {
+        try {
+            $prestamo = DB::transaction(function () use (
+                $id_prestamo,
+                $observacion
+            ) {
+
+                $prestamo = PaquetePrestamos::lockForUpdate()->find($id_prestamo);
+
+                if (!$prestamo) {
+                    throw new Exception("No se encontró el préstamo");
+                }
+
+                if ($prestamo->id_devuelto) {
+                    throw new Exception("El préstamo ya fue devuelto");
+                }
+
+                $paquete = Paquetes::lockForUpdate()->find($prestamo->id_paquete);
+
+                if (!$paquete) {
+                    throw new Exception("No se encontró el paquete");
+                }
+
+                if ($paquete->estado == 1) {
+                    throw new Exception("El paquete ya se encuentra disponible para préstamo");
+                }
+
+                $prestamo->update([
+                    'observacion' => $observacion,
+                    'id_devuelto' => Auth::id(),
+                    'fecha_devuelto' => now()
+                ]);
+
+                $paquete->update([
+                    'estado' => 1
+                ]);
+
+                return $prestamo;
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Préstamo devuelto correctamente',
+                'data' => $prestamo->toArray()
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
                 'data' => []
             ];
         }

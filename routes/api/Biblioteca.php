@@ -77,6 +77,7 @@ Route::get("/ejemplares", [BibliotecaController::class, "verEjemplaresLibroBibli
 Route::put("/ejemplares", [BibliotecaController::class, 'cambiarEstadoEjemplarBiblioteca']);
 
 Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplarBiblioteca']);
+Route::get("/prestamosEjemplar/historial", [BibliotecaController::class, 'obtenerHistorialPrestamoEjemplarUsuario']);
 Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
 Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);
@@ -131,5 +132,9 @@ Route::put("/paquetes/contenido/estado", [BibliotecaController::class, 'cambiarE
 }
  */
 Route::put("/paquetes/contenido", [BibliotecaController::class, 'editarDatosContenidoPaqueteBiblioteca']);
+
+Route::post("/paquetes/prestamo", [BibliotecaController::class, 'generarPrestamoPaqueteUsuario']);
+Route::put("/paquetes/prestamo/devolver", [BibliotecaController::class, 'devolverPrestamoPaqueteUsuario']);
+Route::get("/paquetes/prestamo/historial", [BibliotecaController::class, 'mostrarHistorialPrestamosPaquetesUsuario']);
 
 

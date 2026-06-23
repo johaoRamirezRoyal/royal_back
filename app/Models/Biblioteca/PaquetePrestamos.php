@@ -36,4 +36,8 @@ class PaquetePrestamos extends Model
     public function usuario(){
         return $this->belongsTo(Usuario::class, 'id_usuario');
     }
+
+    public function devuelto(){
+        return $this->belongsTo(Usuario::class, 'id_devuelto');
+    }
 }
