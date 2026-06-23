@@ -1097,18 +1097,19 @@ class hikvisionattendanceService
     }
 
     /**
-     * Elimina una huella registrada de un empleado en el dispositivo.
-     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con mode "byFingerPrintID":
-     * el mode "byEmployeeNo" borra TODAS las huellas del empleado sin importar qué
-     * fingerPrintID se envíe (confirmado contra el equipo real: el filtro era
-     * ignorado en todas sus variantes mientras el mode fue "byEmployeeNo").
-     * EmployeeNoDetail (singular) es el campo requerido por el dispositivo para
-     * identificar al empleado ("MessageParametersLack: EmployeeNoDetail" al usar
-     * EmployeeNoList).
+     * Elimina TODAS las huellas registradas de un empleado en el dispositivo.
+     *
+     * El firmware de este equipo (confirmado con pruebas directas contra el
+     * dispositivo real) solo soporta el mode "byEmployeeNo" para borrar huellas,
+     * y este mode ignora el parámetro fingerPrintID a pesar de que las
+     * capabilities ISAPI (GET /ISAPI/AccessControl/FingerPrint/Delete/capabilities)
+     * lo documentan como válido: siempre borra todas las huellas del empleado.
+     * No existe forma de eliminar una huella individual en este modelo, por lo
+     * que el flujo de UI es "borrar todas y volver a registrar".
      *
      * @return array{error: bool, message: string, data: array}
      */
-    public function eliminarHuellaEmpleado(string $employeeNo, int $fingerPrintID): array
+    public function eliminarTodasLasHuellasEmpleado(string $employeeNo): array
     {
         try {
             $response = $this->client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
@@ -1118,28 +1119,26 @@ class hikvisionattendanceService
                 ],
                 'json' => [
                     'FingerPrintDelete' => [
-                        'mode' => 'byFingerPrintID',
+                        'mode' => 'byEmployeeNo',
                         'EmployeeNoDetail' => [
                             'employeeNo' => $employeeNo,
                         ],
-                        'fingerPrintID' => [$fingerPrintID],
                     ],
                 ],
             ]);
 
             $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Huella eliminada del empleado', ['employeeNo' => $employeeNo, 'fingerPrintID' => $fingerPrintID, 'data' => $data]);
+            Log::info('Huellas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
 
             return [
                 'error' => false,
-                'message' => 'Huella eliminada correctamente',
+                'message' => 'Huellas eliminadas correctamente',
                 'data' => $data ?? [],
             ];
         } catch (\Exception $e) {
-            Log::error('Error eliminando huella en Hikvision: ' . $e->getMessage(), [
+            Log::error('Error eliminando huellas en Hikvision: ' . $e->getMessage(), [
                 'employeeNo' => $employeeNo,
-                'fingerPrintID' => $fingerPrintID,
             ]);
 
             $body = (method_exists($e, 'getResponse') && $e->getResponse())
@@ -1148,7 +1147,7 @@ class hikvisionattendanceService
 
             return [
                 'error' => true,
-                'message' => $body ?? 'Error al eliminar la huella del dispositivo',
+                'message' => $body ?? 'Error al eliminar las huellas del dispositivo',
                 'data' => [],
             ];
         }

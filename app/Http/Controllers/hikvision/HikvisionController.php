@@ -259,7 +259,6 @@ class HikvisionController extends Controller
     public function eliminarHuellaEmpleado(Request $request){
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
-            'fingerPrintID' => ['required', 'integer', 'min:1', 'max:10'],
         ]);
 
         if($validator->fails()){
@@ -270,9 +269,8 @@ class HikvisionController extends Controller
             ], 400);
         }
 
-        $resultado = $this->hikvision_service->eliminarHuellaEmpleado(
-            $request->input('employeeNo'),
-            (int) $request->input('fingerPrintID')
+        $resultado = $this->hikvision_service->eliminarTodasLasHuellasEmpleado(
+            $request->input('employeeNo')
         );
 
         return $this->apiResponse($resultado);
