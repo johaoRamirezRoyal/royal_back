@@ -1111,7 +1111,7 @@ class hikvisionattendanceService
                 . '<fingerPrintID>' . $fingerPrintID . '</fingerPrintID>'
                 . '</FingerPrintDelete>';
 
-            $response = $this->client->delete('/ISAPI/AccessControl/FingerPrint', [
+            $response = $this->client->post('/ISAPI/AccessControl/FingerPrintDelete', [
                 'headers' => [
                     'Content-Type' => 'application/xml',
                 ],
