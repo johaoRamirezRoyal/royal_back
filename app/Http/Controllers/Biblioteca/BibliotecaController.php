@@ -184,6 +184,15 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function obtenerHistorialPrestamoEjemplarUsuario(Request $request){
+        $id_usuario = $request->input('id_usuario');
+        $deuda = $request->input('deuda', false);
+
+        $response = $this->biblioteca_services->obtenerHistorialPrestamoEjemplarUsuario($id_usuario, $deuda);
+
+        return $this->apiResponse($response);
+    }
+
     public function verPrestamosLibro(Request $request)
     {
         $id_libro = $request->input("id_libro");
@@ -261,6 +270,39 @@ class BibliotecaController extends Controller
         $body = $request->validated();
 
         $response = $this->biblioteca_services->editarDatosContenidoPaqueteBiblioteca($body, $request->input('id_contenido'));
+
+        return $this->apiResponse($response);
+    }
+
+    public function mostrarHistorialPrestamosPaquetesUsuario(Request $request){
+        $id_usuario = $request->input('id_usuario');
+        $deuda = $request->input('deuda', false);
+
+        $response = $this->biblioteca_services->mostrarHistorialPrestamosPaquetesUsuario($id_usuario, $deuda);
+
+        return $this->apiResponse($response);
+    }
+
+    public function generarPrestamoPaqueteUsuario(Request $request){
+        $id_usuario = $request->input('id_usuario');
+        $id_paquete = $request->input('id_paquete');
+
+        #Generamos una fecha aleatoria de ahora + 1 mes
+        $fecha = date('Y-m-d', strtotime('+1 month'));
+
+        $fecha_devolucion = $request->input('fecha_devolucion', $fecha);
+        $observacion = $request->input('observacion');
+
+        $response = $this->biblioteca_services->generarPrestamoPaqueteUsuario($id_usuario, $id_paquete, $fecha_devolucion, $observacion);
+
+        return $this->apiResponse($response);
+    }
+
+    public function devolverPrestamoPaqueteUsuario(Request $request){
+        $id_prestamo = $request->input('id_prestamo');
+        $observacion = $request->input('observacion');
+
+        $response = $this->biblioteca_services->devolverPrestamoPaqueteUsuario($id_prestamo, $observacion);
 
         return $this->apiResponse($response);
     }
