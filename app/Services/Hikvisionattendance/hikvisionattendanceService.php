@@ -1098,24 +1098,30 @@ class hikvisionattendanceService
 
     /**
      * Elimina una huella registrada de un empleado en el dispositivo.
-     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con estructura específica.
+     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con estructura específica:
+     * EmployeeNoList (array) + fingerPrintID (array) a nivel de FingerPrintDelete.
+     * El intento previo anidaba fingerPrintID dentro de un EmployeeNoDetail singular,
+     * lo cual el dispositivo interpretaba como "sin filtro" y borraba todas las huellas.
      *
      * @return array{error: bool, message: string, data: array}
      */
     public function eliminarHuellaEmpleado(string $employeeNo, int $fingerPrintID): array
     {
         try {
-            $xml = '<?xml version="1.0" encoding="UTF-8"?>'
-                . '<FingerPrintDelete>'
-                . '<employeeNo>' . $employeeNo . '</employeeNo>'
-                . '<fingerPrintID>' . $fingerPrintID . '</fingerPrintID>'
-                . '</FingerPrintDelete>';
-
-            $response = $this->client->post('/ISAPI/AccessControl/FingerPrintDelete', [
+            $response = $this->client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
                 'headers' => [
-                    'Content-Type' => 'application/xml',
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
                 ],
-                'body' => $xml,
+                'json' => [
+                    'FingerPrintDelete' => [
+                        'mode' => 'byEmployeeNo',
+                        'EmployeeNoList' => [
+                            ['employeeNo' => $employeeNo],
+                        ],
+                        'fingerPrintID' => [$fingerPrintID],
+                    ],
+                ],
             ]);
 
             $data = json_decode($response->getBody()->getContents(), true);
