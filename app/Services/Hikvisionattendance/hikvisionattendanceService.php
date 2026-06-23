@@ -1105,18 +1105,15 @@ class hikvisionattendanceService
     public function eliminarHuellaEmpleado(string $employeeNo, int $fingerPrintID): array
     {
         try {
-            $response = $this->client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
+            $response = $this->client->delete('/ISAPI/AccessControl/FingerPrint?format=json', [
                 'headers' => [
                     'Content-Type' => 'application/json',
                     'Accept'       => 'application/json',
                 ],
                 'json' => [
-                    'FingerPrintDelete' => [
-                        'mode'             => 'byEmployeeNo',
-                        'EmployeeNoDetail' => [
-                            'employeeNo'   => $employeeNo,
-                            'fingerPrintID' => $fingerPrintID,
-                        ],
+                    'FingerPrint' => [
+                        'employeeNo'    => $employeeNo,
+                        'fingerPrintID' => $fingerPrintID,
                     ],
                 ],
             ]);
