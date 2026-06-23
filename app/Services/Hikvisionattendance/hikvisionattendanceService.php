@@ -3,6 +3,7 @@
 namespace App\Services\Hikvisionattendance;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\HandlerStack;
@@ -909,6 +910,241 @@ class hikvisionattendanceService
                 'error' => true,
                 'message' => "No se pudo actualizar la información del usuario",
                 'data' => $errorMsg,
+            ];
+        }
+    }
+
+    /**
+     * Registra una huella para un empleado ya existente en el dispositivo, en dos pasos:
+     * 1) CaptureFingerPrint: bloquea esperando a que el usuario coloque el dedo en el
+     *    lector y devuelve el template crudo (fingerData) sin saber a quién pertenece.
+     * 2) FingerPrintDownload: vincula ese fingerData capturado al employeeNo + slot
+     *    indicados, que es lo que realmente "guarda" la huella en el perfil del empleado.
+     *
+     * El dispositivo responde "OK" en el paso 2 incluso si el employeeNo no existe,
+     * sin persistir nada, así que se valida antes de pedirle al usuario que coloque el dedo.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function registrarHuellaEmpleado(string $employeeNo, int $fingerPrintID = 1): array
+    {
+        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+            return [
+                'error' => true,
+                'message' => 'El empleado no está registrado en el dispositivo',
+                'data' => [],
+            ];
+        }
+
+        $captura = $this->capturarHuella($fingerPrintID);
+
+        if ($captura['error']) {
+            return $captura;
+        }
+
+        return $this->vincularHuellaEmpleado($employeeNo, $fingerPrintID, $captura['data']['fingerData']);
+    }
+
+    private function empleadoExisteEnDispositivo(string $employeeNo): bool
+    {
+        $resultado = $this->obtenerUnEmpleadoEspecifico($employeeNo);
+
+        return !$resultado['error']
+            && (($resultado['data'][0]->UserInfoSearch->responseStatusStrg ?? null) === 'OK');
+    }
+
+    /**
+     * Paso 1: captura el template de huella desde el sensor. Llamada bloqueante: el
+     * dispositivo espera a que el usuario coloque el dedo y solo responde cuando
+     * captura la huella, falla o agota su propio timeout interno de espera.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    private function capturarHuella(int $fingerNo): array
+    {
+        try {
+            // Este submódulo del dispositivo ignora "?format=json" y solo acepta/devuelve XML,
+            // a diferencia del resto de endpoints de AccessControl (confirmado contra el equipo real).
+            $xml = '<?xml version="1.0" encoding="UTF-8"?><CaptureFingerPrintCond><fingerNo>'
+                . $fingerNo
+                . '</fingerNo></CaptureFingerPrintCond>';
+
+            $response = $this->client->post('/ISAPI/AccessControl/CaptureFingerPrint', [
+                'headers' => [
+                    'Content-Type' => 'application/xml',
+                ],
+                'body' => $xml,
+                'timeout' => 25, // margen para que el usuario coloque el dedo
+            ]);
+
+            $body = $response->getBody()->getContents();
+            $data = $this->parseXmlResponse($body);
+
+            Log::info('Huella capturada del sensor', ['fingerNo' => $fingerNo, 'raw' => $body, 'data' => $data]);
+
+            if (empty($data['fingerData'])) {
+                return [
+                    'error' => true,
+                    'message' => 'El dispositivo no devolvió los datos de la huella capturada',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Huella capturada',
+                'data' => $data,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error capturando huella en Hikvision: ' . $e->getMessage(), [
+                'fingerNo' => $fingerNo,
+            ]);
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorHuella($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Paso 2: vincula un template de huella ya capturado (fingerData) al employeeNo
+     * y slot (fingerPrintID) indicados, guardándolo en el perfil del empleado.
+     *
+     * El empleado debe existir previamente en el dispositivo (UserInfo), de lo
+     * contrario el dispositivo responde "OK" pero no persiste nada.
+     *
+     * Nota de nomenclatura ISAPI (confirmado contra el dispositivo real): a pesar del
+     * nombre, "FingerPrintDownload" es la operación de escritura (el dispositivo
+     * "descarga" el dato hacia su almacenamiento); "FingerPrintUpload" es la de
+     * consulta (el dispositivo "sube" el dato hacia el cliente).
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    private function vincularHuellaEmpleado(string $employeeNo, int $fingerPrintID, string $fingerData): array
+    {
+        try {
+            $response = $this->client->post('/ISAPI/AccessControl/FingerPrintDownload?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ],
+                'json' => [
+                    'FingerPrintCfg' => [
+                        'employeeNo'       => $employeeNo,
+                        'fingerPrintID'    => $fingerPrintID,
+                        'fingerType'       => 'normalFP',
+                        'fingerData'       => $fingerData,
+                        'enableCardReader' => [1],
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Huella vinculada a empleado', ['employeeNo' => $employeeNo, 'fingerPrintID' => $fingerPrintID, 'data' => $data]);
+
+            return [
+                'error' => false,
+                'message' => 'Huella registrada correctamente',
+                'data' => $data ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error vinculando huella en Hikvision: ' . $e->getMessage(), [
+                'employeeNo' => $employeeNo,
+                'fingerPrintID' => $fingerPrintID,
+            ]);
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorHuella($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Traduce errores conocidos del dispositivo (timeout esperando el dedo, employeeNo
+     * inexistente, huella duplicada, límite alcanzado) a un mensaje legible para el
+     * modal del frontend. Si el código no es reconocido, se conserva el mensaje crudo
+     * del dispositivo para no ocultar información útil para soporte.
+     */
+    private function traducirErrorHuella(\Exception $e): string
+    {
+        if ($e instanceof ConnectException || stripos($e->getMessage(), 'timed out') !== false) {
+            return 'Tiempo de espera agotado: no se detectó ningún dedo en el lector';
+        }
+
+        $body = (method_exists($e, 'getResponse') && $e->getResponse())
+            ? $e->getResponse()->getBody()->getContents()
+            : null;
+
+        $decoded = $body ? json_decode($body, true) : null;
+        $subStatusCode = $decoded['subStatusCode'] ?? null;
+
+        $mensajes = [
+            'employeeNoNotExist' => 'El empleado no está registrado en el dispositivo',
+            'fingerPrintMaxNumExceed' => 'Se alcanzó el límite de huellas permitidas para este empleado',
+            'fingerPrintExist' => 'Esta huella ya está registrada',
+        ];
+
+        if ($subStatusCode && isset($mensajes[$subStatusCode])) {
+            return $mensajes[$subStatusCode];
+        }
+
+        return $decoded['errorMsg'] ?? $body ?? 'Error al registrar la huella en el dispositivo';
+    }
+
+    /**
+     * Elimina una huella registrada de un empleado en el dispositivo.
+     * Usa PUT /ISAPI/AccessControl/FingerPrint/Delete con estructura específica.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function eliminarHuellaEmpleado(string $employeeNo, int $fingerPrintID): array
+    {
+        try {
+            $response = $this->client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ],
+                'json' => [
+                    'FingerPrintDelete' => [
+                        'mode'             => 'byEmployeeNo',
+                        'employeeNo'       => $employeeNo,
+                        'fingerPrintID'    => $fingerPrintID,
+                        'EmployeeNoDetail' => [
+                            'employeeNo' => $employeeNo,
+                        ],
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Huella eliminada del empleado', ['employeeNo' => $employeeNo, 'fingerPrintID' => $fingerPrintID, 'data' => $data]);
+
+            return [
+                'error' => false,
+                'message' => 'Huella eliminada correctamente',
+                'data' => $data ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error eliminando huella en Hikvision: ' . $e->getMessage(), [
+                'employeeNo' => $employeeNo,
+                'fingerPrintID' => $fingerPrintID,
+            ]);
+
+            $body = (method_exists($e, 'getResponse') && $e->getResponse())
+                ? $e->getResponse()->getBody()->getContents()
+                : null;
+
+            return [
+                'error' => true,
+                'message' => $body ?? 'Error al eliminar la huella del dispositivo',
+                'data' => [],
             ];
         }
     }

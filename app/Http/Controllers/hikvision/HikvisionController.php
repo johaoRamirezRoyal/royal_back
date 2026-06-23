@@ -233,4 +233,48 @@ class HikvisionController extends Controller
 
         return $this->apiResponse($desactivar);
     }
+
+    public function registrarHuellaEmpleado(Request $request){
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'fingerPrintID' => ['nullable', 'integer', 'min:1', 'max:10'],
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarHuellaEmpleado(
+            $request->input('employeeNo'),
+            (int) $request->input('fingerPrintID', 1)
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function eliminarHuellaEmpleado(Request $request){
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'fingerPrintID' => ['required', 'integer', 'min:1', 'max:10'],
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->eliminarHuellaEmpleado(
+            $request->input('employeeNo'),
+            (int) $request->input('fingerPrintID')
+        );
+
+        return $this->apiResponse($resultado);
+    }
 }
