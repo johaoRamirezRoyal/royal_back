@@ -376,7 +376,7 @@ class hikvisionattendanceService
         }
     }
      */
-    public function registrarEmpleado($datos_empleado)
+    public function registrarEmpleado(array $datos_empleado)
     {
         try {
             $payload = [
@@ -393,6 +393,12 @@ class hikvisionattendanceService
                     ],
                 ],
             ];
+
+            $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
+
+            if ($groupId !== null) {
+                $payload['UserInfo']['groupId'] = $groupId;
+            }
 
             $response = $this->client->post(
                 '/ISAPI/AccessControl/Employee',
