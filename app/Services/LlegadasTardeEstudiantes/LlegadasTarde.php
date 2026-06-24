@@ -15,6 +15,18 @@ class LlegadasTarde extends Service
 
     public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora): array{
         try {
+            $yaRegistrada = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
+                ->where('fecha', $fecha)
+                ->exists();
+
+            if ($yaRegistrada) {
+                return [
+                    'error' => false,
+                    'message' => 'El alumno ya tiene una llegada tarde registrada hoy',
+                    'data' => []
+                ];
+            }
+
             //Encontramos el ultimo periodo academico agregado y activo
             $periodo_academico = PeriodoAcademico::where('activo', true)
                 ->orderByDesc('fecha_inicio')
