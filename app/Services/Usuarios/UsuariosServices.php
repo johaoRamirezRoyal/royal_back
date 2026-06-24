@@ -142,12 +142,18 @@ class UsuariosServices
             ])->with([
                 'perfilRelacion:id_perfil,nombre',
                 'nivelRelacion:id,nombre',
-            ])->when($search, function ($query, $search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('nombre', 'LIKE', "%$search%")
-                        ->orWhere('apellido', 'LIKE', "%$search%")
-                        ->orWhere('documento', 'LIKE', "%$search%")
-                        ->orWhere('correo', 'LIKE', "%$search%");
+            ])->when(trim((string) $search), function ($query, $search) {
+                $palabras = preg_split('/\s+/', trim($search));
+
+                $query->where(function ($q) use ($palabras) {
+                    foreach ($palabras as $palabra) {
+                        $q->where(function ($sub) use ($palabra) {
+                            $sub->where('nombre', 'LIKE', "%$palabra%")
+                                ->orWhere('apellido', 'LIKE', "%$palabra%")
+                                ->orWhere('documento', 'LIKE', "%$palabra%")
+                                ->orWhere('correo', 'LIKE', "%$palabra%");
+                        });
+                    }
                 });
             })->when($datos['perfiles'] ?? null, function ($query, $perfil) {
                 $query->whereIn('perfil', $perfil);
