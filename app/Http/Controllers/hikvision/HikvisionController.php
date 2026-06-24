@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
+use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -11,14 +12,23 @@ use Illuminate\Support\Facades\Validator;
 
 class HikvisionController extends Controller
 {
+    // Perfil de Estudiante en la tabla perfiles
+    const PERFIL_ESTUDIANTE = 16;
+
+    // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
+    const HORA_LIMITE_LLEGADA = '07:05:00';
+
     protected hikvisionattendanceService $hikvision_service;
 
     protected UsuariosServices $usuario_services;
 
-    public function __construct(hikvisionattendanceService $hikvisionService, UsuariosServices $usuariosServices)
+    protected LlegadasTarde $llegadas_tarde_service;
+
+    public function __construct(hikvisionattendanceService $hikvisionService, UsuariosServices $usuariosServices, LlegadasTarde $llegadasTardeService)
     {
         $this->hikvision_service = $hikvisionService;
         $this->usuario_services = $usuariosServices;
+        $this->llegadas_tarde_service = $llegadasTardeService;
     }
 
     public function __invoke(Request $request)
@@ -386,5 +396,35 @@ class HikvisionController extends Controller
             'dateTime' => $data['dateTime'] ?? null,
             'raw' => $data,
         ]);
+
+        if ($attendanceStatus === 'checkIn') {
+            $this->registrarLlegadaTardeSiAplica((int) $employeeNoString);
+        }
+    }
+
+    /**
+     * Registra una llegada tarde si el usuario es estudiante y el servidor
+     * recibió el checkIn después de la hora límite. Se usa la hora del
+     * servidor (no la del dispositivo) porque el reloj del equipo no es confiable.
+     */
+    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
+    {
+        $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
+
+        if ($usuario['error'] || ! $usuario['usuario'] || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+            return;
+        }
+
+        $ahora = now();
+
+        if ($ahora->format('H:i:s') <= self::HORA_LIMITE_LLEGADA) {
+            return;
+        }
+
+        $this->llegadas_tarde_service->agregarLlegadaTarde(
+            $idUsuario,
+            $ahora->format('Y-m-d'),
+            $ahora->format('H:i:s')
+        );
     }
 }

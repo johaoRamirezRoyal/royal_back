@@ -82,13 +82,12 @@ class hikvisionattendanceService
     }
 
     /**
-     * Construye la contraseña de asistencia a partir del documento del usuario.
-     * El dispositivo solo acepta entre 4 y 8 caracteres, así que se truncan
-     * los documentos más largos a sus primeros 8 dígitos.
+     * Construye la contraseña de asistencia a partir de los últimos 4 dígitos
+     * del documento del usuario (el dispositivo acepta entre 4 y 8 caracteres).
      */
     protected function construirPasswordAsistencia(string $documento): string
     {
-        return substr($documento, 0, 8);
+        return substr($documento, -4);
     }
 
     public function __construct()
