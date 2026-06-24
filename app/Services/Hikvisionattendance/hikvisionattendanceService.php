@@ -38,6 +38,49 @@ class hikvisionattendanceService
         '1' => 'Salida',
     ];
 
+    // groupId del Person Group de Hikvision (ya creado en el dispositivo) asignado según el id_perfil del usuario
+    const GROUP_ID_POR_PERFIL = [
+        16 => 8, // Students
+        1 => 2, // Admin. Dept.
+        2 => 2,
+        4 => 2,
+        5 => 2,
+        7 => 2,
+        8 => 2,
+        9 => 2,
+        11 => 2,
+        12 => 2,
+        15 => 2,
+        18 => 2,
+        19 => 2,
+        21 => 2,
+        22 => 2,
+        24 => 2,
+        25 => 2,
+        26 => 2,
+        29 => 2,
+        30 => 2,
+        31 => 2,
+        33 => 2,
+        34 => 2,
+        3 => 9, // Teachers
+        13 => 9,
+        14 => 9,
+        20 => 9,
+        10 => 10, // Workers
+        23 => 10,
+        27 => 10,
+        32 => 10,
+    ];
+
+    /**
+     * Obtiene el groupId del Person Group de Hikvision para un id_perfil dado.
+     */
+    protected function obtenerGroupIdPorPerfil(int $idPerfil): ?int
+    {
+        return self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null;
+    }
+
     public function __construct()
     {
         $this->username = config('services.hikvision.username');
@@ -382,6 +425,12 @@ class hikvisionattendanceService
                     ],
                 ];
 
+                $groupId = $this->obtenerGroupIdPorPerfil((int) $usuario['perfil']);
+
+                if ($groupId !== null) {
+                    $data['UserInfo']['groupId'] = $groupId;
+                }
+
                 yield function () use ($data) {
                     return $this->client->postAsync(
                         '/ISAPI/AccessControl/UserInfo/Record?format=json', // Forzamos el formato en la URL
@@ -654,6 +703,18 @@ class hikvisionattendanceService
 
             $body = $response->getBody()->getContents();
             $data = json_decode($body, true);
+
+            $groupIdPorEmployeeNo = [];
+            foreach ($usuarios as $usuario) {
+                $groupIdPorEmployeeNo[(string) $usuario['id_user']] = $this->obtenerGroupIdPorPerfil((int) $usuario['perfil']);
+            }
+
+            if (isset($data['UserInfoSearch']['UserInfo']) && is_array($data['UserInfoSearch']['UserInfo'])) {
+                foreach ($data['UserInfoSearch']['UserInfo'] as &$infoUsuario) {
+                    $infoUsuario['groupId'] = $groupIdPorEmployeeNo[(string) ($infoUsuario['employeeNo'] ?? '')] ?? null;
+                }
+                unset($infoUsuario);
+            }
 
             return [
                 'error' => false,
