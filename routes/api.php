@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admissions\AdmissionsController;
+use App\Http\Controllers\Hikvision\HikvisionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -10,6 +11,8 @@ Route::get('/', function () {
         'status' => 'success',
     ]);
 });
+
+Route::post('/pushNotification', [HikvisionController::class, 'testNotificationHikvision']);
 
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
@@ -24,7 +27,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
         require __DIR__.'/api/anioAcademico.php';
     });
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
-    Route::get("/inscripcionesPsicologa", [AdmissionsController::class, "mostrarAspirantesAPsicologa"]);
+    Route::get('/inscripcionesPsicologa', [AdmissionsController::class, 'mostrarAspirantesAPsicologa']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {

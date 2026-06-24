@@ -81,6 +81,16 @@ class hikvisionattendanceService
         return self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null;
     }
 
+    /**
+     * Construye la contraseña de asistencia a partir del documento del usuario.
+     * El dispositivo solo acepta entre 4 y 8 caracteres, así que se truncan
+     * los documentos más largos a sus primeros 8 dígitos.
+     */
+    protected function construirPasswordAsistencia(string $documento): string
+    {
+        return substr($documento, 0, 8);
+    }
+
     public function __construct()
     {
         $this->username = config('services.hikvision.username');
@@ -223,6 +233,29 @@ class hikvisionattendanceService
     }
 
     /**
+     * Obtiene la configuración de los hosts HTTP a los que el dispositivo envía notificaciones de eventos.
+     */
+    public function obtenerHttpHosts()
+    {
+        try {
+            $response = $this->client->get('/ISAPI/Event/notification/httpHosts?format=json');
+
+            return [
+                'error' => false,
+                'data' => $this->parseXmlResponse($response->getBody()->getContents()),
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error al obtener httpHosts', ['error' => $e->getMessage()]);
+
+            return [
+                'error' => true,
+                'message' => 'No se pudo obtener la configuración de httpHosts',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
      * Obtener eventos de acceso (facial, huella, QR)
      *
      * @return array['error', 'message', 'data']
@@ -351,6 +384,7 @@ class hikvisionattendanceService
                     'employeeNo' => $datos_empleado['id_user'],
                     'name' => $datos_empleado['nombre'],
                     'userType' => $datos_empleado['perfil'],
+                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
                     'Valid' => [
                         'enable' => true,
                         'beginTime' => $datos_empleado['fechareg'],
@@ -414,6 +448,7 @@ class hikvisionattendanceService
                         'employeeNo'    => (string) $usuario['id_user'],
                         'name'          => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
                         'userType'      => 'normal',
+                        'password'      => $this->construirPasswordAsistencia((string) $usuario['documento']),
                         'gender'        => 'male',
                         'localUIRight'  => false, // En JSON usa booleanos reales, no strings
                         'Valid' => [
