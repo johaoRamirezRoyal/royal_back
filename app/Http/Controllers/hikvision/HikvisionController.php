@@ -218,7 +218,8 @@ class HikvisionController extends Controller
         $data = $request->all();
 
         $validator = Validator::make($data, [
-            'id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
+            'id_user' => ['required', 'array', 'min:1'],
+            'id_user.*' => ['integer', 'exists:usuarios,id_user'],
             'enable' => ['required', 'integer', 'in:0,1'],
         ]);
 
@@ -227,9 +228,10 @@ class HikvisionController extends Controller
                 'error' => true,
                 'message' => $validator->errors()->first(),
                 'data' => [],
-            ]);
+            ], 400);
         }
 
+<<<<<<< HEAD
         $id_user = $request->input("id_user");
         $enable = $request->input("enable");
 
@@ -237,11 +239,34 @@ class HikvisionController extends Controller
         Log::info("Usuario cargado", $usuario['usuario']->toArray());
         if($usuario['error']){
             return $this->apiResponse($usuario);
+=======
+        $enable = $request->input('enable');
+        $resultado = ['success' => [], 'error' => []];
+
+        foreach ($request->input('id_user') as $id_user) {
+            $usuario = $this->usuario_services->mostrarInfoUsuarioId($id_user);
+
+            if ($usuario['error'] || !$usuario['usuario']) {
+                $resultado['error'][] = ['id_user' => $id_user, 'message' => 'No se encontró el usuario en la base de datos'];
+                continue;
+            }
+
+            $desactivar = $this->hikvision_service->desactivarUsuario($usuario['usuario']->toArray(), $enable);
+
+            if ($desactivar['error']) {
+                $resultado['error'][] = ['id_user' => $id_user, 'message' => $desactivar['message']];
+                continue;
+            }
+
+            $resultado['success'][] = ['id_user' => $id_user, 'message' => $desactivar['message']];
+>>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
         }
 
-        $desactivar = $this->hikvision_service->desactivarUsuario($usuario['usuario']->toArray(), $enable);
-
-        return $this->apiResponse($desactivar);
+        return $this->apiResponse([
+            'error' => false,
+            'message' => 'Proceso completado',
+            'data' => $resultado,
+        ]);
     }
 
     public function registrarHuellaEmpleado(Request $request){
@@ -266,7 +291,69 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
+<<<<<<< HEAD
     public function eliminarHuellaEmpleado(Request $request){
+=======
+    public function registrarContrasenaEmpleado(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'integer', 'exists:usuarios,id_user'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $employeeNo = $request->input('employeeNo');
+
+        $usuario = $this->usuario_services->mostrarInfoUsuarioId($employeeNo);
+
+        if ($usuario['error'] || !$usuario['usuario']) {
+            return response()->json([
+                'error' => true,
+                'message' => 'No se encontró el usuario en la base de datos',
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarContrasenaEmpleado(
+            (string) $employeeNo,
+            (string) $usuario['usuario']->documento
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function registrarRostroEmpleado(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'faceLibraryId' => ['nullable', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarRostroEmpleado(
+            $request->input('employeeNo'),
+            $request->input('faceLibraryId', '1')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function eliminarHuellaEmpleado(Request $request)
+    {
+>>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
         ]);
