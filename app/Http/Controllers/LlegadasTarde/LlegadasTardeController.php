@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\LlegadasTarde;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\LlegadasTarde\LlegadaTardeRequest;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use Illuminate\Http\Request;
 
@@ -11,6 +12,18 @@ class LlegadasTardeController extends Controller
 
     public function __construct(LlegadasTarde $llegadas_tarde){
         $this->llegadas_tarde = $llegadas_tarde;
+    }
+
+    public function agregarLlegadaTarde(LlegadaTardeRequest $request){
+        $body = $request->validated();
+
+        $id_alumno = $body['id_alumno'];
+        $fecha = $body['fecha'];
+        $hora = $body['hora'];
+
+        $response = $this->llegadas_tarde->agregarLlegadaTarde($id_alumno, $fecha, $hora);
+
+        return $this->apiResponse($response);
     }
 
     public function obtenerLlegadasTarde(Request $request){
