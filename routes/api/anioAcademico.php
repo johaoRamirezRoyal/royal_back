@@ -27,22 +27,22 @@ Route::get("/periodo-academico/id", [PeriodoAcademicoController::class, 'obtener
 /**
  * POST /periodo-academico
  * Body (JSON):
- *   {
- *       "id_anio_escolar": 1,
- *       "fecha_inicio": "2026-02-01",
- *       "fecha_fin": "2026-06-30",
- *       "activo": true
- *   }
+{
+    "id_anio_escolar": 1,
+    "fecha_inicio": "2026-02-01",
+    "fecha_fin": "2026-06-30",
+    "activo": true
+}
  */
 Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPeriodoAcademico']);
 
 /**
  * PUT /periodo-academico/estado
  * Body (JSON):
- *   {
- *       "ids_periodos_academicos": [1, 2, 3],
- *       "estado": 0
- *   }
+{
+    "ids_periodos_academicos": [1, 2, 3],
+    "estado": 0
+}
  * Nota: si ids_periodos_academicos se omite, actualiza todos los registros.
  */
 Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'desactivarPeriodosAcademicos']);
