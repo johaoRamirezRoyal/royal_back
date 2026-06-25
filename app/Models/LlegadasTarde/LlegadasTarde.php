@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class LlegadasTarde extends Model
 {
+    public $timestamps = false;
+
     protected $table = 'llegadas_tardes';
 
     protected $fillable = [
