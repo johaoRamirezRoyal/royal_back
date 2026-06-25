@@ -75,15 +75,33 @@ class LlegadasTarde extends Service
         }
     }
 
-    public function obtenerLlegadasTarde(int $id_periodo_academico, ?int $id_alumno = null): array
+    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null): array
     {
         try {
+            if ($id_periodo_academico === null) {
+
+                $periodo = PeriodoAcademico::where('activo', 1)
+                    ->latest('id')
+                    ->first();
+
+                if (!$periodo) {
+                    return [
+                        'error' => true,
+                        'message' => 'No existe un período académico activo',
+                        'data' => []
+                    ];
+                }
+
+                $id_periodo_academico = $periodo->id;
+            }
+
             $llegadas_tarde = ModelsLlegadasTarde::where('id_periodo_academico', $id_periodo_academico)
                 ->with('alumno:id_user,nombre,apellido,correo')
                 ->with('periodoAcademico:id,fecha_inicio,fecha_fin,activo')
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
-                })->get();
+                })
+                ->get();
 
             if ($llegadas_tarde->isEmpty()) {
                 return [
