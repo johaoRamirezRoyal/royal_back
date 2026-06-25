@@ -28,7 +28,7 @@ class LlegadasTardeController extends Controller
 
     public function obtenerLlegadasTarde(Request $request){
 
-        $id_anio_academico = $request->input('id_periodo_academico');
+        $id_anio_academico = $request->input('id_periodo_academico', null);
         $id_alumno = $request->input('id_alumno', null);
 
         $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, $id_alumno);
