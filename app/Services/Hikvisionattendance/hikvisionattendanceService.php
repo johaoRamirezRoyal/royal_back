@@ -2,6 +2,7 @@
 
 namespace App\Services\Hikvisionattendance;
 
+use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
@@ -84,10 +85,16 @@ class hikvisionattendanceService
     /**
      * Construye la contraseña de asistencia a partir de los últimos 4 dígitos
      * del documento del usuario (el dispositivo acepta entre 4 y 8 caracteres).
+     * Si el usuario no tiene documento registrado, se genera una contraseña
+     * aleatoria de 4 dígitos para no bloquear el registro.
      */
-    protected function construirPasswordAsistencia(string $documento): string
+    protected function construirPasswordAsistencia(?string $documento): string
     {
-        return substr($documento, -4);
+        if (!empty($documento)) {
+            return substr($documento, -4);
+        }
+
+        return (string) random_int(1000, 9999);
     }
 
     public function __construct()
@@ -384,6 +391,10 @@ class hikvisionattendanceService
                     'name' => $datos_empleado['nombre'],
                     'userType' => $datos_empleado['perfil'],
                     'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                    'doorRight' => '1',
+                    'RightPlan' => [
+                        ['doorNo' => 1, 'planTemplateNo' => '1'],
+                    ],
                     'Valid' => [
                         'enable' => true,
                         'beginTime' => $datos_empleado['fechareg'],
@@ -456,6 +467,10 @@ class hikvisionattendanceService
                         'password'      => $this->construirPasswordAsistencia((string) $usuario['documento']),
                         'gender'        => 'male',
                         'localUIRight'  => false, // En JSON usa booleanos reales, no strings
+                        'doorRight'     => '1',
+                        'RightPlan'     => [
+                            ['doorNo' => 1, 'planTemplateNo' => '1'],
+                        ],
                         'Valid' => [
                             'enable'    => true,
                             'beginTime' => now()->format('Y-m-d\TH:i:s'),
@@ -582,6 +597,8 @@ class hikvisionattendanceService
                 if (!empty($empleado['faceURL'])) {
                     $empleado['faceURL'] = $this->proxyImagenUrl($empleado['faceURL']);
                 }
+
+                $empleado['contrasenaVigente'] = $this->tieneContrasenaVigente($empleado);
             }
             unset($empleado);
 
@@ -598,6 +615,40 @@ class hikvisionattendanceService
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Determina si el empleado tiene una contraseña de asistencia vigente: que tenga
+     * un password asignado (no vacío) y que su cuenta esté habilitada y dentro del
+     * rango Valid.beginTime/endTime reportado por el dispositivo.
+     */
+    private function tieneContrasenaVigente(array $empleado): bool
+    {
+        if (empty($empleado['password'])) {
+            return false;
+        }
+
+        $valid = $empleado['Valid'] ?? [];
+
+        if (empty($valid['enable'])) {
+            return false;
+        }
+
+        try {
+            $ahora = now();
+
+            if (!empty($valid['beginTime']) && $ahora->lt(Carbon::parse($valid['beginTime']))) {
+                return false;
+            }
+
+            if (!empty($valid['endTime']) && $ahora->gt(Carbon::parse($valid['endTime']))) {
+                return false;
+            }
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -919,8 +970,12 @@ class hikvisionattendanceService
                     'name' => substr($usuario['nombre'], 0, 30),
                     'userType' => 'normal',
                     'Valid' => [
-                        'enable' => $enable, // Desactivamos el acceso
-                        'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                        'enable' => $enable, // Activamos/desactivamos el acceso
+                        // beginTime fijo (no now()): el dispositivo recalcula este campo con
+                        // su propio reloj si se le manda "now" del servidor, y el desfase de
+                        // zona horaria lo deja adelantado respecto a su hora local, provocando
+                        // que rechace al usuario como "permiso expirado" justo al reactivarlo.
+                        'beginTime' => '2024-01-01T00:00:00',
                         'endTime' => '2035-12-31T23:59:59', // Fecha lejana
                         'timeType' => 'local',
                     ],
@@ -980,6 +1035,21 @@ class hikvisionattendanceService
                 $payload_user['name'] = substr(preg_replace('/[^A-Za-z0-9 ]/', '', $payload_user['name']), 0, 32);
             }
 
+            // Confirmado contra el dispositivo real: si el PUT no incluye "Valid",
+            // el dispositivo recalcula beginTime usando su reloj interno con un desfase
+            // de zona horaria, dejándolo adelantado respecto a su propia hora local y
+            // provocando que rechace al usuario como "permiso expirado" (la cuenta
+            // aún no es válida según su propio reloj). Por eso siempre se manda un
+            // Valid explícito y estable, salvo que el caller ya haya enviado uno.
+            if (!isset($payload_user['Valid'])) {
+                $payload_user['Valid'] = [
+                    'enable' => true,
+                    'beginTime' => '2024-01-01T00:00:00',
+                    'endTime' => '2035-12-31T23:59:59',
+                    'timeType' => 'local',
+                ];
+            }
+
             $body = [
                 'UserInfo' => $payload_user
             ];
@@ -1016,6 +1086,49 @@ class hikvisionattendanceService
     }
 
     /**
+     * Registra (o sobrescribe) la contraseña de asistencia de un empleado ya existente
+     * en el dispositivo. Si el empleado tiene documento, la contraseña son sus últimos
+     * 4 dígitos; si no tiene documento registrado, se le asigna una contraseña aleatoria
+     * de 4 dígitos.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function registrarContrasenaEmpleado(string $employeeNo, ?string $documento): array
+    {
+        if ($this->obtenerInfoUsuarioDispositivo($employeeNo) === null) {
+            return [
+                'error' => true,
+                'message' => 'El empleado no está registrado en el dispositivo',
+                'data' => [],
+            ];
+        }
+
+        $origen = !empty($documento) ? 'documento' : 'aleatorio';
+        $password = $this->construirPasswordAsistencia($documento);
+
+        $resultado = $this->actualizarInformacionUsuario([
+            'id_user' => $employeeNo,
+            'password' => $password,
+        ]);
+
+        if ($resultado['error']) {
+            return [
+                'error' => true,
+                'message' => 'No se pudo registrar la contraseña en el dispositivo: ' . $resultado['message'],
+                'data' => [],
+            ];
+        }
+
+        return [
+            'error' => false,
+            'message' => $origen === 'documento'
+                ? 'Contraseña asignada a partir de los últimos 4 dígitos del documento'
+                : 'El usuario no tiene documento registrado: se asignó una contraseña aleatoria',
+            'data' => ['password' => $password, 'origen' => $origen],
+        ];
+    }
+
+    /**
      * Registra una huella para un empleado ya existente en el dispositivo, en dos pasos:
      * 1) CaptureFingerPrint: bloquea esperando a que el usuario coloque el dedo en el
      *    lector y devuelve el template crudo (fingerData) sin saber a quién pertenece.
@@ -1048,10 +1161,29 @@ class hikvisionattendanceService
 
     private function empleadoExisteEnDispositivo(string $employeeNo): bool
     {
+        return $this->obtenerInfoUsuarioDispositivo($employeeNo) !== null;
+    }
+
+    /**
+     * Obtiene el UserInfo del empleado tal como lo reporta el dispositivo (incluye
+     * campos como 'password' que no se exponen a través de los demás métodos públicos),
+     * o null si el empleado no existe en el dispositivo.
+     */
+    private function obtenerInfoUsuarioDispositivo(string $employeeNo): ?object
+    {
         $resultado = $this->obtenerUnEmpleadoEspecifico($employeeNo);
 
-        return !$resultado['error']
-            && (($resultado['data'][0]->UserInfoSearch->responseStatusStrg ?? null) === 'OK');
+        if ($resultado['error']) {
+            return null;
+        }
+
+        $busqueda = $resultado['data'][0]->UserInfoSearch ?? null;
+
+        if (!$busqueda || ($busqueda->responseStatusStrg ?? null) !== 'OK' || empty($busqueda->UserInfo)) {
+            return null;
+        }
+
+        return $busqueda->UserInfo[0];
     }
 
     /**
@@ -1252,5 +1384,228 @@ class hikvisionattendanceService
                 'data' => [],
             ];
         }
+    }
+
+    /**
+     * Registra el rostro de un empleado ya existente en el dispositivo, en dos pasos:
+     * 1) CaptureFaceData: a diferencia de la huella, no es una llamada bloqueante única;
+     *    cada POST devuelve el progreso actual (captureProgress, en XML) mientras no hay
+     *    rostro detectado, así que hay que reconsultar mientras el usuario se posiciona
+     *    frente a la cámara. Al completarse, el dispositivo entrega la imagen JPEG cruda
+     *    en el cuerpo de la respuesta (no XML), porque se pide con dataType=binary.
+     * 2) Se sube esa imagen (multipart) a la biblioteca de rostros (FDID) del dispositivo,
+     *    vinculada al employeeNo.
+     *
+     * Importante: una vez el dispositivo entrega la imagen, la sesión de captura queda
+     * cerrada en ese mismo instante — seguir llamando a CaptureFaceData después de eso
+     * (p. ej. por un bug en el conteo del bucle) hace que el dispositivo responda 400
+     * badParameters y, confirmado en pruebas reales, puede dejar el submódulo de captura
+     * sin responder durante varios minutos. Por eso el bucle corta de inmediato al
+     * recibir contenido no-XML, sin reintentar.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function registrarRostroEmpleado(string $employeeNo, string $faceLibraryId = '1'): array
+    {
+        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+            return [
+                'error' => true,
+                'message' => 'El empleado no está registrado en el dispositivo',
+                'data' => [],
+            ];
+        }
+
+        $captura = $this->capturarRostro();
+
+        if ($captura['error']) {
+            return $captura;
+        }
+
+        return $this->vincularRostroEmpleado($employeeNo, $faceLibraryId, $captura['data']['imagenJpeg']);
+    }
+
+    /**
+     * Paso 1: captura el rostro desde la cámara del dispositivo.
+     *
+     * Confirmado contra el dispositivo real: este submódulo, igual que CaptureFingerPrint,
+     * solo acepta/devuelve XML (ignora "?format=json"). Mientras no se detecta un rostro,
+     * cada llamada responde de inmediato en XML con el progreso actual (captureProgress);
+     * al completarse, el cuerpo de la respuesta deja de ser XML y pasa a ser la imagen
+     * JPEG cruda capturada, momento en el que se debe detener el bucle inmediatamente.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    private function capturarRostro(int $maxIntentos = 25, int $intervaloMs = 700): array
+    {
+        $xml = '<?xml version="1.0" encoding="UTF-8"?><CaptureFaceDataCond><captureInfrared>false</captureInfrared><dataType>binary</dataType></CaptureFaceDataCond>';
+
+        try {
+            for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+                $response = $this->client->post('/ISAPI/AccessControl/CaptureFaceData', [
+                    'headers' => [
+                        'Content-Type' => 'application/xml',
+                    ],
+                    'body' => $xml,
+                    'timeout' => 10,
+                ]);
+
+                $body = $response->getBody()->getContents();
+
+                if (!str_starts_with(ltrim($body), '<')) {
+                    $imagen = $this->extraerJpegValido($body);
+
+                    if ($imagen === null) {
+                        Log::warning('Rostro: respuesta binaria sin marcadores JPEG reconocibles', [
+                            'bytes' => strlen($body),
+                            'primeros_bytes' => bin2hex(substr($body, 0, 32)),
+                            'content_type' => $response->getHeaderLine('Content-Type'),
+                        ]);
+
+                        return [
+                            'error' => true,
+                            'message' => 'El dispositivo devolvió la imagen capturada en un formato inesperado',
+                            'data' => [],
+                        ];
+                    }
+
+                    Log::info('Rostro capturado del sensor (imagen binaria)', [
+                        'bytes_originales' => strlen($body),
+                        'bytes_jpeg' => strlen($imagen),
+                        'content_type' => $response->getHeaderLine('Content-Type'),
+                    ]);
+
+                    return [
+                        'error' => false,
+                        'message' => 'Rostro capturado',
+                        'data' => ['imagenJpeg' => $imagen],
+                    ];
+                }
+
+                usleep($intervaloMs * 1000);
+            }
+
+            return [
+                'error' => true,
+                'message' => 'Tiempo de espera agotado: no se detectó ningún rostro frente a la cámara',
+                'data' => [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error capturando rostro en Hikvision: ' . $e->getMessage());
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorRostro($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Recorta el contenido binario devuelto por CaptureFaceData a los límites reales del
+     * JPEG (marcador SOI 0xFFD8FF ... EOI 0xFFD9), descartando cualquier byte de framing
+     * que el dispositivo pueda anteponer o anexar. Sin este recorte, el dispositivo
+     * rechaza la imagen en el paso de vinculación con "SubpicAnalysisModelingError"
+     * (no logra modelar un rostro a partir de datos con bytes extra antes/después del JPEG).
+     */
+    private function extraerJpegValido(string $contenido): ?string
+    {
+        $inicio = strpos($contenido, "\xFF\xD8\xFF");
+
+        if ($inicio === false) {
+            return null;
+        }
+
+        $fin = strrpos($contenido, "\xFF\xD9");
+
+        if ($fin === false || $fin < $inicio) {
+            return substr($contenido, $inicio);
+        }
+
+        return substr($contenido, $inicio, $fin - $inicio + 2);
+    }
+
+    /**
+     * Paso 2: sube la imagen JPEG ya capturada y la vincula al employeeNo y biblioteca
+     * (FDID) indicados, vía multipart (metadatos JSON + archivo de imagen).
+     *
+     * Confirmado contra el dispositivo real: este endpoint exige PUT (POST responde
+     * methodNotAllowed); con PUT y el multipart de abajo el dispositivo reconoce la
+     * operación como "saveFacePic".
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    private function vincularRostroEmpleado(string $employeeNo, string $faceLibraryId, string $imagenJpeg): array
+    {
+        try {
+            $response = $this->client->put('/ISAPI/Intelligent/FDLib/FDSetUp?format=json', [
+                'multipart' => [
+                    [
+                        'name' => 'FaceDataRecord',
+                        'contents' => json_encode([
+                            'faceLibType' => 'blackFD',
+                            'FDID' => $faceLibraryId,
+                            'FPID' => $employeeNo,
+                        ]),
+                        'headers' => ['Content-Type' => 'application/json'],
+                    ],
+                    [
+                        'name' => 'img',
+                        'contents' => $imagenJpeg,
+                        'filename' => 'face.jpg',
+                        'headers' => ['Content-Type' => 'image/jpeg'],
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Rostro vinculado a empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
+
+            return [
+                'error' => false,
+                'message' => 'Rostro registrado correctamente',
+                'data' => $data ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error vinculando rostro en Hikvision: ' . $e->getMessage(), [
+                'employeeNo' => $employeeNo,
+            ]);
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorRostro($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Traduce errores conocidos del dispositivo (timeout esperando frente a la cámara,
+     * employeeNo inexistente, rostro duplicado) a un mensaje legible para el modal del
+     * frontend. Si el código no es reconocido, se conserva el mensaje crudo del dispositivo.
+     */
+    private function traducirErrorRostro(\Exception $e): string
+    {
+        if ($e instanceof ConnectException || stripos($e->getMessage(), 'timed out') !== false) {
+            return 'Tiempo de espera agotado: no se detectó ningún rostro frente a la cámara';
+        }
+
+        $body = (method_exists($e, 'getResponse') && $e->getResponse())
+            ? $e->getResponse()->getBody()->getContents()
+            : null;
+
+        $decoded = $body ? json_decode($body, true) : null;
+        $subStatusCode = $decoded['subStatusCode'] ?? null;
+
+        $mensajes = [
+            'employeeNoNotExist' => 'El empleado no está registrado en el dispositivo',
+            'faceExist' => 'Este rostro ya está registrado',
+        ];
+
+        if ($subStatusCode && isset($mensajes[$subStatusCode])) {
+            return $mensajes[$subStatusCode];
+        }
+
+        return $decoded['errorMsg'] ?? $body ?? 'Error al registrar el rostro en el dispositivo';
     }
 }
