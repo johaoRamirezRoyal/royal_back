@@ -101,4 +101,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/TipoDocumentos.php';
     });
 
+    //LLEGADAS TARDE
+    Route::prefix("/llegadas-tarde")->group(function () {
+        require __DIR__ . '/api/llegadasTarde.php';
+    });
+
 });
