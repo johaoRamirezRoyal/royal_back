@@ -388,60 +388,63 @@ class hikvisionattendanceService
     public function registrarEmpleado(array $datos_empleado)
     {
         try {
-            $payload = [
+            $data = [
                 'UserInfo' => [
-                    'employeeNo' => $datos_empleado['id_user'],
-                    'name' => $datos_empleado['nombre'],
-                    'userType' => $datos_empleado['perfil'],
-                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'doorRight' => '1',
-                    'RightPlan' => [
+                    'employeeNo'   => (string) $datos_empleado['id_user'],
+                    'name'         => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
+                    'userType'     => 'normal',
+                    'password'     => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                    'gender'       => 'male',
+                    'localUIRight' => false,
+                    'doorRight'    => '1',
+                    'RightPlan'    => [
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
                     'Valid' => [
-                        'enable' => true,
-                        'beginTime' => $datos_empleado['fechareg'],
-                        'endTime' => '2035-12-31T23:59:59',
-                        'timeType' => 'local',
+                        'enable'    => true,
+                        'beginTime' => '2024-01-01T00:00:00',
+                        'endTime'   => '2035-12-31T23:59:59',
+                        'timeType'  => 'local',
                     ],
                 ],
             ];
 
             $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
-
             if ($groupId !== null) {
-                $payload['UserInfo']['groupId'] = $groupId;
+                $data['UserInfo']['groupId'] = $groupId;
             }
 
-            $response = $this->client->post(
-                '/ISAPI/AccessControl/Employee',
-                [
-                    'body' => json_encode($payload),
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                    ],
+            $this->client->post('/ISAPI/AccessControl/UserInfo/Record?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
                 ],
-            );
+                'json' => $data,
+            ]);
 
-            if ($response->getStatusCode() === 201 || $response->getStatusCode() === 200) {
+            return [
+                'error'   => false,
+                'id_user' => $datos_empleado['id_user'],
+                'message' => 'Usuario creado con exito',
+            ];
+        } catch (GuzzleException $e) {
+            $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
+            $body     = $response ? $response->getBody()->getContents() : null;
+            $decoded  = $body ? json_decode($body, true) : null;
+
+            if (($decoded['subStatusCode'] ?? null) === 'employeeNoAlreadyExist') {
                 return [
-                    'error' => false,
+                    'error'   => false,
                     'id_user' => $datos_empleado['id_user'],
-                    'message' => 'Usuario creado con exito',
+                    'message' => 'Ya estaba registrado en el dispositivo',
                 ];
             }
 
-            return [
-                'error' => true,
-                'message' => 'Error al registrar el usuario',
-                'id_user' => $datos_empleado['id_user'],
-            ];
-        } catch (GuzzleException $e) {
-            Log::error('Error registrando al empleado: ' . $e->getMessage());
+            Log::error('Error registrando al empleado: ' . ($body ?? $e->getMessage()));
 
             return [
-                'error' => true,
-                'message' => $e->getMessage(),
+                'error'   => true,
+                'message' => $decoded['errorMsg'] ?? $e->getMessage(),
                 'id_user' => $datos_empleado['id_user'],
             ];
         }
@@ -476,7 +479,7 @@ class hikvisionattendanceService
                         ],
                         'Valid' => [
                             'enable'    => true,
-                            'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                            'beginTime' => '2024-01-01T00:00:00',
                             'endTime'   => '2035-12-31T23:59:59',
                             'timeType'  => 'local',
                         ],
