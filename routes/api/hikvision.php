@@ -15,6 +15,7 @@ Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados
 Route::get('/image', [HikvisionController::class, 'obtenerImagenEmpleado']);
 Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosRegistradosPorPerfil']);
 Route::get("/userInfo", [HikvisionController::class, 'obtenerUnEmpleadoEspecifico']);
+Route::delete("/", [HikvisionController::class, 'eliminarEmpleados']);
 Route::delete("/perfil", [HikvisionController::class, 'eliminarUsuariosRegistrados']);
 Route::put("/desactivar", [HikvisionController::class, 'desactivarUsuario']);
 Route::get("/asistencia", [HikvisionController::class, 'obtenerAsistenciaEmpleado']);
