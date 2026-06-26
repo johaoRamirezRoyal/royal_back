@@ -244,7 +244,7 @@ class UsuariosServices
         }
     }
 
-    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda)
+    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda, ?string $estado = null)
     {
         try {
             $usuarios = Usuario::select([
@@ -282,6 +282,9 @@ class UsuariosServices
                             });
                         }
                     });
+                })
+                ->when($estado, function ($query, $estado) {
+                    $query->where('estado', $estado);
                 })
                 ->orderBy('nombre')
                 ->orderBy('documento')
