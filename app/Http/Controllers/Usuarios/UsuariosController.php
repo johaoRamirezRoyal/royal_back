@@ -62,6 +62,27 @@ class UsuariosController extends Controller
         return $this->paginatedResponse($response);
     }
 
+    public function mostrarUsuariosPaginados(Request $request)
+    {
+        $per_page = $request->input('per-page', 10);
+        $perfil_filtro = $request->input('perfiles');
+        $nivel_filtro = $request->input('niveles');
+        $busqueda = $request->input('busqueda');
+
+        $response = $this->service_usuarios->mostrarUsuariosPaginados(
+            (int) $per_page,
+            $perfil_filtro,
+            $nivel_filtro,
+            $busqueda
+        );
+
+        if ($response['error']) {
+            return $this->error($response['message']);
+        }
+
+        return $this->paginatedResponse($response);
+    }
+
     public function mostrarTodosUsuarios()
     {
         return response()->json(
