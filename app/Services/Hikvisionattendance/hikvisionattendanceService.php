@@ -82,6 +82,21 @@ class hikvisionattendanceService
         return self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null;
     }
 
+    /**
+     * Construye la contraseña de asistencia a partir de los últimos 4 dígitos
+     * del documento del usuario (el dispositivo acepta entre 4 y 8 caracteres).
+     * Si el usuario no tiene documento registrado, se genera una contraseña
+     * aleatoria de 4 dígitos para no bloquear el registro.
+     */
+    protected function construirPasswordAsistencia(?string $documento): string
+    {
+        if (!empty($documento)) {
+            return substr($documento, -4);
+        }
+
+        return (string) random_int(1000, 9999);
+    }
+
     public function __construct()
     {
         $this->username = config('services.hikvision.username');
@@ -96,11 +111,10 @@ class hikvisionattendanceService
         $stack->push($this->retryMiddleware(3, 1000)); // 3 intentos
 
         $this->client = new Client([
-            'base_uri' => $this->baseUrl,  // ya incluye el puerto
-            'auth'     => [$this->username, $this->password, 'digest'],
-            'verify'   => config('services.hikvision.verify_ssl', false), // mejor no usar env() directo aquí
-            'timeout'  => 30,
-            'handler'  => $stack,
+            'base_uri' => $this->baseUrl,
+            'auth' => [$this->username, $this->password, 'digest'], // 👈 Agregar 'digest'
+            'verify' => env('HIKVISION_VERIFY_SSL', false),
+            'timeout' => 30,
         ]);
     }
 
@@ -223,6 +237,29 @@ class hikvisionattendanceService
             ]);
 
             return ['isConnected' => false, 'data' => null];
+        }
+    }
+
+    /**
+     * Obtiene la configuración de los hosts HTTP a los que el dispositivo envía notificaciones de eventos.
+     */
+    public function obtenerHttpHosts()
+    {
+        try {
+            $response = $this->client->get('/ISAPI/Event/notification/httpHosts?format=json');
+
+            return [
+                'error' => false,
+                'data' => $this->parseXmlResponse($response->getBody()->getContents()),
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error al obtener httpHosts', ['error' => $e->getMessage()]);
+
+            return [
+                'error' => true,
+                'message' => 'No se pudo obtener la configuración de httpHosts',
+                'data' => null,
+            ];
         }
     }
 
@@ -350,75 +387,60 @@ class hikvisionattendanceService
     public function registrarEmpleado(array $datos_empleado)
     {
         try {
-            $data = [
+            $payload = [
                 'UserInfo' => [
-<<<<<<< HEAD
                     'employeeNo' => $datos_empleado['id_user'],
                     'name' => $datos_empleado['nombre'],
                     'userType' => $datos_empleado['perfil'],
-<<<<<<< HEAD
-=======
                     'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
                     'doorRight' => '1',
                     'RightPlan' => [
-=======
-                    'employeeNo'   => (string) $datos_empleado['id_user'],
-                    'name'         => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
-                    'userType'     => 'normal',
-                    'password'     => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'gender'       => 'male',
-                    'localUIRight' => false,
-                    'doorRight'    => '1',
-                    'RightPlan'    => [
->>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
->>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
                     'Valid' => [
-                        'enable'    => true,
-                        'beginTime' => '2024-01-01T00:00:00',
-                        'endTime'   => '2035-12-31T23:59:59',
-                        'timeType'  => 'local',
+                        'enable' => true,
+                        'beginTime' => $datos_empleado['fechareg'],
+                        'endTime' => '2035-12-31T23:59:59',
+                        'timeType' => 'local',
                     ],
                 ],
             ];
 
             $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
+
             if ($groupId !== null) {
-                $data['UserInfo']['groupId'] = $groupId;
+                $payload['UserInfo']['groupId'] = $groupId;
             }
 
-            $this->client->post('/ISAPI/AccessControl/UserInfo/Record?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept'       => 'application/json',
+            $response = $this->client->post(
+                '/ISAPI/AccessControl/Employee',
+                [
+                    'body' => json_encode($payload),
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                    ],
                 ],
-                'json' => $data,
-            ]);
+            );
 
-            return [
-                'error'   => false,
-                'id_user' => $datos_empleado['id_user'],
-                'message' => 'Usuario creado con exito',
-            ];
-        } catch (GuzzleException $e) {
-            $response = method_exists($e, 'getResponse') ? $e->getResponse() : null;
-            $body     = $response ? $response->getBody()->getContents() : null;
-            $decoded  = $body ? json_decode($body, true) : null;
-
-            if (($decoded['subStatusCode'] ?? null) === 'employeeNoAlreadyExist') {
+            if ($response->getStatusCode() === 201 || $response->getStatusCode() === 200) {
                 return [
-                    'error'   => false,
+                    'error' => false,
                     'id_user' => $datos_empleado['id_user'],
-                    'message' => 'Ya estaba registrado en el dispositivo',
+                    'message' => 'Usuario creado con exito',
                 ];
             }
 
-            Log::error('Error registrando al empleado: ' . ($body ?? $e->getMessage()));
+            return [
+                'error' => true,
+                'message' => 'Error al registrar el usuario',
+                'id_user' => $datos_empleado['id_user'],
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error registrando al empleado: ' . $e->getMessage());
 
             return [
-                'error'   => true,
-                'message' => $decoded['errorMsg'] ?? $e->getMessage(),
+                'error' => true,
+                'message' => $e->getMessage(),
                 'id_user' => $datos_empleado['id_user'],
             ];
         }
@@ -444,6 +466,7 @@ class hikvisionattendanceService
                         'employeeNo'    => (string) $usuario['id_user'],
                         'name'          => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
                         'userType'      => 'normal',
+                        'password'      => $this->construirPasswordAsistencia((string) $usuario['documento']),
                         'gender'        => 'male',
                         'localUIRight'  => false, // En JSON usa booleanos reales, no strings
                         'doorRight'     => '1',
@@ -452,7 +475,7 @@ class hikvisionattendanceService
                         ],
                         'Valid' => [
                             'enable'    => true,
-                            'beginTime' => '2024-01-01T00:00:00',
+                            'beginTime' => now()->format('Y-m-d\TH:i:s'),
                             'endTime'   => '2035-12-31T23:59:59',
                             'timeType'  => 'local',
                         ],
