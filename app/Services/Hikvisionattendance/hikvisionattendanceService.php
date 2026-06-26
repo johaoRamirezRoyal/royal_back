@@ -83,6 +83,7 @@ class hikvisionattendanceService
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     /**
      * Construye la contraseña de asistencia a partir de los últimos 4 dígitos
@@ -100,6 +101,8 @@ class hikvisionattendanceService
     }
 
 >>>>>>> 1b9117f (feat: registrar llegadas tarde de estudiantes desde el webhook de Hikvision)
+=======
+>>>>>>> 9f56c6e (Reemplazo de archivos de hickvision)
     public function __construct()
     {
         $this->username = config('services.hikvision.username');
