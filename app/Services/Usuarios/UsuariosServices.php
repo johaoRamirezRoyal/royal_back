@@ -243,6 +243,64 @@ class UsuariosServices
         }
     }
 
+    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda)
+    {
+        try {
+            $usuarios = Usuario::select([
+                'id_user',
+                'documento',
+                'nombre',
+                'apellido',
+                'correo',
+                'perfil',
+                'id_nivel',
+                'id_curso',
+                'id_grupo',
+                'estado',
+            ])
+                ->with([
+                    'perfilRelacion:id_perfil,nombre',
+                    'nivelRelacion:id,nombre',
+                    'cursoRelacion:id,nombre',
+                ])
+                ->when($perfil_filtro, function ($query, $perfiles) {
+                    $query->whereIn('perfil', $perfiles);
+                })
+                ->when($nivel_filtro, function ($query, $niveles) {
+                    $query->whereIn('id_nivel', $niveles);
+                })
+                ->when($busqueda, function ($query, $search) {
+                    $palabras = preg_split('/\s+/', trim($search));
+                    $query->where(function ($q) use ($palabras) {
+                        foreach ($palabras as $palabra) {
+                            $q->where(function ($sub) use ($palabra) {
+                                $sub->where('nombre', 'LIKE', "%$palabra%")
+                                    ->orWhere('apellido', 'LIKE', "%$palabra%")
+                                    ->orWhere('documento', 'LIKE', "%$palabra%")
+                                    ->orWhere('correo', 'LIKE', "%$palabra%");
+                            });
+                        }
+                    });
+                })
+                ->orderBy('nombre')
+                ->orderBy('documento')
+                ->whereNotIn('perfil', [17, 6])
+                ->paginate((int) $perPage);
+
+            return [
+                'error' => false,
+                'message' => 'Datos obtenidos satisfactoriamente',
+                'data' => $usuarios,
+            ];
+        } catch (QueryException $e) {
+            return [
+                'error' => true,
+                'message' => 'Ha ocurrido un error inesperado',
+                'data' => $e->getMessage(),
+            ];
+        }
+    }
+
     public function mostrarTodosUsuarios()
     {
         try {

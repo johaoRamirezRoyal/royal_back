@@ -111,10 +111,11 @@ class hikvisionattendanceService
         $stack->push($this->retryMiddleware(3, 1000)); // 3 intentos
 
         $this->client = new Client([
-            'base_uri' => $this->baseUrl,
-            'auth' => [$this->username, $this->password, 'digest'], // 👈 Agregar 'digest'
-            'verify' => env('HIKVISION_VERIFY_SSL', false),
-            'timeout' => 30,
+            'base_uri' => $this->baseUrl,  // ya incluye el puerto
+            'auth'     => [$this->username, $this->password, 'digest'],
+            'verify'   => config('services.hikvision.verify_ssl', false), // mejor no usar env() directo aquí
+            'timeout'  => 30,
+            'handler'  => $stack,
         ]);
     }
 
