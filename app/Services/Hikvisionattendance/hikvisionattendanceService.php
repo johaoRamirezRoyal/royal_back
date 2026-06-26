@@ -13,7 +13,6 @@ use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
 use Illuminate\Support\Facades\Log;
 
-use function PHPUnit\Framework\isEmpty;
 
 class hikvisionattendanceService
 {
@@ -352,16 +351,6 @@ class hikvisionattendanceService
         try {
             $data = [
                 'UserInfo' => [
-<<<<<<< HEAD
-                    'employeeNo' => $datos_empleado['id_user'],
-                    'name' => $datos_empleado['nombre'],
-                    'userType' => $datos_empleado['perfil'],
-<<<<<<< HEAD
-=======
-                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'doorRight' => '1',
-                    'RightPlan' => [
-=======
                     'employeeNo'   => (string) $datos_empleado['id_user'],
                     'name'         => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
                     'userType'     => 'normal',
@@ -370,10 +359,8 @@ class hikvisionattendanceService
                     'localUIRight' => false,
                     'doorRight'    => '1',
                     'RightPlan'    => [
->>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
->>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
                     'Valid' => [
                         'enable'    => true,
                         'beginTime' => '2024-01-01T00:00:00',
@@ -1062,6 +1049,20 @@ class hikvisionattendanceService
                 'data' => $errorMsg,
             ];
         }
+    }
+
+    /**
+     * Construye una contraseña de asistencia de 4 dígitos:
+     * - Si hay documento, usa los últimos 4 dígitos.
+     * - Si no, genera un número aleatorio de 4 dígitos.
+     */
+    private function construirPasswordAsistencia(?string $documento): string
+    {
+        if (!empty($documento) && strlen($documento) >= 4) {
+            return substr($documento, -4);
+        }
+
+        return str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
     }
 
     /**
