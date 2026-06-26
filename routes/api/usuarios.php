@@ -12,7 +12,7 @@ Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActi
 Route::get('/all/general', [UsuariosController::class, 'mostrarTodosUsuariosPaginado']);
 Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);
 Route::get('/all', [UsuariosController::class, 'mostrarTodosUsuarios']);
-Route::get('/paginados', [UsuariosController::class, 'mostrarUsuariosPaginados']);
+Route::post('/paginados', [UsuariosController::class, 'mostrarUsuariosPaginados']);
 
 Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId'])->where('id', '[0-9]+');
 
