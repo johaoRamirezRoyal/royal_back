@@ -38,7 +38,7 @@ class UsuariosServices
      * @param  mixed  $perPage
      * @return LengthAwarePaginator
      */
-    public function mostrarTodosUsuariosActivoPaginado($perPage)
+    public function mostrarTodosUsuariosActivoPaginado($perPage): array
     {
         try {
             $data = DB::table('usuarios')
@@ -227,6 +227,7 @@ class UsuariosServices
                 ->orderBy('nombre')
                 ->orderBy('documento')
                 ->whereNotIn('perfil', [17, 6])
+                ->where('estado', 'activo')
                 ->paginate((int) $perPage);
 
             return [
