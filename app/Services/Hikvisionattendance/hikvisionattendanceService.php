@@ -81,9 +81,6 @@ class hikvisionattendanceService
         return self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null;
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
     /**
      * Construye la contraseña de asistencia a partir de los últimos 4 dígitos
      * del documento del usuario (el dispositivo acepta entre 4 y 8 caracteres).
@@ -99,9 +96,6 @@ class hikvisionattendanceService
         return (string) random_int(1000, 9999);
     }
 
->>>>>>> 1b9117f (feat: registrar llegadas tarde de estudiantes desde el webhook de Hikvision)
-=======
->>>>>>> 9f56c6e (Reemplazo de archivos de hickvision)
     public function __construct()
     {
         $this->username = config('services.hikvision.username');
@@ -1071,21 +1065,7 @@ class hikvisionattendanceService
             ];
         }
     }
-
-    /**
-     * Construye una contraseña de asistencia de 4 dígitos:
-     * - Si hay documento, usa los últimos 4 dígitos.
-     * - Si no, genera un número aleatorio de 4 dígitos.
-     */
-    private function construirPasswordAsistencia(?string $documento): string
-    {
-        if (!empty($documento) && strlen($documento) >= 4) {
-            return substr($documento, -4);
-        }
-
-        return str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
-    }
-
+    
     /**
      * Registra (o sobrescribe) la contraseña de asistencia de un empleado ya existente
      * en el dispositivo. Si el empleado tiene documento, la contraseña son sus últimos
