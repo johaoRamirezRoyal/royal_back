@@ -118,6 +118,7 @@ class HikvisionController extends Controller
         return $this->apiResponse($info_usuarios);
     }
 
+<<<<<<< HEAD
     public function registrarEmpleado(Request $request){
         $data = $request->all();
         
@@ -132,6 +133,23 @@ class HikvisionController extends Controller
             'telefono' => ['nullable', 'string', 'max:20'],
             'id_grupo' => ['required', 'integer', 'exists:grupos,id'],
         ]);
+=======
+    public function registrarEmpleado(Request $request)
+    {
+        $input = $request->all();
+
+        // Acepta objeto único o array de empleados
+        $empleados = array_is_list($input) ? $input : [$input];
+
+        $rules = [
+            '*.id_user'   => ['required', 'integer', 'exists:usuarios,id_user'],
+            '*.documento' => ['required', 'string', 'max:16'],
+            '*.nombre'    => ['required', 'string'],
+            '*.perfil'    => ['required', 'integer', 'exists:perfiles,id_perfil'],
+        ];
+
+        $validator = Validator::make($empleados, $rules);
+>>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
 
         if($validator->fails()){
             return response()->json([
@@ -141,9 +159,11 @@ class HikvisionController extends Controller
                 ], 400);
         }
 
-        $usuario = $this->hikvision_service->registrarEmpleado($data);
+        if (count($empleados) === 1) {
+            return $this->apiResponse($this->hikvision_service->registrarEmpleado($empleados[0]));
+        }
 
-        return $this->apiResponse($usuario);
+        return $this->apiResponse($this->hikvision_service->registrarEmpleadosMasivo($empleados));
     }
 
     public function registrarEmpleadosMasivoPerfil(Request $request){
@@ -214,7 +234,40 @@ class HikvisionController extends Controller
         return $this->apiResponse($eliminacion_masiva);
     }
 
+<<<<<<< HEAD
     public function desactivarUsuario(Request $request){
+=======
+    public function eliminarEmpleados(Request $request)
+    {
+        $input = $request->all();
+
+        $empleados = array_is_list($input) ? $input : [$input];
+
+        $validator = Validator::make($empleados, [
+            '*.id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->eliminarUsuariosRegistrados($empleados);
+
+        if (! $resultado['error']) {
+            $ids = array_column($empleados, 'id_user');
+            $this->usuario_services->actualizarAsistenciaRegistrada($ids, false);
+        }
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function desactivarUsuario(Request $request)
+    {
+>>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
         $data = $request->all();
 
         $validator = Validator::make($data, [
@@ -410,7 +463,7 @@ class HikvisionController extends Controller
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
-        if ($usuario['error'] || ! $usuario['usuario'] || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+        if ($usuario['error'] || ! $usuario['usuario'] || $usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
             return;
         }
 

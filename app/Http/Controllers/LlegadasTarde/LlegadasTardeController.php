@@ -37,10 +37,10 @@ class LlegadasTardeController extends Controller
 
     }
 
-    public function eliminarLlegadaTarde(Request $request){
-        $ids_llegadas_tarde = $request->input('ids_llegadas_tarde');
+    public function eliminarLlegadaTarde(Request $request, ?int $id = null){
+        $ids = $id !== null ? [$id] : $request->input('ids_llegadas_tarde', []);
 
-        $response = $this->llegadas_tarde->eliminarLlegadaTarde($ids_llegadas_tarde);
+        $response = $this->llegadas_tarde->eliminarLlegadaTarde($ids);
 
         return $this->apiResponse($response);
     }

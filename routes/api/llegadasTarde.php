@@ -32,3 +32,4 @@ Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
  *   }
  */
 Route::delete('/', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
+Route::delete('/{id}', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
