@@ -4,6 +4,7 @@ namespace App\Models\Usuarios;
 
 use App\Models\Areas\Cursos;
 use App\Models\Admisiones\Inscripcion;
+use App\Models\GestionAcademica\DocenteAsignatura;
 use App\Models\Inventario\Reportes;
 use App\Models\Notificacion;
 use Tymon\JWTAuth\Contracts\JWTSubject;
@@ -68,6 +69,11 @@ class Usuario extends Authenticatable implements JWTSubject
     public function notifications()
     {
         return $this->hasMany(Notificacion::class, 'user_id', 'id_user');
+    }
+
+    public function asignaturas()
+    {
+        return $this->hasMany(DocenteAsignatura::class, 'id_docente', 'id_user');
     }
 
     // Campos asignables masivamente
