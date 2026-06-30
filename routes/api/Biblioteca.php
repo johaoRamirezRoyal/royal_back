@@ -77,6 +77,7 @@ Route::post("/ejemplares", [BibliotecaController::class, "agregarEjemplarLibroBi
     }
  */
 Route::get("/ejemplares", [BibliotecaController::class, "verEjemplaresLibroBiblioteca"]);
+Route::get("/ejemplares/deshabilitados", [BibliotecaController::class, "verEjemplaresDeshabilitadosLibroBiblioteca"]);
 Route::put("/ejemplares", [BibliotecaController::class, 'cambiarEstadoEjemplarBiblioteca']);
 
 Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplarBiblioteca']);

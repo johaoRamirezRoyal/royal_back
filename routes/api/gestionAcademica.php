@@ -57,3 +57,26 @@ Route::post('/docentes-asignaturas', [GestionAcademicaController::class, 'asigna
 }
 */
 Route::delete('/docentes-asignaturas', [GestionAcademicaController::class, 'eliminarAsignaturasDocente']);
+
+/**
+ * JSON para listar carga académica
+ */
+Route::get('/carga-academica', [GestionAcademicaController::class, 'listarCargaAcademica']);
+
+/**
+ * JSON para crear carga académica
+{
+    "id_curso": 1,
+    "id_docente_asignatura": 2
+}
+ */
+Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaAcademica']);
+
+/**
+ * JSON para cambiar estado de carga académica
+{
+    "ids": [1,2,3],
+    "estado": 0
+}
+ */
+Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambiarEstadoCargaAcademica']);

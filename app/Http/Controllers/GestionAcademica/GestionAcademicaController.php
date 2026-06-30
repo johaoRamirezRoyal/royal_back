@@ -4,6 +4,7 @@ namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GestionAcademica\AsignaturaRequest;
+use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use Illuminate\Http\Request;
@@ -77,10 +78,40 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function eliminarAsignaturasDocente(Request $request){
+    public function eliminarAsignaturasDocente(Request $request)
+    {
         $ids = $request->input('ids');
 
         $response = $this->service->docenteAsignatura()->eliminarAsignaturasDocente($ids);
+
+        return $this->apiResponse($response);
+    }
+
+    public function listarCargaAcademica(Request $request)
+    {
+        $id_docente = $request->input('id_docente');
+        $id_curso = $request->input('id_curso', null);
+        $id_asignatura = $request->input('id_asignatura', null);
+        $estado = $request->input('estado', 1);
+
+        $response = $this->service->cargaAcademica()->listarCargaAcademicaDocente($id_docente, $estado, $id_curso, $id_asignatura);
+
+        return $this->apiResponse($response);
+    }
+
+    public function crearCargaAcademica(CargaAcademicaRequest $request)
+    {
+        $body = $request->validated();
+        $response = $this->service->cargaAcademica()->añadirCargaAcademicaDocente($body['id_curso'], $body['id_docente_asignatura']);
+        return $this->apiResponse($response);
+    }
+
+    public function cambiarEstadoCargaAcademica(Request $request)
+    {
+        $ids = $request->input('ids');
+        $estado = $request->input('estado', 0);
+
+        $response = $this->service->cargaAcademica()->cambiarEstadoCargaAcademica($ids, $estado);
 
         return $this->apiResponse($response);
     }
