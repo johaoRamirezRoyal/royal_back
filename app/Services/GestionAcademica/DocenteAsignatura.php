@@ -39,8 +39,8 @@ class DocenteAsignatura extends Service
                 )
                 ->with([
                     'nivelRelacion:id,nombre',
-                    'asignaturas:id,id_asignatura,id_docente',
-                    'asignaturas.asignatura:id,nombre,abreviatura,color'
+                    'docente_asignaturas:id,id_asignatura,id_docente',
+                    'docente_asignaturas.asignatura:id,nombre,abreviatura,color'
                 ])
                 ->orderBy('apellido')
                 ->orderBy('nombre')
