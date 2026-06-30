@@ -19,6 +19,10 @@ Route::group(['prefix' => 'auth'], function () {
     require __DIR__.'/api/auth.php';
 });
 
+// Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
+Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
+    ->where('filename', '.+');
+
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
 Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
