@@ -230,6 +230,7 @@ class BibliotecaController extends Controller
         $response = $this->biblioteca_services->verEjemplaresLibroBiblioteca(
             $request->integer("id_libro") ?: null,
             $request->input("autor"),
+            $request->input("s"),
             $request->integer("perpage") ?: null
         );
 

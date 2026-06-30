@@ -609,7 +609,7 @@ class BibliotecaServices extends Service
      * @param mixed $perpage
      * @return array{data: array, error: bool, message: string}
      */
-    public function verEjemplaresLibroBiblioteca(?int $id_libro = null, ?string $autor = null, ?int $perpage = 10)
+    public function verEjemplaresLibroBiblioteca(?int $id_libro = null, ?string $autor = null, ?string $search = null, ?int $perpage = 10)
     {
         try {
             $ejemplares = Ejemplares::query()
@@ -619,6 +619,10 @@ class BibliotecaServices extends Service
                     'prestamos:id,id_ejemplar,id_usuario,fecha_prestamo,fecha_devolucion,observacion,id_devuelto,fecha_devuelto',
                     'prestamos.usuario:id_user,nombre,apellido,correo'
                 ])
+                ->when(!empty($search), fn($q) => 
+                                $q->where('titulo', 'LIKE', "%$search%")
+                                ->orWhere('id', 'LIKE', "%$search%")
+                            )
                 ->when(
                     !empty($id_libro),
                     fn($q) => $q->where('id_libro', $id_libro)
