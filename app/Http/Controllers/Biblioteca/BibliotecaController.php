@@ -48,10 +48,12 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function mostrarSubcategoriasBiblioteca()
+    public function mostrarSubcategoriasBiblioteca(Request $request)
     {
+        
+        $id_categoria = $request->input("id_categoria", null);
 
-        $response = $this->biblioteca_services->mostrarSubcategoriasBiblioteca();
+        $response = $this->biblioteca_services->mostrarSubcategoriasBiblioteca($id_categoria);
 
         return $this->apiResponse($response);
     }
