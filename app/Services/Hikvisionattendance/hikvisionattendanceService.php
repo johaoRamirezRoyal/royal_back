@@ -388,14 +388,12 @@ class hikvisionattendanceService
         try {
             $payload = [
                 'UserInfo' => [
-                    'employeeNo'   => (string) $datos_empleado['id_user'],
-                    'name'         => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
-                    'userType'     => 'normal',
-                    'password'     => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'gender'       => 'male',
-                    'localUIRight' => false,
-                    'doorRight'    => '1',
-                    'RightPlan'    => [
+                    'employeeNo' => $datos_empleado['id_user'],
+                    'name' => $datos_empleado['nombre'],
+                    'userType' => $datos_empleado['perfil'],
+                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                    'doorRight' => '1',
+                    'RightPlan' => [
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
                     'Valid' => [

@@ -96,8 +96,11 @@ class LlegadasTarde extends Service
             }
 
             $llegadas_tarde = ModelsLlegadasTarde::where('id_periodo_academico', $id_periodo_academico)
-                ->with('alumno:id_user,nombre,apellido,correo,id_curso', 'alumno.cursoRelacion:id,nombre')
-                ->with('periodoAcademico:id,fecha_inicio,fecha_fin,activo')
+                ->with([
+                    'alumno' => fn($q) => $q->select('id_user', 'nombre', 'apellido', 'correo', 'id_curso')
+                                           ->with('cursoRelacion:id,nombre'),
+                    'periodoAcademico:id,fecha_inicio,fecha_fin,activo',
+                ])
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
                 })
