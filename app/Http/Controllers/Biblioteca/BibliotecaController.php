@@ -10,6 +10,7 @@ use App\Http\Requests\Biblioteca\LibroRequest;
 use App\Http\Requests\Biblioteca\PaqueteRequest;
 use App\Http\Requests\Biblioteca\PrestamoEjemplarRequest;
 use App\Http\Requests\Biblioteca\SubcategoriaRequest;
+use App\Models\Biblioteca\Libro;
 use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
 use Illuminate\Http\Request;
@@ -87,14 +88,68 @@ class BibliotecaController extends Controller
     {
         $response = $this->biblioteca_services
             ->obtenerTodosLosLibrosBiblioteca(
-                $request->input('search'),
+                $request->input('s'),
                 $request->input('categoria'),
                 $request->input('subcategoria'),
                 $request->input('activo', 1),
-                $request->input("perpage", 30),
+                $request->input("per-page", 10),
             );
 
         return $this->apiResponse($response);
+    }
+
+    public function verImagenBiblioteca(string $carpeta, string $filename)
+    {
+        $ruta = storage_path("app/public/{$carpeta}/{$filename}");
+
+        if (!file_exists($ruta)) {
+            abort(404);
+        }
+
+        return response()->file($ruta, [
+            'Content-Type' => mime_content_type($ruta)
+        ]);
+    }
+
+    public function subirImagenBiblioteca(Request $request)
+    {
+        if (!$request->hasFile('foto')) {
+            return $this->apiResponse([
+                'error'   => true,
+                'message' => 'No se recibió ningún archivo',
+                'data'    => []
+            ]);
+        }
+
+        $id_libro = $request->integer('id_libro') ?: null;
+        $libro    = $id_libro ? Libro::find($id_libro) : null;
+
+        if ($id_libro && !$libro) {
+            return $this->apiResponse([
+                'error'   => true,
+                'message' => "No se encontró el libro con ID: {$id_libro}",
+                'data'    => []
+            ]);
+        }
+
+        if ($libro?->foto) {
+            $this->file_storage_service->eliminar($libro->foto);
+        }
+
+        $archivo = $this->file_storage_service->uploadFile(
+            $request->file('foto'),
+            $request->input('carpeta', 'biblioteca')
+        );
+
+        if ($libro) {
+            $libro->update(['foto' => $archivo['ruta']]);
+        }
+
+        return $this->apiResponse([
+            'error'   => false,
+            'message' => $libro ? 'Imagen subida y libro actualizado' : 'Imagen subida correctamente',
+            'data'    => $archivo
+        ]);
     }
 
     public function agregarNuevoLibroBiblioteca(LibroRequest $request)
@@ -118,7 +173,7 @@ class BibliotecaController extends Controller
 
     public function editarLibro(LibroRequest $request)
     {
-        $id_libro = $request->input('id_libro');
+        $id_libro = $request->integer('id_libro');
         $body = $request->validated();
 
         if ($request->hasFile('foto')) {
@@ -142,6 +197,12 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function estadisticasEjemplaresBiblioteca()
+    {
+        $response = $this->biblioteca_services->estadisticasEjemplaresBiblioteca();
+        return $this->apiResponse($response);
+    }
+
     public function agregarEjemplarLibroBiblioteca(EjemplaresRequest $request)
     {
         $body = $request->validated();
@@ -158,9 +219,9 @@ class BibliotecaController extends Controller
     public function verEjemplaresLibroBiblioteca(Request $request)
     {
         $response = $this->biblioteca_services->verEjemplaresLibroBiblioteca(
-            $request->input("id_libro"),
+            $request->integer("id_libro") ?: null,
             $request->input("autor"),
-            $request->input("perpage")
+            $request->integer("perpage") ?: null
         );
 
         return $this->apiResponse($response);

@@ -298,6 +298,8 @@ class BibliotecaServices extends Service
             $libros = Libro::query()
                 ->where('activo', $estado)
 
+                ->withCount(['ejemplares as cantidad_ejemplares'])
+
                 ->with([
                     'categoria:id,nombre',
                     'subcategoria:id,nombre'
@@ -512,7 +514,41 @@ class BibliotecaServices extends Service
     /*
     -------------------------------------------------
     |
-    |                   EJEMPLARES 
+    |             ESTADISTICAS
+    |
+    -------------------------------------------------
+    */
+
+    public function estadisticasEjemplaresBiblioteca(): array
+    {
+        try {
+            $counts = Ejemplares::selectRaw('estado, count(*) as total')
+                ->whereIn('estado', [1, 2])
+                ->groupBy('estado')
+                ->pluck('total', 'estado');
+
+            return [
+                'error'   => false,
+                'message' => 'Estadísticas obtenidas',
+                'data'    => [
+                    'disponibles' => (int) ($counts[1] ?? 0),
+                    'prestados'   => (int) ($counts[2] ?? 0),
+                ]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener estadísticas de ejemplares');
+            return [
+                'error'   => true,
+                'message' => 'Error en el servidor al obtener estadísticas',
+                'data'    => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |                   EJEMPLARES
     |
     -------------------------------------------------
     */

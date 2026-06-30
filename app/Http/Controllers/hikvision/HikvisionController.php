@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
@@ -18,6 +19,7 @@ class HikvisionController extends Controller
     const HORA_LIMITE_LLEGADA = '07:05:00';
 
     protected hikvisionattendanceService $hikvision_service;
+
     protected UsuariosServices $usuario_services;
 
     protected LlegadasTarde $llegadas_tarde_service;
@@ -29,26 +31,104 @@ class HikvisionController extends Controller
         $this->llegadas_tarde_service = $llegadasTardeService;
     }
 
+    public function __invoke(Request $request)
+    {
+        $data = $this->extraerDatos($request);
 
-    public function testHikvisionConexion(){
+        if ($data) {
+            Log::info('[hikvision-email] Evento recibido', ['eventType' => $data['eventType'] ?? null]);
+        }
+
+        if ($data && ($data['eventType'] ?? '') === 'AccessControllerEvent') {
+            $this->testNotificationHikvision($data);
+        }
+
+        return response('', 200);
+    }
+
+    /**
+     * Extrae el payload del evento: JSON plano, XML plano, o
+     * multipart/form-data (una parte JSON/XML y, si hay foto, una imagen).
+     */
+    private function extraerDatos(Request $request): ?array
+    {
+        $contentType = $request->header('Content-Type', '');
+
+        if (str_contains($contentType, 'multipart/form-data')) {
+            foreach ($request->post() as $valor) {
+                $decoded = $this->intentarDecodificar((string) $valor);
+                if ($decoded !== null) {
+                    return $decoded;
+                }
+            }
+
+            foreach ($request->allFiles() as $archivo) {
+                $archivos = is_array($archivo) ? $archivo : [$archivo];
+                foreach ($archivos as $file) {
+                    $decoded = $this->intentarDecodificar(file_get_contents($file->getRealPath()));
+                    if ($decoded !== null) {
+                        return $decoded;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return $this->intentarDecodificar($request->getContent());
+    }
+
+    private function intentarDecodificar(string $raw): ?array
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+
+        $json = json_decode($raw, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
+            return $json;
+        }
+
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($raw);
+        if ($xml instanceof SimpleXMLElement) {
+            $arr = json_decode((string) json_encode($xml), true);
+
+            return is_array($arr) ? $arr : null;
+        }
+
+        return null;
+    }
+
+    public function testHikvisionConexion()
+    {
         $informacion = $this->hikvision_service->testConnection();
 
-        if($informacion['isConnected'] == false){
+        if ($informacion['isConnected'] == false) {
             return response()->json([
                 'error' => true,
-                'message' => "No se logró conectar a hikvision",
-                'data' => null
+                'message' => 'No se logró conectar a hikvision',
+                'data' => null,
             ]);
         }
 
         return response()->json([
             'error' => false,
-            'message' => "Conexión exitosa!",
+            'message' => 'Conexión exitosa!',
             'data' => $informacion['data'],
         ]);
     }
 
-    public function obtenerEmpleadosRegistrados(Request $request){
+    public function obtenerHttpHosts()
+    {
+        $resultado = $this->hikvision_service->obtenerHttpHosts();
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function obtenerEmpleadosRegistrados(Request $request)
+    {
         $pageSize = $request->input('per-page', 30);
 
         $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize);
@@ -56,14 +136,15 @@ class HikvisionController extends Controller
         return $this->apiResponse($usuarios);
     }
 
-    public function obtenerUnEmpleadoEspecifico(Request $request){
+    public function obtenerUnEmpleadoEspecifico(Request $request)
+    {
         $id_user = $request->input('id_user');
 
-        if(!$id_user){
+        if (! $id_user) {
             return response()->json([
                 'error' => true,
-                'message' => "Debe proporcionar un id_user válido",
-                'data' => []
+                'message' => 'Debe proporcionar un id_user válido',
+                'data' => [],
             ]);
         }
 
@@ -72,20 +153,21 @@ class HikvisionController extends Controller
         return $this->apiResponse($datos_usuario);
     }
 
-    public function obtenerImagenEmpleado(Request $request){
+    public function obtenerImagenEmpleado(Request $request)
+    {
         $path = $request->input('path');
 
-        if(!$path){
+        if (! $path) {
             return response()->json([
                 'error' => true,
-                'message' => "Debe proporcionar la ruta de la imagen",
-                'data' => null
+                'message' => 'Debe proporcionar la ruta de la imagen',
+                'data' => null,
             ], 400);
         }
 
         $resultado = $this->hikvision_service->obtenerImagenEmpleado($path);
 
-        if($resultado['error']){
+        if ($resultado['error']) {
             return response()->json($resultado, 400);
         }
 
@@ -94,22 +176,24 @@ class HikvisionController extends Controller
             ->header('Cache-Control', 'private, max-age=300');
     }
 
-    public function obtenerAsistenciaEmpleado(Request $request){
-        $id_empleado = $request->input("id_empleado");
-        $start_date = $request->input("start_date", null);
-        $end_date = $request->input("end_date", null);
+    public function obtenerAsistenciaEmpleado(Request $request)
+    {
+        $id_empleado = $request->input('id_empleado');
+        $start_date = $request->input('start_date', null);
+        $end_date = $request->input('end_date', null);
 
         $response = $this->hikvision_service->obtenerAsistenciaEmpleado($id_empleado, $start_date, $end_date);
 
         return $this->apiResponse($response);
     }
 
-    public function obtenerEmpleadosRegistradosPorPerfil(Request $request){
-        $id_perfil = $request->input("id_perfil");
+    public function obtenerEmpleadosRegistradosPorPerfil(Request $request)
+    {
+        $id_perfil = $request->input('id_perfil');
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
-        if($usuarios['error']){
+        if ($usuarios['error']) {
             return $this->apiResponse($usuarios);
         }
 
@@ -118,22 +202,6 @@ class HikvisionController extends Controller
         return $this->apiResponse($info_usuarios);
     }
 
-<<<<<<< HEAD
-    public function registrarEmpleado(Request $request){
-        $data = $request->all();
-        
-        $validator = Validator::make($data, [
-            'id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
-            'nombre' => ['required', 'string', 'max:30'],
-            'apellido' => ['required', 'string', 'max:30'],
-            'correo' => ['required', 'email', 'max:30'],
-            'perfil' => ['required', 'integer', 'exists:perfiles,id'],
-            'id_nivel' => ['required', 'integer', 'exists:niveles,id'],
-            'id_curso' => ['required', 'integer', 'exists:cursos,id'],
-            'telefono' => ['nullable', 'string', 'max:20'],
-            'id_grupo' => ['required', 'integer', 'exists:grupos,id'],
-        ]);
-=======
     public function registrarEmpleado(Request $request)
     {
         $input = $request->all();
@@ -149,14 +217,13 @@ class HikvisionController extends Controller
         ];
 
         $validator = Validator::make($empleados, $rules);
->>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
                 'error' => true,
                 'message' => $validator->errors()->first(),
                 'data' => [],
-                ], 400);
+            ], 400);
         }
 
         if (count($empleados) === 1) {
@@ -166,8 +233,9 @@ class HikvisionController extends Controller
         return $this->apiResponse($this->hikvision_service->registrarEmpleadosMasivo($empleados));
     }
 
-    public function registrarEmpleadosMasivoPerfil(Request $request){
-        $id_perfil = $request->input("id_perfil");
+    public function registrarEmpleadosMasivoPerfil(Request $request)
+    {
+        $id_perfil = $request->input('id_perfil');
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
@@ -177,7 +245,7 @@ class HikvisionController extends Controller
 
         $usuariosPendientes = array_values(array_filter(
             $usuarios['data'],
-            fn ($usuario) => empty($usuario['asistenciaRegistrada'])
+            fn($usuario) => empty($usuario['asistenciaRegistrada'])
         ));
 
         if (empty($usuariosPendientes)) {
@@ -190,7 +258,7 @@ class HikvisionController extends Controller
 
         $registro_masivo = $this->hikvision_service->registrarEmpleadosMasivo($usuariosPendientes);
 
-        if (!$registro_masivo['error']) {
+        if (! $registro_masivo['error']) {
             $idsExitosos = array_column($registro_masivo['data']['success'], 'id_user');
             $this->usuario_services->actualizarAsistenciaRegistrada($idsExitosos, true);
         }
@@ -198,22 +266,23 @@ class HikvisionController extends Controller
         return $this->apiResponse($registro_masivo);
     }
 
-    public function eliminarUsuariosRegistrados(Request $request){
-        $id_perfil = $request->input("id_perfil");
+    public function eliminarUsuariosRegistrados(Request $request)
+    {
+        $id_perfil = $request->input('id_perfil');
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
-        Log::info("usuarios obtenidos", [
-            "users" => $usuarios
+        Log::info('usuarios obtenidos', [
+            'users' => $usuarios,
         ]);
 
-        if($usuarios['error']){
+        if ($usuarios['error']) {
             return $this->apiResponse($usuarios);
         }
 
         $usuariosRegistrados = array_values(array_filter(
             $usuarios['data'],
-            fn ($usuario) => !empty($usuario['asistenciaRegistrada'])
+            fn($usuario) => ! empty($usuario['asistenciaRegistrada'])
         ));
 
         if (empty($usuariosRegistrados)) {
@@ -226,7 +295,7 @@ class HikvisionController extends Controller
 
         $eliminacion_masiva = $this->hikvision_service->eliminarUsuariosRegistrados($usuariosRegistrados);
 
-        if (!$eliminacion_masiva['error']) {
+        if (! $eliminacion_masiva['error']) {
             $idsEliminados = array_column($usuariosRegistrados, 'id_user');
             $this->usuario_services->actualizarAsistenciaRegistrada($idsEliminados, false);
         }
@@ -234,9 +303,6 @@ class HikvisionController extends Controller
         return $this->apiResponse($eliminacion_masiva);
     }
 
-<<<<<<< HEAD
-    public function desactivarUsuario(Request $request){
-=======
     public function eliminarEmpleados(Request $request)
     {
         $input = $request->all();
@@ -267,7 +333,6 @@ class HikvisionController extends Controller
 
     public function desactivarUsuario(Request $request)
     {
->>>>>>> 591bab3 (Hikvision: registro/eliminación individual, bloqueo de inactivos y correcciones de dispositivo)
         $data = $request->all();
 
         $validator = Validator::make($data, [
@@ -276,7 +341,7 @@ class HikvisionController extends Controller
             'enable' => ['required', 'integer', 'in:0,1'],
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
                 'error' => true,
                 'message' => $validator->errors()->first(),
@@ -284,15 +349,6 @@ class HikvisionController extends Controller
             ], 400);
         }
 
-<<<<<<< HEAD
-        $id_user = $request->input("id_user");
-        $enable = $request->input("enable");
-
-        $usuario = $this->usuario_services->mostrarInfoUsuarioId($id_user);
-        Log::info("Usuario cargado", $usuario['usuario']->toArray());
-        if($usuario['error']){
-            return $this->apiResponse($usuario);
-=======
         $enable = $request->input('enable');
         $resultado = ['success' => [], 'error' => []];
 
@@ -312,7 +368,6 @@ class HikvisionController extends Controller
             }
 
             $resultado['success'][] = ['id_user' => $id_user, 'message' => $desactivar['message']];
->>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
         }
 
         return $this->apiResponse([
@@ -322,13 +377,14 @@ class HikvisionController extends Controller
         ]);
     }
 
-    public function registrarHuellaEmpleado(Request $request){
+    public function registrarHuellaEmpleado(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
             'fingerPrintID' => ['nullable', 'integer', 'min:1', 'max:10'],
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
                 'error' => true,
                 'message' => $validator->errors()->first(),
@@ -344,9 +400,6 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
-<<<<<<< HEAD
-    public function eliminarHuellaEmpleado(Request $request){
-=======
     public function registrarContrasenaEmpleado(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -406,12 +459,11 @@ class HikvisionController extends Controller
 
     public function eliminarHuellaEmpleado(Request $request)
     {
->>>>>>> acb9c9e (feat: registro de contraseña y rostro en Hikvision, desactivación en batch y correcciones de beginTime)
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
                 'error' => true,
                 'message' => $validator->errors()->first(),
@@ -425,9 +477,6 @@ class HikvisionController extends Controller
 
         return $this->apiResponse($resultado);
     }
-<<<<<<< HEAD
-}
-=======
 
     public function testNotificationHikvision(Request $request)
     {
@@ -480,4 +529,3 @@ class HikvisionController extends Controller
         );
     }
 }
->>>>>>> 1b9117f (feat: registrar llegadas tarde de estudiantes desde el webhook de Hikvision)

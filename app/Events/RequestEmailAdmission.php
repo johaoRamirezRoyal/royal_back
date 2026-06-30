@@ -10,6 +10,7 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class RequestEmailAdmission
 {
@@ -19,5 +20,7 @@ class RequestEmailAdmission
      * Create a new event instance.
      */
     public function __construct(public string $email, public string $token, public string $verificationCode)
-    {}
+    {
+        Log::info("Se esta enviando el correo desde RequestEmailAdmission");
+    }
 }

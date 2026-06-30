@@ -11,6 +11,9 @@ Route::get("/subcategorias", [BibliotecaController::class, "mostrarSubcategorias
 Route::post("/subcategorias", [BibliotecaController::class, "agregarSubcategoriaBiblioteca"]);
 Route::put("/subcategorias/estado", [BibliotecaController::class, "cambiarEstadoSubcategoriaBiblioteca"]);
 
+Route::get("/estadisticas", [BibliotecaController::class, 'estadisticasEjemplaresBiblioteca']);
+Route::post("/imagen", [BibliotecaController::class, 'subirImagenBiblioteca']);
+
 //LIBROS
 /**
  * JSON para consultrar los libros:

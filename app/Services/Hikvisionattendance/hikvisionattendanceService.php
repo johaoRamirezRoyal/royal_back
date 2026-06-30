@@ -241,6 +241,29 @@ class hikvisionattendanceService
     }
 
     /**
+     * Obtiene la configuración de los hosts HTTP a los que el dispositivo envía notificaciones de eventos.
+     */
+    public function obtenerHttpHosts()
+    {
+        try {
+            $response = $this->client->get('/ISAPI/Event/notification/httpHosts?format=json');
+
+            return [
+                'error' => false,
+                'data' => $this->parseXmlResponse($response->getBody()->getContents()),
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error al obtener httpHosts', ['error' => $e->getMessage()]);
+
+            return [
+                'error' => true,
+                'message' => 'No se pudo obtener la configuración de httpHosts',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
      * Obtener eventos de acceso (facial, huella, QR)
      *
      * @return array['error', 'message', 'data']
@@ -366,14 +389,12 @@ class hikvisionattendanceService
         try {
             $data = [
                 'UserInfo' => [
-                    'employeeNo'   => (string) $datos_empleado['id_user'],
-                    'name'         => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
-                    'userType'     => 'normal',
-                    'password'     => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'gender'       => 'male',
-                    'localUIRight' => false,
-                    'doorRight'    => '1',
-                    'RightPlan'    => [
+                    'employeeNo' => $datos_empleado['id_user'],
+                    'name' => $datos_empleado['nombre'],
+                    'userType' => $datos_empleado['perfil'],
+                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                    'doorRight' => '1',
+                    'RightPlan' => [
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
                     'Valid' => [
@@ -386,9 +407,20 @@ class hikvisionattendanceService
             ];
 
             $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
+
             if ($groupId !== null) {
-                $data['UserInfo']['groupId'] = $groupId;
+                $payload['UserInfo']['groupId'] = $groupId;
             }
+
+            $response = $this->client->post(
+                '/ISAPI/AccessControl/Employee',
+                [
+                    'body' => json_encode($payload),
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                    ],
+                ],
+            );
 
             $this->client->post('/ISAPI/AccessControl/UserInfo/Record?format=json', [
                 'headers' => [
@@ -446,6 +478,7 @@ class hikvisionattendanceService
                         'employeeNo'    => (string) $usuario['id_user'],
                         'name'          => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
                         'userType'      => 'normal',
+                        'password'      => $this->construirPasswordAsistencia((string) $usuario['documento']),
                         'gender'        => 'male',
                         'localUIRight'  => false, // En JSON usa booleanos reales, no strings
                         'doorRight'     => '1',

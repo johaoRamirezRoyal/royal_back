@@ -1,0 +1,27 @@
+# Systemd unit for the Laravel queue worker (email queue: 'emails,default').
+#
+# Install:
+#   sudo cp deploy/royal-back-queue.service /etc/systemd/system/royal-back-queue.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now royal-back-queue
+#
+# After every deploy (new code), tell running workers to restart gracefully:
+#   php artisan queue:restart
+#
+# Logs:
+#   journalctl -u royal-back-queue -f
+
+[Unit]
+Description=Royal Backend - Laravel Queue Worker (emails)
+After=network.target mysql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/royal_back
+ExecStart=/usr/bin/php artisan queue:work --queue=emails,default --sleep=3 --tries=3 --max-time=3600
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

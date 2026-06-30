@@ -5,14 +5,13 @@ namespace App\Http\Controllers\Admissions;
 use App\Events\RequestEmailAdmission;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admisiones\AdmisionesDocumentoRequest;
+use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
 use App\Http\Requests\Admisiones\RegistrarAspiranteRequest;
-use App\Http\Requests\Admisiones\RegistrarFamiliarRequest;
+use App\Http\Requests\Admisiones\RegistrarFamiliaresRequest;
 use App\Http\Requests\Admisiones\RegistrarInformacionMedicaRequest;
 use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
-use App\Http\Requests\Admisiones\ReferenciaFamiliarRequest;
-use App\Http\Requests\Admisiones\RegistrarFamiliaresRequest;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -85,6 +84,8 @@ class AdmissionsController extends Controller
             return $this->error('Demasiadas solicitudes', 429);
         }
 
+        Log::info('Haciendo algo en la función requestVerification');
+
         $token = Cache::get("email_token_{$email}") ?? Str::random(64);
 
         $code = str_pad(random_int(0, 99999), 5, '0', STR_PAD_LEFT);
@@ -118,6 +119,9 @@ class AdmissionsController extends Controller
             Log::info("Enviando correo de verificacion a {$email}");
             //event(new RequestEmailAdmission($email, $token, $code));
         } catch (\Exception $err) {
+            Log::alert('Ha ocurrido un error inesperado en el envio del correo', ['Error' => $err]);
+
+            return $this->error('Ha ocurrido un error inesperado en la peticion del correo');
             Log::alert("Ha ocurrido un error inesperado en el envio del correo", ["Error" => $err]);
             return $this->error("Ha ocurrido un error inesperado en la peticion del correo");
         }
@@ -506,11 +510,11 @@ class AdmissionsController extends Controller
     {
         $ids = $request->input('ids');
 
-        if (empty($ids) || !is_array($ids)) {
+        if (empty($ids) || ! is_array($ids)) {
             return $this->apiResponse([
                 'error' => true,
                 'message' => 'Debe enviar un arreglo de IDs',
-                'data' => []
+                'data' => [],
             ]);
         }
 
@@ -525,7 +529,7 @@ class AdmissionsController extends Controller
 
         foreach ($documentos['data'] as $docs) {
 
-            if (!empty($docs['public_id'])) {
+            if (! empty($docs['public_id'])) {
 
                 $resourceType = in_array(strtolower($docs['formato'] ?? ''), $imageFormats, true)
                     ? 'image'
@@ -541,7 +545,7 @@ class AdmissionsController extends Controller
                         'data' => [
                             'documento' => $docs,
                             'resource_type_usado' => $resourceType,
-                        ]
+                        ],
                     ]);
                 }
             }

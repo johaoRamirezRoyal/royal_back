@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admissions\AdmissionsController;
+use App\Http\Controllers\Hikvision\HikvisionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -11,21 +12,26 @@ Route::get('/', function () {
     ]);
 });
 
+Route::post('/pushNotification', [HikvisionController::class, 'testNotificationHikvision']);
+
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
     require __DIR__ . '/api/auth.php';
 });
+
+// Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
+Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
+    ->where('filename', '.+');
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
 Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
     Route::group(['prefix' => 'anio-academico'], function () {
-        require __DIR__ . '/api/anioAcademico.php';
+        require __DIR__.'/api/anioAcademico.php';
     });
-
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
-    Route::get("/inscripcionesPsicologa", [AdmissionsController::class, "mostrarAspirantesAPsicologa"]);
+    Route::get('/inscripcionesPsicologa', [AdmissionsController::class, 'mostrarAspirantesAPsicologa']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {
@@ -90,7 +96,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // BIBLIOTECA
     Route::prefix('/biblioteca')->group(function () {
-        require __DIR__ . '/api/Biblioteca.php';
+        require __DIR__.'/api/Biblioteca.php';
     });
 
     // TIPOS DE DOCUMENTOS
@@ -100,6 +106,16 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     //LLEGADAS TARDE
     Route::prefix("/llegadas-tarde")->group(function () {
         require __DIR__ . '/api/llegadasTarde.php';
+    });
+
+    //LLEGADAS TARDE
+    Route::prefix("/llegadas-tarde")->group(function () {
+        require __DIR__ . '/api/llegadasTarde.php';
+    });
+
+    // GESTIÓN ACADÉMICA
+    Route::prefix('/gestion-academica')->group(function () {
+        require __DIR__ . '/api/gestionAcademica.php';
     });
 
 });

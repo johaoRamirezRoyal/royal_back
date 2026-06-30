@@ -10,6 +10,7 @@ Route::put("/fingerprint/delete", [HikvisionController::class, 'eliminarHuellaEm
 Route::post("/password/enroll", [HikvisionController::class, 'registrarContrasenaEmpleado']);
 Route::post("/face/enroll", [HikvisionController::class, 'registrarRostroEmpleado']);
 Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
+Route::get('/httpHosts', [HikvisionController::class, 'obtenerHttpHosts']);
 Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
 Route::get('/image', [HikvisionController::class, 'obtenerImagenEmpleado']);
 Route::get("/userInfo/perfil", [HikvisionController::class, 'obtenerEmpleadosRegistradosPorPerfil']);
