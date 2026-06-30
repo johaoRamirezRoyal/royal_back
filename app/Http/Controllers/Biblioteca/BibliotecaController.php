@@ -188,18 +188,25 @@ class BibliotecaController extends Controller
     public function cambiarEstadoLibro(Request $request)
     {
         $ids_libros = $request->input('ids');
+        $estado = $request->input('estado', 0);
+
+        if (is_string($estado)) {
+            $estado = $estado === 'activo' ? 1 : ($estado === 'inactivo' ? 0 : (int) $estado);
+        }
 
         $response = $this->biblioteca_services->cambiarEstadoLibro(
             $ids_libros,
-            $request->input('estado', 0)
+            (int) $estado
         );
 
         return $this->apiResponse($response);
     }
 
-    public function estadisticasEjemplaresBiblioteca()
+    public function estadisticasEjemplaresBiblioteca(Request $request)
     {
-        $response = $this->biblioteca_services->estadisticasEjemplaresBiblioteca();
+        $response = $this->biblioteca_services->estadisticasEjemplaresBiblioteca(
+            $request->integer('id_libro') ?: null
+        );
         return $this->apiResponse($response);
     }
 
@@ -221,6 +228,16 @@ class BibliotecaController extends Controller
         $response = $this->biblioteca_services->verEjemplaresLibroBiblioteca(
             $request->integer("id_libro") ?: null,
             $request->input("autor"),
+            $request->integer("perpage") ?: null
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function verEjemplaresDeshabilitadosLibroBiblioteca(Request $request)
+    {
+        $response = $this->biblioteca_services->verEjemplaresDeshabilitadosLibroBiblioteca(
+            $request->integer("id_libro") ?: null,
             $request->integer("perpage") ?: null
         );
 

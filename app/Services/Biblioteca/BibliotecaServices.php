@@ -298,7 +298,7 @@ class BibliotecaServices extends Service
             $libros = Libro::query()
                 ->where('activo', $estado)
 
-                ->withCount(['ejemplares as cantidad_ejemplares'])
+                ->withCount(['ejemplares as cantidad_ejemplares' => fn($q) => $q->activo()])
 
                 ->with([
                     'categoria:id,nombre',
@@ -519,21 +519,32 @@ class BibliotecaServices extends Service
     -------------------------------------------------
     */
 
-    public function estadisticasEjemplaresBiblioteca(): array
+    public function estadisticasEjemplaresBiblioteca(?int $id_libro = null): array
     {
         try {
             $counts = Ejemplares::selectRaw('estado, count(*) as total')
                 ->whereIn('estado', [1, 2])
+                ->when(
+                    !empty($id_libro),
+                    fn($q) => $q->where('id_libro', $id_libro)
+                )
                 ->groupBy('estado')
                 ->pluck('total', 'estado');
+
+            $data = [
+                'disponibles' => (int) ($counts[1] ?? 0),
+                'prestados'   => (int) ($counts[2] ?? 0),
+            ];
+
+            if (empty($id_libro)) {
+                $data['ejemplares_total'] = Ejemplares::count();
+                $data['libros_total'] = Libro::count();
+            }
 
             return [
                 'error'   => false,
                 'message' => 'Estadísticas obtenidas',
-                'data'    => [
-                    'disponibles' => (int) ($counts[1] ?? 0),
-                    'prestados'   => (int) ($counts[2] ?? 0),
-                ]
+                'data'    => $data
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener estadísticas de ejemplares');
@@ -643,6 +654,47 @@ class BibliotecaServices extends Service
             return [
                 'error' => true,
                 "message" => "Error en el servidor al listar ejemplares",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Metodo para ver los ejemplares deshabilitados de un libro
+     * @param mixed $id_libro
+     * @param mixed $perpage
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function verEjemplaresDeshabilitadosLibroBiblioteca(?int $id_libro = null, ?int $perpage = 10)
+    {
+        try {
+            $ejemplares = Ejemplares::query()
+                ->where('estado', 4)
+                ->with(['libro:id,titulo,autor,editorial,foto'])
+                ->when(
+                    !empty($id_libro),
+                    fn($q) => $q->where('id_libro', $id_libro)
+                )
+                ->paginate($perpage);
+
+            if ($ejemplares->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontraron ejemplares deshabilitados",
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Ejemplares deshabilitados listados correctamente",
+                'data' => $ejemplares->toArray(),
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error en el servidor al tratar de listar los ejemplares deshabilitados");
+            return [
+                'error' => true,
+                "message" => "Error en el servidor al listar ejemplares deshabilitados",
                 'data' => []
             ];
         }
