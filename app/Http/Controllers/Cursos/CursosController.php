@@ -11,6 +11,6 @@ class CursosController extends Controller
     {
         $responseData = $cursos->getCursos();
 
-        return $this->success($responseData, 'Se han encontrado cursos');
+        return $this->success('Se han encontrado cursos', $responseData);
     }
 }

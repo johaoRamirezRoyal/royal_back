@@ -13,6 +13,7 @@ use App\Models\Biblioteca\Subcategoria;
 use App\Services\FileStorageService;
 use App\Services\Service;
 use Exception;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\File;
@@ -603,6 +604,47 @@ class BibliotecaServices extends Service
     }
 
     /**
+     * Verifica si un ejemplar existe (por su código) y si está disponible para préstamo.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function verificarEjemplarBiblioteca(string $codigo): array
+    {
+        try {
+            $ejemplar = Ejemplares::where('codigo', $codigo)
+                ->with('libro:id,titulo,autor,editorial,foto')
+                ->first();
+
+            if (!$ejemplar) {
+                return [
+                    'error' => true,
+                    'message' => 'El ejemplar no existe',
+                    'data' => ['existe' => false],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => $ejemplar->estado == 1
+                    ? 'El ejemplar está disponible para préstamo'
+                    : 'El ejemplar existe pero no está disponible para préstamo',
+                'data' => [
+                    'existe' => true,
+                    'disponible' => $ejemplar->estado == 1,
+                    'estado' => $ejemplar->estado,
+                    'ejemplar' => $ejemplar,
+                ],
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al tratar de verificar el ejemplar");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al verificar el ejemplar",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
      * Metodo para ver los ejemplares de un libro, puede ser filtrado
      * @param mixed $id_libro
      * @param mixed $autor
@@ -1029,6 +1071,90 @@ class BibliotecaServices extends Service
                 'error' => true,
                 'message' => "Error inesperado al devolver el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
                 'data' => $data
+            ];
+        }
+    }
+
+    /**
+     * Lista todos los préstamos de ejemplar activos (no devueltos) de la biblioteca,
+     * sin filtrar por usuario ni ejemplar específico.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function obtenerPrestamosEjemplarActivos(
+        ?string $search = null,
+        ?int $perpage = 10,
+        array|string|int|null $id_curso = null,
+        array|string|int|null $id_nivel = null,
+        ?string $fecha_inicio = null,
+        ?string $fecha_fin = null,
+        ?string $codigo_ejemplar = null
+    ): array
+    {
+        $id_curso = array_filter(Arr::wrap($id_curso));
+        $id_nivel = array_filter(Arr::wrap($id_nivel));
+
+        try {
+            $prestamos = PrestamosEjemplar::query()
+                ->whereNull('id_devuelto')
+                ->with([
+                    'ejemplar:id,codigo,id_libro',
+                    'ejemplar.libro:id,titulo,autor,editorial,edicion',
+                    'usuario:id_user,nombre,apellido,correo,id_curso,id_nivel',
+                    'usuario.cursoRelacion:id,nombre',
+                    'usuario.nivelRelacion:id,nombre',
+                ])
+                ->when(
+                    !empty($search),
+                    fn ($q) => $q->where(
+                        fn ($grupo) => $grupo->whereHas(
+                            'usuario',
+                            fn ($sub) => $sub->where('nombre', 'LIKE', "%$search%")
+                                ->orWhere('apellido', 'LIKE', "%$search%")
+                        )->orWhereHas(
+                            'ejemplar',
+                            fn ($sub) => $sub->where('codigo', 'LIKE', "%$search%")
+                        )
+                    )
+                )
+                ->when(
+                    !empty($id_curso) || !empty($id_nivel),
+                    fn ($q) => $q->whereHas(
+                        'usuario',
+                        fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
+                            ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
+                    )
+                )
+                ->when(
+                    !empty($codigo_ejemplar),
+                    fn ($q) => $q->whereHas(
+                        'ejemplar',
+                        fn ($sub) => $sub->where('codigo', 'LIKE', "%$codigo_ejemplar%")
+                    )
+                )
+                ->when(!empty($fecha_inicio), fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fecha_inicio))
+                ->when(!empty($fecha_fin), fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fecha_fin))
+                ->orderByDesc('fecha_prestamo')
+                ->paginate($perpage);
+
+            if ($prestamos->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No hay préstamos activos',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Préstamos activos listados correctamente',
+                'data' => $prestamos->toArray(),
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al tratar de listar los préstamos activos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al listar los préstamos activos",
+                'data' => [],
             ];
         }
     }

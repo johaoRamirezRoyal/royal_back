@@ -15,6 +15,7 @@ use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class BibliotecaController extends Controller
 
@@ -225,6 +226,25 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function verificarEjemplarBiblioteca(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'codigo' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $response = $this->biblioteca_services->verificarEjemplarBiblioteca($request->input('codigo'));
+
+        return $this->apiResponse($response);
+    }
+
     public function verEjemplaresLibroBiblioteca(Request $request)
     {
         $response = $this->biblioteca_services->verEjemplaresLibroBiblioteca(
@@ -241,7 +261,7 @@ class BibliotecaController extends Controller
     {
         $response = $this->biblioteca_services->verEjemplaresDeshabilitadosLibroBiblioteca(
             $request->integer("id_libro") ?: null,
-            $request->integer("perpage") ?: null
+            $request->integer("per-page") ?: null
         );
 
         return $this->apiResponse($response);
@@ -252,6 +272,21 @@ class BibliotecaController extends Controller
         $response = $this->biblioteca_services->cambiarEstadoEjemplarBiblioteca(
             $request->input('ids_ejemplares'),
             $request->input('estado', 4)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function obtenerPrestamosEjemplarActivos(Request $request)
+    {
+        $response = $this->biblioteca_services->obtenerPrestamosEjemplarActivos(
+            $request->input("s"),
+            $request->integer("per-page") ?: null,
+            $request->input("id_curso") ?: null,
+            $request->input("id_nivel") ?: null,
+            $request->input("fecha_inicio"),
+            $request->input("fecha_fin"),
+            $request->input("codigo_ejemplar")
         );
 
         return $this->apiResponse($response);
