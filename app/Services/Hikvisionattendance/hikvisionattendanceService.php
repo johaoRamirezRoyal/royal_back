@@ -11,6 +11,7 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 
@@ -164,6 +165,13 @@ class hikvisionattendanceService
             ) use ($maxRetries) {
 
                 if ($retries >= $maxRetries) {
+                    return false;
+                }
+
+                // Los endpoints de captura (huella/rostro) son polling bloqueante dentro de un
+                // mismo request: si el dispositivo no responde, reintentar aquí solo triplica la
+                // espera y retrasa que una cancelación (ver cancelarRegistroRostro) surta efecto.
+                if (str_contains($request->getUri()->getPath(), 'Capture')) {
                     return false;
                 }
 
@@ -1416,13 +1424,36 @@ class hikvisionattendanceService
             ];
         }
 
-        $captura = $this->capturarRostro();
+        Cache::forget($this->cancelacionRostroCacheKey($employeeNo));
+
+        $captura = $this->capturarRostro($employeeNo);
 
         if ($captura['error']) {
             return $captura;
         }
 
         return $this->vincularRostroEmpleado($employeeNo, $faceLibraryId, $captura['data']['imagenJpeg']);
+    }
+
+    /**
+     * Marca como cancelada la captura de rostro en curso para un empleado, para que
+     * el bucle de polling de capturarRostro() (que corre en la petición de registrarRostroEmpleado,
+     * potencialmente en otro proceso PHP-FPM) la detecte y se detenga antes de agotar sus reintentos.
+     */
+    public function cancelarRegistroRostro(string $employeeNo): array
+    {
+        Cache::put($this->cancelacionRostroCacheKey($employeeNo), true, now()->addSeconds(30));
+
+        return [
+            'error' => false,
+            'message' => 'Se solicitó la cancelación de la captura de rostro',
+            'data' => [],
+        ];
+    }
+
+    private function cancelacionRostroCacheKey(string $employeeNo): string
+    {
+        return "hikvision:cancelar-captura-rostro:{$employeeNo}";
     }
 
     /**
@@ -1436,12 +1467,22 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    private function capturarRostro(int $maxIntentos = 25, int $intervaloMs = 700): array
+    private function capturarRostro(string $employeeNo, int $maxIntentos = 25, int $intervaloMs = 700): array
     {
         $xml = '<?xml version="1.0" encoding="UTF-8"?><CaptureFaceDataCond><captureInfrared>false</captureInfrared><dataType>binary</dataType></CaptureFaceDataCond>';
 
         try {
             for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+                if (Cache::pull($this->cancelacionRostroCacheKey($employeeNo))) {
+                    Log::info('Captura de rostro cancelada por el usuario', ['employeeNo' => $employeeNo]);
+
+                    return [
+                        'error' => true,
+                        'message' => 'Captura de rostro cancelada',
+                        'data' => [],
+                    ];
+                }
+
                 $response = $this->client->post('/ISAPI/AccessControl/CaptureFaceData', [
                     'headers' => [
                         'Content-Type' => 'application/xml',

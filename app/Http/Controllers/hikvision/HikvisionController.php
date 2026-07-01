@@ -457,6 +457,27 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function cancelarRegistroRostro(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->cancelarRegistroRostro(
+            $request->input('employeeNo')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
     public function eliminarHuellaEmpleado(Request $request)
     {
         $validator = Validator::make($request->all(), [
