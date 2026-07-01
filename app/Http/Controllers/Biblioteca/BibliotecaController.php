@@ -231,7 +231,7 @@ class BibliotecaController extends Controller
             $request->integer("id_libro") ?: null,
             $request->input("autor"),
             $request->input("s"),
-            $request->integer("perpage") ?: null
+            $request->integer("per-page") ?: null
         );
 
         return $this->apiResponse($response);
