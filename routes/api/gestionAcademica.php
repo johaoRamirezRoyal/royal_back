@@ -80,3 +80,10 @@ Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaA
 }
  */
 Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambiarEstadoCargaAcademica']);
+
+Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
+Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
+Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria']);
+Route::put('/franjas-horarias/orden', [GestionAcademicaController::class, 'actualizarOrdenFranjasHorarias']);
+Route::put('/franjas-horarias/horario', [GestionAcademicaController::class, 'actualizarHorarioFranja']);
+Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria']);
