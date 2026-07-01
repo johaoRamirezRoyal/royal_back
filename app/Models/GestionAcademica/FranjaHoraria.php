@@ -26,4 +26,9 @@ class FranjaHoraria extends Model
     {
         return $this->belongsTo(Anio::class, 'id_anio_escolar', 'id');
     }
+
+    public function diaSemana()
+    {
+        return $this->belongsTo(DiaSemana::class, 'id_dia_semana', 'id');
+    }
 }

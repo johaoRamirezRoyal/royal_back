@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\GestionAcademica\AsignaturaRequest;
 use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
+use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use Illuminate\Http\Request;
 
@@ -114,5 +115,41 @@ class GestionAcademicaController extends Controller
         $response = $this->service->cargaAcademica()->cambiarEstadoCargaAcademica($ids, $estado);
 
         return $this->apiResponse($response);
+    }
+
+    public function verFranjasHorarias(Request $request)
+    {
+        $id_anio_escolar = $request->input('id_anio_escolar');
+        $id_dia_semana = $request->input('id_dia_semana');
+        $tipo = $request->input('tipo');
+
+        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $tipo));
+    }
+
+    public function crearFranjaHoraria(FranjaHorariaRequest $request)
+    {
+        return $this->apiResponse($this->service->franjaHoraria()->añadirFranjaHoraria($request->all()));
+    }
+
+    public function actualizarTipoFranjaHoraria(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarFranjaHoraria($body['ids'], $body['id_anio_escolar'] ?? null, $body['tipo'] ?? null));
+    }
+
+    public function actualizarOrdenFranjasHorarias(FranjaHorariaRequest $request)
+    {
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarOrdenFranjasHorarias($request->input('franjas')));
+    }
+
+    public function actualizarHorarioFranja(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarHorarioFranja($body['id'], $body['hora_inicio'] ?? null, $body['hora_fin'] ?? null));
+    }
+
+    public function eliminarFranjaHoraria(FranjaHorariaRequest $request)
+    {
+        return $this->apiResponse($this->service->franjaHoraria()->eliminarFranjaHoraria($request->input('ids')));
     }
 }

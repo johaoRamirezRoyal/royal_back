@@ -9,7 +9,8 @@ class GestionAcademicaService extends Service
     public function __construct(
         private Asignatura $asignatura,
         private DocenteAsignatura $docenteAsignatura,
-        private CargaAcademicaService $cargaAcademica
+        private CargaAcademicaService $cargaAcademica,
+        private FranjaHorariaService $franjaHoraria
     ) {}
 
     public function asignatura(): Asignatura
@@ -25,5 +26,10 @@ class GestionAcademicaService extends Service
     public function cargaAcademica(): CargaAcademicaService
     {
         return $this->cargaAcademica;
+    }
+
+    public function franjaHoraria(): FranjaHorariaService
+    {
+        return $this->franjaHoraria;
     }
 }
