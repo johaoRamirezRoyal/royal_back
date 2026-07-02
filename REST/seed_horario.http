@@ -1,0 +1,225 @@
+### ============================================
+### SEED HORARIO — REST Client
+### ============================================
+### Primero haz login con un admin para obtener el token.
+### Después de login, el token se setea automáticamente vía cookie.
+### Si usas cookie, las requests protegidas funcionan sin más configuración.
+### ============================================
+
+### 1. LOGIN (reemplaza user/pass con credenciales reales)
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+
+{
+    "user": "avargas",
+    "pass": "123456"
+}
+
+### ============================================
+### Tras login exitoso, el token JWT queda en cookie httpOnly.
+### Las siguientes requests la enviarán automáticamente.
+### ============================================
+
+### 2. ASIGNAR ASIGNATURAS AL DOCENTE (id=25, abornachera)
+POST http://localhost:8000/api/gestion-academica/docentes-asignaturas
+Content-Type: application/json
+
+{
+    "id_user": 25,
+    "asignaturas": [1, 2, 3, 4, 5, 6]
+}
+
+### 3. CREAR CARGA ACADÉMICA (usar id_docente_asignatura del paso anterior)
+### El id_docente_asignatura lo obtienes del response del paso 2.
+### Reemplaza 1 con el id real devuelto.
+### Curso: 1 = Quinto A
+POST http://localhost:8000/api/gestion-academica/carga-academica
+Content-Type: application/json
+
+{
+    "id_curso": 1,
+    "id_docente_asignatura": 1
+}
+
+### ============================================
+### HORARIO — LUNES (id_dia=1)
+### Franjas: id 1-10
+### ============================================
+
+### 4.1 LUNES - Bloque 1 (07:00-07:50) - Matemáticas
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 1,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.2 LUNES - Bloque 2 (07:50-08:40) - Lengua Castellana
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 2,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.3 LUNES - Bloque 3 (08:40-09:30) - Ciencias Naturales
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 3,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.4 LUNES - Bloque 5 (10:00-10:50) - Ciencias Sociales
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 5,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.5 LUNES - Bloque 6 (10:50-11:40) - Inglés
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 6,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.6 LUNES - Bloque 8 (12:30-13:20) - Educación Física
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 8,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.7 LUNES - Bloque 9 (13:20-14:10) - Matemáticas
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 9,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 4.8 LUNES - Bloque 10 (14:10-15:00) - Ciencias Naturales
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 10,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### ============================================
+### HORARIO — MARTES (id_dia=2)
+### Franjas: id 11-20
+### ============================================
+
+### 5.1 MARTES - Bloque 1 (07:00-07:50)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 11,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.2 MARTES - Bloque 2 (07:50-08:40)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 12,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.3 MARTES - Bloque 3 (08:40-09:30)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 13,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.4 MARTES - Bloque 5 (10:00-10:50)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 15,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.5 MARTES - Bloque 6 (10:50-11:40)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 16,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.6 MARTES - Bloque 8 (12:30-13:20)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 18,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.7 MARTES - Bloque 9 (13:20-14:10)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 19,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### 5.8 MARTES - Bloque 10 (14:10-15:00)
+POST http://localhost:8000/api/gestion-academica/horario
+Content-Type: application/json
+
+{
+    "id_franja_horaria": 20,
+    "id_carga_academica": 1,
+    "tipo": "CLASE"
+}
+
+### ============================================
+### VER HORARIO COMPLETO
+### ============================================
+
+### Horario del docente 25
+GET http://localhost:8000/api/gestion-academica/horario?id_docente=25
+
+### Horario del curso 1 (Quinto A)
+GET http://localhost:8000/api/gestion-academica/horario?id_curso=1
+
+### Horario del Lunes (id_dia_semana=1)
+GET http://localhost:8000/api/gestion-academica/horario?id_dia_semana=1
