@@ -83,6 +83,7 @@ Route::put("/ejemplares", [BibliotecaController::class, 'cambiarEstadoEjemplarBi
 
 Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar/activos", [BibliotecaController::class, 'obtenerPrestamosEjemplarActivos']);
+Route::get("/prestamosEjemplar/devueltos", [BibliotecaController::class, 'obtenerPrestamosEjemplarDevueltos']);
 Route::get("/prestamosEjemplar/historial", [BibliotecaController::class, 'obtenerHistorialPrestamoEjemplarUsuario']);
 Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);

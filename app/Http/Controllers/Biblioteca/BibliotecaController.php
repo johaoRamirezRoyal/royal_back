@@ -289,7 +289,22 @@ class BibliotecaController extends Controller
             $request->input("codigo_ejemplar")
         );
 
-        return $this->apiResponse($response);
+        return $this->paginatedResponse($response);
+    }
+
+    public function obtenerPrestamosEjemplarDevueltos(Request $request)
+    {
+        $response = $this->biblioteca_services->obtenerPrestamosEjemplarDevueltos(
+            $request->input("s"),
+            $request->integer("per-page") ?: null,
+            $request->input("id_curso") ?: null,
+            $request->input("id_nivel") ?: null,
+            $request->input("fecha_inicio"),
+            $request->input("fecha_fin"),
+            $request->input("codigo_ejemplar")
+        );
+
+        return $this->paginatedResponse($response);
     }
 
     public function verPrestamosDeEjemplar(Request $request)

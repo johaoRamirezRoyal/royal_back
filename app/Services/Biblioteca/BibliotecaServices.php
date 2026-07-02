@@ -1076,6 +1076,71 @@ class BibliotecaServices extends Service
     }
 
     /**
+     * Query base compartida por los préstamos activos y devueltos: mismos filtros
+     * (búsqueda, curso, nivel, rango de fechas, código de ejemplar), solo cambia
+     * si se exige que el préstamo esté devuelto o no.
+     */
+    private function filtrarPrestamosEjemplar(
+        bool $devueltos,
+        ?string $search,
+        array|string|int|null $id_curso,
+        array|string|int|null $id_nivel,
+        ?string $fecha_inicio,
+        ?string $fecha_fin,
+        ?string $codigo_ejemplar
+    ) {
+        $id_curso = array_filter(Arr::wrap($id_curso));
+        $id_nivel = array_filter(Arr::wrap($id_nivel));
+
+        return PrestamosEjemplar::query()
+            ->when(
+                $devueltos,
+                fn ($q) => $q->whereNotNull('id_devuelto'),
+                fn ($q) => $q->whereNull(['id_devuelto', 'fecha_devuelto'])
+            )
+            ->with([
+                'ejemplar:id,codigo,id_libro',
+                'ejemplar.libro:id,titulo,autor,editorial,edicion,foto,id_categoria,id_subcategoria',
+                'ejemplar.libro.categoria:id,nombre,activo',
+                'ejemplar.libro.subcategoria:id,id_categoria,nombre,activo',
+                'usuario:id_user,nombre,apellido,correo,id_curso,id_nivel',
+                'usuario.cursoRelacion:id,nombre',
+                'usuario.nivelRelacion:id,nombre',
+            ])
+            ->when(
+                !empty($search),
+                fn ($q) => $q->where(
+                    fn ($grupo) => $grupo->whereHas(
+                        'usuario',
+                        fn ($sub) => $sub->where('nombre', 'LIKE', "%$search%")
+                            ->orWhere('apellido', 'LIKE', "%$search%")
+                    )->orWhereHas(
+                        'ejemplar',
+                        fn ($sub) => $sub->where('codigo', 'LIKE', "%$search%")
+                    )
+                )
+            )
+            ->when(
+                !empty($id_curso) || !empty($id_nivel),
+                fn ($q) => $q->whereHas(
+                    'usuario',
+                    fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
+                        ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
+                )
+            )
+            ->when(
+                !empty($codigo_ejemplar),
+                fn ($q) => $q->whereHas(
+                    'ejemplar',
+                    fn ($sub) => $sub->where('codigo', 'LIKE', "%$codigo_ejemplar%")
+                )
+            )
+            ->when(!empty($fecha_inicio), fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fecha_inicio))
+            ->when(!empty($fecha_fin), fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fecha_fin))
+            ->orderByDesc('fecha_prestamo');
+    }
+
+    /**
      * Lista todos los préstamos de ejemplar activos (no devueltos) de la biblioteca,
      * sin filtrar por usuario ni ejemplar específico.
      * @return array{data: array, error: bool, message: string}
@@ -1090,51 +1155,16 @@ class BibliotecaServices extends Service
         ?string $codigo_ejemplar = null
     ): array
     {
-        $id_curso = array_filter(Arr::wrap($id_curso));
-        $id_nivel = array_filter(Arr::wrap($id_nivel));
-
         try {
-            $prestamos = PrestamosEjemplar::query()
-                ->whereNull('id_devuelto')
-                ->with([
-                    'ejemplar:id,codigo,id_libro',
-                    'ejemplar.libro:id,titulo,autor,editorial,edicion',
-                    'usuario:id_user,nombre,apellido,correo,id_curso,id_nivel',
-                    'usuario.cursoRelacion:id,nombre',
-                    'usuario.nivelRelacion:id,nombre',
-                ])
-                ->when(
-                    !empty($search),
-                    fn ($q) => $q->where(
-                        fn ($grupo) => $grupo->whereHas(
-                            'usuario',
-                            fn ($sub) => $sub->where('nombre', 'LIKE', "%$search%")
-                                ->orWhere('apellido', 'LIKE', "%$search%")
-                        )->orWhereHas(
-                            'ejemplar',
-                            fn ($sub) => $sub->where('codigo', 'LIKE', "%$search%")
-                        )
-                    )
-                )
-                ->when(
-                    !empty($id_curso) || !empty($id_nivel),
-                    fn ($q) => $q->whereHas(
-                        'usuario',
-                        fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
-                            ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
-                    )
-                )
-                ->when(
-                    !empty($codigo_ejemplar),
-                    fn ($q) => $q->whereHas(
-                        'ejemplar',
-                        fn ($sub) => $sub->where('codigo', 'LIKE', "%$codigo_ejemplar%")
-                    )
-                )
-                ->when(!empty($fecha_inicio), fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fecha_inicio))
-                ->when(!empty($fecha_fin), fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fecha_fin))
-                ->orderByDesc('fecha_prestamo')
-                ->paginate($perpage);
+            $prestamos = $this->filtrarPrestamosEjemplar(
+                false,
+                $search,
+                $id_curso,
+                $id_nivel,
+                $fecha_inicio,
+                $fecha_fin,
+                $codigo_ejemplar
+            )->paginate($perpage);
 
             if ($prestamos->isEmpty()) {
                 return [
@@ -1147,13 +1177,62 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => 'Préstamos activos listados correctamente',
-                'data' => $prestamos->toArray(),
+                'data' => $prestamos,
             ];
         } catch (\Exception $e) {
             $this->sendError($e, "Error al tratar de listar los préstamos activos");
             return [
                 'error' => true,
                 'message' => "Error en el servidor al listar los préstamos activos",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Lista todos los préstamos de ejemplar ya devueltos de la biblioteca,
+     * sin filtrar por usuario ni ejemplar específico.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function obtenerPrestamosEjemplarDevueltos(
+        ?string $search = null,
+        ?int $perpage = 10,
+        array|string|int|null $id_curso = null,
+        array|string|int|null $id_nivel = null,
+        ?string $fecha_inicio = null,
+        ?string $fecha_fin = null,
+        ?string $codigo_ejemplar = null
+    ): array
+    {
+        try {
+            $prestamos = $this->filtrarPrestamosEjemplar(
+                true,
+                $search,
+                $id_curso,
+                $id_nivel,
+                $fecha_inicio,
+                $fecha_fin,
+                $codigo_ejemplar
+            )->paginate($perpage);
+
+            if ($prestamos->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No hay préstamos devueltos',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Préstamos devueltos listados correctamente',
+                'data' => $prestamos,
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al tratar de listar los préstamos devueltos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al listar los préstamos devueltos",
                 'data' => [],
             ];
         }
