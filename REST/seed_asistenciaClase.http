@@ -1,0 +1,95 @@
+### ============================================
+### ASISTENCIA CLASE — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### 1. CREAR ASISTENCIA (horario 1, Lunes bloque 1)
+POST http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_horario_clase": 1,
+    "fecha": "2026-07-02",
+    "estado": "DICTADA",
+    "observacion": "Clase normal"
+}
+
+### 2. CREAR ASISTENCIA CANCELADA
+POST http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id_horario_clase": 2,
+    "fecha": "2026-07-02",
+    "estado": "CANCELADA",
+    "observacion": "Feriado institucional"
+}
+
+### 3. CREAR ASISTENCIA REPROGRAMADA
+POST http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id_horario_clase": 3,
+    "fecha": "2026-07-02",
+    "estado": "REPROGRAMADA",
+    "observacion": "Se reprograma para el viernes"
+}
+
+### 4. VER ASISTENCIAS del horario 1
+GET http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1
+
+### 5. VER ASISTENCIAS del horario 1 filtrado por fecha
+GET http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1&fecha=2026-07-02
+
+### 6. VER ASISTENCIAS de todos los horarios del Lunes (ids 1-8)
+GET http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1
+
+### 7. ACTUALIZAR asistencia 1 (cambiar a CANCELADA)
+PUT http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id": 1,
+    "estado": "CANCELADA",
+    "observacion": "Se canceló por reunión de docentes"
+}
+
+### 8. ACTUALIZAR solo observación de asistencia 2
+PUT http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id": 2,
+    "observacion": "Feriado del Día del Maestro"
+}
+
+### 9. CREAR asistencia para horario 4 (Lunes bloque 5)
+POST http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id_horario_clase": 4,
+    "fecha": "2026-07-02",
+    "estado": "DICTADA"
+}
+
+### 10. CREAR asistencia para horario 9 (Martes bloque 1)
+POST http://localhost:8000/api/gestion-academica/asistencias-clase
+Content-Type: application/json
+
+{
+    "id_horario_clase": 9,
+    "fecha": "2026-07-03",
+    "estado": "DICTADA",
+    "observacion": "Clase de matemáticas"
+}
+
+### 11. VER todas las asistencias del horario 2
+GET http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=2
