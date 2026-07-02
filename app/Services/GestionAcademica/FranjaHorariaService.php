@@ -13,17 +13,25 @@ class FranjaHorariaService extends Service
     {
         try {
             $franjaHoraria = FranjaHoraria::query()
-                ->with([
-                    'diaSemana:id,nombre,abreviatura',
-                    'anioEscolar:id,anio_inicio,anio_fin',
-                ])->where('id_anio_escolar', $id_anio_escolar)
+                ->join(
+                    'dias_semana',
+                    'dias_semana.id',
+                    '=',
+                    'academico_franja_horaria.id_dia_semana'
+                )
+                ->select(
+                    'dias_semana.nombre',
+                    'dias_semana.abreviatura',
+                    'dias_semana.orden as orden_dia',
+                    'academico_franja_horaria.*',
+                )->where('id_anio_escolar', $id_anio_escolar)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
                 })->when($tipo !== null, function ($query) use ($tipo) {
                     $query->where('tipo', $tipo);
                 })
                 ->orderBy('dias_semana.orden')
-                ->orderBy('franja_horaria.hora_inicio')
+                ->orderBy('academico_franja_horaria.hora_inicio')
                 ->get();
 
             if ($franjaHoraria->isEmpty()) {

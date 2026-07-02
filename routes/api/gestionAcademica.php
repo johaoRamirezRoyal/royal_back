@@ -81,9 +81,92 @@ Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaA
  */
 Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambiarEstadoCargaAcademica']);
 
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2
+ */
 Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias
+{
+  "id_anio_escolar": 7,
+  "id_dia_semana": 2,
+  "hora_inicio": "07:55:00",
+  "hora_fin": "08:50:00",
+  "orden": 3,
+  "tipo": "CLASE"
+}
+ */
 Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
+{
+    "ids": [3, 4],
+    "id_anio_escolar": 2,
+    "tipo": "RECESO"
+}
+ */
 Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias/orden
+
+{
+  "franjas": [
+    {
+      "id": 3,
+      "orden": 3
+    },
+    {
+      "id": 4,
+      "orden": 4
+    }
+  ]
+}
+ */
 Route::put('/franjas-horarias/orden', [GestionAcademicaController::class, 'actualizarOrdenFranjasHorarias']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias/horario
+
+{
+  "id": 4,
+  "hora_inicio": "09:55:00",
+  "hora_fin": "11:00:00"
+}
+*/
 Route::put('/franjas-horarias/horario', [GestionAcademicaController::class, 'actualizarHorarioFranja']);
+
+/**
+ * DELETE /gestion-academica/franjas-horarias
+
+{
+    "ids": [1, 2, 3]
+}
+*/
 Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/horario?id_docente=24&id_curso=1&id_asignatura=5&id_dia_semana=2
+ */
+Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/horario
+{
+    "id_franja_horaria": 1,
+    "id_carga_academica": 2,
+    "tipo": "CLASE"
+}
+ */
+Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/horario
+{
+    "ids": [1, 2, 3]
+}
+ */
+Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios']);
