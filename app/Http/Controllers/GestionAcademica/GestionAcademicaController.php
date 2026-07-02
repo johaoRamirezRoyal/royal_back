@@ -7,6 +7,7 @@ use App\Http\Requests\GestionAcademica\AsignaturaRequest;
 use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
+use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use Illuminate\Http\Request;
 
@@ -151,5 +152,25 @@ class GestionAcademicaController extends Controller
     public function eliminarFranjaHoraria(FranjaHorariaRequest $request)
     {
         return $this->apiResponse($this->service->franjaHoraria()->eliminarFranjaHoraria($request->input('ids')));
+    }
+
+    public function verHorario(Request $request)
+    {
+        $id_docente = $request->input('id_docente');
+        $id_curso = $request->input('id_curso');
+        $id_asignatura = $request->input('id_asignatura');
+        $id_dia_semana = $request->input('id_dia_semana');
+
+        return $this->apiResponse($this->service->horarioClase()->verHorario($id_docente, $id_curso, $id_asignatura, $id_dia_semana));
+    }
+
+    public function crearHorarioClase(HorarioClaseRequest $request)
+    {
+        return $this->apiResponse($this->service->horarioClase()->añadirHorarioClase($request->all()));
+    }
+
+    public function eliminarHorarios(HorarioClaseRequest $request)
+    {
+        return $this->apiResponse($this->service->horarioClase()->eliminarHorarios($request->input('ids')));
     }
 }
