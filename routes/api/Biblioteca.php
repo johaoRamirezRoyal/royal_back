@@ -85,6 +85,14 @@ Route::post("/prestamosEjemplar", [BibliotecaController::class, 'prestarEjemplar
 Route::get("/prestamosEjemplar/activos", [BibliotecaController::class, 'obtenerPrestamosEjemplarActivos']);
 Route::get("/prestamosEjemplar/devueltos", [BibliotecaController::class, 'obtenerPrestamosEjemplarDevueltos']);
 Route::get("/prestamosEjemplar/historial", [BibliotecaController::class, 'obtenerHistorialPrestamoEjemplarUsuario']);
+/**
+{
+  "ids": [1, 2, 3]
+}
+ */
+Route::post("/prestamosEjemplar/recordatorio", [BibliotecaController::class, 'enviarRecordatorioPrestamosPendientes']);
+Route::get("/prestamosEjemplar/pazYSalvo", [BibliotecaController::class, 'generarPazYSalvoPdf']);
+Route::get("/prestamosEjemplar/listadoPdf", [BibliotecaController::class, 'generarListadoPrestamosPdf']);
 Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
 Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);

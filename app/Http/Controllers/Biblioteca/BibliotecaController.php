@@ -316,12 +316,58 @@ class BibliotecaController extends Controller
     }
 
     public function obtenerHistorialPrestamoEjemplarUsuario(Request $request){
-        $id_usuario = $request->input('id_usuario');
-        $deuda = $request->input('deuda', false);
+        $response = $this->biblioteca_services->obtenerHistorialPrestamoEjemplarUsuario(
+            $request->input('id_usuario') ?: null,
+            $request->boolean('deuda'),
+            $request->input('s'),
+            $request->input('id_curso') ?: null,
+            $request->input('id_nivel') ?: null,
+            $request->input('dir', 'desc'),
+            $request->integer('per-page') ?: null
+        );
 
-        $response = $this->biblioteca_services->obtenerHistorialPrestamoEjemplarUsuario($id_usuario, $deuda);
+        return $this->paginatedResponse($response);
+    }
+
+    public function enviarRecordatorioPrestamosPendientes(Request $request)
+    {
+        $response = $this->biblioteca_services->enviarRecordatorioPrestamosPendientes(
+            $request->input('ids', [])
+        );
 
         return $this->apiResponse($response);
+    }
+
+    public function generarPazYSalvoPdf(Request $request)
+    {
+        $response = $this->biblioteca_services->generarPazYSalvoPdf(
+            $request->integer('id_usuario')
+        );
+
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
+        return response($response['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $response['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
+    public function generarListadoPrestamosPdf(Request $request)
+    {
+        $response = $this->biblioteca_services->generarListadoPrestamosPdf(
+            $request->integer('id_usuario')
+        );
+
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
+        return response($response['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $response['data']['nombre_archivo'] . '"',
+        ]);
     }
 
     public function verPrestamosLibro(Request $request)

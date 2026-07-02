@@ -244,8 +244,12 @@ class UsuariosServices
         }
     }
 
-    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda, ?string $estado = null)
+    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda, ?string $estado = null, string $sort = 'nombre', string $dir = 'asc', ?array $curso_filtro = null)
     {
+        $sortable = ['nombre', 'apellido', 'documento', 'correo', 'perfil', 'estado'];
+        $sort = in_array($sort, $sortable, true) ? $sort : 'nombre';
+        $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+
         try {
             $usuarios = Usuario::select([
                 'id_user',
@@ -270,6 +274,9 @@ class UsuariosServices
                 ->when($nivel_filtro, function ($query, $niveles) {
                     $query->whereIn('id_nivel', $niveles);
                 })
+                ->when($curso_filtro, function ($query, $cursos) {
+                    $query->whereIn('id_curso', $cursos);
+                })
                 ->when($busqueda, function ($query, $search) {
                     $palabras = preg_split('/\s+/', trim($search));
                     $query->where(function ($q) use ($palabras) {
@@ -286,8 +293,7 @@ class UsuariosServices
                 ->when($estado, function ($query, $estado) {
                     $query->where('estado', $estado);
                 })
-                ->orderBy('nombre')
-                ->orderBy('documento')
+                ->orderBy($sort, $dir)
                 ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
 
