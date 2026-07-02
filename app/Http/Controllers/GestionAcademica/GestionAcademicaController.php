@@ -7,6 +7,7 @@ use App\Http\Requests\GestionAcademica\AsignaturaRequest;
 use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
+use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use Illuminate\Http\Request;
@@ -172,5 +173,23 @@ class GestionAcademicaController extends Controller
     public function eliminarHorarios(HorarioClaseRequest $request)
     {
         return $this->apiResponse($this->service->horarioClase()->eliminarHorarios($request->input('ids')));
+    }
+
+    public function verAsistenciasClase(Request $request)
+    {
+        $id_horario_clase = $request->input('id_horario_clase');
+        $fecha = $request->input('fecha');
+
+        return $this->apiResponse($this->service->asistenciaClase()->verAsistenciaClase($id_horario_clase, $fecha));
+    }
+
+    public function crearAsistenciaClase(AsistenciaClaseRequest $request)
+    {
+        return $this->apiResponse($this->service->asistenciaClase()->agregarAsistenciaClase($request->all()));
+    }
+
+    public function actualizarAsistenciaClase(AsistenciaClaseRequest $request)
+    {
+        return $this->apiResponse($this->service->asistenciaClase()->actualizarAsistenciaClase($request->all()));
     }
 }

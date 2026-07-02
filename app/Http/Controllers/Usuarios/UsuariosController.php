@@ -67,15 +67,21 @@ class UsuariosController extends Controller
         $per_page = $request->input('per-page', 10);
         $perfil_filtro = $request->input('perfiles');
         $nivel_filtro = $request->input('niveles');
-        $busqueda = $request->input('busqueda');
+        $curso_filtro = $request->input('cursos');
+        $busqueda = $request->input('s', $request->input('busqueda'));
         $estado = $request->input('estado');
+        $sort = $request->input('sort', 'nombre');
+        $dir = $request->input('dir', 'asc');
 
         $response = $this->service_usuarios->mostrarUsuariosPaginados(
             (int) $per_page,
             $perfil_filtro,
             $nivel_filtro,
             $busqueda,
-            $estado
+            $estado,
+            $sort,
+            $dir,
+            $curso_filtro
         );
 
         if ($response['error']) {

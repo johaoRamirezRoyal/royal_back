@@ -10,7 +10,11 @@ use App\Models\Biblioteca\PaquetePrestamos;
 use App\Models\Biblioteca\Paquetes;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
+use App\Models\Usuarios\Usuario;
+use App\Mail\RecordatorioPrestamosEmail;
 use App\Services\FileStorageService;
+use App\Services\MailService;
+use App\Pdf\Biblioteca\PazYSalvoPdfService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Arr;
@@ -1238,17 +1242,50 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function obtenerHistorialPrestamoEjemplarUsuario(int $id_usuario, bool $deuda = false)
+    public function obtenerHistorialPrestamoEjemplarUsuario(
+        ?int $id_usuario = null,
+        bool $deuda = false,
+        ?string $search = null,
+        array|string|int|null $id_curso = null,
+        array|string|int|null $id_nivel = null,
+        string $dir = 'desc',
+        ?int $perpage = 10
+    )
     {
+        $id_curso = array_filter(Arr::wrap($id_curso));
+        $id_nivel = array_filter(Arr::wrap($id_nivel));
+        $dir = strtolower($dir) === 'asc' ? 'asc' : 'desc';
+
         try {
             $historial = PrestamosEjemplar::with([
                 'ejemplar:id,codigo,id_libro',
-                'usuario:id_user,nombre,apellido,correo',
+                'usuario:id_user,nombre,apellido,correo,documento,id_curso,id_nivel',
+                'usuario.cursoRelacion:id,nombre',
+                'usuario.nivelRelacion:id,nombre',
                 'ejemplar.libro:id,titulo,editorial,edicion,autor,id_categoria,id_subcategoria',
                 'ejemplar.libro.categoria:id,nombre',
                 'ejemplar.libro.subcategoria:id,nombre',
-            ])->where('id_usuario', $id_usuario)
-                ->when($deuda, fn($q) => $q->whereNull('id_devuelto'))->get();
+            ])->when($id_usuario, fn ($q) => $q->where('id_usuario', $id_usuario))
+                ->when($deuda, fn ($q) => $q->whereNull('id_devuelto'))
+                ->when(
+                    !empty($search),
+                    fn ($q) => $q->whereHas(
+                        'usuario',
+                        fn ($sub) => $sub->where('nombre', 'LIKE', "%$search%")
+                            ->orWhere('apellido', 'LIKE', "%$search%")
+                            ->orWhere('documento', 'LIKE', "%$search%")
+                    )
+                )
+                ->when(
+                    !empty($id_curso) || !empty($id_nivel),
+                    fn ($q) => $q->whereHas(
+                        'usuario',
+                        fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
+                            ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
+                    )
+                )
+                ->orderBy('fecha_prestamo', $dir)
+                ->paginate($perpage);
 
             if ($historial->isEmpty()) {
                 return [
@@ -1263,7 +1300,7 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => "Historial de prestamos obtenidos",
-                'data' => $historial->toArray(),
+                'data' => $historial,
             ];
         } catch (Exception $e) {
             $this->sendError($e, "Error al obtener el historial de prestamos");
@@ -1275,10 +1312,239 @@ class BibliotecaServices extends Service
         }
     }
 
+    /**
+     * Envía un correo recordatorio a los usuarios indicados que tengan préstamos
+     * de ejemplares sin devolver, adjuntando el PDF de paz y salvo con el detalle.
+     * @param array|string|int $ids_usuarios
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function enviarRecordatorioPrestamosPendientes(array|string|int $ids_usuarios): array
+    {
+        try {
+            $ids_usuarios = array_filter(Arr::wrap($ids_usuarios));
+
+            if (empty($ids_usuarios)) {
+                return [
+                    'error' => true,
+                    'message' => "No se recibieron usuarios a notificar",
+                    'data' => [],
+                ];
+            }
+
+            $usuarios = Usuario::whereIn('id_user', $ids_usuarios)->get(['id_user', 'nombre', 'correo']);
+            $mailService = app(MailService::class);
+
+            $enviados = [];
+            $sin_prestamos_pendientes = [];
+            $sin_correo = [];
+
+            foreach ($usuarios as $usuario) {
+                $cantidadLibros = PrestamosEjemplar::where('id_usuario', $usuario->id_user)
+                    ->whereNull('id_devuelto')
+                    ->count();
+
+                if ($cantidadLibros === 0) {
+                    $sin_prestamos_pendientes[] = $usuario->id_user;
+                    continue;
+                }
+
+                if (empty($usuario->correo)) {
+                    $sin_correo[] = $usuario->id_user;
+                    continue;
+                }
+
+                $pdf = $this->generarPazYSalvoPdf($usuario->id_user);
+
+                if ($pdf['error']) {
+                    continue;
+                }
+
+                $enviado = $mailService->send($usuario->correo, new RecordatorioPrestamosEmail(
+                    $usuario->nombre,
+                    $cantidadLibros,
+                    $pdf['data']['contenido'],
+                    $pdf['data']['nombre_archivo']
+                ));
+
+                if ($enviado) {
+                    $enviados[] = $usuario->id_user;
+                }
+            }
+
+            return [
+                'error' => false,
+                'message' => "Recordatorios procesados",
+                'data' => [
+                    'enviados' => $enviados,
+                    'sin_prestamos_pendientes' => $sin_prestamos_pendientes,
+                    'sin_correo' => $sin_correo,
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al enviar los recordatorios de préstamos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al enviar los recordatorios de préstamos",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Genera el PDF de "Paz y Salvo" con los libros que el usuario aún no ha
+     * devuelto. Se genera en memoria, no se guarda en el servidor.
+     * @param int $id_usuario
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function generarPazYSalvoPdf(int $id_usuario): array
+    {
+        try {
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento'])->find($id_usuario);
+
+            if (!$usuario) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el usuario con ID: {$id_usuario}",
+                    'data' => [],
+                ];
+            }
+
+            $prestamos = PrestamosEjemplar::with([
+                'ejemplar:id,codigo,id_libro',
+                'ejemplar.libro:id,titulo,id_categoria,id_subcategoria',
+                'ejemplar.libro.categoria:id,nombre',
+                'ejemplar.libro.subcategoria:id,nombre',
+            ])->where('id_usuario', $id_usuario)
+                ->whereNull('id_devuelto')
+                ->orderBy('fecha_prestamo', 'desc')
+                ->get();
+
+            $pdfService = app(PazYSalvoPdfService::class);
+            $contenido = $pdfService->generate([
+                'tipo' => 'paz_y_salvo',
+                'institucion' => config('app.name'),
+                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'numero_documento' => (string) $usuario->documento,
+                'prestamos' => $this->construirFilasPrestamosPdf($prestamos),
+                'sin_pendientes' => $prestamos->isEmpty(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "PDF generado correctamente",
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => "paz_y_salvo_{$id_usuario}.pdf",
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al generar el PDF de paz y salvo");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al generar el PDF de paz y salvo",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Genera el PDF "Listado de Prestamos" con todos los préstamos (devueltos
+     * o no) que ha realizado el usuario. Se genera en memoria, no se guarda
+     * en el servidor.
+     * @param int $id_usuario
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function generarListadoPrestamosPdf(int $id_usuario): array
+    {
+        try {
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento'])->find($id_usuario);
+
+            if (!$usuario) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el usuario con ID: {$id_usuario}",
+                    'data' => [],
+                ];
+            }
+
+            $prestamos = PrestamosEjemplar::with([
+                'ejemplar:id,codigo,id_libro',
+                'ejemplar.libro:id,titulo,id_categoria,id_subcategoria',
+                'ejemplar.libro.categoria:id,nombre',
+                'ejemplar.libro.subcategoria:id,nombre',
+            ])->where('id_usuario', $id_usuario)
+                ->orderBy('fecha_prestamo', 'desc')
+                ->get();
+
+            $pdfService = app(PazYSalvoPdfService::class);
+            $contenido = $pdfService->generate([
+                'tipo' => 'listado',
+                'institucion' => config('app.name'),
+                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'numero_documento' => (string) $usuario->documento,
+                'prestamos' => $this->construirFilasPrestamosPdf($prestamos),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "PDF generado correctamente",
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => "listado_prestamos_{$id_usuario}.pdf",
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al generar el PDF de listado de préstamos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al generar el PDF de listado de préstamos",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Mapea préstamos de ejemplar al formato de fila que espera PazYSalvoPdfService.
+     * @param \Illuminate\Support\Collection<int, PrestamosEjemplar> $prestamos
+     */
+    private function construirFilasPrestamosPdf($prestamos): array
+    {
+        $hoy = now()->startOfDay();
+
+        return $prestamos->values()->map(function ($prestamo, $indice) use ($hoy) {
+            if ($prestamo->id_devuelto) {
+                $estado = 'JUSTO A TIEMPO';
+                if ($prestamo->fecha_devolucion && $prestamo->fecha_devuelto) {
+                    $entrega = $prestamo->fecha_devuelto->toDateString();
+                    $limite = $prestamo->fecha_devolucion->toDateString();
+                    $estado = match (true) {
+                        $entrega < $limite => 'DEVUELTO ANTES DE TIEMPO',
+                        $entrega > $limite => 'DEVOLUCION TARDIA',
+                        default => 'JUSTO A TIEMPO',
+                    };
+                }
+            } else {
+                $vencido = $prestamo->fecha_devolucion && $prestamo->fecha_devolucion->lt($hoy);
+                $estado = $vencido ? 'VENCIDO' : 'POR VENCER';
+            }
+
+            return [
+                'no_prestamo' => (string) ($indice + 1),
+                'libro' => $prestamo->ejemplar->libro->titulo ?? '-',
+                'num_ejemplar' => $prestamo->ejemplar->codigo ?? '-',
+                'categoria' => $prestamo->ejemplar->libro->categoria->nombre ?? '-',
+                'subcategoria' => $prestamo->ejemplar->libro->subcategoria->nombre ?? '-',
+                'fecha_prestamo' => $prestamo->fecha_prestamo?->format('d/m/Y') ?? '-',
+                'fecha_devolucion' => $prestamo->fecha_devolucion?->format('d/m/Y') ?? '-',
+                'estado' => $estado,
+            ];
+        })->all();
+    }
+
     /*
     -------------------------------------------------
     |
-    |             BIBLIOTECA PAQUETES 
+    |             BIBLIOTECA PAQUETES
     |
     -------------------------------------------------
     */

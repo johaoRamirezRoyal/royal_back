@@ -170,3 +170,29 @@ Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase']
 }
  */
 Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1&fecha=2026-07-02
+ */
+Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/asistencias-clase
+{
+    "id_horario_clase": 1,
+    "fecha": "2026-07-02",
+    "estado": "DICTADA",
+    "observacion": "Clase normal"
+}
+ */
+Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsistenciaClase']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/asistencias-clase
+{
+    "id": 1,
+    "estado": "CANCELADA",
+    "observacion": "Feriado"
+}
+ */
+Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase']);
