@@ -11,8 +11,8 @@ POST http://localhost:8000/api/auth/login
 Content-Type: application/json
 
 {
-    "user": "avargas",
-    "pass": "123456"
+    "user": "1193377218",
+    "pass": "1193377218"
 }
 
 ### ============================================
