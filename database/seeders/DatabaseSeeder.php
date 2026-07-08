@@ -16,7 +16,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AsignaturaSeeder::class,          // academico_asignatura
-            EstudianteSeeder::class,          // usuarios (perfil=16, requiere que los cursos 05A-11B ya existan en `curso`)
             FranjaHorarioSeeder::class,       // academico_franja_horaria
             DocenteAsignaturaSeeder::class,   // academico_docente_asignatura (requiere usuarios ya cargados)
             CargaAcademicaSeeder::class,      // academico_carga_academica
