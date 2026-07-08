@@ -223,3 +223,28 @@ GET http://localhost:8000/api/gestion-academica/horario?id_curso=1
 
 ### Horario del Lunes (id_dia_semana=1)
 GET http://localhost:8000/api/gestion-academica/horario?id_dia_semana=1
+
+### ============================================
+### ASISTENCIA ESTUDIANTE (seed)
+### ============================================
+
+### Crear asistencias individuales para los estudiantes en cada clase creada del seed_asistenciaClase.http
+### NOTA: Reemplazar id_asistencia_clase e id_alumno con valores reales tras crear las asistencias-clase.
+POST http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_asistencia_clase": 1,
+    "estudiantes": [
+        { "id_alumno": 1, "estado": "AUSENTE" },
+        { "id_alumno": 2, "estado": "TARDE" },
+        { "id_alumno": 3, "estado": "PERMISO" }
+    ]
+}
+
+### Filtrar asistencias por horario
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_horario_clase=1
+
+### Filtrar asistencias por estudiante
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_estudiante=1

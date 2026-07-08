@@ -39,18 +39,53 @@ class AsistenciaClaseService extends Service
         }
     }
 
-    public function verAsistenciaClase(int $id_horario_clase, ?string $fecha): array
-    {
+    public function verAsistenciaClase(
+        int|array $id_horario_clase,
+        ?string $fecha = null,
+        ?string $fecha_inicio = null,
+        ?string $fecha_fin = null
+    ): array {
         try {
 
             if (!is_null($fecha)) {
                 Carbon::createFromFormat('Y-m-d', $fecha);
             }
 
+            if (!is_null($fecha_inicio)) {
+                Carbon::createFromFormat('Y-m-d', $fecha_inicio);
+            }
+
+            if (!is_null($fecha_fin)) {
+                Carbon::createFromFormat('Y-m-d', $fecha_fin);
+
+                if (is_null($fecha_inicio)) {
+                    return [
+                        'error' => true,
+                        'message' => 'fecha_fin requiere fecha_inicio.',
+                        'data' => []
+                    ];
+                }
+
+                if ($fecha_fin < $fecha_inicio) {
+                    return [
+                        'error' => true,
+                        'message' => 'fecha_fin debe ser mayor o igual a fecha_inicio.',
+                        'data' => []
+                    ];
+                }
+            }
+
             $asistencias = AsistenciaClase::with('horarioClase')
-                ->where('id_horario_clase', $id_horario_clase)
+                ->when(is_array($id_horario_clase), function ($query) use ($id_horario_clase) {
+                    $query->whereIn('id_horario_clase', $id_horario_clase);
+                }, function ($query) use ($id_horario_clase) {
+                    $query->where('id_horario_clase', $id_horario_clase);
+                })
                 ->when(filled($fecha), function ($query) use ($fecha) {
                     $query->whereDate('fecha', $fecha);
+                })
+                ->when(filled($fecha_inicio) && filled($fecha_fin), function ($query) use ($fecha_inicio, $fecha_fin) {
+                    $query->whereBetween('fecha', [$fecha_inicio, $fecha_fin]);
                 })
                 ->get();
 
