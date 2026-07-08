@@ -99,6 +99,7 @@ class AsistenciaEstudianteService extends Service
                     'id_alumno' => $estudiante['id_alumno'],
                     'id_asistencia_clase' => $id_asistencia_clase,
                     'estado' => $estudiante['estado'],
+                    'observacion' => $estudiante['observacion'] ?? null,
                 ];
             }
 

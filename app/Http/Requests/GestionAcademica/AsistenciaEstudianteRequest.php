@@ -34,6 +34,7 @@ class AsistenciaEstudianteRequest extends FormRequest
                 'string',
                 Rule::in(['AUSENTE', 'TARDE', 'PERMISO']),
             ],
+            'estudiantes.*.observacion' => ['nullable', 'string', 'max:255'],
         ];
     }
 
