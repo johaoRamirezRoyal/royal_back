@@ -15,7 +15,7 @@ Accept: application/json
 
 {
     "id_horario_clase": 1,
-    "fecha": "2026-07-02",
+    "fecha": "2026-07-08",
     "estado": "DICTADA",
     "observacion": "Clase normal"
 }
@@ -93,3 +93,55 @@ Content-Type: application/json
 
 ### 11. VER todas las asistencias del horario 2
 GET http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=2
+
+### ============================================
+### ASISTENCIA ESTUDIANTE
+### ============================================
+
+### 12. CREAR asistencias de estudiantes para la clase 1
+POST http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_asistencia_clase": 1,
+    "estudiantes": [
+        { "id_alumno": 1, "estado": "AUSENTE" },
+        { "id_alumno": 2, "estado": "TARDE" },
+        { "id_alumno": 3, "estado": "PERMISO" }
+    ]
+}
+
+### 13. CREAR asistencias para la clase 3
+POST http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_asistencia_clase": 3,
+    "estudiantes": [
+        { "id_alumno": 1, "estado": "AUSENTE" },
+        { "id_alumno": 2, "estado": "AUSENTE" }
+    ]
+}
+
+### 14. FILTRAR asistencias de estudiantes por horario 1
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_horario_clase=1
+
+### 15. FILTRAR por horario + fecha
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_horario_clase=1&fecha=2026-07-02
+
+### 16. FILTRAR por estudiante
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_estudiante=1
+
+### 17. FILTRAR por curso
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_curso=1
+
+### 18. ELIMINAR asistencias 1 y 2
+DELETE http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2]
+}

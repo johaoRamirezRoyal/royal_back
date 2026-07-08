@@ -8,6 +8,7 @@ use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
+use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use Illuminate\Http\Request;
@@ -191,5 +192,33 @@ class GestionAcademicaController extends Controller
     public function actualizarAsistenciaClase(AsistenciaClaseRequest $request)
     {
         return $this->apiResponse($this->service->asistenciaClase()->actualizarAsistenciaClase($request->all()));
+    }
+
+    public function verAsistenciasEstudiantes(Request $request)
+    {
+        return $this->apiResponse($this->service->asistenciaEstudiante()->verAsistenciaEstudiantesFiltrada(
+            id_estudiante:    $request->input('id_estudiante'),
+            id_curso:         $request->input('id_curso'),
+            fecha:            $request->input('fecha'),
+            id_clase:         $request->input('id_clase'),
+            id_horario_clase: $request->input('id_horario_clase'),
+        ));
+    }
+
+    public function crearAsistenciaEstudiantes(AsistenciaEstudianteRequest $request)
+    {
+        $validated = $request->validated();
+
+        return $this->apiResponse($this->service->asistenciaEstudiante()->agregarAsistenciaEstudiantes(
+            $validated['estudiantes'],
+            $validated['id_asistencia_clase'],
+        ));
+    }
+
+    public function eliminarAsistenciaEstudiante(Request $request)
+    {
+        return $this->apiResponse($this->service->asistenciaEstudiante()->eliminarAsistenciaEstudiante(
+            $request->input('ids', []),
+        ));
     }
 }
