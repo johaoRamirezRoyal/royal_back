@@ -3,8 +3,10 @@ namespace App\Models\Inventario;
 
 use App\Models\Areas\Areas;
 use App\Models\Estado;
+use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder;
 
 class Inventario extends Model
 {
@@ -59,5 +61,31 @@ class Inventario extends Model
 
     public function reportes(){
         return $this->hasMany(Reportes::class, 'id_inventario');
+    }
+
+    public function prestamos()
+    {
+        return $this->hasMany(PrestamosInventario::class, 'id_inventario', 'id');
+    }
+
+    public function scopeDisponiblePrestamo(
+        Builder $query,
+        ?string $descripcion,
+        ?int $categoria
+    ): Builder {
+        return $query
+            ->where('activo', 1)
+
+            ->when($descripcion, function (Builder $query) use ($descripcion) {
+                $query->where('descripcion', 'like', "%{$descripcion}%");
+            })
+
+            ->when($categoria, function (Builder $query) use ($categoria) {
+                $query->where('id_categoria', $categoria);
+            })
+
+            ->whereDoesntHave('prestamos', function (Builder $query) {
+                $query->whereNull('fecha_devolucion');
+            });
     }
 }

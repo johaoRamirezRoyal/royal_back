@@ -33,4 +33,8 @@ class Reservas extends \Illuminate\Database\Eloquent\Model
         'fecha_confirmado' => 'datetime',
         'fecha_cancelado' => 'datetime',
     ];
+
+    public function hora(){
+        return $this->hasMany(Horas::class, 'hora_reserva', 'id');
+    }
 }

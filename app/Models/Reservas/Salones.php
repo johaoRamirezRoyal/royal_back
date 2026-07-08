@@ -4,6 +4,7 @@ namespace App\Models\Reservas;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder;
 
 class Salones extends Model {
     use HasFactory;
@@ -33,5 +34,10 @@ class Salones extends Model {
             'id_user',
             'id_user'            
         );
+    }
+
+    public function scopeActivo(Builder $query): Builder
+    {
+        return $query->where('activo', 1);
     }
 }
