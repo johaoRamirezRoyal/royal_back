@@ -173,6 +173,11 @@ Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios'
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1&fecha=2026-07-02
+ *
+ * id_horario_clase también acepta un array: ?id_horario_clase[]=1&id_horario_clase[]=2
+ * fecha_inicio/fecha_fin (Y-m-d) filtran por rango en vez de un día exacto;
+ * fecha_fin requiere fecha_inicio. Ejemplo:
+ * ?id_horario_clase[]=1&id_horario_clase[]=2&fecha_inicio=2026-07-01&fecha_fin=2026-07-31
  */
 Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase']);
 

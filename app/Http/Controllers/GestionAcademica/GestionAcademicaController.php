@@ -180,8 +180,15 @@ class GestionAcademicaController extends Controller
     {
         $id_horario_clase = $request->input('id_horario_clase');
         $fecha = $request->input('fecha');
+        $fecha_inicio = $request->input('fecha_inicio');
+        $fecha_fin = $request->input('fecha_fin');
 
-        return $this->apiResponse($this->service->asistenciaClase()->verAsistenciaClase($id_horario_clase, $fecha));
+        return $this->apiResponse($this->service->asistenciaClase()->verAsistenciaClase(
+            $id_horario_clase,
+            $fecha,
+            $fecha_inicio,
+            $fecha_fin
+        ));
     }
 
     public function crearAsistenciaClase(AsistenciaClaseRequest $request)
