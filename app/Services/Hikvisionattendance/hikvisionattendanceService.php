@@ -398,7 +398,7 @@ class hikvisionattendanceService
                 'UserInfo' => [
                     'employeeNo' => $datos_empleado['id_user'],
                     'name' => $datos_empleado['nombre'],
-                    'userType' => $datos_empleado['perfil'],
+                    'userType' => 'normal',
                     'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
                     'doorRight' => '1',
                     'RightPlan' => [
