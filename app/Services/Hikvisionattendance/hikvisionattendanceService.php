@@ -408,7 +408,11 @@ class hikvisionattendanceService
                     ],
                     'Valid' => [
                         'enable' => true,
-                        'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                        // beginTime fijo (no now()): el dispositivo recalcula este campo con
+                        // su propio reloj si se le manda "now" del servidor, y el desfase de
+                        // zona horaria lo deja adelantado respecto a su hora local, provocando
+                        // que rechace al usuario como "permiso expirado".
+                        'beginTime' => '2024-01-01T00:00:00',
                         'endTime' => '2035-12-31T23:59:59',
                         'timeType' => 'local',
                     ],
@@ -487,7 +491,8 @@ class hikvisionattendanceService
                         ],
                         'Valid' => [
                             'enable'    => true,
-                            'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                            // beginTime fijo, mismo motivo que en registrarEmpleado.
+                            'beginTime' => '2024-01-01T00:00:00',
                             'endTime'   => '2035-12-31T23:59:59',
                             'timeType'  => 'local',
                         ],
