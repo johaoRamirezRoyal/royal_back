@@ -459,7 +459,15 @@ class hikvisionattendanceService
                 ];
             }
 
-            Log::error('Error registrando al empleado: ' . ($body ?? $e->getMessage()));
+            return [
+                'error' => true,
+                'message' => 'Error al registrar el usuario',
+                'id_user' => $datos_empleado['id_user'],
+            ];
+        } catch (GuzzleException $e) {
+            Log::error('Error registrando al empleado: ' . $e->getMessage(), [
+                'payload' => $payload ?? null,
+            ]);
 
             return [
                 'error'   => true,
