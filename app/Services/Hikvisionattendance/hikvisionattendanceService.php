@@ -406,10 +406,10 @@ class hikvisionattendanceService
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
                     ],
                     'Valid' => [
-                        'enable'    => true,
-                        'beginTime' => '2024-01-01T00:00:00',
-                        'endTime'   => '2035-12-31T23:59:59',
-                        'timeType'  => 'local',
+                        'enable' => true,
+                        'beginTime' => now()->format('Y-m-d\TH:i:s'),
+                        'endTime' => '2035-12-31T23:59:59',
+                        'timeType' => 'local',
                     ],
                 ],
             ];
