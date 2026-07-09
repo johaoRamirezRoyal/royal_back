@@ -406,7 +406,7 @@ class hikvisionattendanceService
                     ],
                     'Valid' => [
                         'enable' => true,
-                        'beginTime' => $datos_empleado['fechareg'],
+                        'beginTime' => now()->format('Y-m-d\TH:i:s'),
                         'endTime' => '2035-12-31T23:59:59',
                         'timeType' => 'local',
                     ],
