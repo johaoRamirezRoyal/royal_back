@@ -396,10 +396,12 @@ class hikvisionattendanceService
         try {
             $payload = [
                 'UserInfo' => [
-                    'employeeNo' => $datos_empleado['id_user'],
-                    'name' => $datos_empleado['nombre'],
+                    'employeeNo' => (string) $datos_empleado['id_user'],
+                    'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
                     'userType' => 'normal',
                     'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                    'gender' => 'male',
+                    'localUIRight' => false,
                     'doorRight' => '1',
                     'RightPlan' => [
                         ['doorNo' => 1, 'planTemplateNo' => '1'],
@@ -420,12 +422,13 @@ class hikvisionattendanceService
             }
 
             $response = $this->client->post(
-                '/ISAPI/AccessControl/Employee',
+                '/ISAPI/AccessControl/UserInfo/Record?format=json',
                 [
-                    'body' => json_encode($payload),
                     'headers' => [
                         'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
                     ],
+                    'json' => $payload,
                 ],
             );
 
