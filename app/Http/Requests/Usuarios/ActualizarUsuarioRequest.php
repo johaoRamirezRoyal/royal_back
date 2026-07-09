@@ -83,6 +83,11 @@ class ActualizarUsuarioRequest extends FormRequest
         ];
     }
 
+    public function toUsuarioFormatCreate(): array
+    {
+        return $this->toUsuarioData();
+    }
+
     public function toUsuarioData(): array
     {
         $data = [
