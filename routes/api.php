@@ -84,6 +84,16 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/inventario.php';
     });
 
+    // PRÉSTAMOS
+    Route::prefix('prestamos')->group(function () {
+        require __DIR__.'/api/prestamos.php';
+    });
+
+    // RESERVAS
+    Route::prefix('reservas')->group(function () {
+        require __DIR__.'/api/reservas.php';
+    });
+
     // CATEGORIAS
     Route::prefix('categorias')->group(function () {
         require __DIR__ . '/api/categorias.php';

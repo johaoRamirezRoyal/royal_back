@@ -2,6 +2,8 @@
 
 namespace App\Models\Reservas;
 
+use App\Models\Usuarios\Usuario;
+
 class Reservas extends \Illuminate\Database\Eloquent\Model
 {
     protected $table = 'reservas';
@@ -9,12 +11,14 @@ class Reservas extends \Illuminate\Database\Eloquent\Model
     protected $primaryKey = 'id';
 
     const CREATED_AT = "fechareg";
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'id',
         'id_salon',
         'portatil',
         'sonido',
+        'titulo',
         'fecha_reserva',
         'hora_reserva',
         'detalle_reserva',
@@ -35,6 +39,14 @@ class Reservas extends \Illuminate\Database\Eloquent\Model
     ];
 
     public function hora(){
-        return $this->hasMany(Horas::class, 'hora_reserva', 'id');
+        return $this->belongsTo(Horas::class, 'hora_reserva', 'id');
+    }
+
+    public function salon(){
+        return $this->belongsTo(Salones::class, 'id_salon', 'id');
+    }
+
+    public function usuario(){
+        return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
     }
 }

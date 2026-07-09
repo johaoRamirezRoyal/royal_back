@@ -1,0 +1,232 @@
+### ============================================
+### RESERVAS DE SALONES — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### 1. CREAR reserva — exitoso
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-07-21",
+    "hora_reserva": 1,
+    "id_user": 3123,
+    "portatil": 1,
+    "sonido": true,
+    "titulo": "Clase de matemáticas",
+    "detalle_reserva": "Se necesita proyector y sonido"
+}
+
+### 2. CREAR reserva — salón inexistente (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 9999,
+    "fecha_reserva": "2026-07-20",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+
+### 3. CREAR reserva — salón ya ocupado (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 1,
+    "fecha_reserva": "2026-07-20",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+
+### 4. CREAR reserva — misma fecha de hoy (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 1,
+    "fecha_reserva": "2026-07-09",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+
+### 5. CREAR reserva — sin campos obligatorios (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Faltan campos"
+}
+
+### 6. CREAR reserva — portátiles exceden capacidad del salón (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 1,
+    "fecha_reserva": "2026-07-20",
+    "hora_reserva": 1,
+    "id_user": 3123,
+    "portatil": 999
+}
+
+### 7. CREAR reserva — usuario inexistente (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 1,
+    "fecha_reserva": "2026-07-20",
+    "hora_reserva": 1,
+    "id_user": 99999
+}
+
+### ============================================
+### ACTUALIZAR / CANCELAR RESERVA
+### ============================================
+
+### 8. ACTUALIZAR reserva — cambiar título
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "titulo": "Clase de ciencias",
+    "detalle_reserva": "Se cambió el detalle"
+}
+
+### 9. ACTUALIZAR reserva — cambiar salón y hora
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 128859,
+    "id_salon": 2,
+    "hora_reserva": 3
+}
+
+### 10. ACTUALIZAR reserva — portátil no debería cambiar (se ignora)
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "portatil": 5,
+    "sonido": true
+}
+
+### 11. ACTUALIZAR reserva — ID inexistente (debe fallar 404)
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 99999,
+    "titulo": "No existe"
+}
+
+### 12. CANCELAR reserva
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "cancelar": true
+}
+
+### 13. CANCELAR reserva — ya cancelada (debe fallar o no hacer nada)
+PUT http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "cancelar": true
+}
+
+### ============================================
+### LISTAR RESERVAS
+### ============================================
+
+### 14. LISTAR todas las reservas (paginadas)
+GET http://localhost:8000/api/reservas?per_page=5
+
+### 15. LISTAR reservas por usuario
+GET http://localhost:8000/api/reservas?id_user=3123
+
+### 16. LISTAR reservas por salón
+GET http://localhost:8000/api/reservas?id_salon=2
+
+### 17. LISTAR reservas por fecha
+GET http://localhost:8000/api/reservas?fecha_reserva=2026-07-22
+
+### 18. LISTAR reservas canceladas
+GET http://localhost:8000/api/reservas?cancelado=true
+
+### 19. LISTAR reservas activas (no canceladas)
+GET http://localhost:8000/api/reservas?cancelado=false
+
+### 20. LISTAR reservas — combinación de filtros
+GET http://localhost:8000/api/reservas?id_user=3123&id_salon=2&cancelado=false&per_page=3
+
+### ============================================
+### CREACIÓN MÚLTIPLE (BATCH)
+### ============================================
+
+### 21. CREAR reservas múltiples — distintas horas mismo día
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-07-22",
+    "hora_reserva": [1, 2, 3],
+    "id_user": 3123,
+    "portatil": 1,
+    "titulo": "Clase multiple - mismo día"
+}
+
+### 22. CREAR reservas múltiples — distintos días misma hora
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": ["2026-07-23", "2026-07-24", "2026-07-25"],
+    "hora_reserva": 1,
+    "id_user": 3123,
+    "titulo": "Clase multiple - mismos días"
+}
+
+### 23. CREAR reservas múltiples — varios días y varias horas
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": ["2026-07-28", "2026-07-29"],
+    "hora_reserva": [1, 2],
+    "id_user": 3123,
+    "portatil": 1,
+    "titulo": "Clase multiple - combinatoria"
+}
