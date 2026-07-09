@@ -5,7 +5,7 @@ namespace App\Models\Prestamos;
 use App\Models\Inventario\Inventario;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Eloquent\Builder;
 
 class PrestamosInventario extends Model
 {
@@ -25,6 +25,8 @@ class PrestamosInventario extends Model
         'observacion',
         'user_log',
     ];
+
+    const UPDATED_AT = null;
 
     public function inventario()
     {

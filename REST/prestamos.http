@@ -1,0 +1,102 @@
+### ============================================
+### PRÉSTAMOS INVENTARIO — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### 1. CREAR préstamo
+POST http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inventario": 1,
+    "id_user_entrega": 11,
+    "id_user_prestamo": 3123,
+    "fecha_compromiso": "2026-07-20 17:00:00",
+    "observacion": "Préstamo de proyector multimedia"
+}
+
+### 2. CREAR préstamo — inventario ya prestado (debe fallar)
+POST http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inventario": 1,
+    "id_user_entrega": 11,
+    "id_user_prestamo": 3123,
+    "fecha_compromiso": "2026-07-20 17:00:00"
+}
+
+### 3. CREAR préstamo — inventario inexistente (debe fallar 400)
+POST http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inventario": 9999,
+    "id_user_entrega": 1,
+    "id_user_prestamo": 2
+}
+
+### 4. LISTAR préstamos activos
+GET http://localhost:8000/api/prestamos?activo=true
+Accept: application/json
+
+### 5. LISTAR préstamos devueltos
+GET http://localhost:8000/api/prestamos?devueltos=true
+
+### 6. LISTAR préstamos vencidos
+GET http://localhost:8000/api/prestamos?vencidos=true
+
+### 7. LISTAR préstamos filtrados por descripción
+GET http://localhost:8000/api/prestamos?descripcion=proyector
+
+### 8. LISTAR todos los préstamos (paginados)
+GET http://localhost:8000/api/prestamos?per_page=5
+
+### 9. ACTUALIZAR préstamo — devolución
+PUT http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_user_recibe": 11,
+    "fecha_devolucion": "2026-07-15 14:30:00",
+    "observacion": "Devuelto en buen estado"
+}
+
+### 10. ACTUALIZAR préstamo — solo observación
+PUT http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "observacion": "Se actualizó la observación del préstamo"
+}
+
+### 11. ACTUALIZAR préstamo — ID inexistente (debe fallar 400)
+PUT http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 9999,
+    "fecha_devolucion": "2026-07-15 14:30:00"
+}
+
+### 12. CREAR préstamo — sin campos obligatorios (debe fallar 400)
+POST http://localhost:8000/api/prestamos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "observacion": "Faltan campos"
+}

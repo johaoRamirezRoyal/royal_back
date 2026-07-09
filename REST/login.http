@@ -1,0 +1,8 @@
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}

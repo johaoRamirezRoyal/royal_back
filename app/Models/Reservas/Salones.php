@@ -2,11 +2,13 @@
 
 namespace App\Models\Reservas;
 
+use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 
-class Salones extends Model {
+class Salones extends Model
+{
     use HasFactory;
 
     protected $table = 'salones';
@@ -25,14 +27,15 @@ class Salones extends Model {
     ];
 
     protected $casts = [
-    'fechareg' => 'datetime',
-];
+        'fechareg' => 'datetime',
+    ];
 
-    public function Usuario() {
+    public function Usuario()
+    {
         return $this->hasMany(
-            \App\Models\Usuarios\Usuario::class,
+            Usuario::class,
             'id_user',
-            'id_user'            
+            'id_user'
         );
     }
 
