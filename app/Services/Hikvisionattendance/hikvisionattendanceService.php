@@ -437,6 +437,18 @@ class hikvisionattendanceService
             );
 
             if ($response->getStatusCode() === 201 || $response->getStatusCode() === 200) {
+                // POST .../UserInfo/Record ignora el Valid.beginTime que se le manda y el
+                // equipo le pone su propio "ahora" al crear, dejando al usuario recién
+                // creado con permiso "expirado" hasta esa hora. PUT .../Modify sí respeta
+                // el Valid enviado, así que se fuerza justo después de crear.
+                $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ],
+                    'json' => $payload,
+                ]);
+
                 return [
                     'error' => false,
                     'id_user' => $datos_empleado['id_user'],
@@ -525,6 +537,28 @@ class hikvisionattendanceService
 
             'fulfilled' => function ($response, $index) use (&$result, $usuarios) {
                 $usuario = $usuarios[$index];
+
+                // Mismo motivo que en registrarEmpleado: el POST de creación ignora el
+                // Valid.beginTime enviado, así que se fuerza con un Modify justo después.
+                $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ],
+                    'json' => [
+                        'UserInfo' => [
+                            'employeeNo' => (string) $usuario['id_user'],
+                            'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
+                            'userType' => 'normal',
+                            'Valid' => [
+                                'enable' => true,
+                                'beginTime' => '2024-01-01T00:00:00',
+                                'endTime' => '2035-12-31T23:59:59',
+                                'timeType' => 'local',
+                            ],
+                        ],
+                    ],
+                ]);
 
                 $result['success'][] = [
                     'id_user' => $usuario['id_user'],

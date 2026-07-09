@@ -210,10 +210,10 @@ class HikvisionController extends Controller
         $empleados = array_is_list($input) ? $input : [$input];
 
         $rules = [
-            '*.id_user'   => ['required', 'integer', 'exists:usuarios,id_user'],
+            '*.id_user' => ['required', 'integer', 'exists:usuarios,id_user'],
             '*.documento' => ['required', 'string', 'max:16'],
-            '*.nombre'    => ['required', 'string'],
-            '*.perfil'    => ['required', 'integer', 'exists:perfiles,id_perfil'],
+            '*.nombre' => ['required', 'string'],
+            '*.perfil' => ['required', 'integer', 'exists:perfiles,id_perfil'],
         ];
 
         $validator = Validator::make($empleados, $rules);
@@ -355,8 +355,9 @@ class HikvisionController extends Controller
         foreach ($request->input('id_user') as $id_user) {
             $usuario = $this->usuario_services->mostrarInfoUsuarioId($id_user);
 
-            if ($usuario['error'] || !$usuario['usuario']) {
+            if ($usuario['error'] || ! $usuario['usuario']) {
                 $resultado['error'][] = ['id_user' => $id_user, 'message' => 'No se encontró el usuario en la base de datos'];
+
                 continue;
             }
 
@@ -364,6 +365,7 @@ class HikvisionController extends Controller
 
             if ($desactivar['error']) {
                 $resultado['error'][] = ['id_user' => $id_user, 'message' => $desactivar['message']];
+
                 continue;
             }
 
@@ -418,7 +420,7 @@ class HikvisionController extends Controller
 
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($employeeNo);
 
-        if ($usuario['error'] || !$usuario['usuario']) {
+        if ($usuario['error'] || ! $usuario['usuario']) {
             return response()->json([
                 'error' => true,
                 'message' => 'No se encontró el usuario en la base de datos',
@@ -508,9 +510,14 @@ class HikvisionController extends Controller
 
         // Ignorar ruido: apertura/cierre de puerta y pings periódicos del equipo
         // sin persona asociada. Solo nos interesa el evento real de asistencia.
-        if ($employeeNoString === null || ! in_array($attendanceStatus, ['checkIn', 'checkOut'], true)) {
+        if ($employeeNoString === null || ! in_array($attendanceStatus, ['checkIn', 'checkOut', 'undefined'], true)) {
             return;
         }
+
+        // Con el modo "salida" desactivado en el equipo, el dispositivo deja de
+        // mandar checkIn/checkOut y manda "undefined" en toda marcación válida.
+        // Mientras esté así, todo evento con persona asociada es una entrada.
+        $esCheckIn = $attendanceStatus === 'checkIn' || $attendanceStatus === 'undefined';
 
         Log::info('[hikvision-notification] Evento de asistencia recibido', [
             'employeeNoString' => $employeeNoString,
@@ -519,7 +526,7 @@ class HikvisionController extends Controller
             'raw' => $data,
         ]);
 
-        if ($attendanceStatus === 'checkIn') {
+        if ($esCheckIn) {
             $this->registrarLlegadaTardeSiAplica((int) $employeeNoString);
         }
     }
