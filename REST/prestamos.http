@@ -66,7 +66,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-    "id": 1,
+    "id": 3,
     "id_user_recibe": 11,
     "fecha_devolucion": "2026-07-15 14:30:00",
     "observacion": "Devuelto en buen estado"

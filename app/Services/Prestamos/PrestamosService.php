@@ -4,6 +4,7 @@ namespace App\Services\Prestamos;
 
 use App\Models\Inventario\Inventario;
 use App\Models\Prestamos\PrestamosInventario;
+use App\Models\Reservas\Reservas;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -72,31 +73,58 @@ class PrestamosService extends Service
     public function actualizarPrestamo(array $data): array
     {
         try {
-            $prestamo = PrestamosInventario::find($data['id']);
+            return DB::transaction(function () use ($data) {
 
-            if (!$prestamo) {
+                $prestamo = PrestamosInventario::with('inventario')
+                    ->find($data['id']);
+
+                if (!$prestamo) {
+                    return [
+                        'error' => true,
+                        'message' => "No se encontró el préstamo con id: {$data['id']}",
+                        'data' => []
+                    ];
+                }
+
+                // Evitar registrar una devolución dos veces
+                if (
+                    isset($data['id_user_recibe']) &&
+                    $prestamo->fecha_devolucion !== null
+                ) {
+                    return [
+                        'error' => true,
+                        'message' => 'El préstamo ya fue devuelto.',
+                        'data' => []
+                    ];
+                }
+
+                unset($data['id']);
+
+                $prestamo->update($data);
+
+                // Si se está registrando la devolución
+                if (isset($data['id_user_recibe'])) {
+
+                    $prestamo->inventario->update([
+                        'estado'  => 1, // Disponible
+                    ]);
+                }
+
+                $prestamo->refresh();
+
                 return [
-                    'error' => true,
-                    'message' => "No se encontró el préstamo con id: {$data['id']}",
-                    'data' => []
+                    'error' => false,
+                    'message' => 'Se ha actualizado el préstamo correctamente.',
+                    'data' => $prestamo->toArray()
                 ];
-            }
-
-            unset($data['id']);
-
-            $prestamo->update($data);
-
-            return [
-                'error' => false,
-                'message' => 'Se ha actualizado el préstamo correctamente',
-                'data' => $prestamo->fresh()->toArray()
-            ];
+            });
         } catch (Exception $e) {
+
             $this->sendError($e, 'Error al actualizar el préstamo');
 
             return [
                 'error' => true,
-                'message' => 'Error en el servidor al actualizar el préstamo',
+                'message' => 'Error en el servidor al actualizar el préstamo.',
                 'data' => []
             ];
         }
@@ -147,5 +175,31 @@ class PrestamosService extends Service
                 'data' => []
             ];
         }
+    }
+
+    public function registrarPrestamo(array $data)
+    {
+        $inventario = Inventario::find($data['id_inventario']);
+
+        if (!$inventario) {
+            throw new Exception('No existe el inventario.');
+        }
+
+        $prestamoActivo = PrestamosInventario::where('id_inventario', $inventario->id)
+            ->whereNull('fecha_devolucion')
+            ->exists();
+
+        if ($prestamoActivo) {
+            throw new Exception('El portátil ya se encuentra prestado.');
+        }
+
+        $prestamo = PrestamosInventario::create($data);
+
+        $inventario->update([
+            'estado' => 8,
+            'id_user' => $data['id_user_prestamo']
+        ]);
+
+        return $prestamo;
     }
 }

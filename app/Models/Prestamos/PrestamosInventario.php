@@ -26,7 +26,7 @@ class PrestamosInventario extends Model
         'user_log',
     ];
 
-    const UPDATED_AT = null;
+    public $timestamps = false;
 
     public function inventario()
     {
