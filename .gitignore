@@ -51,3 +51,6 @@ coverage/
 *.log
 *.cache
 *.tmp
+
+#HTTP
+./REST/
