@@ -72,4 +72,9 @@ class Reportes extends Model
     public function periodo(){
         return $this->belongsTo(Periodo::class, 'periodo');
     }
+
+    public function solucion()
+    {
+        return $this->hasOne(Reportes::class, 'id_reporte', 'id');
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Services\inventario;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
+use App\Models\Inventario\Reportes;
 use App\Services\MailService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -149,7 +150,7 @@ class InventarioServices
                     ->update([
                         "estado" => 5,
                         "activo" => 0,
-                        ]);
+                    ]);
 
                 $registros = [];
 
@@ -196,14 +197,15 @@ class InventarioServices
      * @param array $ids
      * @param mixed $id_log
      */
-    public function liberarInventario(array $ids, ?int $id_log = null){
+    public function liberarInventario(array $ids, ?int $id_log = null)
+    {
         try {
             $result = DB::transaction(function () use ($ids, $id_log) {
                 $inventario = Inventario::whereIn('id', $ids)
-                            ->whereNotIn('estado', [4, 5])    
-                            ->get();
+                    ->whereNotIn('estado', [4, 5])
+                    ->get();
 
-                if($inventario->isEmpty()){
+                if ($inventario->isEmpty()) {
                     return [
                         'error' => true,
                         'message' => 'No se encontraron esos elementos en el inventario',
@@ -212,14 +214,15 @@ class InventarioServices
                 }
 
                 Inventario::whereIn('id', $inventario->pluck('id'))
-                    ->update(["estado" => 4,
-                                "id_user" => null,
-                                "id_area" => null,
-                            ]);
+                    ->update([
+                        "estado" => 4,
+                        "id_user" => null,
+                        "id_area" => null,
+                    ]);
 
                 $registros = [];
 
-                foreach($inventario as $i){
+                foreach ($inventario as $i) {
                     $registros[] = [
                         'id_inventario' => $i->id,
                         'id_log' => $id_log,
@@ -235,7 +238,7 @@ class InventarioServices
                 ];
             });
 
-            if(!$result['error']){
+            if (!$result['error']) {
                 $titulo = "Notificación | Inventario Liberado";
                 $contenido = "Se han Liberado los siguientes elementos:\n\n";
 
@@ -247,7 +250,7 @@ class InventarioServices
             }
 
             return $result;
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             Log::error('No se liberaron los elementos: ' . $e->getMessage());
 
             return [
@@ -265,20 +268,21 @@ class InventarioServices
      * @param int $id_usuario
      * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
-    public function asignarInventario(array $ids, int $id_area, int $id_usuario){
-        try{
+    public function asignarInventario(array $ids, int $id_area, int $id_usuario)
+    {
+        try {
             $inventario_liberado = Inventario::whereIn('id', $ids)
-                                                ->where('estado', 4)
-                                                ->get();
-    
-            if($inventario_liberado->isEmpty()){
+                ->where('estado', 4)
+                ->get();
+
+            if ($inventario_liberado->isEmpty()) {
                 return [
                     'message' => "Ese inventario no está liberado.",
                     'data' => null,
                     'error' => true,
                 ];
             }
-    
+
             Inventario::whereIn('id', $inventario_liberado->pluck('id'))
                 ->where('estado', 4)
                 ->update([
@@ -291,7 +295,7 @@ class InventarioServices
             $contenido = "Se han Asignado los siguientes elementos:\n\n";
 
 
-            foreach($inventario_liberado as $inv){
+            foreach ($inventario_liberado as $inv) {
                 $contenido .= "{$inv->descripcion} (Codigo: {$inv->id})\n";
             }
 
@@ -302,8 +306,7 @@ class InventarioServices
                 'message' => "Inventario asignado",
                 'error' => false,
             ];
-
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             Log::error("No se asigno el inventario: " . $e->getMessage());
 
             return [
@@ -314,16 +317,223 @@ class InventarioServices
         }
     }
 
-    //REPORTAR INVENTARIO
+    /**
+     * Metodo para reportar varios inventarios. 
+     * @param array $ids
+     * @param int $id_log
+     * @param string $descripcion
+     * @param int $id_anio
+     * @param int $id_periodo
+     * @return array
+     */
     public function reportarInventario(
-        array $ids, 
-        int $id_log, 
-        int $id_responsable, 
+        array $ids,
+        int $id_log,
         string $descripcion,
-        string $estado,
         int $id_anio,
         int $id_periodo
-        ): array{
-        return [];
+    ): array {
+
+        try {
+
+            return DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
+
+                $inventario = Inventario::whereIn('id', $ids)
+                    ->whereNotIn('estado', [2, 5])
+                    ->get();
+
+                if ($inventario->isEmpty()) {
+                    return [
+                        'error' => true,
+                        'message' => 'No se encontró inventario disponible para reportar.',
+                        'data' => []
+                    ];
+                }
+
+                foreach ($inventario as $item) {
+
+                    $item->update([
+                        'estado' => 2,
+                        'observacion' => $descripcion
+                    ]);
+
+                    Reportes::create([
+                        'id_inventario' => $item->id,
+                        'id_area' => $item->id_area,
+                        'tipo_reporte' => 1,
+                        'estado' => 2,
+                        'id_log' => $id_log,
+                        'id_user' => $id_log,
+                        'descripcion' => $descripcion,
+                        'observacion' => $descripcion,
+                        'id_anio' => $id_anio,
+                        'periodo' => $id_periodo
+                    ]);
+                }
+
+                return [
+                    'error' => false,
+                    'message' => 'Inventario reportado correctamente.',
+                    'data' => $inventario
+                ];
+            });
+        } catch (\Throwable $e) {
+
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
+    }
+
+    public function mostrarReportesDeInventario(
+        ?array $id_inventario,
+        ?int $id_user,
+        ?int $id_anio,
+        ?int $id_periodo,
+        ?string $search,
+        ?int $estado,
+        ?int $per_page
+    ): array {
+        try {
+
+            $query = Reportes::query()
+                ->with([
+                    'inventario',
+                    'usuario',
+                    'anio',
+                    'periodo'
+                ])
+                ->when(!empty($id_inventario), function ($q) use ($id_inventario) {
+                    $q->whereIn('id_inventario', $id_inventario);
+                })
+                ->when($id_user, function ($q) use ($id_user) {
+                    $q->where('id_user', $id_user);
+                })
+                ->when($id_anio, function ($q) use ($id_anio) {
+                    $q->where('id_anio', $id_anio);
+                })
+                ->when($id_periodo, function ($q) use ($id_periodo) {
+                    $q->where('periodo', $id_periodo);
+                })
+                ->when(!is_null($estado), function ($q) use ($estado) {
+                    $q->where('estado', $estado);
+                })
+                ->when($search, function ($q) use ($search) {
+                    $q->where(function ($query) use ($search) {
+                        $query->where('descripcion', 'like', "%{$search}%")
+                            ->orWhereHas('inventario', function ($inventario) use ($search) {
+                                $inventario->where('codigo', 'like', "%{$search}%")
+                                    ->orWhere('descripcion', 'like', "%{$search}%");
+                            })
+                            ->orWhereHas('usuario', function ($usuario) use ($search) {
+                                $usuario->where('nombre', 'like', "%{$search}%");
+                            });
+                    });
+                })
+                ->latest('id');
+
+            $reportes = $per_page
+                ? $query->paginate($per_page)
+                : $query->get();
+
+            return [
+                'error' => false,
+                'message' => 'Reportes obtenidos correctamente.',
+                'data' => $reportes
+            ];
+        } catch (\Throwable $e) {
+
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Método para solucionar un reporte a partir de su ID.
+     * @param int $id_reporte
+     * @param int $id_resp
+     * @param mixed $fecha_respuesta
+     * @param string $descripcion
+     * @return array
+     */
+    public function solucionarReporteInventario(
+        int $id_reporte,
+        int $id_resp,
+        ?string $fecha_respuesta,
+        string $descripcion
+    ): array {
+        try {
+
+            return DB::transaction(function () use ($id_reporte, $id_resp, $fecha_respuesta, $descripcion) {
+
+                $reporte = Reportes::with('inventario')->find($id_reporte);
+
+                if (!$reporte) {
+                    return [
+                        'error' => true,
+                        'message' => 'No se encontró el reporte.',
+                        'data' => []
+                    ];
+                }
+
+                // Verificar si ya existe una solución para este reporte
+                $solucion = Reportes::where('id_reporte', $reporte->id)->first();
+
+                if ($solucion) {
+                    return [
+                        'error' => true,
+                        'message' => 'El reporte ya fue solucionado.',
+                        'data' => $solucion
+                    ];
+                }
+
+                $solucion = Reportes::create([
+                    'id_reporte'        => $reporte->id,
+                    'id_inventario'     => $reporte->id_inventario,
+                    'id_area'           => $reporte->id_area,
+                    'id_user'           => $reporte->id_user,
+                    'id_log'            => $id_resp,
+                    'id_resp'           => $id_resp,
+                    'fecha_respuesta'   => $fecha_respuesta ?? now(),
+                    'descripcion'       => $descripcion,
+                    'estado'            => 3, // Solucionado
+                    'periodo'        => $reporte->periodo,
+                    'id_anio'           => $reporte->id_anio,
+                ]);
+
+                // Verificar si quedan otros reportes pendientes para el inventario
+                $tienePendientes = Reportes::where('id_inventario', $reporte->id_inventario)
+                    ->whereNull('id_reporte') // Solo reportes originales
+                    ->where('estado', 2)      // Estado reportado
+                    ->where('id', '<>', $reporte->id)
+                    ->whereDoesntHave('solucion')
+                    ->exists();
+
+                if (!$tienePendientes) {
+                    $reporte->inventario->update([
+                        'estado' => 3,
+                        'observacion' => $descripcion
+                    ]);
+                }
+
+                return [
+                    'error' => false,
+                    'message' => 'Reporte solucionado correctamente.',
+                    'data' => $solucion->fresh()
+                ];
+            });
+        } catch (\Throwable $e) {
+
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
     }
 }
