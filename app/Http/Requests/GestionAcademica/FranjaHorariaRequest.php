@@ -3,7 +3,6 @@
 namespace App\Http\Requests\GestionAcademica;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class FranjaHorariaRequest extends FormRequest
 {
@@ -20,7 +19,6 @@ class FranjaHorariaRequest extends FormRequest
             'hora_inicio' => ['nullable', 'date_format:H:i:s'],
             'hora_fin' => ['nullable', 'date_format:H:i:s'],
             'orden' => ['nullable', 'integer', 'min:1'],
-            'tipo' => ['nullable', 'string', Rule::in(['CLASE', 'RECESO', 'ALMUERZO'])],
             'id' => ['nullable', 'integer', 'exists:academico_franja_horaria,id'],
             'ids' => ['nullable', 'array'],
             'ids.*' => ['integer', 'exists:academico_franja_horaria,id'],
@@ -37,7 +35,6 @@ class FranjaHorariaRequest extends FormRequest
             'id_dia_semana.exists' => 'El día de la semana no existe.',
             'hora_inicio.date_format' => 'La hora debe tener formato H:i:s.',
             'hora_fin.date_format' => 'La hora debe tener formato H:i:s.',
-            'tipo.in' => 'El tipo debe ser CLASE, RECESO o ALMUERZO.',
             'id.exists' => 'La franja horaria no existe.',
             'ids.*.exists' => 'Una o más franjas no existen.',
             'franjas.*.id.required_with' => 'Cada franja debe tener un id.',

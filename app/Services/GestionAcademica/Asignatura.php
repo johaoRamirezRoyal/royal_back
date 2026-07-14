@@ -147,24 +147,30 @@ class Asignatura extends Service
         }
     }
 
-    public function eliminar(int $id): array
+    public function eliminar(array $ids): array
     {
         try {
-            $item = AsignaturaModel::find($id);
-
-            if (!$item) {
+            if (empty($ids)) {
                 return [
                     'error' => true,
-                    'message' => "Asignatura con ID $id no encontrada.",
+                    'message' => 'Debe indicar al menos un id de asignatura para desactivar.',
                     'data' => []
                 ];
             }
 
-            $item->update(['activo' => 0]);
+            $desactivadas = AsignaturaModel::whereIn('id', $ids)->update(['activo' => 0]);
+
+            if ($desactivadas === 0) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontraron asignaturas para desactivar.',
+                    'data' => []
+                ];
+            }
 
             return [
                 'error' => false,
-                'message' => 'Asignatura desactivada.',
+                'message' => "Se desactivaron {$desactivadas} asignatura(s).",
                 'data' => []
             ];
         } catch (Exception $e) {

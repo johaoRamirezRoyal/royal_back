@@ -4,6 +4,7 @@ namespace App\Models\GestionAcademica;
 
 use App\Models\AnioEscolar\Anio;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FranjaHoraria extends Model
 {
@@ -19,7 +20,6 @@ class FranjaHoraria extends Model
         'hora_inicio',
         'hora_fin',
         'orden',
-        'tipo',
     ];
 
     public function anioEscolar()
@@ -30,5 +30,10 @@ class FranjaHoraria extends Model
     public function diaSemana()
     {
         return $this->belongsTo(DiaSemana::class, 'id_dia_semana', 'id');
+    }
+
+    public function horarioClase(): HasOne
+    {
+        return $this->hasOne(HorarioClase::class, 'id_franja_horaria', 'id');
     }
 }
