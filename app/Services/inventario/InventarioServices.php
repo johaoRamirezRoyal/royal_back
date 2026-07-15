@@ -2,6 +2,7 @@
 
 namespace App\Services\inventario;
 
+use App\Models\AnioEscolar\Anio;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
@@ -529,6 +530,102 @@ class InventarioServices
             });
         } catch (\Throwable $e) {
 
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
+    }
+
+    public function programarMantenimientoPreventivo(
+        array $ids,
+        string $fecha_inicio,
+        int $id_log,
+        string $observacion,
+        ?int $id_anio,
+        ?int $periodo
+    ): array {
+        try {
+            $inventarios = Inventario::whereIn('id', $ids)
+                ->whereNotIn('estado', [2, 5, 6])
+                ->get();
+
+            if ($inventarios->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontraron inventarios disponibles para programar mantenimiento preventivo.',
+                    'data' => []
+                ];
+            }
+
+            $idAnio = $id_anio;
+            $idPeriodo = $periodo;
+
+            if (is_null($idAnio) || is_null($idPeriodo)) {
+                $ultimoAnioEscolar = Anio::with([
+                    'periodos:id,id_anio,numero,fecha_inicio,fecha_fin'
+                ])
+                    ->where('activo', 1)
+                    ->latest('id')
+                    ->first();
+
+                if(is_null($idPeriodo)){
+                    return [
+                        'error' => true,
+                        'message' => "Debes añadir el periodo escolar para el mantenimiento",
+                        'data' => []
+                    ];
+                }
+
+                if (!$ultimoAnioEscolar) {
+                    return [
+                        'error' => true,
+                        'message' => 'No existe un año escolar registrado.',
+                        'data' => []
+                    ];
+                }
+
+                $idAnio ??= $ultimoAnioEscolar->id;
+            }
+
+            DB::transaction(function () use (
+                $inventarios,
+                $fecha_inicio,
+                $id_log,
+                $observacion,
+                $idAnio,
+                $idPeriodo
+            ) {
+                foreach ($inventarios as $inventario) {
+                    Reportes::create([
+                        'id_inventario' => $inventario->id,
+                        'id_area' => $inventario->id_area,
+                        'observacion' => 'Mantenimiento Preventivo',
+                        'estado' => 6,
+                        'id_user' => $inventario->id_user,
+                        'id_log' => $id_log,
+                        'id_resp' => $inventario->id_user,
+                        'tipo_reporte' => 2,
+                        'descripcion' => $observacion,
+                        'id_anio' => $idAnio,
+                        'periodo' => $idPeriodo,
+                        'fechareg' => $fecha_inicio,
+                    ]);
+
+                    $inventario->update([
+                        'estado' => 6,
+                        'observacion' => $observacion,
+                    ]);
+                }
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Se programó el mantenimiento preventivo para ' . $inventarios->count() . ' inventario(s).',
+                'data' => []
+            ];
+        } catch (\Throwable $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
