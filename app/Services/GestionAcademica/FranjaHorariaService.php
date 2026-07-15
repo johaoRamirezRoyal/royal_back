@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class FranjaHorariaService extends Service
 {
-    public function verFranjasHorarias(int $id_anio_escolar, ?int $id_dia_semana, ?string $tipo)
+    public function verFranjasHorarias(int $id_anio_escolar, ?int $id_dia_semana, ?bool $disponible = null)
     {
         try {
             $franjaHoraria = FranjaHoraria::query()
@@ -27,8 +27,8 @@ class FranjaHorariaService extends Service
                 )->where('id_anio_escolar', $id_anio_escolar)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
-                })->when($tipo !== null, function ($query) use ($tipo) {
-                    $query->where('tipo', $tipo);
+                })->when($disponible, function ($query) {
+                    $query->whereDoesntHave('horarioClase');
                 })
                 ->orderBy('dias_semana.orden')
                 ->orderBy('academico_franja_horaria.hora_inicio')
@@ -65,7 +65,6 @@ class FranjaHorariaService extends Service
      * - id_dia_semana
      * - hora_inicio
      * - hora_fin
-     * - tipo (clase, receso o almuerzo)
      * - orden
      *
      * Validaciones:
@@ -150,17 +149,14 @@ class FranjaHorariaService extends Service
      *
      * Permite actualizar:
      * - Año escolar.
-     * - Tipo.
      *
      * @param array $ids
      * @param int|null $id_anio_escolar
-     * @param string|null $tipo
      * @return array
      */
     public function actualizarFranjaHoraria(
         array $ids,
-        ?int $id_anio_escolar,
-        ?string $tipo
+        ?int $id_anio_escolar
     ): array {
         try {
 
@@ -172,7 +168,7 @@ class FranjaHorariaService extends Service
                 ];
             }
 
-            if ($id_anio_escolar === null && $tipo === null) {
+            if ($id_anio_escolar === null) {
                 return [
                     'error' => true,
                     'message' => 'Debe enviar al menos un campo para actualizar.',
@@ -180,15 +176,9 @@ class FranjaHorariaService extends Service
                 ];
             }
 
-            $dataActualizar = [];
-
-            if ($id_anio_escolar !== null) {
-                $dataActualizar['id_anio_escolar'] = $id_anio_escolar;
-            }
-
-            if ($tipo !== null) {
-                $dataActualizar['tipo'] = $tipo;
-            }
+            $dataActualizar = [
+                'id_anio_escolar' => $id_anio_escolar,
+            ];
 
             $actualizados = FranjaHoraria::whereIn('id', $ids)
                 ->update($dataActualizar);
@@ -236,27 +226,29 @@ class FranjaHorariaService extends Service
                 ];
             }
 
-            DB::beginTransaction();
-
             foreach ($franjas as $franja) {
-
-                if (
-                    !isset($franja['id']) ||
-                    !isset($franja['orden'])
-                ) {
-                    DB::rollBack();
-
+                if (!isset($franja['id']) || !isset($franja['orden'])) {
                     return [
                         'error' => true,
                         'message' => 'Cada franja debe contener id y orden.',
                         'data' => []
                     ];
                 }
+            }
 
+            DB::beginTransaction();
+
+            // Dos pasadas: primero a valores temporales negativos (únicos por id) para
+            // no chocar con el uq_franja_horaria (id_anio_escolar, id_dia_semana, orden)
+            // mientras otras filas del mismo grupo aún tienen su orden viejo.
+            foreach ($franjas as $franja) {
                 FranjaHoraria::where('id', $franja['id'])
-                    ->update([
-                        'orden' => $franja['orden']
-                    ]);
+                    ->update(['orden' => -$franja['id']]);
+            }
+
+            foreach ($franjas as $franja) {
+                FranjaHoraria::where('id', $franja['id'])
+                    ->update(['orden' => $franja['orden']]);
             }
 
             DB::commit();

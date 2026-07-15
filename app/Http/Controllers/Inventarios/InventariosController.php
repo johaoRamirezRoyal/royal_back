@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Inventarios;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
+use App\Http\Requests\Inventario\ReportarInventarioRequest;
+use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
 use App\Services\inventario\InventarioServices as InventarioServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-
-use function PHPSTORM_META\map;
 
 class InventariosController extends Controller
 {
@@ -128,5 +129,57 @@ class InventariosController extends Controller
         $asignar = $this->inventario_services->asignarInventario($data['ids'], $data['id_area'], $data['id_user']);
 
         return $this->apiResponse($asignar);
+    }
+
+    public function reportarInventario(ReportarInventarioRequest $request)
+    {
+        $data = $request->toReportarInventario();
+
+        $resultado = $this->inventario_services->reportarInventario(
+            $data['ids'],
+            $data['id_log'],
+            $data['descripcion'],
+            $data['id_anio'],
+            $data['id_periodo']
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function mostrarReportesInventario(MostrarReportesInventarioRequest $request)
+    {
+        $resultado = $this->inventario_services->mostrarReportesDeInventario(
+            $request->input('id_inventario'),
+            $request->input('id_user'),
+            $request->input('id_anio'),
+            $request->input('id_periodo'),
+            $request->input('search'),
+            $request->input('estado'),
+            $request->input('per_page')
+        );
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        if ($resultado['data'] instanceof \Illuminate\Pagination\LengthAwarePaginator) {
+            return $this->paginatedResponse($resultado);
+        }
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function solucionarReporteInventario(SolucionarReporteInventarioRequest $request)
+    {
+        $data = $request->toSolucionarReporte();
+
+        $resultado = $this->inventario_services->solucionarReporteInventario(
+            $data['id_reporte'],
+            $data['id_resp'],
+            $data['fecha_respuesta'],
+            $data['descripcion']
+        );
+
+        return $this->apiResponse($resultado);
     }
 }

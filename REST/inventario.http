@@ -1,0 +1,242 @@
+### ============================================
+### INVENTARIO — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### ============================================
+### LISTADO
+### ============================================
+
+### 1. OBTENER listado de inventario (paginado)
+GET http://localhost:8000/api/inventario/listado?per-page=10
+
+### 2. OBTENER listado — buscar por descripción
+GET http://localhost:8000/api/inventario/listado?search=computador
+
+### 3. OBTENER listado — filtrar por área
+GET http://localhost:8000/api/inventario/listado?id_area[]=1
+
+### 4. OBTENER listado — filtrar por categoría
+GET http://localhost:8000/api/inventario/listado?id_categoria[]=9
+
+### 5. OBTENER listado — filtrar por estado
+GET http://localhost:8000/api/inventario/listado?estado[]=2
+
+### 6. OBTENER listado — filtrar por usuario
+GET http://localhost:8000/api/inventario/listado?id_usuario=3123
+
+### ============================================
+### AGREGAR
+### ============================================
+
+### 7. AGREGAR inventario — exitoso
+POST http://localhost:8000/api/inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "Monitor Dell 24 pulgadas",
+    "marca": "Dell",
+    "modelo": "P2422H",
+    "precio": 850000,
+    "estado": 1,
+    "id_usuario": 3123,
+    "activo": 1,
+    "fecha_compra": "2026-01-15",
+    "id_area": 1,
+    "id_categoria": 1
+}
+
+### 8. AGREGAR inventario — sin campos obligatorios (debe fallar 422)
+POST http://localhost:8000/api/inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "marca": "Dell"
+}
+
+### ============================================
+### DESCONTINUAR
+### ============================================
+
+### 9. DESCONTINUAR inventario — exitoso
+PUT http://localhost:8000/api/inventario/descontinuar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1],
+    "id_log": 3123
+}
+
+### 10. DESCONTINUAR inventario — sin IDs (debe fallar 422)
+PUT http://localhost:8000/api/inventario/descontinuar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_log": 3123
+}
+
+### 11. DESCONTINUAR inventario — ID inexistente (debe fallar)
+PUT http://localhost:8000/api/inventario/descontinuar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [99999],
+    "id_log": 3123
+}
+
+### ============================================
+### LIBERAR
+### ============================================
+
+### 12. LIBERAR inventario — exitoso
+PUT http://localhost:8000/api/inventario/liberar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1],
+    "id_log": 3123
+}
+
+### 13. LIBERAR inventario — sin IDs (debe fallar 422)
+PUT http://localhost:8000/api/inventario/liberar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_log": 3123
+}
+
+### ============================================
+### ASIGNAR
+### ============================================
+
+### 14. ASIGNAR inventario — exitoso
+PUT http://localhost:8000/api/inventario/asignar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1],
+    "id_area": 1,
+    "id_user": 3123
+}
+
+### 15. ASIGNAR inventario — sin campos obligatorios (debe fallar 422)
+PUT http://localhost:8000/api/inventario/asignar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1]
+}
+
+### ============================================
+### REPORTAR
+### ============================================
+
+### 16. REPORTAR inventario — exitoso
+POST http://localhost:8000/api/inventario/reportar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [11899],
+    "id_log": 3123,
+    "descripcion": "Problema con mouse, ta pesao la prueba",
+    "id_anio": 10,
+    "id_periodo": 1
+}
+
+### 17. REPORTAR inventario — sin campos obligatorios (debe fallar 422)
+POST http://localhost:8000/api/inventario/reportar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1]
+}
+
+### 18. REPORTAR inventario — ID inventario inexistente (debe fallar 422)
+POST http://localhost:8000/api/inventario/reportar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [99999],
+    "id_log": 3123,
+    "descripcion": "Elemento dañado",
+    "id_anio": 1,
+    "id_periodo": 1
+}
+
+### ============================================
+### MOSTRAR REPORTES
+### ============================================
+
+### 19. OBTENER reportes — todos (paginados)
+GET http://localhost:8000/api/inventario/reportes?per_page=10
+
+### 20. OBTENER reportes — filtrar por inventario
+GET http://localhost:8000/api/inventario/reportes?id_inventario[]=11899
+
+### 21. OBTENER reportes — filtrar por usuario
+GET http://localhost:8000/api/inventario/reportes?id_user=3123
+
+### 22. OBTENER reportes — filtrar por año y periodo
+GET http://localhost:8000/api/inventario/reportes?id_anio=1&id_periodo=1
+
+### 23. OBTENER reportes — filtrar por estado
+GET http://localhost:8000/api/inventario/reportes?estado=2
+
+### 24. OBTENER reportes — buscar por descripción
+GET http://localhost:8000/api/inventario/reportes?search=pantalla
+
+### 25. OBTENER reportes — combinación de filtros
+GET http://localhost:8000/api/inventario/reportes?id_user=3123&estado=2&per_page=5
+
+### ============================================
+### SOLUCIONAR REPORTE
+### ============================================
+
+### 26. SOLUCIONAR reporte — exitoso
+PUT http://localhost:8000/api/inventario/reportes/solucionar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_reporte": 15572,
+    "id_resp": 3123,
+    "descripcion": "Reporte solucionado de mouse prueba debe salir el id del periodo creo",
+    "fecha_respuesta": "2026-07-14"
+}
+
+### 27. SOLUCIONAR reporte — sin campos obligatorios (debe fallar 422)
+PUT http://localhost:8000/api/inventario/reportes/solucionar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_reporte": 1
+}
+
+### 28. SOLUCIONAR reporte — reporte inexistente (debe fallar 422)
+PUT http://localhost:8000/api/inventario/reportes/solucionar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_reporte": 99999,
+    "id_resp": 3123,
+    "descripcion": "No existe este reporte"
+}

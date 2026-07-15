@@ -31,18 +31,6 @@ class HorarioClaseService extends Service
                 ];
             }
 
-            // Si es una clase, la franja debe ser de tipo CLASE
-            if (
-                $data['tipo'] === 'CLASE' &&
-                strtoupper($franja->tipo) !== 'CLASE'
-            ) {
-                return [
-                    'error' => true,
-                    'message' => 'No se puede asignar una clase a una franja de tipo ' . $franja->tipo . '.',
-                    'data' => []
-                ];
-            }
-
             // Validar carga académica
             if ($data['tipo'] === 'CLASE') {
 
@@ -54,12 +42,28 @@ class HorarioClaseService extends Service
                     ];
                 }
 
-                $carga = CargaAcademica::find($data['id_carga_academica']);
+                $carga = CargaAcademica::with('docenteAsignatura.asignatura')->find($data['id_carga_academica']);
 
                 if (!$carga) {
                     return [
                         'error' => true,
                         'message' => 'La carga académica no existe.',
+                        'data' => []
+                    ];
+                }
+
+                if (!$carga->activo) {
+                    return [
+                        'error' => true,
+                        'message' => 'No se puede definir una clase de una carga académica desactivada.',
+                        'data' => []
+                    ];
+                }
+
+                if (!$carga->docenteAsignatura?->asignatura?->activo) {
+                    return [
+                        'error' => true,
+                        'message' => 'No se puede definir una clase de una asignatura desactivada.',
                         'data' => []
                     ];
                 }
@@ -182,7 +186,7 @@ class HorarioClaseService extends Service
 
                 ->with([
 
-                    'franjaHoraria:id,id_dia_semana,hora_inicio,hora_fin,orden,tipo',
+                    'franjaHoraria:id,id_dia_semana,hora_inicio,hora_fin,orden',
 
                     'franjaHoraria.diaSemana:id,nombre,abreviatura',
 
@@ -213,15 +217,22 @@ class HorarioClaseService extends Service
                     });
                 })
 
+                // Las franjas sin carga académica (receso, almuerzo, planeación, etc.) no
+                // pertenecen a ningún docente en particular — se muestran siempre, sin
+                // filtrar por id_docente, igual que ya se hace con el chequeo de "activo".
                 ->when($id_docente, function ($query) use ($id_docente) {
 
-                    $query->whereHas(
-                        'cargaAcademica.docenteAsignatura',
-                        function ($q) use ($id_docente) {
+                    $query->where(function ($q) use ($id_docente) {
 
-                            $q->where('id_docente', $id_docente);
-                        }
-                    );
+                        $q->whereNull('id_carga_academica')
+                            ->orWhereHas(
+                                'cargaAcademica.docenteAsignatura',
+                                function ($q2) use ($id_docente) {
+
+                                    $q2->where('id_docente', $id_docente);
+                                }
+                            );
+                    });
                 })
 
                 ->when($id_asignatura, function ($query) use ($id_asignatura) {
@@ -233,6 +244,23 @@ class HorarioClaseService extends Service
                             $q->where('id_asignatura', $id_asignatura);
                         }
                     );
+                })
+
+                // Oculta clases de carga académica o asignatura desactivada; las franjas
+                // sin carga académica (descansos, etc.) no aplican y se muestran siempre.
+                ->where(function ($query) {
+
+                    $query->whereNull('id_carga_academica')
+                        ->orWhere(function ($q) {
+
+                            $q->whereHas('cargaAcademica', function ($q2) {
+
+                                $q2->where('activo', 1);
+                            })->whereHas('cargaAcademica.docenteAsignatura.asignatura', function ($q2) {
+
+                                $q2->where('activo', 1);
+                            });
+                        });
                 })
 
                 ->join(

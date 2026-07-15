@@ -83,7 +83,8 @@ Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambi
 
 
 /**
-http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2&id_dia_semana=2&disponible=1
+'disponible=1' filtra solo las franjas que aún no tienen un horario de clase asignado.
  */
 Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
 
@@ -94,8 +95,7 @@ http://localhost:8000/api/gestion-academica/franjas-horarias
   "id_dia_semana": 2,
   "hora_inicio": "07:55:00",
   "hora_fin": "08:50:00",
-  "orden": 3,
-  "tipo": "CLASE"
+  "orden": 3
 }
  */
 Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
@@ -104,8 +104,7 @@ Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranj
 http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
 {
     "ids": [3, 4],
-    "id_anio_escolar": 2,
-    "tipo": "RECESO"
+    "id_anio_escolar": 2
 }
  */
 Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria']);

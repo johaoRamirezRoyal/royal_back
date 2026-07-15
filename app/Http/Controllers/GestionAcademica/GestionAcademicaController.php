@@ -57,8 +57,9 @@ class GestionAcademicaController extends Controller
 
     public function eliminarAsignatura(Request $request)
     {
-        $id = $request->input('id');
-        return $this->apiResponse($this->service->asignatura()->eliminar($id));
+        $ids = $request->input('ids', []);
+
+        return $this->apiResponse($this->service->asignatura()->eliminar($ids));
     }
 
     public function listarDocentesAsignaturas(Request $request)
@@ -124,9 +125,9 @@ class GestionAcademicaController extends Controller
     {
         $id_anio_escolar = $request->input('id_anio_escolar');
         $id_dia_semana = $request->input('id_dia_semana');
-        $tipo = $request->input('tipo');
+        $disponible = $request->boolean('disponible');
 
-        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $tipo));
+        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $disponible));
     }
 
     public function crearFranjaHoraria(FranjaHorariaRequest $request)
@@ -137,7 +138,7 @@ class GestionAcademicaController extends Controller
     public function actualizarTipoFranjaHoraria(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
-        return $this->apiResponse($this->service->franjaHoraria()->actualizarFranjaHoraria($body['ids'], $body['id_anio_escolar'] ?? null, $body['tipo'] ?? null));
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarFranjaHoraria($body['ids'], $body['id_anio_escolar'] ?? null));
     }
 
     public function actualizarOrdenFranjasHorarias(FranjaHorariaRequest $request)
