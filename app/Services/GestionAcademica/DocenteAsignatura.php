@@ -39,7 +39,9 @@ class DocenteAsignatura extends Service
                 )
                 ->with([
                     'nivelRelacion:id,nombre',
-                    'docente_asignaturas:id,id_asignatura,id_docente',
+                    'docente_asignaturas' => function ($query) {
+                        $query->where('activo', 1)->select('id', 'id_asignatura', 'id_docente');
+                    },
                     'docente_asignaturas.asignatura:id,nombre,abreviatura,color'
                 ])
                 ->orderBy('apellido')
@@ -99,11 +101,14 @@ class DocenteAsignatura extends Service
                 $data = array_map(fn($id) => [
                     'id_docente' => $id_user,
                     'id_asignatura' => $id,
+                    'activo' => 1,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ], $asignaturas);
 
-                DocenteAsignaturaModel::insertOrIgnore($data);
+                // upsert en vez de insertOrIgnore: reactiva la fila si ya existía
+                // desactivada por un eliminarAsignaturasDocente previo.
+                DocenteAsignaturaModel::upsert($data, ['id_docente', 'id_asignatura'], ['activo', 'updated_at']);
             });
 
             return [
@@ -125,7 +130,7 @@ class DocenteAsignatura extends Service
 
     public function eliminarAsignaturasDocente(array $ids_asignatura_docente): array {
         try {
-            $asignaturas = DocenteAsignaturaModel::whereIn('id', $ids_asignatura_docente)->delete();
+            $asignaturas = DocenteAsignaturaModel::whereIn('id', $ids_asignatura_docente)->update(['activo' => 0]);
 
             if ($asignaturas == 0) {
               return [
