@@ -729,4 +729,76 @@ class AdmissionsController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    public function listarPsicologasDisponibles(Request $request)
+    {
+        $response = $this->admisiones_services->listarPsicologasDisponibles();
+
+        return $this->apiResponse($response);
+    }
+
+    public function agendarCitaPsicologia(Request $request)
+    {
+        $data = $request->validate([
+            'id_inscripcion' => 'required|integer|exists:admisiones_inscripciones,id',
+            'id_psicologa' => 'required|integer|exists:usuarios,id_user',
+            'fecha_cita' => 'required|date',
+            'observaciones' => 'nullable|string',
+        ]);
+
+        $response = $this->admisiones_services->agendarCitaPsicologia(
+            $data['id_inscripcion'],
+            $data['id_psicologa'],
+            $data['fecha_cita'],
+            $data['observaciones'] ?? null
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function obtenerCitasPsicologiaDeInscripcion(Request $request)
+    {
+        $id_inscripcion = (int) $request->input('id_inscripcion');
+
+        if (! $id_inscripcion) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Debe proporcionar un id de inscripción válido',
+                'data' => [],
+            ]);
+        }
+
+        $response = $this->admisiones_services->obtenerCitasPsicologiaDeInscripcion($id_inscripcion);
+
+        return $this->apiResponse($response);
+    }
+
+    public function actualizarFechaCitaPsicologia(Request $request)
+    {
+        $data = $request->validate([
+            'id' => 'required|integer|exists:admisiones_citas_psicologia,id',
+            'fecha_cita' => 'required|date',
+        ]);
+
+        $response = $this->admisiones_services->actualizarFechaCitaPsicologia($data['id'], $data['fecha_cita']);
+
+        return $this->apiResponse($response);
+    }
+
+    public function listarCitasPsicologia(Request $request)
+    {
+        $data = $request->validate([
+            'id_psicologa' => 'nullable|integer|exists:usuarios,id_user',
+            'fecha_desde' => 'nullable|date',
+            'fecha_hasta' => 'nullable|date',
+        ]);
+
+        $response = $this->admisiones_services->listarCitasPsicologia(
+            $data['id_psicologa'] ?? null,
+            $data['fecha_desde'] ?? null,
+            $data['fecha_hasta'] ?? null
+        );
+
+        return $this->apiResponse($response);
+    }
 }

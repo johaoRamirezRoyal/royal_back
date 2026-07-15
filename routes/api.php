@@ -32,6 +32,30 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     });
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
     Route::get('/inscripcionesPsicologa', [AdmissionsController::class, 'mostrarAspirantesAPsicologa']);
+
+    // Lista los usuarios con perfil de psicóloga (preescolar/primaria/bachillerato) y estado activo.
+    Route::get('/psicologasDisponibles', [AdmissionsController::class, 'listarPsicologasDisponibles']);
+
+    /**
+     * Ejemplo JSON para agendar una cita de psicología (la define la psicóloga):
+        {
+            "id_inscripcion": 1,
+            "id_psicologa": 45,
+            "fecha_cita": "2026-07-20 09:00:00",
+            "observaciones": "Primera valoración con la familia."
+        }
+     * Notifica (in-app) al acudiente que registró la inscripción.
+     */
+    Route::post('/citaPsicologia', [AdmissionsController::class, 'agendarCitaPsicologia']);
+
+    // ?id_inscripcion=1 -> { data: { tiene_cita: bool, citas: [...] } }
+    Route::get('/citaPsicologia', [AdmissionsController::class, 'obtenerCitasPsicologiaDeInscripcion']);
+
+    // Reprogramar una cita: { "id": 7, "fecha_cita": "2026-07-21 10:00:00" }
+    Route::put('/citaPsicologia', [AdmissionsController::class, 'actualizarFechaCitaPsicologia']);
+
+    // ?id_psicologa=45&fecha_desde=2026-07-01&fecha_hasta=2026-07-31 (todos opcionales; sin filtros trae todas)
+    Route::get('/citasPsicologia', [AdmissionsController::class, 'listarCitasPsicologia']);
 });
 
 Route::group(['prefix' => 'admissions'], function () {

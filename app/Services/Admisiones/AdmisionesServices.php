@@ -3,6 +3,7 @@
 namespace App\Services\Admisiones;
 
 use App\Models\Admisiones\Aspirante;
+use App\Models\Admisiones\CitaPsicologia;
 use App\Models\Admisiones\Documento;
 use App\Models\Admisiones\Estado;
 use App\Models\Admisiones\Familiares;
@@ -13,6 +14,7 @@ use App\Models\Usuarios\Usuario;
 use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Services\Service;
 use App\Services\MailService;
+use App\Services\NotificacionesService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +23,8 @@ use Illuminate\Support\Facades\Log;
 class AdmisionesServices extends Service
 {
     public function __construct(
-        private MailService $mailService
+        private MailService $mailService,
+        private NotificacionesService $notificacionesService
     ) {}
 
     /**
@@ -30,6 +33,58 @@ class AdmisionesServices extends Service
     private array $mailTo = [
         'hernando.ramirez@royalschool.edu.co',
     ];
+
+    /**
+     * IDs de perfil de psicóloga por nivel, con los grados que cada una atiende.
+     * Se reutiliza para: filtrar aspirantes por psicóloga, resolver a qué
+     * psicóloga notificar según el grado del aspirante, y listar psicólogas disponibles.
+     */
+    private const NIVELES_PSICOLOGAS = [
+        21 => ["Stem", "Pre Kinder", "Kinder", "Transición"],
+        24 => ["Primero de primaria", "Segundo de primaria", "Tercero de primaria", "Cuarto de primaria", "Quinto de primaria"],
+        25 => ["Sexto de bachillerato", "Séptimo de bachillerato", "Octavo de bachillerato", "Noveno de bachillerato", "Décimo de bachillerato", "Undécimo de bachillerato"],
+    ];
+
+    private function perfilPsicologaParaGrado(?string $grado): ?int
+    {
+        foreach (self::NIVELES_PSICOLOGAS as $perfil => $cursos) {
+            if (in_array($grado, $cursos, true)) {
+                return $perfil;
+            }
+        }
+
+        return null;
+    }
+
+    private function esEstadoRevisionPsicologia(?string $nombreEstado): bool
+    {
+        $normalizado = mb_strtolower($nombreEstado ?? '');
+
+        return str_contains($normalizado, 'revis') && str_contains($normalizado, 'psicolog');
+    }
+
+    /**
+     * Duración asumida de una cita de psicología, usada solo para detectar cruces de horario.
+     * No hay campo de duración en la tabla; ajustar aquí si cambia la duración real de las citas.
+     */
+    private const CITA_DURACION_MINUTOS = 45;
+
+    private function existeCruceDeHorario(int $id_psicologa, Carbon $inicio, Carbon $fin, ?int $excluirCitaId = null): bool
+    {
+        return CitaPsicologia::where('id_psicologa', $id_psicologa)
+            ->when($excluirCitaId, fn ($query) => $query->where('id', '!=', $excluirCitaId))
+            ->whereBetween('fecha_cita', [
+                $inicio->copy()->subMinutes(self::CITA_DURACION_MINUTOS),
+                $fin,
+            ])
+            ->get(['fecha_cita'])
+            ->contains(function ($cita) use ($inicio, $fin) {
+                $citaInicio = Carbon::parse($cita->fecha_cita);
+                $citaFin = $citaInicio->copy()->addMinutes(self::CITA_DURACION_MINUTOS);
+
+                return $citaInicio->lt($fin) && $citaFin->gt($inicio);
+            });
+    }
 
     /* =================================================================== INSCRIPCION SERVICES =================================================================== */
     public function registrarInscripcion(array $data): array
@@ -390,6 +445,29 @@ class AdmisionesServices extends Service
 
             if (! empty($mailTo)) {
                 $this->mailService->sendGeneric($mailTo, $titulo, $contenido);
+            }
+
+            if ($this->esEstadoRevisionPsicologia($estado_nuevo)) {
+                $perfilPsicologa = $this->perfilPsicologaParaGrado($inscripcion->aspirante?->grado_aplica);
+
+                $correosPsicologas = $perfilPsicologa
+                    ? Usuario::where('perfil', $perfilPsicologa)->pluck('correo')->filter()->toArray()
+                    : [];
+
+                if (! empty($correosPsicologas)) {
+                    $this->mailService->sendGeneric(
+                        $correosPsicologas,
+                        "Nueva inscripción en revisión de psicología | {$inscripcion->codigo}",
+                        "Se ha asignado la inscripción con código {$inscripcion->codigo} para revisión de psicología.\n\n".
+                        'Aspirante: '.optional($inscripcion->aspirante)->nombre_completo."\n".
+                        'Grado al que aplica: '.optional($inscripcion->aspirante)->grado_aplica
+                    );
+                } else {
+                    Log::warning('No se encontró psicóloga para notificar el cambio de estado', [
+                        'id_inscripcion' => $id_inscripcion,
+                        'grado_aplica' => $inscripcion->aspirante?->grado_aplica,
+                    ]);
+                }
             }
 
             return [
@@ -1254,19 +1332,8 @@ class AdmisionesServices extends Service
      * @return array{data: array, error: bool, message: string}
      */
     public function mostrarAspirantesAPsicologa(int $perfil_psicologa): array {
-        
-        //Aquí irán los IDs de los perfiles de las psicologas en base a su nivel. 
-        $perfil_psicologa_preescolar = 21;
-        $perfil_psicologa_primaria = 24;
-        $perfil_psicologa_bachillerato = 25;
 
-        $niveles_cursos = [
-            $perfil_psicologa_preescolar => ["Stem", "Pre Kinder", "Kinder", "Transición"],
-            $perfil_psicologa_primaria => ["Primero de primaria", "Segundo de primaria", "Tercero de primaria", "Cuarto de primaria", "Quinto de primaria"],
-            $perfil_psicologa_bachillerato => ["Sexto de bachillerato", "Séptimo de bachillerato", "Octavo de bachillerato", "Noveno de bachillerato", "Décimo de bachillerato", "Undécimo de bachillerato"],
-        ];
-
-        $cursosPermitidos = $niveles_cursos[$perfil_psicologa] ?? [];
+        $cursosPermitidos = self::NIVELES_PSICOLOGAS[$perfil_psicologa] ?? [];
      
         try {
             $inscripciones = Inscripcion::with([
@@ -1303,6 +1370,250 @@ class AdmisionesServices extends Service
                 'error' => true,
                 'message' => "Error al obtener las inscripciones de un psicologa",
                 'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Listar las psicólogas disponibles (usuarios con un perfil de psicóloga y estado activo).
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function listarPsicologasDisponibles(): array
+    {
+        try {
+            $psicologas = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))
+                ->where('estado', 'activo')
+                ->get(['id_user', 'nombre', 'apellido', 'correo', 'perfil']);
+
+            if ($psicologas->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontraron psicólogas disponibles',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Psicólogas disponibles obtenidas correctamente',
+                'data' => $psicologas->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las psicólogas disponibles');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener las psicólogas disponibles',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Agendar una cita de psicología para una inscripción. Notifica al acudiente que registró la inscripción.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function agendarCitaPsicologia(int $id_inscripcion, int $id_psicologa, string $fecha_cita, ?string $observaciones = null): array
+    {
+        try {
+            $inscripcion = Inscripcion::with(['usuarioRegistro', 'aspirante'])->find($id_inscripcion);
+
+            if (! $inscripcion) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa inscripción',
+                    'data' => [],
+                ];
+            }
+
+            $psicologa = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))->find($id_psicologa);
+
+            if (! $psicologa) {
+                return [
+                    'error' => true,
+                    'message' => 'El usuario indicado no es una psicóloga válida',
+                    'data' => [],
+                ];
+            }
+
+            $inicio = Carbon::parse($fecha_cita);
+            $fin = $inicio->copy()->addMinutes(self::CITA_DURACION_MINUTOS);
+
+            if ($this->existeCruceDeHorario($id_psicologa, $inicio, $fin)) {
+                return [
+                    'error' => true,
+                    'message' => 'La psicóloga ya tiene una cita agendada en ese horario',
+                    'data' => [],
+                ];
+            }
+
+            $cita = CitaPsicologia::create([
+                'id_inscripcion' => $id_inscripcion,
+                'id_psicologa' => $id_psicologa,
+                'fecha_cita' => $fecha_cita,
+                'observaciones' => $observaciones,
+            ]);
+
+            $acudiente = $inscripcion->usuarioRegistro;
+
+            if ($acudiente) {
+                $this->notificacionesService->crear(
+                    $acudiente->id_user,
+                    'Cita de psicología agendada',
+                    'Se ha agendado una cita de psicología para la inscripción '.$inscripcion->codigo.
+                    ' el '.Carbon::parse($fecha_cita)->format('d/m/Y H:i').
+                    '. Aspirante: '.optional($inscripcion->aspirante)->nombre_completo.
+                    '. Psicóloga: '.$psicologa->nombre.' '.$psicologa->apellido.'.',
+                    $acudiente->perfil ?? 1
+                );
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Cita de psicología agendada correctamente',
+                'data' => $cita->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al agendar la cita de psicología');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al agendar la cita de psicología',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Consultar si una inscripción ya tiene cita(s) de psicología agendada(s).
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function obtenerCitasPsicologiaDeInscripcion(int $id_inscripcion): array
+    {
+        try {
+            $citas = CitaPsicologia::with('psicologa:id_user,nombre,apellido,correo')
+                ->where('id_inscripcion', $id_inscripcion)
+                ->orderByDesc('fecha_cita')
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => $citas->isEmpty() ? 'La inscripción no tiene citas de psicología agendadas' : 'Citas de psicología encontradas',
+                'data' => [
+                    'tiene_cita' => $citas->isNotEmpty(),
+                    'citas' => $citas->toArray(),
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al consultar la cita de psicología de la inscripción');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al consultar la cita de psicología',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Reprogramar (cambiar fecha/hora) una cita de psicología existente. Notifica al acudiente.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function actualizarFechaCitaPsicologia(int $id_cita, string $fecha_cita): array
+    {
+        try {
+            $cita = CitaPsicologia::with(['inscripcion.usuarioRegistro', 'psicologa'])->find($id_cita);
+
+            if (! $cita) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa cita de psicología',
+                    'data' => [],
+                ];
+            }
+
+            $inicio = Carbon::parse($fecha_cita);
+            $fin = $inicio->copy()->addMinutes(self::CITA_DURACION_MINUTOS);
+
+            if ($this->existeCruceDeHorario($cita->id_psicologa, $inicio, $fin, $cita->id)) {
+                return [
+                    'error' => true,
+                    'message' => 'La psicóloga ya tiene una cita agendada en ese horario',
+                    'data' => [],
+                ];
+            }
+
+            $cita->update(['fecha_cita' => $fecha_cita]);
+
+            $acudiente = $cita->inscripcion?->usuarioRegistro;
+
+            if ($acudiente) {
+                $mensajeReprogramacion = 'La cita de psicología para la inscripción '.$cita->inscripcion->codigo.
+                    ' fue reprogramada para el '.$inicio->format('d/m/Y H:i').
+                    '. Psicóloga: '.$cita->psicologa->nombre.' '.$cita->psicologa->apellido.'.';
+
+                $this->notificacionesService->crear(
+                    $acudiente->id_user,
+                    'Cita de psicología reprogramada',
+                    $mensajeReprogramacion,
+                    $acudiente->perfil ?? 1
+                );
+
+                if ($acudiente->correo) {
+                    $this->mailService->sendGeneric(
+                        $acudiente->correo,
+                        "Cita de psicología reprogramada | {$cita->inscripcion->codigo}",
+                        $mensajeReprogramacion
+                    );
+                }
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Fecha de la cita actualizada correctamente',
+                'data' => $cita->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la fecha de la cita de psicología');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la fecha de la cita',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Listar citas de psicología. Sin filtros trae todas; se puede acotar por psicóloga y/o rango de fechas.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function listarCitasPsicologia(?int $id_psicologa = null, ?string $fecha_desde = null, ?string $fecha_hasta = null): array
+    {
+        try {
+            $citas = CitaPsicologia::with([
+                'psicologa:id_user,nombre,apellido,correo,perfil',
+                'inscripcion:id,codigo,id_usuario_registro',
+                'inscripcion.aspirante:id,id_inscripcion,nombre_completo,grado_aplica',
+            ])
+                ->when($id_psicologa, fn ($query) => $query->where('id_psicologa', $id_psicologa))
+                ->when($fecha_desde, fn ($query) => $query->where('fecha_cita', '>=', $fecha_desde))
+                ->when($fecha_hasta, fn ($query) => $query->where('fecha_cita', '<=', $fecha_hasta))
+                ->orderBy('fecha_cita')
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => $citas->isEmpty() ? 'No se encontraron citas de psicología' : 'Citas de psicología obtenidas correctamente',
+                'data' => $citas->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al listar las citas de psicología');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al listar las citas de psicología',
+                'data' => [],
             ];
         }
     }

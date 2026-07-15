@@ -9,11 +9,31 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
+    /**
+     * Descarta direcciones que no cumplen RFC 2822 antes de enviar.
+     * Un solo correo inválido en el lote hace que Mail::to()->send() lance
+     * excepción para TODO el envío, bloqueando también a los destinatarios válidos.
+     */
+    private function filtrarCorreosValidos(array $recipients): array
+    {
+        $validos = array_values(array_filter(
+            $recipients,
+            fn ($email) => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+        ));
+
+        $invalidos = array_diff($recipients, $validos);
+
+        if (! empty($invalidos)) {
+            Log::warning('Se omitieron destinatarios con correo inválido', ['invalidos' => array_values($invalidos)]);
+        }
+
+        return $validos;
+    }
 
     public function sendView(array|string $to, string $subject, string $view, array $data = []): array
     {
         try {
-            $recipients = is_string($to) ? [$to] : $to;
+            $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
@@ -59,7 +79,7 @@ class MailService
     public function sendGeneric(array|string $to, string $titulo, string $contenido): array
     {
         try {
-            $recipients = is_string($to) ? [$to] : $to;
+            $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
@@ -100,7 +120,7 @@ class MailService
     public function send(array|string $to, Mailable $mailable): bool
     {
         try {
-            $recipients = is_string($to) ? [$to] : $to;
+            $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
