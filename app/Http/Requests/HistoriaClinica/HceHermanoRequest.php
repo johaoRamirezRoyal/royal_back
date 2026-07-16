@@ -14,8 +14,10 @@ class HceHermanoRequest extends FormRequest
     public function rules(): array
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
+        $isUpdated = $this->isMethod("PUT") ? "required" : "sometimes";
 
         return [
+            'id' => [$isUpdated, 'integer'],
             'id_inscripcion' => [$isRequired, 'integer'],
             'nombre' => [$isRequired, 'string', 'max:255'],
             'edad' => ['nullable', 'integer'],

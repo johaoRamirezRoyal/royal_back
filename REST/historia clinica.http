@@ -34,7 +34,7 @@ Accept: application/json
 }
 
 ### 3. ACTUALIZAR por id
-PUT http://localhost:8000/api/historia-clinica/cognitivo-lenguaje
+PUT http://localhost:8000/api/compartido/historia-clinica/cognitivo-lenguaje
 Content-Type: application/json
 Accept: application/json
 

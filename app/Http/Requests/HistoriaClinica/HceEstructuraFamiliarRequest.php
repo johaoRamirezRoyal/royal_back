@@ -14,8 +14,10 @@ class HceEstructuraFamiliarRequest extends FormRequest
     public function rules(): array
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
+        $isUpdated = $this->isMethod("PUT") ? "required" : "sometimes";
 
         return [
+            'id' => [$isUpdated, 'integer'],
             'id_inscripcion' => [$isRequired, 'integer'],
             'relacion_padres' => ['nullable', 'string'],
             'otras_personas_significativas' => ['nullable', 'string'],

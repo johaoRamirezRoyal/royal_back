@@ -14,8 +14,10 @@ class HceEmbarazoPartoRequest extends FormRequest
     public function rules(): array
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
+        $isUpdated = $this->isMethod("PUT") ? "required" : "sometimes";
 
         return [
+            'id' => [$isUpdated, 'integer'],
             'id_inscripcion' => [$isRequired, 'integer'],
             'embarazo_tipo' => ['nullable', 'string'],
             'tiempo_gestacion' => ['nullable', 'string'],

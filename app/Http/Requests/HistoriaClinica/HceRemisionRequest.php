@@ -14,8 +14,10 @@ class HceRemisionRequest extends FormRequest
     public function rules(): array
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
+        $isUpdated = $this->isMethod("PUT") ? "required" : "sometimes";
 
         return [
+            'id' => [$isUpdated, 'integer'],
             'id_inscripcion' => [$isRequired, 'integer'],
             'neurodesarrollo' => ['nullable', 'string'],
             'fonoaudiologia' => ['nullable', 'string'],
