@@ -25,11 +25,20 @@ Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Bibl
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
 Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
+
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
+    
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
+
     Route::group(['prefix' => 'anio-academico'], function () {
         require __DIR__.'/api/anioAcademico.php';
     });
+
+    // HISTORIA CLÍNICA
+    Route::prefix('/historia-clinica')->group(function () {
+        require __DIR__ . '/api/historiaClinica.php';
+    });
+
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
     Route::get('/inscripcionesPsicologa', [AdmissionsController::class, 'mostrarAspirantesAPsicologa']);
 
@@ -151,5 +160,4 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/gestion-academica')->group(function () {
         require __DIR__ . '/api/gestionAcademica.php';
     });
-
 });

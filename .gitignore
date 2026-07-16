@@ -53,4 +53,4 @@ coverage/
 *.tmp
 
 #HTTP
-./REST/
+./REST/*

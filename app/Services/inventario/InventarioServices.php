@@ -395,6 +395,7 @@ class InventarioServices
         ?int $id_periodo,
         ?string $search,
         ?int $estado,
+        ?int $tipo_categoria,
         ?int $per_page
     ): array {
         try {
@@ -420,6 +421,11 @@ class InventarioServices
                 })
                 ->when(!is_null($estado), function ($q) use ($estado) {
                     $q->where('estado', $estado);
+                })
+                ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
+                    $q->whereHas('inventario.categoria', function ($categoria) use ($tipo_categoria) {
+                        $categoria->where('tipo_categoria', $tipo_categoria);
+                    });
                 })
                 ->when($search, function ($q) use ($search) {
                     $q->where(function ($query) use ($search) {
@@ -570,7 +576,7 @@ class InventarioServices
                     ->latest('id')
                     ->first();
 
-                if(is_null($idPeriodo)){
+                if (is_null($idPeriodo)) {
                     return [
                         'error' => true,
                         'message' => "Debes añadir el periodo escolar para el mantenimiento",
