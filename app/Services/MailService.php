@@ -9,8 +9,6 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
-<<<<<<< HEAD
-=======
     /**
      * Descarta direcciones que no cumplen RFC 2822 antes de enviar.
      * Un solo correo inválido en el lote hace que Mail::to()->send() lance
@@ -32,7 +30,6 @@ class MailService
         return $validos;
     }
 
->>>>>>> main
     public function sendView(array|string $to, string $subject, string $view, array $data = []): array
     {
         try {
