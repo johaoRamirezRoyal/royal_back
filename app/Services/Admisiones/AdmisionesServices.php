@@ -347,6 +347,15 @@ class AdmisionesServices extends Service
                 'referenciaFamiliares',
                 'documento',
                 'documento.tipoDocumento:id,nombre',
+                'cognitivoLenguaje',
+                'desarrolloPsicomotor',
+                'embarazoParto',
+                'estructuraFamiliar',
+                'hermanos',
+                'historiaEscolar',
+                'observacionesFirmas',
+                'psicoafectiva',
+                'remision',
             ])
                 ->where('codigo', $codigo)
                 ->first();
