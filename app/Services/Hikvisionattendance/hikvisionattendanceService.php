@@ -1440,6 +1440,139 @@ class hikvisionattendanceService
     }
 
     /**
+     * Registra (o sobrescribe) una tarjeta de proximidad para un empleado ya existente
+     * en el dispositivo, vía CardInfo/Record. A diferencia de huella/rostro, el DS-K1T321MFWX-B
+     * no expone una operación ISAPI de "captura" para leer el número de la tarjeta acercándola
+     * al lector: el cardNo debe conocerse de antemano (impreso/grabado en la tarjeta, o leído
+     * con un lector USB externo) y se envía directamente.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function registrarTarjetaEmpleado(string $employeeNo, string $cardNo, string $cardType = 'normalCard'): array
+    {
+        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+            return [
+                'error' => true,
+                'message' => 'El empleado no está registrado en el dispositivo',
+                'data' => [],
+            ];
+        }
+
+        try {
+            $response = $this->client->post('/ISAPI/AccessControl/CardInfo/Record?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                'json' => [
+                    'CardInfo' => [
+                        'employeeNo' => $employeeNo,
+                        'cardNo' => $cardNo,
+                        'cardType' => $cardType,
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Tarjeta registrada a empleado', ['employeeNo' => $employeeNo, 'cardNo' => $cardNo, 'data' => $data]);
+
+            return [
+                'error' => false,
+                'message' => 'Tarjeta registrada correctamente',
+                'data' => $data ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error registrando tarjeta en Hikvision: ' . $e->getMessage(), [
+                'employeeNo' => $employeeNo,
+                'cardNo' => $cardNo,
+            ]);
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorTarjeta($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Elimina TODAS las tarjetas registradas de un empleado en el dispositivo.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function eliminarTarjetaEmpleado(string $employeeNo): array
+    {
+        try {
+            $response = $this->client->put('/ISAPI/AccessControl/CardInfo/Delete?format=json', [
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+                'json' => [
+                    'CardInfoDelCond' => [
+                        'mode' => 'byEmployeeNo',
+                        'EmployeeNoList' => [
+                            ['employeeNo' => $employeeNo],
+                        ],
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            Log::info('Tarjetas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
+
+            return [
+                'error' => false,
+                'message' => 'Tarjetas eliminadas correctamente',
+                'data' => $data ?? [],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error eliminando tarjetas en Hikvision: ' . $e->getMessage(), [
+                'employeeNo' => $employeeNo,
+            ]);
+
+            $body = (method_exists($e, 'getResponse') && $e->getResponse())
+                ? $e->getResponse()->getBody()->getContents()
+                : null;
+
+            return [
+                'error' => true,
+                'message' => $body ?? 'Error al eliminar las tarjetas del dispositivo',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Traduce errores conocidos del dispositivo (tarjeta duplicada, employeeNo inexistente)
+     * a un mensaje legible para el frontend. Si el código no es reconocido, se conserva el
+     * mensaje crudo del dispositivo.
+     */
+    private function traducirErrorTarjeta(\Exception $e): string
+    {
+        $body = (method_exists($e, 'getResponse') && $e->getResponse())
+            ? $e->getResponse()->getBody()->getContents()
+            : null;
+
+        $decoded = $body ? json_decode($body, true) : null;
+        $subStatusCode = $decoded['subStatusCode'] ?? null;
+
+        $mensajes = [
+            'employeeNoNotExist' => 'El empleado no está registrado en el dispositivo',
+            'cardNoAlreadyExist' => 'Esta tarjeta ya está registrada',
+            'cardNoExist' => 'Esta tarjeta ya está registrada',
+        ];
+
+        if ($subStatusCode && isset($mensajes[$subStatusCode])) {
+            return $mensajes[$subStatusCode];
+        }
+
+        return $decoded['errorMsg'] ?? $body ?? 'Error al registrar la tarjeta en el dispositivo';
+    }
+
+    /**
      * Registra el rostro de un empleado ya existente en el dispositivo, en dos pasos:
      * 1) CaptureFaceData: a diferencia de la huella, no es una llamada bloqueante única;
      *    cada POST devuelve el progreso actual (captureProgress, en XML) mientras no hay
