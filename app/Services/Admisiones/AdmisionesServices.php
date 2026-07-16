@@ -1468,6 +1468,15 @@ class AdmisionesServices extends Service
                 );
             }
 
+            $this->notificacionesService->crear(
+                $psicologa->id_user,
+                'Nueva cita de psicología a tu cargo',
+                'Se te ha asignado una cita de psicología para la inscripción '.$inscripcion->codigo.
+                ' el '.Carbon::parse($fecha_cita)->format('d/m/Y H:i').
+                '. Aspirante: '.optional($inscripcion->aspirante)->nombre_completo.'.',
+                $psicologa->perfil ?? 1
+            );
+
             return [
                 'error' => false,
                 'message' => 'Cita de psicología agendada correctamente',
@@ -1579,6 +1588,118 @@ class AdmisionesServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar la fecha de la cita',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Reasignar la psicóloga a cargo de una cita existente. Notifica y envía correo
+     * al acudiente y a la nueva psicóloga informando el cambio.
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function actualizarPsicologaCitaPsicologia(int $id_cita, int $id_psicologa): array
+    {
+        try {
+            $cita = CitaPsicologia::with(['inscripcion.usuarioRegistro', 'psicologa'])->find($id_cita);
+
+            if (! $cita) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa cita de psicología',
+                    'data' => [],
+                ];
+            }
+
+            if ($cita->id_psicologa === $id_psicologa) {
+                return [
+                    'error' => false,
+                    'message' => 'La cita ya está asignada a esa psicóloga',
+                    'data' => $cita->toArray(),
+                ];
+            }
+
+            $psicologaNueva = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))->find($id_psicologa);
+
+            if (! $psicologaNueva) {
+                return [
+                    'error' => true,
+                    'message' => 'El usuario indicado no es una psicóloga válida',
+                    'data' => [],
+                ];
+            }
+
+            $inicio = Carbon::parse($cita->fecha_cita);
+            $fin = $inicio->copy()->addMinutes(self::CITA_DURACION_MINUTOS);
+
+            if ($this->existeCruceDeHorario($id_psicologa, $inicio, $fin, $cita->id)) {
+                return [
+                    'error' => true,
+                    'message' => 'La psicóloga ya tiene una cita agendada en ese horario',
+                    'data' => [],
+                ];
+            }
+
+            $psicologaAnterior = $cita->psicologa;
+
+            $cita->update(['id_psicologa' => $id_psicologa]);
+
+            $mensajeCambio = 'La psicóloga a cargo de la cita de psicología para la inscripción '.$cita->inscripcion->codigo.
+                ' del '.$inicio->format('d/m/Y H:i').
+                ' cambió de '.optional($psicologaAnterior)->nombre.' '.optional($psicologaAnterior)->apellido.
+                ' a '.$psicologaNueva->nombre.' '.$psicologaNueva->apellido.'.';
+
+            $acudiente = $cita->inscripcion?->usuarioRegistro;
+
+            if ($acudiente) {
+                $this->notificacionesService->crear(
+                    $acudiente->id_user,
+                    'Cambio de psicóloga en cita de psicología',
+                    $mensajeCambio,
+                    $acudiente->perfil ?? 1
+                );
+            }
+
+            if ($psicologaAnterior) {
+                $this->notificacionesService->crear(
+                    $psicologaAnterior->id_user,
+                    'Se te retiró una cita de psicología',
+                    'Ya no estás a cargo de la cita de psicología para la inscripción '.$cita->inscripcion->codigo.
+                    ' del '.$inicio->format('d/m/Y H:i').
+                    '. Fue reasignada a '.$psicologaNueva->nombre.' '.$psicologaNueva->apellido.'.',
+                    $psicologaAnterior->perfil ?? 1
+                );
+            }
+
+            $this->notificacionesService->crear(
+                $psicologaNueva->id_user,
+                'Nueva cita de psicología a tu cargo',
+                'Se te ha asignado la cita de psicología para la inscripción '.$cita->inscripcion->codigo.
+                ' del '.$inicio->format('d/m/Y H:i').'.',
+                $psicologaNueva->perfil ?? 1
+            );
+
+            $correosDestino = array_filter([$acudiente->correo ?? null, $psicologaNueva->correo]);
+
+            if (! empty($correosDestino)) {
+                $this->mailService->sendGeneric(
+                    $correosDestino,
+                    "Cambio de psicóloga en cita de psicología | {$cita->inscripcion->codigo}",
+                    $mensajeCambio
+                );
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Psicóloga de la cita actualizada correctamente',
+                'data' => $cita->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la psicóloga de la cita de psicología');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la psicóloga de la cita',
                 'data' => [],
             ];
         }

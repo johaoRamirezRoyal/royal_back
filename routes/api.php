@@ -54,6 +54,9 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     // Reprogramar una cita: { "id": 7, "fecha_cita": "2026-07-21 10:00:00" }
     Route::put('/citaPsicologia', [AdmissionsController::class, 'actualizarFechaCitaPsicologia']);
 
+    // Reasignar la psicóloga a cargo: { "id": 7, "id_psicologa": 46 }. Envía correo al acudiente y a la nueva psicóloga.
+    Route::put('/citaPsicologia/psicologa', [AdmissionsController::class, 'actualizarPsicologaCitaPsicologia']);
+
     // ?id_psicologa=45&fecha_desde=2026-07-01&fecha_hasta=2026-07-31 (todos opcionales; sin filtros trae todas)
     Route::get('/citasPsicologia', [AdmissionsController::class, 'listarCitasPsicologia']);
 });
