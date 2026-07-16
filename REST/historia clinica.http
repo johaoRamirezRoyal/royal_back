@@ -1,0 +1,465 @@
+### ============================================
+### HISTORIA CLÍNICA — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+
+### ============================================
+### COGNITIVO LENGUAJE
+### ============================================
+
+### 1. VER por inscripción
+GET http://localhost:8000/api/compartido/historia-clinica/cognitivo-lenguaje?id_inscripcion=1
+
+### 2. CREAR / ACTUALIZAR (upsert)
+POST http://localhost:8000/api/compartido/historia-clinica/cognitivo-lenguaje
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "comprension_instrucciones": "Buena comprensión de instrucciones simples y complejas",
+    "desarrollo_lectoescritura": "Lectura fluida, escritura con caligrafía adecuada",
+    "dominio_segunda_lengua": "Nivel intermedio de inglés",
+    "lenguaje_estado": "Adecuado para su edad",
+    "updated_by": 1
+}
+
+### 3. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/cognitivo-lenguaje
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "lenguaje_estado": "Presenta dificultades en pronunciación",
+    "updated_by": 1
+}
+
+### 4. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/cognitivo-lenguaje
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### DESARROLLO PSICOMOTOR
+### ============================================
+
+### 5. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/desarrollo-psicomotor?id_inscripcion=1
+
+### 6. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/desarrollo-psicomotor
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "sostenimiento_cabeza": "A los 2 meses",
+    "sentarse_solo": "A los 6 meses",
+    "equilibrio": "Adecuado",
+    "gateo": "A los 8 meses",
+    "caminar": "A los 12 meses",
+    "seguimiento_ocular": "Presente",
+    "agarre_pinza": "Adecuado",
+    "abotonarse": "5 años",
+    "recorte": "Adecuado para su edad",
+    "trazo": "Buena grafomotricidad",
+    "lateralidad": "Diestro",
+    "notas": "Sin observaciones relevantes",
+    "updated_by": 1
+}
+
+### 7. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/desarrollo-psicomotor
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "notas": "Actualización: presenta dificultades en el trazo",
+    "updated_by": 1
+}
+
+### 8. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/desarrollo-psicomotor
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### EMBARAZO Y PARTO
+### ============================================
+
+### 9. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/embarazo-parto?id_inscripcion=1
+
+### 10. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/embarazo-parto
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "embarazo_tipo": "Planificado",
+    "tiempo_gestacion": "39 semanas",
+    "parto_tipo": "Vaginal",
+    "uso_forceps": "No",
+    "dificultades_embarazo": "Sin dificultades",
+    "requirio_oxygeno_nacer": "No",
+    "lloro_inmediatamente_nacer": "Sí",
+    "presento_ictericia": "No",
+    "sufrio_anoxia": "No",
+    "convulsiono": "No",
+    "presento_erupciones_piel": "No",
+    "permanecio_hospital_mas_tiempo": "No",
+    "estado_salud_madre": "Buena",
+    "estado_emocional_madre": "Estable",
+    "estado_nino_al_nacer": "Normal",
+    "alimentacion_nino_seno": "Lactancia materna exclusiva",
+    "juega_solo_o_con_otros": "Con otros niños",
+    "sostenia_tetero_solo": "A los 6 meses",
+    "usa_cuchara_tenedor": "A los 2 años",
+    "descripcion_alimentacion_hijo": "Buena alimentación, come de todo",
+    "tiene_rabietas": "Ocasionalmente",
+    "llora_facilmente": "No",
+    "updated_by": 1
+}
+
+### 11. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/embarazo-parto
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "dificultades_embarazo": "Náuseas en el primer trimestre",
+    "updated_by": 1
+}
+
+### 12. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/embarazo-parto
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### ESTRUCTURA FAMILIAR
+### ============================================
+
+### 13. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/estructura-familiar?id_inscripcion=1
+
+### 14. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/estructura-familiar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "relacion_padres": "Casados, relación estable",
+    "otras_personas_significativas": "Abuela materna",
+    "antecedentes_familiares_fisicos": "Diabetes en abuelo paterno",
+    "antecedentes_familiares_psicologicos": "Sin antecedentes",
+    "comentario_familiar_relevante": "Familia unida y de apoyo",
+    "updated_by": 1
+}
+
+### 15. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/estructura-familiar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "comentario_familiar_relevante": "Familia con buen dinámica, sin conflictos relevantes",
+    "updated_by": 1
+}
+
+### 16. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/estructura-familiar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### HERMANOS
+### ============================================
+
+### 17. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/hermanos?id_inscripcion=1
+
+### 18. CREAR hermano
+POST http://localhost:8000/api/historia-clinica/hermanos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "nombre": "Carlos García",
+    "edad": 10,
+    "tipo_relacion": "Hermano mayor"
+}
+
+### 19. ACTUALIZAR hermano por id
+PUT http://localhost:8000/api/historia-clinica/hermanos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "edad": 11,
+    "tipo_relacion": "Hermano mayor"
+}
+
+### 20. ELIMINAR hermano
+DELETE http://localhost:8000/api/historia-clinica/hermanos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### HISTORIA ESCOLAR
+### ============================================
+
+### 21. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/historia-escolar?id_inscripcion=1
+
+### 22. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/historia-escolar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "edad_escolarizacion": "4 años",
+    "nombre_colegio": "Colegio San José",
+    "adaptacion": "Buena adaptación desde el inicio",
+    "relacion_companeros": "Buena relación con sus compañeros",
+    "relacion_profesores": "Buena relación con los profesores",
+    "fortalezas_academicas": "Matemáticas y ciencias naturales",
+    "dificultades_academicas": "Redacción y ortografía",
+    "refuerzo_academico": "Refuerzo en español los sábados",
+    "anos_perdidos_causas": "Sin años perdidos",
+    "updated_by": 1
+}
+
+### 23. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/historia-escolar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "fortalezas_academicas": "Matemáticas, ciencias naturales e inglés",
+    "updated_by": 1
+}
+
+### 24. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/historia-escolar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### OBSERVACIONES Y FIRMAS
+### ============================================
+
+### 25. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/observaciones-firmas?id_inscripcion=1
+
+### 26. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/observaciones-firmas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "observaciones": "Se recomienda seguimiento psicológico mensual. El paciente muestra avances en su desarrollo cognitivo.",
+    "updated_by": 1
+}
+
+### 27. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/observaciones-firmas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "observaciones": "Actualización: paciente en buen estado, se mantiene seguimiento.",
+    "updated_by": 1
+}
+
+### 28. SUBIR FIRMA PADRE (multipart/form-data)
+POST http://localhost:8000/api/historia-clinica/observaciones-firmas/1/firma/firma_padre
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="firma"; filename="firma_padre.png"
+Content-Type: image/png
+
+< ./firma_padre.png
+--WebAppBoundary--
+
+### 29. SUBIR FIRMA MADRE
+POST http://localhost:8000/api/historia-clinica/observaciones-firmas/1/firma/firma_madre
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="firma"; filename="firma_madre.png"
+Content-Type: image/png
+
+< ./firma_madre.png
+--WebAppBoundary--
+
+### 30. SUBIR FIRMA PSICÓLOGA
+POST http://localhost:8000/api/historia-clinica/observaciones-firmas/1/firma/firma_psicologa
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="firma"; filename="firma_psicologa.png"
+Content-Type: image/png
+
+< ./firma_psicologa.png
+--WebAppBoundary--
+
+### 31. ELIMINAR (elimina las firmas de Cloudinary también)
+DELETE http://localhost:8000/api/historia-clinica/observaciones-firmas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### PSICOAFECTIVA
+### ============================================
+
+### 32. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/psicoafectiva?id_inscripcion=1
+
+### 33. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/psicoafectiva
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "actividad_ludica_preferida": "Juegos de construcciones y pintura",
+    "expresion_afecto_familiar": "Abrazos y palabras de cariño",
+    "normas_disciplinarias_hogar": "Normas claras con explicación",
+    "reaccion_consecuencias": "Acepta las consecuencias de sus actos",
+    "llora_facilmente": "No",
+    "pataletas": "Ocasionalmente",
+    "agresividad": "Sin agresividad",
+    "tics": "No presenta",
+    "fobias": "Sin fobias",
+    "mentiras": "Ocasionalmente por miedo",
+    "insomnio": "No presenta",
+    "duerme_con": "Solo en su cama",
+    "alimentacion": "Buena alimentación",
+    "dificultades_estomacales": "Sin dificultades",
+    "alergias": "Sin alergias",
+    "control_esfinteres": "Adeguado para su edad",
+    "updated_by": 1
+}
+
+### 34. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/psicoafectiva
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "pataletas": "Frecuentes cuando no obtiene lo que desea",
+    "updated_by": 1
+}
+
+### 35. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/psicoafectiva
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### ============================================
+### REMISIÓN
+### ============================================
+
+### 36. VER por inscripción
+GET http://localhost:8000/api/historia-clinica/remision?id_inscripcion=1
+
+### 37. CREAR / ACTUALIZAR
+POST http://localhost:8000/api/historia-clinica/remision
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_inscripcion": 1,
+    "neurodesarrollo": "No aplica",
+    "fonoaudiologia": "No aplica",
+    "psicologia_clinica": "Remitido a psicología clínica para evaluación integral",
+    "psicologia_aprendizaje": "No aplica",
+    "terapia_ocupacional": "No aplica",
+    "otra": "Sin remisiones adicionales",
+    "updated_by": 1
+}
+
+### 38. ACTUALIZAR por id
+PUT http://localhost:8000/api/historia-clinica/remision
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "id_inscripcion": 1,
+    "fonoaudiologia": "Remitido a fonoaudiología por dificultades de pronunciación",
+    "updated_by": 1
+}
+
+### 39. ELIMINAR
+DELETE http://localhost:8000/api/historia-clinica/remision
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
