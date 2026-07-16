@@ -67,9 +67,28 @@ class HorarioClaseService extends Service
                         'data' => []
                     ];
                 }
-            } else {
+            } elseif (!empty($data['id_carga_academica'])) {
 
-                $data['id_carga_academica'] = null;
+                // Tipo distinto de CLASE pero con un docente específico seleccionado
+                // (vía su carga académica): validar que exista y esté activa, igual
+                // que para CLASE, en vez de descartar la selección.
+                $carga = CargaAcademica::find($data['id_carga_academica']);
+
+                if (!$carga) {
+                    return [
+                        'error' => true,
+                        'message' => 'La carga académica no existe.',
+                        'data' => []
+                    ];
+                }
+
+                if (!$carga->activo) {
+                    return [
+                        'error' => true,
+                        'message' => 'No se puede asignar el bloque a una carga académica desactivada.',
+                        'data' => []
+                    ];
+                }
             }
 
             // Una franja solo puede tener una actividad

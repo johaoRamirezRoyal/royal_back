@@ -540,7 +540,17 @@ class HikvisionController extends Controller
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
-        if ($usuario['error'] || ! $usuario['usuario'] || $usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+        if ($usuario['error'] || ! $usuario['usuario']) {
+            Log::warning('[hikvision-notification] Llegada tarde omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
+            return;
+        }
+
+        if ($usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+            Log::info('[hikvision-notification] Llegada tarde omitida: no aplica (no es estudiante activo)', [
+                'idUsuario' => $idUsuario,
+                'estado' => $usuario['usuario']->estado,
+                'perfil' => $usuario['usuario']->perfil,
+            ]);
             return;
         }
 
@@ -550,10 +560,17 @@ class HikvisionController extends Controller
             return;
         }
 
-        $this->llegadas_tarde_service->agregarLlegadaTarde(
+        $resultado = $this->llegadas_tarde_service->agregarLlegadaTarde(
             $idUsuario,
             $ahora->format('Y-m-d'),
             $ahora->format('H:i:s')
         );
+
+        if ($resultado['error']) {
+            Log::error('[hikvision-notification] Fallo al registrar llegada tarde', [
+                'idUsuario' => $idUsuario,
+                'message' => $resultado['message'] ?? null,
+            ]);
+        }
     }
 }
