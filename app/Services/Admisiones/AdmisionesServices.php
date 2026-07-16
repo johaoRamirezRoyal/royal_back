@@ -2,6 +2,7 @@
 
 namespace App\Services\Admisiones;
 
+use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\CitaPsicologia;
 use App\Models\Admisiones\Documento;
@@ -11,10 +12,9 @@ use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
 use App\Models\Usuarios\Usuario;
-use App\Http\Resources\Academico\AnioAcademicoResource;
-use App\Services\Service;
 use App\Services\MailService;
 use App\Services\NotificacionesService;
+use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -40,9 +40,9 @@ class AdmisionesServices extends Service
      * psicóloga notificar según el grado del aspirante, y listar psicólogas disponibles.
      */
     private const NIVELES_PSICOLOGAS = [
-        21 => ["Stem", "Pre Kinder", "Kinder", "Transición"],
-        24 => ["Primero de primaria", "Segundo de primaria", "Tercero de primaria", "Cuarto de primaria", "Quinto de primaria"],
-        25 => ["Sexto de bachillerato", "Séptimo de bachillerato", "Octavo de bachillerato", "Noveno de bachillerato", "Décimo de bachillerato", "Undécimo de bachillerato"],
+        21 => ['Stem', 'Pre Kinder', 'Kinder', 'Transición'],
+        24 => ['Primero de primaria', 'Segundo de primaria', 'Tercero de primaria', 'Cuarto de primaria', 'Quinto de primaria'],
+        25 => ['Sexto de bachillerato', 'Séptimo de bachillerato', 'Octavo de bachillerato', 'Noveno de bachillerato', 'Décimo de bachillerato', 'Undécimo de bachillerato'],
     ];
 
     private function perfilPsicologaParaGrado(?string $grado): ?int
@@ -129,32 +129,34 @@ class AdmisionesServices extends Service
         }
     }
 
-    public function actualizarDatosInscripcion(int $id, array $data): array {
+    public function actualizarDatosInscripcion(int $id, array $data): array
+    {
         try {
             $inscripcion = Inscripcion::find($id);
 
-            if(!$inscripcion){
+            if (! $inscripcion) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró la inscripción con el ID proporcionado.",
-                    'data' => []
+                    'message' => 'No se encontró la inscripción con el ID proporcionado.',
+                    'data' => [],
                 ];
             }
 
             $inscripcion->update($data);
-            
+
             return [
                 'error' => false,
-                'message' => "Se ha actualizado la inscripción",
-                'data' => $inscripcion->refresh()->toArray()
+                'message' => 'Se ha actualizado la inscripción',
+                'data' => $inscripcion->refresh()->toArray(),
             ];
-            
-        }catch(Exception $e){
-            $this->sendError($e, "Error al actualizar la inscripción.");
+
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la inscripción.');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al tratar de actualizar la inscripción.",
-                'data' => []
+                'message' => 'Error en el servidor al tratar de actualizar la inscripción.',
+                'data' => [],
             ];
         }
     }
@@ -336,7 +338,19 @@ class AdmisionesServices extends Service
     {
         try {
 
-            $inscripcion = Inscripcion::with([
+            $relacionesHistoriaClinica = [
+                'cognitivoLenguaje',
+                'desarrolloPsicomotor',
+                'embarazoParto',
+                'estructuraFamiliar',
+                'hermanos',
+                'historiaEscolar',
+                'observacionesFirmas',
+                'psicoafectiva',
+                'remision',
+            ];
+
+            $inscripcion = Inscripcion::with(array_merge([
                 'usuarioRegistro:id_user,nombre,apellido',
                 'estadoInscripcion:id,nombre',
                 'updatedBy:id_user,nombre,apellido',
@@ -347,20 +361,18 @@ class AdmisionesServices extends Service
                 'referenciaFamiliares',
                 'documento',
                 'documento.tipoDocumento:id,nombre',
-                'cognitivoLenguaje',
-                'desarrolloPsicomotor',
-                'embarazoParto',
-                'estructuraFamiliar',
-                'hermanos',
-                'historiaEscolar',
-                'observacionesFirmas',
-                'psicoafectiva',
-                'remision',
-            ])
+            ], $relacionesHistoriaClinica))
                 ->where('codigo', $codigo)
                 ->first();
 
-            if (! $inscripcion) {
+            if ($inscripcion) {
+                // Agrupa las relaciones cargadas en un solo atributo "historia_clinica"
+                $inscripcion->historia_clinica = collect($relacionesHistoriaClinica)
+                    ->mapWithKeys(fn ($rel) => [$rel => $inscripcion->getRelation($rel)]);
+
+                // Oculta esas relaciones del nivel raíz del array/JSON (ya siguen disponibles vía historia_clinica)
+                $inscripcion->makeHidden($relacionesHistoriaClinica);
+            } else {
                 return [
                     'error' => true,
                     'message' => 'No se encontró la inscripción con el código proporcionado.',
@@ -373,6 +385,7 @@ class AdmisionesServices extends Service
                 'message' => 'Información de la inscripción obtenida exitosamente.',
                 'data' => $inscripcion->toArray(),
             ];
+            
         } catch (\Throwable $e) {
 
             Log::error(
@@ -402,7 +415,7 @@ class AdmisionesServices extends Service
 
             $inscripcion = Inscripcion::with([
                 'aspirante',
-                'estadoInscripcion'
+                'estadoInscripcion',
             ])->find($id_inscripcion);
 
             if (! $inscripcion) {
@@ -558,7 +571,7 @@ class AdmisionesServices extends Service
             if (! empty($data['fecha_nacimiento']) && empty($data['edad'])) {
                 $data['edad'] = now()->parse($data['fecha_nacimiento'])->age;
             }
-                
+
             $data['fecha_registro'] = now();
 
             $aspirante->update($data);
@@ -1213,10 +1226,11 @@ class AdmisionesServices extends Service
     }
 
     // ========================================= ESTADO DE INSCRIPCIONES SERVICES =========================================
-    
+
     /**
      * Metodo para listar los estados de las inscripciones, se puede añadir el parametro $activo para filtrar por estado.
-     * @param mixed $estado
+     *
+     * @param  mixed  $estado
      * @return array{data: array, error: bool, message: string}
      */
     public function mostrarTodosLosEstadosDeInscripcion(?bool $activo = null): array
@@ -1224,30 +1238,31 @@ class AdmisionesServices extends Service
         try {
             $estado = Estado::query();
 
-            if(!is_null($activo)){
+            if (! is_null($activo)) {
                 $estado->where('estado', $activo);
             }
 
             $estados = $estado->get();
 
-            if($estados->isEmpty()){
+            if ($estados->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró ningún estado para las inscripciones",
+                    'message' => 'No se encontró ningún estado para las inscripciones',
                     'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Estados de inscripciones obtenidos correctamente",
+                'message' => 'Estados de inscripciones obtenidos correctamente',
                 'data' => $estados->toArray(),
             ];
-        }catch(Exception $e){
-            $this->sendError($e, "Error al obtener los datos de los estados de las inscripciones");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener los datos de los estados de las inscripciones');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al obtener los estados de las inscripciones",
+                'message' => 'Error en el servidor al obtener los estados de las inscripciones',
                 'data' => [],
             ];
         }
@@ -1255,7 +1270,7 @@ class AdmisionesServices extends Service
 
     /**
      * Metodo para mostrar un estado de inscripción.
-     * @param int $id
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function mostrarEstadoDeInscripcionId(int $id): array
@@ -1263,87 +1278,91 @@ class AdmisionesServices extends Service
         try {
             $estado = Estado::find($id);
 
-            if(!$estado){
+            if (! $estado) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el estado de inscripción con el ID proporcionado",
+                    'message' => 'No se encontró el estado de inscripción con el ID proporcionado',
                     'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Estado de inscripción obtenido correctamente",
-                'data' => $estado->toArray()
+                'message' => 'Estado de inscripción obtenido correctamente',
+                'data' => $estado->toArray(),
             ];
-        }catch(Exception $e){
-            $this->sendError($e, "Error al obtener el estado de inscripción por ID");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener el estado de inscripción por ID');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al obtener el estado de inscripción.",
-                'data' => []
+                'message' => 'Error en el servidor al obtener el estado de inscripción.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Summary of cambiarEstadoDeEstadoInscripcion
-     * @param int $id
-     * @param bool $estado
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function cambiarEstadoDeEstadoInscripcion(int $id, bool $estado): array
     {
         try {
             $estado = Estado::find($id);
-            if(!$estado){
+            if (! $estado) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el estado de inscripción con el ID proporcionado.",
-                    'data' => []
+                    'message' => 'No se encontró el estado de inscripción con el ID proporcionado.',
+                    'data' => [],
                 ];
             }
 
-            if($estado->estado === $estado){
+            if ($estado->estado === $estado) {
                 return [
                     'error' => true,
-                    'message' => "El estado de inscripción ya se encuentra en ese estado.",
-                    'data' => $estado->toArray()
+                    'message' => 'El estado de inscripción ya se encuentra en ese estado.',
+                    'data' => $estado->toArray(),
                 ];
             }
 
             $estado_actualizado = $estado->update(['estado' => $estado]);
-            if(!$estado_actualizado){
+            if (! $estado_actualizado) {
                 return [
                     'error' => true,
-                    'message' => "No se pudo actualizar el estado de inscripción, intente nuevamente.",
-                    'data' => []
+                    'message' => 'No se pudo actualizar el estado de inscripción, intente nuevamente.',
+                    'data' => [],
                 ];
             }
+
             return [
                 'error' => false,
-                'message' => "Estado de inscripción actualizado correctamente",
-                'data' => $estado->fresh()->toArray()
+                'message' => 'Estado de inscripción actualizado correctamente',
+                'data' => $estado->fresh()->toArray(),
             ];
-        }catch(Exception $e){
-            $this->sendError($e, "Error al cambiar el estado del estado de inscripción");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al cambiar el estado del estado de inscripción');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al actualizar el estado de inscripción.",
-                'data' => []
+                'message' => 'Error en el servidor al actualizar el estado de inscripción.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Método para filtrar las inscripciones en base al curso.
-     * @param string $perfil_psicologa
+     *
+     * @param  string  $perfil_psicologa
      * @return array{data: array, error: bool, message: string}
      */
-    public function mostrarAspirantesAPsicologa(int $perfil_psicologa): array {
+    public function mostrarAspirantesAPsicologa(int $perfil_psicologa): array
+    {
 
         $cursosPermitidos = self::NIVELES_PSICOLOGAS[$perfil_psicologa] ?? [];
-     
+
         try {
             $inscripciones = Inscripcion::with([
                 'usuarioRegistro:id_user,nombre,apellido',
@@ -1356,7 +1375,7 @@ class AdmisionesServices extends Service
                 'referenciaFamiliares',
                 'documento',
                 'documento.tipoDocumento:id,nombre',
-            ])->whereHas('aspirante', function($query) use ($cursosPermitidos) {
+            ])->whereHas('aspirante', function ($query) use ($cursosPermitidos) {
                 $query->whereIn('grado_aplica', $cursosPermitidos);
             })->get();
 
@@ -1373,18 +1392,20 @@ class AdmisionesServices extends Service
                 'message' => 'Inscripciones seleccionadas',
                 'data' => $inscripciones->toArray(),
             ];
-        }catch(Exception $e){
-            $this->sendError($e, "Error al obtener las inscripciones de un psicologa");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las inscripciones de un psicologa');
+
             return [
                 'error' => true,
-                'message' => "Error al obtener las inscripciones de un psicologa",
-                'data' => []
+                'message' => 'Error al obtener las inscripciones de un psicologa',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Listar las psicólogas disponibles (usuarios con un perfil de psicóloga y estado activo).
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function listarPsicologasDisponibles(): array
@@ -1420,6 +1441,7 @@ class AdmisionesServices extends Service
 
     /**
      * Agendar una cita de psicología para una inscripción. Notifica al acudiente que registró la inscripción.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function agendarCitaPsicologia(int $id_inscripcion, int $id_psicologa, string $fecha_cita, ?string $observaciones = null): array
@@ -1504,6 +1526,7 @@ class AdmisionesServices extends Service
 
     /**
      * Consultar si una inscripción ya tiene cita(s) de psicología agendada(s).
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function obtenerCitasPsicologiaDeInscripcion(int $id_inscripcion): array
@@ -1535,6 +1558,7 @@ class AdmisionesServices extends Service
 
     /**
      * Reprogramar (cambiar fecha/hora) una cita de psicología existente. Notifica al acudiente.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function actualizarFechaCitaPsicologia(int $id_cita, string $fecha_cita): array
@@ -1605,6 +1629,7 @@ class AdmisionesServices extends Service
     /**
      * Reasignar la psicóloga a cargo de una cita existente. Notifica y envía correo
      * al acudiente y a la nueva psicóloga informando el cambio.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function actualizarPsicologaCitaPsicologia(int $id_cita, int $id_psicologa): array
@@ -1716,6 +1741,7 @@ class AdmisionesServices extends Service
 
     /**
      * Listar citas de psicología. Sin filtros trae todas; se puede acotar por psicóloga y/o rango de fechas.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function listarCitasPsicologia(?int $id_psicologa = null, ?string $fecha_desde = null, ?string $fecha_hasta = null): array
