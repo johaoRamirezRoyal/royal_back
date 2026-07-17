@@ -402,6 +402,52 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function registrarTarjetaEmpleado(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'cardNo' => ['required', 'string'],
+            'cardType' => ['nullable', 'string', 'in:normalCard,disabledCard,blockCard,patrolCard,dutyCard,visitorCard'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarTarjetaEmpleado(
+            $request->input('employeeNo'),
+            $request->input('cardNo'),
+            $request->input('cardType', 'normalCard')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function eliminarTarjetaEmpleado(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->eliminarTarjetaEmpleado(
+            $request->input('employeeNo')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
     public function registrarContrasenaEmpleado(Request $request)
     {
         $validator = Validator::make($request->all(), [
