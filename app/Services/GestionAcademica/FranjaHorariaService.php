@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class FranjaHorariaService extends Service
 {
-    public function verFranjasHorarias(int $id_anio_escolar, ?int $id_dia_semana, ?bool $disponible = null)
+    public function verFranjasHorarias(int $id_anio_escolar, ?int $id_dia_semana, ?bool $disponible = null, ?int $id_carga_academica = null)
     {
         try {
             $franjaHoraria = FranjaHoraria::query()
@@ -27,8 +27,14 @@ class FranjaHorariaService extends Service
                 )->where('id_anio_escolar', $id_anio_escolar)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
-                })->when($disponible, function ($query) {
-                    $query->whereDoesntHave('horarioClase');
+                })->when($disponible, function ($query) use ($id_carga_academica) {
+                    // Sin id_carga_academica: excluye franjas ocupadas por cualquier clase.
+                    // Con id_carga_academica: solo excluye las ya asignadas a esa clase puntual.
+                    $query->whereDoesntHave('horarioClase', function ($q) use ($id_carga_academica) {
+                        $q->when($id_carga_academica, function ($q) use ($id_carga_academica) {
+                            $q->where('id_carga_academica', $id_carga_academica);
+                        });
+                    });
                 })
                 ->orderBy('dias_semana.orden')
                 ->orderBy('academico_franja_horaria.hora_inicio')

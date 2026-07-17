@@ -126,8 +126,9 @@ class GestionAcademicaController extends Controller
         $id_anio_escolar = $request->input('id_anio_escolar');
         $id_dia_semana = $request->input('id_dia_semana');
         $disponible = $request->boolean('disponible');
+        $id_carga_academica = $request->input('id_carga_academica');
 
-        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $disponible));
+        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $disponible, $id_carga_academica));
     }
 
     public function crearFranjaHoraria(FranjaHorariaRequest $request)
