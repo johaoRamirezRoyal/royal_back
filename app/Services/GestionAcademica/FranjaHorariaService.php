@@ -2,6 +2,7 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Services\Service;
 use Exception;
@@ -28,11 +29,24 @@ class FranjaHorariaService extends Service
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
                 })->when($disponible, function ($query) use ($id_carga_academica) {
+
                     // Sin id_carga_academica: excluye franjas ocupadas por cualquier clase.
-                    // Con id_carga_academica: solo excluye las ya asignadas a esa clase puntual.
-                    $query->whereDoesntHave('horarioClase', function ($q) use ($id_carga_academica) {
-                        $q->when($id_carga_academica, function ($q) use ($id_carga_academica) {
-                            $q->where('id_carga_academica', $id_carga_academica);
+                    // Con id_carga_academica: excluye las franjas donde YA hay clase para
+                    // ese CURSO (con cualquier docente) o para ese DOCENTE (en cualquier
+                    // curso), ya que ninguno de los dos puede estar en dos clases a la vez.
+                    // Ocupado por otro curso con otro docente sigue apareciendo como libre.
+                    $carga = $id_carga_academica
+                        ? CargaAcademica::with('docenteAsignatura')->find($id_carga_academica)
+                        : null;
+
+                    $query->whereDoesntHave('horarioClase', function ($q) use ($carga) {
+                        $q->when($carga, function ($q) use ($carga) {
+                            $q->whereHas('cargaAcademica', function ($q2) use ($carga) {
+                                $q2->where('id_curso', $carga->id_curso)
+                                    ->orWhereHas('docenteAsignatura', function ($q3) use ($carga) {
+                                        $q3->where('id_docente', $carga->docenteAsignatura?->id_docente);
+                                    });
+                            });
                         });
                     });
                 })
