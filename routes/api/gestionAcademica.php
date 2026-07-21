@@ -83,8 +83,10 @@ Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambi
 
 
 /**
-http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2&id_dia_semana=2&disponible=1
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2&id_dia_semana=2&disponible=1&id_carga_academica=5
 'disponible=1' filtra solo las franjas que aún no tienen un horario de clase asignado.
+Si además se envía 'id_carga_academica', solo se excluyen las franjas ya asignadas a ESA carga académica
+(las asignadas a otras cargas académicas se siguen mostrando como disponibles).
  */
 Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
 

@@ -32,7 +32,19 @@ class CloudinaryService
 
     public function __construct()
     {
-        Configuration::instance(config('cloudinary.cloud_url'));
+        /**
+         * Configuración Cloudinary
+         */
+        Configuration::instance([
+            'cloud' => [
+                'cloud_name' => config('cloudinary.cloud_name'),
+                'api_key' => config('cloudinary.api_key'),
+                'api_secret' => config('cloudinary.api_secret'),
+            ],
+            'url' => [
+                'secure' => true,
+            ],
+        ]);
 
         $this->uploadApi = new UploadApi;
     }
@@ -175,7 +187,7 @@ class CloudinaryService
                 $resourceType = "raw";
             }
 
-            $cloudName = env('CLOUDINARY_CLOUD_NAME');
+            $cloudName = config('cloudinary.cloud_name');
             $url = "https://res.cloudinary.com/{$cloudName}/{$resourceType}/upload/{$publicId}.{$format}";
 
             return [
