@@ -797,6 +797,18 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function actualizarEstadoCitaPsicologia(Request $request)
+    {
+        $data = $request->validate([
+            'id' => 'required|integer|exists:admisiones_citas_psicologia,id',
+            'estado_cita' => 'required|in:AGENDADA,ATENDIDA',
+        ]);
+
+        $response = $this->admisiones_services->actualizarEstadoCitaPsicologia($data['id'], $data['estado_cita']);
+
+        return $this->apiResponse($response);
+    }
+
     public function listarCitasPsicologia(Request $request)
     {
         $data = $request->validate([
