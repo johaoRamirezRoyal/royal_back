@@ -169,4 +169,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/gestion-academica')->group(function () {
         require __DIR__ . '/api/gestionAcademica.php';
     });
+
+    // DOCUMENTOS VARIOS
+    Route::prefix('/documentos-varios')->group(function () {
+        require __DIR__ . '/api/documentosVarios.php';
+    });
 });
