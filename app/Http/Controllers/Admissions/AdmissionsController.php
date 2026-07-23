@@ -809,6 +809,24 @@ class AdmissionsController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function subirDocumentoObservacionCitaPsicologia(Request $request)
+    {
+        $data = $request->validate([
+            'id' => 'required|integer|exists:admisiones_citas_psicologia,id',
+            'documento' => 'required|file|mimes:pdf',
+        ]);
+
+        $resultado = $this->cloudinary_service->uploadFile($request->file('documento'), 'Admisiones/CitasPsicologia');
+
+        if ($resultado['error']) {
+            return response()->json($resultado, 400);
+        }
+
+        $response = $this->admisiones_services->subirDocumentoObservacionCita($data['id'], $resultado['data']['url']);
+
+        return $this->apiResponse($response);
+    }
+
     public function listarCitasPsicologia(Request $request)
     {
         $data = $request->validate([

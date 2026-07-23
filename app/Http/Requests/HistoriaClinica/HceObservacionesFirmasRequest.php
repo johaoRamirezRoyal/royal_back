@@ -24,7 +24,6 @@ class HceObservacionesFirmasRequest extends FormRequest
             'firma_padre_url' => ['nullable', 'string'],
             'firma_madre' => ['nullable', 'string'],
             'firma_madre_url' => ['nullable', 'string'],
-            'firma_psicologa' => ['nullable', 'string'],
             'firma_psicologa_url' => ['nullable', 'string'],
             'updated_by' => ['nullable', 'integer'],
         ];

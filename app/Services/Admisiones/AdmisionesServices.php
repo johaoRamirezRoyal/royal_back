@@ -11,6 +11,8 @@ use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
+use App\Models\HistoriaClinica\HceObservacionesFirmas;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\NotificacionesService;
@@ -1759,6 +1761,17 @@ class AdmisionesServices extends Service
 
             $cita->update(['estado_cita' => $estado_cita]);
 
+            if ($estado_cita === 'ATENDIDA') {
+                $firmaPsicologa = Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first();
+
+                if ($firmaPsicologa?->url) {
+                    HceObservacionesFirmas::updateOrCreate(
+                        ['id_inscripcion' => $cita->id_inscripcion],
+                        ['firma_psicologa_url' => $firmaPsicologa->url]
+                    );
+                }
+            }
+
             $acudiente = $cita->inscripcion?->usuarioRegistro;
 
             if ($acudiente) {
@@ -1795,6 +1808,40 @@ class AdmisionesServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el estado de la cita',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Guarda la URL del documento de observación (ya subido a Cloudinary) en la cita.
+     */
+    public function subirDocumentoObservacionCita(int $id_cita, string $url_documento): array
+    {
+        try {
+            $cita = CitaPsicologia::find($id_cita);
+
+            if (! $cita) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa cita de psicología',
+                    'data' => [],
+                ];
+            }
+
+            $cita->update(['doc_observacion' => $url_documento]);
+
+            return [
+                'error' => false,
+                'message' => 'Documento de observación guardado correctamente',
+                'data' => $cita->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al guardar el documento de observación de la cita');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al guardar el documento de observación',
                 'data' => [],
             ];
         }

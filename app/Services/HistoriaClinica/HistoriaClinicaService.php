@@ -886,8 +886,8 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // Eliminar firma anterior si existe
-            if ($registro->{$campo}) {
+            // Eliminar firma anterior si existe (firma_psicologa solo guarda la url, sin public_id que limpiar)
+            if ($campo !== 'firma_psicologa' && $registro->{$campo}) {
                 $this->cloudinaryService->deleteFile($registro->{$campo});
             }
 
@@ -901,10 +901,13 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            $registro->update([
-                $campo => $resultado['data']['public_id'],
-                $campo . '_url' => $resultado['data']['url'],
-            ]);
+            $update = [$campo . '_url' => $resultado['data']['url']];
+
+            if ($campo !== 'firma_psicologa') {
+                $update[$campo] = $resultado['data']['public_id'];
+            }
+
+            $registro->update($update);
 
             return [
                 'error' => false,
@@ -935,8 +938,8 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // Eliminar firmas de Cloudinary
-            foreach (['firma_padre', 'firma_madre', 'firma_psicologa'] as $campo) {
+            // Eliminar firmas de Cloudinary (firma_psicologa no tiene public_id propio: es la firma del usuario)
+            foreach (['firma_padre', 'firma_madre'] as $campo) {
                 if ($registro->{$campo}) {
                     $this->cloudinaryService->deleteFile($registro->{$campo});
                 }

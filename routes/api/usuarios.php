@@ -3,6 +3,9 @@
 use App\Http\Controllers\Usuarios\UsuariosController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/firma', [UsuariosController::class, 'verFirma']);
+Route::post('/firma', [UsuariosController::class, 'subirFirma']);
+
 Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
 Route::get('/filtro', [UsuariosController::class, 'filtrarUsuarios']);
 Route::get('/perfiles', [UsuariosController::class, 'mostrarTodosPerfiles']);
