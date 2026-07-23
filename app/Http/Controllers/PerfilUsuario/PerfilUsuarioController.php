@@ -4,6 +4,7 @@ namespace App\Http\Controllers\PerfilUsuario;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PerfilUsuario\InfoAdicionalUsuarioRequest;
+use App\Http\Requests\PerfilUsuario\ProduccionIntelectualRequest;
 use App\Services\PerfilUsuario\PerfilUsuarioService;
 use Illuminate\Http\Request;
 
@@ -12,6 +13,15 @@ class PerfilUsuarioController extends Controller
     public function __construct(
         private PerfilUsuarioService $service
     ) {}
+
+    // ── Hoja de Vida ───────────────────────────────────────────
+
+    public function hojaDeVida(Request $request)
+    {
+        $id_usuario = $request->input('id_usuario');
+
+        return $this->apiResponse($this->service->obtenerHojaDeVida($id_usuario));
+    }
 
     // ── Info Adicional ──────────────────────────────────────────
 
@@ -193,5 +203,72 @@ class PerfilUsuarioController extends Controller
         $id_usuario = $request->input('id_usuario');
 
         return $this->apiResponse($this->service->eliminarExperienciasPorUsuario($id_usuario));
+    }
+
+    // ── Producción Intelectual ──────────────────────────────────
+
+    public function crearProduccionIntelectual(Request $request)
+    {
+        $request->validate([
+            'id_user' => 'required|integer',
+            'tipo_produccion' => 'required|string|max:100',
+            'denominacion' => 'required|string|max:100',
+            'nombre' => 'required|string|max:200',
+            'objetivo' => 'nullable|string|max:200',
+            'descripcion_actividades' => 'required|string|max:500',
+            'duracion' => 'required|string|max:100',
+            'lugar' => 'required|string|max:250',
+            'observacion' => 'required|string|max:300',
+            'evidencia_pdf' => 'nullable|file|mimes:pdf|max:10240',
+        ]);
+
+        $data = $request->except('evidencia_pdf');
+        $archivo = $request->file('evidencia_pdf');
+
+        return $this->apiResponse($this->service->crearProduccionIntelectual($data, $archivo));
+    }
+
+    public function actualizarProduccionIntelectual(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer',
+            'id_user' => 'required|integer',
+            'tipo_produccion' => 'nullable|string|max:100',
+            'denominacion' => 'nullable|string|max:100',
+            'nombre' => 'nullable|string|max:200',
+            'objetivo' => 'nullable|string|max:200',
+            'descripcion_actividades' => 'nullable|string|max:500',
+            'duracion' => 'nullable|string|max:100',
+            'lugar' => 'nullable|string|max:250',
+            'observacion' => 'nullable|string|max:300',
+            'evidencia_pdf' => 'nullable|file|mimes:pdf|max:10240',
+        ]);
+
+        $body = $request->except('evidencia_pdf');
+        $id = $body['id'] ?? null;
+        $archivo = $request->file('evidencia_pdf');
+
+        return $this->apiResponse($this->service->actualizarProduccionIntelectual($id, $body, $archivo));
+    }
+
+    public function eliminarProduccionIntelectual(Request $request)
+    {
+        $id = $request->input('id');
+
+        return $this->apiResponse($this->service->eliminarProduccionIntelectual($id));
+    }
+
+    public function obtenerProduccionesPorUsuario(Request $request)
+    {
+        $id_usuario = $request->input('id_usuario');
+
+        return $this->apiResponse($this->service->obtenerProduccionesPorUsuario($id_usuario));
+    }
+
+    public function eliminarProduccionesPorUsuario(Request $request)
+    {
+        $id_usuario = $request->input('id_usuario');
+
+        return $this->apiResponse($this->service->eliminarProduccionesPorUsuario($id_usuario));
     }
 }

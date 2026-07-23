@@ -18,6 +18,9 @@ Accept: application/json
 ### 1. VER información del perfil por id_usuario
 GET http://localhost:8000/api/info-perfil?id_usuario=1
 
+### HOJA DE VIDA DE UN USUARIO
+GET http://localhost:8000/api/info-perfil/hoja-de-vida?id_usuario=3123
+
 ### 2. CREAR / ACTUALIZAR (upsert por id_user)
 POST http://localhost:8000/api/info-perfil
 Content-Type: application/json
@@ -59,3 +62,6 @@ Accept: application/json
 
 ### 5. VERIFICAR COMPLETITUD DEL PERFIL
 GET http://localhost:8000/api/info-perfil/completitud?id_usuario=3123
+
+### 6. VER HOJA DE VIDA COMPLETA
+GET http://localhost:8000/api/info-perfil/hoja-de-vida?id_usuario=3123

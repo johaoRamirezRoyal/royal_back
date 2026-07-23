@@ -5,6 +5,7 @@ use App\Models\PerfilUsuario\CertificadoFormacion;
 use App\Models\PerfilUsuario\ExperienciaLaboral;
 use App\Models\PerfilUsuario\Formacion;
 use App\Models\PerfilUsuario\InfoAdicionalUsuario;
+use App\Models\PerfilUsuario\ProduccionIntelectual;
 use App\Services\FileStorageService;
 use App\Services\Service;
 use Exception;
@@ -47,6 +48,60 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener la información.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function obtenerHojaDeVida(int $id_usuario): array
+    {
+        try {
+            $usuario = \App\Models\Usuarios\Usuario::with([
+                'perfilRelacion:id_perfil,nombre',
+                'nivelRelacion:id,nombre',
+            ])
+                ->where('id_user', $id_usuario)
+                ->first([
+                    'id_user', 'nombre', 'apellido', 'correo', 'telefono', 'documento', 'user', 'perfil', 'id_nivel'
+                ]);
+
+            if (!$usuario) {
+                return [
+                    'error' => true,
+                    'message' => 'Usuario no encontrado.',
+                    'data' => []
+                ];
+            }
+
+            $infoAdicional = InfoAdicionalUsuario::with('tipoDocumento:id,nombre')
+                ->where('id_user', $id_usuario)
+                ->first();
+
+            $formaciones = Formacion::with('certificados')
+                ->where('id_user', $id_usuario)
+                ->get();
+
+            $experiencias = ExperienciaLaboral::where('id_user', $id_usuario)->get();
+
+            $producciones = ProduccionIntelectual::where('id_user', $id_usuario)->get();
+
+            return [
+                'error' => false,
+                'message' => 'Hoja de vida obtenida correctamente.',
+                'data' => [
+                    'usuario' => $usuario->toArray(),
+                    'informacion_adicional' => $infoAdicional?->toArray(),
+                    'formaciones' => $formaciones->toArray(),
+                    'experiencias_laborales' => $experiencias->toArray(),
+                    'producciones_intelectuales' => $producciones->toArray(),
+                ]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener la hoja de vida del usuario.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener la hoja de vida.',
                 'data' => []
             ];
         }
@@ -621,6 +676,149 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar las experiencias.',
+                'data' => []
+            ];
+        }
+    }
+
+    // ── Producción Intelectual ──────────────────────────────────
+
+    public function crearProduccionIntelectual(array $data, ?UploadedFile $archivo): array
+    {
+        try {
+            $data['fechareg'] = now();
+
+            if ($archivo) {
+                $ruta = $this->fileStorageService->uploadFile($archivo, 'produccion-intelectual');
+                $data['evidencia_pdf'] = $ruta['ruta'];
+            }
+
+            $produccion = ProduccionIntelectual::create($data);
+
+            return [
+                'error' => false,
+                'message' => 'Producción intelectual creada correctamente.',
+                'data' => $produccion
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear la producción intelectual.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al crear la producción intelectual.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function actualizarProduccionIntelectual(int $id, array $data, ?UploadedFile $archivo): array
+    {
+        try {
+            $produccion = ProduccionIntelectual::where('id', $id)->first();
+
+            if (!$produccion) {
+                return [
+                    'error' => true,
+                    'message' => 'Producción intelectual no encontrada.',
+                    'data' => []
+                ];
+            }
+
+            if ($archivo) {
+                $ruta = $this->fileStorageService->uploadFile($archivo, 'produccion-intelectual');
+                $data['evidencia_pdf'] = $ruta['ruta'];
+            }
+
+            $produccion->update($data);
+
+            return [
+                'error' => false,
+                'message' => 'Producción intelectual actualizada correctamente.',
+                'data' => $produccion
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la producción intelectual.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la producción intelectual.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function eliminarProduccionIntelectual(int $id): array
+    {
+        try {
+            $produccion = ProduccionIntelectual::where('id', $id)->first();
+
+            if (!$produccion) {
+                return [
+                    'error' => true,
+                    'message' => 'Producción intelectual no encontrada.',
+                    'data' => []
+                ];
+            }
+
+            if ($produccion->evidencia_pdf) {
+                $this->fileStorageService->eliminar($produccion->evidencia_pdf);
+            }
+
+            $produccion->delete();
+
+            return [
+                'error' => false,
+                'message' => 'Producción intelectual eliminada correctamente.',
+                'data' => []
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al eliminar la producción intelectual.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar la producción intelectual.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function obtenerProduccionesPorUsuario(int $id_usuario): array
+    {
+        try {
+            $producciones = ProduccionIntelectual::where('id_user', $id_usuario)->get();
+
+            return [
+                'error' => false,
+                'message' => 'Producciones obtenidas correctamente.',
+                'data' => $producciones
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las producciones del usuario.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener las producciones.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function eliminarProduccionesPorUsuario(int $id_usuario): array
+    {
+        try {
+            $eliminadas = ProduccionIntelectual::where('id_user', $id_usuario)->delete();
+
+            return [
+                'error' => false,
+                'message' => "$eliminadas producción(es) intelectual(es) eliminada(s) correctamente.",
+                'data' => []
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al eliminar las producciones del usuario.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar las producciones.',
                 'data' => []
             ];
         }
