@@ -7,6 +7,7 @@ use App\Models\Admisiones\Inscripcion;
 use App\Models\GestionAcademica\DocenteAsignatura;
 use App\Models\Inventario\Reportes;
 use App\Models\Notificacion;
+use App\Models\PerfilUsuario\FotoPerfil;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
@@ -74,6 +75,10 @@ class Usuario extends Authenticatable implements JWTSubject
     public function docente_asignaturas()
     {
         return $this->hasMany(DocenteAsignatura::class, 'id_docente', 'id_user');
+    }
+
+    public function fotoPerfil(){
+        return $this->hasMany(FotoPerfil::class, 'id_user', 'id_user');
     }
 
     // Campos asignables masivamente

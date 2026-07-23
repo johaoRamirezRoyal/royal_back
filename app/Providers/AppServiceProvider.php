@@ -6,6 +6,7 @@ use App\Events\PasswordRestore;
 use App\Listeners\SendPasswordRestore;
 use App\Services\HistoriaClinica\HistoriaClinicaService;
 use App\Services\JwtService;
+use App\Services\PerfilUsuario\PerfilUsuarioService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -26,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
 
         // HistoriaClinicaService
         $this->app->singleton(HistoriaClinicaService::class);
+
+        // PerfilUsuarioService
+        $this->app->singleton(PerfilUsuarioService::class);
     }
 
     /**

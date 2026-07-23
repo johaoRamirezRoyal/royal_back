@@ -1,0 +1,61 @@
+### ============================================
+### PERFIL USUARIO — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+### INFORMACIÓN ADICIONAL USUARIO
+### ============================================
+
+### 1. VER información del perfil por id_usuario
+GET http://localhost:8000/api/info-perfil?id_usuario=1
+
+### 2. CREAR / ACTUALIZAR (upsert por id_user)
+POST http://localhost:8000/api/info-perfil
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_user": 1,
+    "tipo_documento": 1,
+    "fecha_expedicion": "2020-01-15",
+    "departamento_nacimiento": "Bogotá D.C.",
+    "fecha_nacimiento": "2005-06-20",
+    "direccion_vivienda": "Calle 123 #45-67",
+    "genero": "M",
+    "correo_personal": "correo@ejemplo.com",
+    "estrato": 3,
+    "cedula_doc": "1234567890"
+}
+
+### 3. ACTUALIZAR por id del registro
+PUT http://localhost:8000/api/info-perfil
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 195,
+    "id_user": 1,
+    "direccion_vivienda": "Calle 456 #78-90",
+    "estrato": 4
+}
+
+### 4. ELIMINAR
+DELETE http://localhost:8000/api/info-perfil
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 195
+}
+
+### 5. VERIFICAR COMPLETITUD DEL PERFIL
+GET http://localhost:8000/api/info-perfil/completitud?id_usuario=3123

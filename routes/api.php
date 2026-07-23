@@ -100,6 +100,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/auth-protected.php';
     });
 
+    // PERFIL USUARIO (antes de usuarios para no matchear contra /usuarios/{id})
+    Route::prefix('/info-perfil')->group(function () {
+        require __DIR__ . '/api/perfilUsuario.php';
+    });
+
     // USUARIOS
     Route::group(['prefix' => 'usuarios'], function () {
         require __DIR__.'/api/usuarios.php';
