@@ -3,6 +3,10 @@
 use App\Http\Controllers\PerfilUsuario\PerfilUsuarioController;
 use Illuminate\Support\Facades\Route;
 
+// ── Hoja de Vida ───────────────────────────────────────────
+
+Route::get('/hoja-de-vida', [PerfilUsuarioController::class, 'hojaDeVida']);
+
 // ── Info Adicional ──────────────────────────────────────────
 
 Route::get('/', [PerfilUsuarioController::class, 'mostrarInformacionPerfilUsuario']);
@@ -29,3 +33,11 @@ Route::post('/experiencias', [PerfilUsuarioController::class, 'crearExperienciaL
 Route::put('/experiencias', [PerfilUsuarioController::class, 'actualizarExperienciaLaboral']);
 Route::delete('/experiencias', [PerfilUsuarioController::class, 'eliminarExperienciaLaboral']);
 Route::delete('/experiencias/usuario', [PerfilUsuarioController::class, 'eliminarExperienciasPorUsuario']);
+
+// ── Producción Intelectual ───────────────────────────────────
+
+Route::get('/producciones', [PerfilUsuarioController::class, 'obtenerProduccionesPorUsuario']);
+Route::post('/producciones', [PerfilUsuarioController::class, 'crearProduccionIntelectual']);
+Route::put('/producciones', [PerfilUsuarioController::class, 'actualizarProduccionIntelectual']);
+Route::delete('/producciones', [PerfilUsuarioController::class, 'eliminarProduccionIntelectual']);
+Route::delete('/producciones/usuario', [PerfilUsuarioController::class, 'eliminarProduccionesPorUsuario']);
