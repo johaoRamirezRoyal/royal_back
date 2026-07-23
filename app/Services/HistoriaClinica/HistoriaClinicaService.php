@@ -783,14 +783,6 @@ class HistoriaClinicaService extends Service
 
             $data = $registro->toArray();
 
-            // Generar URLs de las firmas si existen
-            foreach (['firma_padre', 'firma_madre', 'firma_psicologa'] as $campo) {
-                if (!empty($data[$campo])) {
-                    $urlResult = $this->cloudinaryService->getFileUrl($data[$campo]);
-                    $data[$campo . '_url'] = $urlResult['error'] ? null : $urlResult['data']['url'];
-                }
-            }
-
             return [
                 'error' => false,
                 'message' => 'Registro obtenido correctamente.',
@@ -910,7 +902,8 @@ class HistoriaClinicaService extends Service
             }
 
             $registro->update([
-                $campo => $resultado['data']['public_id']
+                $campo => $resultado['data']['public_id'],
+                $campo . '_url' => $resultado['data']['url'],
             ]);
 
             return [

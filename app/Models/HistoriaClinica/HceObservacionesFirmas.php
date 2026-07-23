@@ -18,8 +18,11 @@ class HceObservacionesFirmas extends Model
         'id_inscripcion',
         'observaciones',
         'firma_padre',
+        'firma_padre_url',
         'firma_madre',
+        'firma_madre_url',
         'firma_psicologa',
+        'firma_psicologa_url',
         'updated_by',
     ];
 
