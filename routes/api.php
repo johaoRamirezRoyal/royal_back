@@ -40,6 +40,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     });
 
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
+    Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
     Route::get('/inscripcionesPsicologa', [AdmissionsController::class, 'mostrarAspirantesAPsicologa']);
 
     // Lista los usuarios con perfil de psicóloga (preescolar/primaria/bachillerato) y estado activo.
@@ -65,6 +66,9 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
 
     // Reasignar la psicóloga a cargo: { "id": 7, "id_psicologa": 46 }. Envía correo al acudiente y a la nueva psicóloga.
     Route::put('/citaPsicologia/psicologa', [AdmissionsController::class, 'actualizarPsicologaCitaPsicologia']);
+
+    // Marcar el estado de una cita: { "id": 7, "estado_cita": "ATENDIDA" }
+    Route::put('/citaPsicologia/estado', [AdmissionsController::class, 'actualizarEstadoCitaPsicologia']);
 
     // ?id_psicologa=45&fecha_desde=2026-07-01&fecha_hasta=2026-07-31 (todos opcionales; sin filtros trae todas)
     Route::get('/citasPsicologia', [AdmissionsController::class, 'listarCitasPsicologia']);

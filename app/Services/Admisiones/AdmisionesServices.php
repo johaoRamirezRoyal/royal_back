@@ -1740,6 +1740,67 @@ class AdmisionesServices extends Service
     }
 
     /**
+     * Actualizar el estado (AGENDADA | ATENDIDA) de una cita de psicología.
+     *
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function actualizarEstadoCitaPsicologia(int $id_cita, string $estado_cita): array
+    {
+        try {
+            $cita = CitaPsicologia::with(['inscripcion.usuarioRegistro', 'psicologa'])->find($id_cita);
+
+            if (! $cita) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa cita de psicología',
+                    'data' => [],
+                ];
+            }
+
+            $cita->update(['estado_cita' => $estado_cita]);
+
+            $acudiente = $cita->inscripcion?->usuarioRegistro;
+
+            if ($acudiente) {
+                $estadoLegible = $estado_cita === 'ATENDIDA' ? 'marcada como atendida' : 'reprogramada como agendada';
+
+                $mensajeEstado = 'La cita de psicología para la inscripción '.$cita->inscripcion->codigo.
+                    ' del '.Carbon::parse($cita->fecha_cita)->format('d/m/Y H:i').
+                    ' fue '.$estadoLegible.'. Psicóloga: '.optional($cita->psicologa)->nombre.' '.optional($cita->psicologa)->apellido.'.';
+
+                $this->notificacionesService->crear(
+                    $acudiente->id_user,
+                    'Estado de cita de psicología actualizado',
+                    $mensajeEstado,
+                    $acudiente->perfil ?? 1
+                );
+
+                if ($acudiente->correo) {
+                    $this->mailService->sendGeneric(
+                        $acudiente->correo,
+                        "Estado de cita de psicología actualizado | {$cita->inscripcion->codigo}",
+                        $mensajeEstado
+                    );
+                }
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Estado de la cita actualizado correctamente',
+                'data' => $cita->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar el estado de la cita de psicología');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar el estado de la cita',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
      * Listar citas de psicología. Sin filtros trae todas; se puede acotar por psicóloga y/o rango de fechas.
      *
      * @return array{data: array, error: bool, message: string}

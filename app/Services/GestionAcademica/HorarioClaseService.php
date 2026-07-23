@@ -72,7 +72,7 @@ class HorarioClaseService extends Service
                 // Tipo distinto de CLASE pero con un docente específico seleccionado
                 // (vía su carga académica): validar que exista y esté activa, igual
                 // que para CLASE, en vez de descartar la selección.
-                $carga = CargaAcademica::find($data['id_carga_academica']);
+                $carga = CargaAcademica::with('docenteAsignatura')->find($data['id_carga_academica']);
 
                 if (!$carga) {
                     return [
@@ -91,37 +91,49 @@ class HorarioClaseService extends Service
                 }
             }
 
-            // Una franja solo puede tener una actividad
-            $existeHorario = HorarioClase::where(
-                'id_franja_horaria',
-                $data['id_franja_horaria']
-            )->exists();
-
-            if ($existeHorario) {
-                return [
-                    'error' => true,
-                    'message' => 'La franja horaria ya tiene una actividad asignada.',
-                    'data' => []
-                ];
-            }
-
-            // Evitar duplicados de carga académica + franja
             if (!empty($data['id_carga_academica'])) {
 
-                $duplicado = HorarioClase::where(
-                    'id_carga_academica',
-                    $data['id_carga_academica']
-                )
-                    ->where(
-                        'id_franja_horaria',
-                        $data['id_franja_horaria']
-                    )
+                // El cruce se valida por curso y por docente, no por franja global, ya
+                // que otro curso con otro docente sí puede compartir la misma franja
+                // (ver FranjaHorariaService::verFranjasHorarias). Lo que no puede pasar
+                // es que el MISMO curso o el MISMO docente tengan dos actividades a la vez.
+                $cursoOcupado = HorarioClase::where('id_franja_horaria', $data['id_franja_horaria'])
+                    ->whereHas('cargaAcademica', function ($q) use ($carga) {
+                        $q->where('id_curso', $carga->id_curso);
+                    })
                     ->exists();
 
-                if ($duplicado) {
+                if ($cursoOcupado) {
                     return [
                         'error' => true,
-                        'message' => 'La carga académica ya está asignada a esa franja horaria.',
+                        'message' => 'El curso ya tiene una actividad asignada en esa franja horaria.',
+                        'data' => []
+                    ];
+                }
+
+                $docenteOcupado = HorarioClase::where('id_franja_horaria', $data['id_franja_horaria'])
+                    ->whereHas('cargaAcademica.docenteAsignatura', function ($q) use ($carga) {
+                        $q->where('id_docente', $carga->docenteAsignatura->id_docente);
+                    })
+                    ->exists();
+
+                if ($docenteOcupado) {
+                    return [
+                        'error' => true,
+                        'message' => 'El docente ya tiene una actividad asignada en esa franja horaria.',
+                        'data' => []
+                    ];
+                }
+            } else {
+
+                // Sin docente (receso, almuerzo, etc.): la franja es compartida por
+                // todo el colegio, así que solo puede tener una actividad.
+                $existeHorario = HorarioClase::where('id_franja_horaria', $data['id_franja_horaria'])->exists();
+
+                if ($existeHorario) {
+                    return [
+                        'error' => true,
+                        'message' => 'La franja horaria ya tiene una actividad asignada.',
                         'data' => []
                     ];
                 }
