@@ -866,7 +866,7 @@ class HistoriaClinicaService extends Service
     public function subirFirma(int $id, string $campo, UploadedFile $file): array
     {
         try {
-            $camposPermitidos = ['firma_padre', 'firma_madre', 'firma_psicologa'];
+            $camposPermitidos = ['firma_padre', 'firma_madre'];
 
             if (!in_array($campo, $camposPermitidos)) {
                 return [
@@ -886,8 +886,7 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // Eliminar firma anterior si existe (firma_psicologa solo guarda la url, sin public_id que limpiar)
-            if ($campo !== 'firma_psicologa' && $registro->{$campo}) {
+            if ($registro->{$campo}) {
                 $this->cloudinaryService->deleteFile($registro->{$campo});
             }
 
@@ -901,13 +900,10 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            $update = [$campo . '_url' => $resultado['data']['url']];
-
-            if ($campo !== 'firma_psicologa') {
-                $update[$campo] = $resultado['data']['public_id'];
-            }
-
-            $registro->update($update);
+            $registro->update([
+                $campo . '_url' => $resultado['data']['url'],
+                $campo => $resultado['data']['public_id'],
+            ]);
 
             return [
                 'error' => false,

@@ -1764,10 +1764,10 @@ class AdmisionesServices extends Service
             if ($estado_cita === 'ATENDIDA') {
                 $firmaPsicologa = Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first();
 
-                if ($firmaPsicologa?->url) {
+                if ($firmaPsicologa) {
                     HceObservacionesFirmas::updateOrCreate(
                         ['id_inscripcion' => $cita->id_inscripcion],
-                        ['firma_psicologa_url' => $firmaPsicologa->url]
+                        ['id_firma_psicologa' => $firmaPsicologa->id]
                     );
                 }
             }
