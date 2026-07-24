@@ -126,7 +126,7 @@ class RegistrarInventarioRequest extends FormRequest
 
     /**
      * Summary of toInventarioCreate
-     * @return array{activo: mixed, descripcion: mixed, estado: mixed, fecha_compra: mixed, id_area: mixed, id_categoria: mixed, id_compra: mixed, id_usuario: mixed, marca: mixed, modelo: mixed, precio: mixed}
+     * @return array{activo: mixed, descripcion: mixed, estado: mixed, fecha_compra: mixed, id_area: mixed, id_categoria: mixed, id_compra: mixed, id_user: mixed, marca: mixed, modelo: mixed, precio: mixed}
      */
     public function toInventarioCreate(): array {
         return [
@@ -135,7 +135,7 @@ class RegistrarInventarioRequest extends FormRequest
             'modelo' => $this->modelo,
             'precio' => $this->precio,
             'estado' => $this->estado,
-            'id_usuario' => $this->id_usuario,
+            'id_user' => $this->id_usuario,
             'activo' => $this->activo,
             'fecha_compra' => $this->fecha_compra,
             'id_area' => $this->id_area,
