@@ -265,6 +265,8 @@ class AdmisionesServices extends Service
                 'documento:id,id_inscripcion,nombre_original,url_archivo,id_tipo_documento',
                 'estadoInscripcion:id,nombre',
                 'documento.tipoDocumento:id,nombre',
+                'citasPsicologia',
+                'citasPsicologia.psicologa:id_user,nombre,apellido',
             ])->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
 
             Log::info('Info de la inscripcion: ', ['data' => $inscripciones]);
@@ -363,6 +365,8 @@ class AdmisionesServices extends Service
                 'referenciaFamiliares',
                 'documento',
                 'documento.tipoDocumento:id,nombre',
+                'citasPsicologia',
+                'citasPsicologia.psicologa:id_user,nombre,apellido',
             ], $relacionesHistoriaClinica))
                 ->where('codigo', $codigo)
                 ->first();
@@ -1761,6 +1765,8 @@ class AdmisionesServices extends Service
 
             $cita->update(['estado_cita' => $estado_cita]);
 
+            $acudiente = $cita->inscripcion?->usuarioRegistro;
+
             if ($estado_cita === 'ATENDIDA') {
                 $firmaPsicologa = Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first();
 
@@ -1770,9 +1776,22 @@ class AdmisionesServices extends Service
                         ['id_firma_psicologa' => $firmaPsicologa->id]
                     );
                 }
-            }
 
-            $acudiente = $cita->inscripcion?->usuarioRegistro;
+                $idEstadoRevisionFinalizada = Estado::where('nombre', 'REVISION FINALIZADA. A LA ESPERA DE RESULTADOS')->value('id');
+
+                if ($idEstadoRevisionFinalizada) {
+                    $this->actualizarEstadoDeInscripcionAspirante(
+                        $cita->id_inscripcion,
+                        (string) $idEstadoRevisionFinalizada,
+                        $acudiente->correo ?? null
+                    );
+                } else {
+                    Log::warning('No existe el estado REVISION FINALIZADA. A LA ESPERA DE RESULTADOS en admisiones_estados', [
+                        'id_cita' => $cita->id,
+                        'id_inscripcion' => $cita->id_inscripcion,
+                    ]);
+                }
+            }
 
             if ($acudiente) {
                 $estadoLegible = $estado_cita === 'ATENDIDA' ? 'marcada como atendida' : 'reprogramada como agendada';
