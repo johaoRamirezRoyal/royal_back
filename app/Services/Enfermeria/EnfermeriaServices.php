@@ -52,12 +52,15 @@ class EnfermeriaServices extends Service
     /**
      * Obtener todas las categorías activas (para selects)
      */
-    public function obtenerCategoriasActivas(): array
+    public function obtenerCategoriasActivas(?int $perPage = null): array
     {
         try {
-            $categorias = EnfermeriaCategoria::where('activo', 1)
-                ->orderBy('nombre')
-                ->get();
+            $query = EnfermeriaCategoria::where('activo', 1)
+                ->orderBy('nombre');
+
+            $categorias = $perPage
+                ? $query->paginate($perPage)
+                : $query->paginate(15);
 
             return [
                 'error' => false,

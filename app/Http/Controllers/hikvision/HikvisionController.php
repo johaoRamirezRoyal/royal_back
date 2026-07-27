@@ -20,7 +20,7 @@ class HikvisionController extends Controller
     const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 1, 17, 28, 6];
 
     // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
-    const HORA_LIMITE_LLEGADA = '07:05:00';
+    const HORA_LIMITE_LLEGADA = '07:15:00';
 
     protected hikvisionattendanceService $hikvision_service;
 
