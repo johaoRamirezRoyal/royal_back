@@ -19,6 +19,7 @@ class CitaPsicologia extends Model
         'fecha_cita',
         'observaciones',
         'estado_cita',
+        'doc_observacion',
     ];
 
     protected $casts = [

@@ -11,6 +11,8 @@ use App\Models\Admisiones\Familiares;
 use App\Models\Admisiones\InformacionMedica;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\Admisiones\ReferenciasFamiliares;
+use App\Models\HistoriaClinica\HceObservacionesFirmas;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\NotificacionesService;
@@ -263,6 +265,8 @@ class AdmisionesServices extends Service
                 'documento:id,id_inscripcion,nombre_original,url_archivo,id_tipo_documento',
                 'estadoInscripcion:id,nombre',
                 'documento.tipoDocumento:id,nombre',
+                'citasPsicologia',
+                'citasPsicologia.psicologa:id_user,nombre,apellido',
             ])->where(['id_usuario_registro' => $id_acudiente])->orderByDesc('fecha_inscripcion')->get();
 
             Log::info('Info de la inscripcion: ', ['data' => $inscripciones]);
@@ -361,6 +365,8 @@ class AdmisionesServices extends Service
                 'referenciaFamiliares',
                 'documento',
                 'documento.tipoDocumento:id,nombre',
+                'citasPsicologia',
+                'citasPsicologia.psicologa:id_user,nombre,apellido',
             ], $relacionesHistoriaClinica))
                 ->where('codigo', $codigo)
                 ->first();
@@ -1761,6 +1767,32 @@ class AdmisionesServices extends Service
 
             $acudiente = $cita->inscripcion?->usuarioRegistro;
 
+            if ($estado_cita === 'ATENDIDA') {
+                $firmaPsicologa = Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first();
+
+                if ($firmaPsicologa) {
+                    HceObservacionesFirmas::updateOrCreate(
+                        ['id_inscripcion' => $cita->id_inscripcion],
+                        ['id_firma_psicologa' => $firmaPsicologa->id]
+                    );
+                }
+
+                $idEstadoRevisionFinalizada = Estado::where('nombre', 'REVISION FINALIZADA. A LA ESPERA DE RESULTADOS')->value('id');
+
+                if ($idEstadoRevisionFinalizada) {
+                    $this->actualizarEstadoDeInscripcionAspirante(
+                        $cita->id_inscripcion,
+                        (string) $idEstadoRevisionFinalizada,
+                        $acudiente->correo ?? null
+                    );
+                } else {
+                    Log::warning('No existe el estado REVISION FINALIZADA. A LA ESPERA DE RESULTADOS en admisiones_estados', [
+                        'id_cita' => $cita->id,
+                        'id_inscripcion' => $cita->id_inscripcion,
+                    ]);
+                }
+            }
+
             if ($acudiente) {
                 $estadoLegible = $estado_cita === 'ATENDIDA' ? 'marcada como atendida' : 'reprogramada como agendada';
 
@@ -1795,6 +1827,40 @@ class AdmisionesServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el estado de la cita',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Guarda la URL del documento de observación (ya subido a Cloudinary) en la cita.
+     */
+    public function subirDocumentoObservacionCita(int $id_cita, string $url_documento): array
+    {
+        try {
+            $cita = CitaPsicologia::find($id_cita);
+
+            if (! $cita) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró esa cita de psicología',
+                    'data' => [],
+                ];
+            }
+
+            $cita->update(['doc_observacion' => $url_documento]);
+
+            return [
+                'error' => false,
+                'message' => 'Documento de observación guardado correctamente',
+                'data' => $cita->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al guardar el documento de observación de la cita');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al guardar el documento de observación',
                 'data' => [],
             ];
         }

@@ -4,6 +4,7 @@ namespace App\Models\HistoriaClinica;
 
 use App\Models\Admisiones\Inscripcion as AdmisionesInscripcion;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 
 class HceObservacionesFirmas extends Model
@@ -21,9 +22,12 @@ class HceObservacionesFirmas extends Model
         'firma_padre_url',
         'firma_madre',
         'firma_madre_url',
-        'firma_psicologa',
-        'firma_psicologa_url',
+        'id_firma_psicologa',
         'updated_by',
+    ];
+
+    protected $appends = [
+        'firma_psicologa_url',
     ];
 
     protected $casts = [
@@ -40,10 +44,23 @@ class HceObservacionesFirmas extends Model
     }
 
     /**
+     * Firma (reutilizable) de la psicóloga.
+     */
+    public function firmaPsicologa()
+    {
+        return $this->belongsTo(Firma::class, 'id_firma_psicologa');
+    }
+
+    /**
      * Usuario que realizó la última actualización.
      */
     public function actualizadoPor()
     {
         return $this->belongsTo(Usuario::class, 'updated_by');
+    }
+
+    public function getFirmaPsicologaUrlAttribute(): ?string
+    {
+        return $this->firmaPsicologa?->url;
     }
 }

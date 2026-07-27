@@ -70,6 +70,9 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
     // Marcar el estado de una cita: { "id": 7, "estado_cita": "ATENDIDA" }
     Route::put('/citaPsicologia/estado', [AdmissionsController::class, 'actualizarEstadoCitaPsicologia']);
 
+    // Subir documento de observación (multipart/form-data): id, documento
+    Route::post('/citaPsicologia/documento', [AdmissionsController::class, 'subirDocumentoObservacionCitaPsicologia']);
+
     // ?id_psicologa=45&fecha_desde=2026-07-01&fecha_hasta=2026-07-31 (todos opcionales; sin filtros trae todas)
     Route::get('/citasPsicologia', [AdmissionsController::class, 'listarCitasPsicologia']);
 });
@@ -178,5 +181,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // ASISTENCIA TRABAJADORES
     Route::prefix('/asistencia-gestion')->group(function () {
         require __DIR__ . '/api/asistenciaGestion.php';
+    // ENFERMERÍA
+    Route::prefix('/enfermeria')->group(function () {
+        require __DIR__ . '/api/enfermeria.php';
     });
 });

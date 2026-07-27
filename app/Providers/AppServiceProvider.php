@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Events\PasswordRestore;
 use App\Listeners\SendPasswordRestore;
 use App\Services\DocumentosVarios\DocumentosVariosService;
+use App\Services\Enfermeria\EnfermeriaServices;
 use App\Services\HistoriaClinica\HistoriaClinicaService;
 use App\Services\JwtService;
 use App\Services\PerfilUsuario\PerfilUsuarioService;
@@ -34,6 +35,9 @@ class AppServiceProvider extends ServiceProvider
 
         // DocumentosVariosService
         $this->app->singleton(DocumentosVariosService::class);
+
+        // EnfermeriaServices
+        $this->app->singleton(EnfermeriaServices::class);
     }
 
     /**

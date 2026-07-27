@@ -2,7 +2,6 @@
 namespace App\Models\Inventario;
 
 use App\Models\Areas\Areas;
-use App\Models\Estado;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
