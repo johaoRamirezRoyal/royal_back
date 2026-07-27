@@ -4,6 +4,7 @@ namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\Usuarios\Usuario;
+use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +12,27 @@ use Illuminate\Support\Facades\DB;
 class AsistenciaGestionService extends Service
 {
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
-    public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 1, 17, 28, 6];
+    public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
+
+    // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
+    private const GRUPO_LABEL_POR_GROUP_ID = [
+        2 => 'Admin. Dept.',
+        8 => 'Estudiantes',
+        9 => 'Profesores',
+        10 => 'Trabajadores',
+    ];
+
+    /**
+     * Nombre del departamento/grupo Hikvision al que pertenece un perfil, reutilizando la
+     * misma asignación perfil→groupId que ya usa la integración con el dispositivo (no
+     * se duplica esa lógica, solo la traducción final a texto legible).
+     */
+    private function grupoLabel(int $perfil): string
+    {
+        $groupId = hikvisionattendanceService::GROUP_ID_POR_PERFIL[$perfil] ?? null;
+
+        return self::GRUPO_LABEL_POR_GROUP_ID[$groupId] ?? 'Sin departamento';
+    }
 
     public function registrarAsistencia(int $idUsuario, string $fecha, string $hora): array
     {
@@ -90,6 +111,13 @@ class AsistenciaGestionService extends Service
 
             $data = $resultados->toArray();
 
+            foreach ($data['data'] as &$fila) {
+                if (isset($fila['usuario']['perfil'])) {
+                    $fila['usuario']['grupo'] = $this->grupoLabel((int) $fila['usuario']['perfil']);
+                }
+            }
+            unset($fila);
+
             // "Faltó" solo tiene sentido para un día puntual: sin una fecha exacta no
             // hay un único universo de usuarios esperados contra el cual comparar.
             if (!empty($filtros['fecha'])) {
@@ -125,22 +153,40 @@ class AsistenciaGestionService extends Service
     {
         $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
 
-        return Usuario::where('estado', 'activo')
+        $usuariosFaltantes = Usuario::where('estado', 'activo')
             ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
             ->whereNotIn('id_user', $idsConAsistencia)
             ->when($idPerfil, fn ($q) => $q->where('perfil', $idPerfil))
             ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))
-            ->get(['id_user', 'nombre', 'perfil'])
-            ->map(fn ($usuario) => [
-                'id' => null,
-                'id_user' => $usuario->id_user,
-                'fecha_asistencia' => $fecha,
-                'hora_asistencia' => null,
-                'fechareg' => null,
-                'puntualidad' => null,
-                'estado' => 'faltó',
-                'usuario' => $usuario,
-            ])
+            ->get(['id_user', 'nombre', 'apellido', 'documento', 'perfil']);
+
+        if ($usuariosFaltantes->isEmpty()) {
+            return [];
+        }
+
+        // Última llegada registrada de cada faltante (cualquier fecha anterior), para dar
+        // contexto de cuándo fue la última vez que sí marcó (p. ej. "Última vez: 1 jul").
+        $ultimasLlegadas = AsistenciaGestion::whereIn('id_user', $usuariosFaltantes->pluck('id_user'))
+            ->selectRaw('id_user, MAX(fecha_asistencia) as ultima_fecha')
+            ->groupBy('id_user')
+            ->pluck('ultima_fecha', 'id_user');
+
+        return $usuariosFaltantes
+            ->map(function ($usuario) use ($fecha, $ultimasLlegadas) {
+                $usuario->grupo = $this->grupoLabel((int) $usuario->perfil);
+
+                return [
+                    'id' => null,
+                    'id_user' => $usuario->id_user,
+                    'fecha_asistencia' => $fecha,
+                    'hora_asistencia' => null,
+                    'fechareg' => null,
+                    'puntualidad' => null,
+                    'estado' => 'faltó',
+                    'ultima_llegada' => $ultimasLlegadas[$usuario->id_user] ?? null,
+                    'usuario' => $usuario,
+                ];
+            })
             ->all();
     }
 
