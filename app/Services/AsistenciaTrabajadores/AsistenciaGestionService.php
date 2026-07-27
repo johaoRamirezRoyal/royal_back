@@ -3,12 +3,16 @@
 namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaGestion;
+use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class AsistenciaGestionService extends Service
 {
+    // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
+    public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 1, 17, 28, 6];
+
     public function registrarAsistencia(int $idUsuario, string $fecha, string $hora): array
     {
         try {
@@ -84,10 +88,22 @@ class AsistenciaGestionService extends Service
                 ->orderBy('hora_asistencia', 'desc')
                 ->paginate($perPage);
 
+            $data = $resultados->toArray();
+
+            // "Faltó" solo tiene sentido para un día puntual: sin una fecha exacta no
+            // hay un único universo de usuarios esperados contra el cual comparar.
+            if (!empty($filtros['fecha'])) {
+                $data['faltantes'] = $this->obtenerFaltantesDelDia(
+                    $filtros['fecha'],
+                    $filtros['id_perfil'] ?? null,
+                    $filtros['id_usuario'] ?? null
+                );
+            }
+
             return [
                 'error' => false,
                 'message' => 'Asistencia obtenida correctamente',
-                'data' => $resultados,
+                'data' => $data,
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener asistencia');
@@ -97,6 +113,35 @@ class AsistenciaGestionService extends Service
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Usuarios activos, no excluidos de asistencia_gestion, que no tienen ninguna
+     * llegada registrada en la fecha dada. Representan las "faltas" del día: no
+     * existe una fila en asistencia_gestion para ellos (a diferencia de una llegada,
+     * una falta no deja registro propio, se infiere por ausencia).
+     */
+    private function obtenerFaltantesDelDia(string $fecha, ?int $idPerfil, ?int $idUsuario): array
+    {
+        $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
+
+        return Usuario::where('estado', 'activo')
+            ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
+            ->whereNotIn('id_user', $idsConAsistencia)
+            ->when($idPerfil, fn ($q) => $q->where('perfil', $idPerfil))
+            ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))
+            ->get(['id_user', 'nombre', 'perfil'])
+            ->map(fn ($usuario) => [
+                'id' => null,
+                'id_user' => $usuario->id_user,
+                'fecha_asistencia' => $fecha,
+                'hora_asistencia' => null,
+                'fechareg' => null,
+                'puntualidad' => null,
+                'estado' => 'faltó',
+                'usuario' => $usuario,
+            ])
+            ->all();
     }
 
     public function obtenerResumenPorUsuario(array $filtros): array

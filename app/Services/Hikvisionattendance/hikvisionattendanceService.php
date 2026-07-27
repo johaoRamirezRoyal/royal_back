@@ -1440,11 +1440,117 @@ class hikvisionattendanceService
     }
 
     /**
+     * Registra a un empleado ya existente en el dispositivo capturando el número de tarjeta
+     * directamente del lector (GET /ISAPI/AccessControl/CaptureCardInfo, bloqueante ~10-25s
+     * esperando a que se acerque la tarjeta) y luego vinculándolo vía registrarTarjetaEmpleado.
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function registrarTarjetaEmpleadoConCaptura(string $employeeNo, string $cardType = 'normalCard'): array
+    {
+        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+            return [
+                'error' => true,
+                'message' => 'El empleado no está registrado en el dispositivo',
+                'data' => [],
+            ];
+        }
+
+        $captura = $this->capturarTarjeta();
+
+        if ($captura['error']) {
+            return $captura;
+        }
+
+        return $this->registrarTarjetaEmpleado($employeeNo, $captura['data']['cardNo'], $cardType);
+    }
+
+    /**
+     * Pone al lector del dispositivo en modo espera de tarjeta (confirmado contra el
+     * dispositivo real: bloquea ~10s+ antes de responder, igual que CaptureFingerPrint/
+     * CaptureFaceData, aunque no aparezca en /ISAPI/AccessControl/CardInfo/capabilities).
+     * A diferencia de esos dos, es GET (no POST) y no requiere cuerpo XML. La respuesta de
+     * éxito trae el número en `CardInfo.cardNo` (confirmado contra el dispositivo real).
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    private function capturarTarjeta(): array
+    {
+        try {
+            $response = $this->client->get('/ISAPI/AccessControl/CaptureCardInfo?format=json', [
+                'timeout' => 25,
+            ]);
+
+            $body = $response->getBody()->getContents();
+            $data = json_decode($body, true);
+
+            Log::info('Tarjeta capturada del lector', ['raw' => $body, 'data' => $data]);
+
+            $cardNo = $data['CardInfo']['cardNo']
+                ?? $data['cardNo']
+                ?? $data['CardNo']
+                ?? $data['CaptureCardInfo']['cardNo'] ?? null;
+
+            if (!$cardNo) {
+                Log::warning('Tarjeta: respuesta de captura sin cardNo reconocible', ['data' => $data]);
+
+                return [
+                    'error' => true,
+                    'message' => 'El dispositivo no devolvió el número de la tarjeta capturada',
+                    'data' => [],
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Tarjeta capturada',
+                'data' => ['cardNo' => (string) $cardNo],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error capturando tarjeta en Hikvision: ' . $e->getMessage());
+
+            return [
+                'error' => true,
+                'message' => $this->traducirErrorCapturaTarjeta($e),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Traduce errores conocidos de la captura de tarjeta (timeout esperando la tarjeta,
+     * dispositivo ocupado) a un mensaje legible. Si el código no es reconocido, se
+     * conserva el mensaje crudo del dispositivo.
+     */
+    private function traducirErrorCapturaTarjeta(\Exception $e): string
+    {
+        if ($e instanceof ConnectException || stripos($e->getMessage(), 'timed out') !== false) {
+            return 'Tiempo de espera agotado: no se detectó ninguna tarjeta en el lector';
+        }
+
+        $body = (method_exists($e, 'getResponse') && $e->getResponse())
+            ? $e->getResponse()->getBody()->getContents()
+            : null;
+
+        $decoded = $body ? json_decode($body, true) : null;
+        $subStatusCode = $decoded['subStatusCode'] ?? null;
+
+        $mensajes = [
+            'deviceError' => 'Tiempo de espera agotado: no se detectó ninguna tarjeta en el lector',
+            'deviceBusy' => 'El lector está ocupado, intenta de nuevo en unos segundos',
+        ];
+
+        if ($subStatusCode && isset($mensajes[$subStatusCode])) {
+            return $mensajes[$subStatusCode];
+        }
+
+        return $decoded['errorMsg'] ?? $body ?? 'Error al capturar la tarjeta desde el dispositivo';
+    }
+
+    /**
      * Registra (o sobrescribe) una tarjeta de proximidad para un empleado ya existente
-     * en el dispositivo, vía CardInfo/Record. A diferencia de huella/rostro, el DS-K1T321MFWX-B
-     * no expone una operación ISAPI de "captura" para leer el número de la tarjeta acercándola
-     * al lector: el cardNo debe conocerse de antemano (impreso/grabado en la tarjeta, o leído
-     * con un lector USB externo) y se envía directamente.
+     * en el dispositivo, vía CardInfo/Record, a partir de un cardNo ya conocido (capturado
+     * con registrarTarjetaEmpleadoConCaptura, o excepcionalmente ya impreso en la tarjeta).
      *
      * @return array{error: bool, message: string, data: array}
      */

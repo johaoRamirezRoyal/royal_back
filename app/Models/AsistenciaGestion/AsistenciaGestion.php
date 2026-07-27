@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Builder;
 
 class AsistenciaGestion extends Model
 {
+    // Después de esta hora una llegada registrada cuenta como "atrasado"
+    public const HORA_LIMITE_PUNTUALIDAD = '07:15:00';
+
     protected $table = 'asistencia_gestion';
     protected $primaryKey = 'id';
     public $timestamps = false;
@@ -24,6 +27,26 @@ class AsistenciaGestion extends Model
         'hora_asistencia' => 'date:H:i:s',
         'fechareg' => 'datetime',
     ];
+
+    protected $appends = ['puntualidad', 'estado'];
+
+    public function getPuntualidadAttribute(): ?string
+    {
+        if (!$this->hora_asistencia) {
+            return null;
+        }
+
+        return $this->hora_asistencia->format('H:i:s') > self::HORA_LIMITE_PUNTUALIDAD
+            ? 'atrasado'
+            : 'a tiempo';
+    }
+
+    // Toda fila en esta tabla es, por definición, una llegada registrada.
+    // Las inasistencias no viven aquí: ver AsistenciaGestionService::obtenerFaltantesDelDia().
+    public function getEstadoAttribute(): string
+    {
+        return 'llegada';
+    }
 
     public function usuario()
     {

@@ -8,6 +8,7 @@ Route::post("/masivo", [HikvisionController::class, 'registrarEmpleadosMasivoPer
 Route::post("/fingerprint/enroll", [HikvisionController::class, 'registrarHuellaEmpleado']);
 Route::put("/fingerprint/delete", [HikvisionController::class, 'eliminarHuellaEmpleado']);
 Route::post("/card/enroll", [HikvisionController::class, 'registrarTarjetaEmpleado']);
+Route::post("/card/enroll/captura", [HikvisionController::class, 'registrarTarjetaEmpleadoCaptura']);
 Route::put("/card/delete", [HikvisionController::class, 'eliminarTarjetaEmpleado']);
 Route::post("/password/enroll", [HikvisionController::class, 'registrarContrasenaEmpleado']);
 Route::post("/face/enroll", [HikvisionController::class, 'registrarRostroEmpleado']);

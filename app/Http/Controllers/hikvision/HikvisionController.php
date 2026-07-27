@@ -16,9 +16,6 @@ class HikvisionController extends Controller
     // Perfil de Estudiante en la tabla perfiles
     const PERFIL_ESTUDIANTE = 16;
 
-    // Perfiles que NO se guardan en asistencia_gestion
-    const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 1, 17, 28, 6];
-
     // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
     const HORA_LIMITE_LLEGADA = '07:05:00';
 
@@ -438,6 +435,29 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function registrarTarjetaEmpleadoCaptura(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'cardType' => ['nullable', 'string', 'in:normalCard,disabledCard,blockCard,patrolCard,dutyCard,visitorCard'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarTarjetaEmpleadoConCaptura(
+            $request->input('employeeNo'),
+            $request->input('cardType', 'normalCard')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
     public function eliminarTarjetaEmpleado(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -592,40 +612,28 @@ class HikvisionController extends Controller
     }
 
     /**
-     * Despacha el checkIn recibido según el perfil del usuario: a los estudiantes
-     * solo se les registra si llegaron tarde (ver registrarLlegadaTardeSiAplica); a
-     * cualquier otro perfil activo (trabajador) se le registra la llegada siempre,
-     * sin importar la hora. Se usa la hora del servidor (no la del dispositivo)
-     * porque el reloj del equipo no es confiable.
+     * Registra una llegada tarde si el usuario es estudiante y el servidor
+     * recibió el checkIn después de la hora límite. Se usa la hora del
+     * servidor (no la del dispositivo) porque el reloj del equipo no es confiable.
      */
-    private function procesarLlegada(int $idUsuario): void
+    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
         if ($usuario['error'] || ! $usuario['usuario']) {
-            Log::warning('[hikvision-notification] Llegada omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
+            Log::warning('[hikvision-notification] Llegada tarde omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
             return;
         }
 
-        if ($usuario['usuario']->estado !== 'activo') {
-            Log::info('[hikvision-notification] Llegada omitida: usuario inactivo', ['idUsuario' => $idUsuario]);
+        if ($usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+            Log::info('[hikvision-notification] Llegada tarde omitida: no aplica (no es estudiante activo)', [
+                'idUsuario' => $idUsuario,
+                'estado' => $usuario['usuario']->estado,
+                'perfil' => $usuario['usuario']->perfil,
+            ]);
             return;
         }
 
-        if ((int) $usuario['usuario']->perfil === self::PERFIL_ESTUDIANTE) {
-            $this->registrarLlegadaTardeSiAplica($idUsuario);
-            return;
-        }
-
-        $this->registrarLlegadaTrabajador($idUsuario);
-    }
-
-    /**
-     * Registra una llegada tarde si el servidor recibió el checkIn después de la
-     * hora límite. Asume que el caller ya validó que el usuario es un estudiante activo.
-     */
-    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
-    {
         $ahora = now();
 
         if ($ahora->format('H:i:s') <= self::HORA_LIMITE_LLEGADA) {
@@ -661,7 +669,7 @@ class HikvisionController extends Controller
 
         $perfil = (int) $usuario['usuario']->perfil;
 
-        if (in_array($perfil, self::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+        if (in_array($perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
             Log::info('[hikvision-notification] Asistencia gestión omitida: perfil excluido', [
                 'idUsuario' => $idUsuario,
                 'perfil' => $perfil,
