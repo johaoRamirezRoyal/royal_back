@@ -1,0 +1,180 @@
+### ============================================
+### PRODUCCIÓN INTELECTUAL — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+### PRODUCCIÓN INTELECTUAL
+### ============================================
+
+### 1. VER producciones por usuario
+GET http://localhost:8000/api/info-perfil/producciones?id_usuario=3123
+
+### 2. CREAR producción intelectual con evidencia (multipart/form-data)
+POST http://localhost:8000/api/info-perfil/producciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_produccion"
+
+Investigación
+--WebAppBoundary
+Content-Disposition: form-data; name="denominacion"
+
+Artículo Científico
+--WebAppBoundary
+Content-Disposition: form-data; name="nombre"
+
+Análisis de rendimiento en redes IoT
+--WebAppBoundary
+Content-Disposition: form-data; name="objetivo"
+
+Evaluar métricas de calidad de servicio
+--WebAppBoundary
+Content-Disposition: form-data; name="descripcion_actividades"
+
+Revisión bibliográfica, recopilación de datos, análisis estadístico y redacción del artículo.
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+120
+--WebAppBoundary
+Content-Disposition: form-data; name="lugar"
+
+Universidad Nacional - Laboratorio de Redes
+--WebAppBoundary
+Content-Disposition: form-data; name="observacion"
+
+Artículo publicado en revista indexada.
+--WebAppBoundary
+Content-Disposition: form-data; name="evidencia_pdf"; filename="articulo.pdf"; filename*="UTF-8''articulo.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 3. CREAR producción intelectual sin evidencia
+POST http://localhost:8000/api/info-perfil/producciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_produccion"
+
+Capítulo de Libro
+--WebAppBoundary
+Content-Disposition: form-data; name="denominacion"
+
+Fundamentos de Programación
+--WebAppBoundary
+Content-Disposition: form-data; name="nombre"
+
+Introducción a Estructuras de Datos
+--WebAppBoundary
+Content-Disposition: form-data; name="objetivo"
+
+Enseñar conceptos básicos de listas y árboles
+--WebAppBoundary
+Content-Disposition: form-data; name="descripcion_actividades"
+
+Escritura del capítulo, revisión por pares y diagramación.
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+200
+--WebAppBoundary
+Content-Disposition: form-data; name="lugar"
+
+Editorial Universitaria
+--WebAppBoundary
+Content-Disposition: form-data; name="observacion"
+
+Pendiente de publicación.
+--WebAppBoundary--
+
+### 4. ACTUALIZAR producción intelectual con nueva evidencia
+### NOTA: usar POST + _method=PUT para multipart/form-data en Laravel
+POST http://localhost:8000/api/info-perfil/producciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="_method"
+
+PUT
+--WebAppBoundary
+Content-Disposition: form-data; name="id"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="observacion"
+
+Actualización: artículo aceptado con correcciones menores.
+--WebAppBoundary
+Content-Disposition: form-data; name="evidencia_pdf"; filename="articulo_v2.pdf"; filename*="UTF-8''articulo_v2.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 5. ACTUALIZAR producción intelectual sin archivo (solo campos)
+POST http://localhost:8000/api/info-perfil/producciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="_method"
+
+PUT
+--WebAppBoundary
+Content-Disposition: form-data; name="id"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+150
+--WebAppBoundary
+Content-Disposition: form-data; name="lugar"
+
+Universidad Nacional - Sala de Conferencias
+--WebAppBoundary--
+
+### 6. ELIMINAR producción intelectual por id (borra evidencia de storage)
+DELETE http://localhost:8000/api/info-perfil/producciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### 7. ELIMINAR todas las producciones de un usuario
+DELETE http://localhost:8000/api/info-perfil/producciones/usuario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_usuario": 3123
+}

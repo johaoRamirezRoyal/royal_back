@@ -2,14 +2,21 @@
 
 namespace App\Services\Usuarios;
 
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
+use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class UsuariosServices
 {
+    public function __construct(
+        private CloudinaryService $cloudinaryService
+    ) {}
+
     public function userExistWhitEmail(string $email)
     {
         return Usuario::query()
@@ -445,6 +452,50 @@ class UsuariosServices
                 'error' => false,
                 'message' => 'Se han obtenido correctamente los datos solicitados',
                 'data' => $data,
+            ];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function verFirmaUsuario(int $id_user): array
+    {
+        try {
+            $firma = Firma::where('id_user', $id_user)->where('activo', 1)->first();
+
+            return [
+                'error' => false,
+                'firma_url' => $firma->url ?? null,
+            ];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function subirFirmaUsuario(int $id_user, UploadedFile $file): array
+    {
+        try {
+            $resultado = $this->cloudinaryService->uploadFile($file, 'usuarios/firmas');
+
+            if ($resultado['error']) {
+                return ['error' => true, 'message' => $resultado['message']];
+            }
+
+            Firma::updateOrCreate(
+                ['id_user' => $id_user],
+                [
+                    'nombre' => $file->getClientOriginalName(),
+                    'url' => $resultado['data']['url'],
+                    'activo' => 1,
+                    'user_log' => $id_user,
+                ]
+            );
+
+            Usuario::where('id_user', $id_user)->update(['firma_digital' => 1]);
+
+            return [
+                'error' => false,
+                'firma_url' => $resultado['data']['url'],
             ];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];

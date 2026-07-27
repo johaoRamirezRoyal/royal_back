@@ -26,8 +26,6 @@ Route::delete('/inscripcionDatos', [AdmissionsController::class, 'eliminarDatoIn
  */
 Route::post('/inscripcion/usuario', [AdmissionsController::class, 'mostrarTodasIncripcionesAcudiente']);
 
-Route::get('/inscripcion', [AdmissionsController::class, 'obtenerInformacionCompletaDeInscripcionMedianteCodigo']);
-
 /** Ejemplo JSON para actualizar datos de un aspirante:
     {
         "id": 2,

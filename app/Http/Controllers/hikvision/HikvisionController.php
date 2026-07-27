@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
+use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use App\Services\Usuarios\UsuariosServices;
@@ -16,7 +17,7 @@ class HikvisionController extends Controller
     const PERFIL_ESTUDIANTE = 16;
 
     // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
-    const HORA_LIMITE_LLEGADA = '07:05:00';
+    const HORA_LIMITE_LLEGADA = '07:15:00';
 
     protected hikvisionattendanceService $hikvision_service;
 
@@ -24,11 +25,18 @@ class HikvisionController extends Controller
 
     protected LlegadasTarde $llegadas_tarde_service;
 
-    public function __construct(hikvisionattendanceService $hikvisionService, UsuariosServices $usuariosServices, LlegadasTarde $llegadasTardeService)
-    {
+    protected AsistenciaGestionService $asistencia_gestion_service;
+
+    public function __construct(
+        hikvisionattendanceService $hikvisionService,
+        UsuariosServices $usuariosServices,
+        LlegadasTarde $llegadasTardeService,
+        AsistenciaGestionService $asistenciaGestionService
+    ) {
         $this->hikvision_service = $hikvisionService;
         $this->usuario_services = $usuariosServices;
         $this->llegadas_tarde_service = $llegadasTardeService;
+        $this->asistencia_gestion_service = $asistenciaGestionService;
     }
 
     public function __invoke(Request $request)
@@ -427,6 +435,29 @@ class HikvisionController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function registrarTarjetaEmpleadoCaptura(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'employeeNo' => ['required', 'string'],
+            'cardType' => ['nullable', 'string', 'in:normalCard,disabledCard,blockCard,patrolCard,dutyCard,visitorCard'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->registrarTarjetaEmpleadoConCaptura(
+            $request->input('employeeNo'),
+            $request->input('cardType', 'normalCard')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
     public function eliminarTarjetaEmpleado(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -572,8 +603,11 @@ class HikvisionController extends Controller
             'raw' => $data,
         ]);
 
+        $idUsuario = (int) $employeeNoString;
+
         if ($esCheckIn) {
-            $this->registrarLlegadaTardeSiAplica((int) $employeeNoString);
+            $this->registrarLlegadaTardeSiAplica($idUsuario);
+            $this->registrarAsistenciaGestionSiAplica($idUsuario);
         }
     }
 
@@ -614,6 +648,45 @@ class HikvisionController extends Controller
 
         if ($resultado['error']) {
             Log::error('[hikvision-notification] Fallo al registrar llegada tarde', [
+                'idUsuario' => $idUsuario,
+                'message' => $resultado['message'] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * Registra la asistencia en asistencia_gestion si el usuario no está en
+     * la lista de perfiles excluidos (estudiantes, admin, etc.).
+     */
+    private function registrarAsistenciaGestionSiAplica(int $idUsuario): void
+    {
+        $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
+
+        if ($usuario['error'] || ! $usuario['usuario']) {
+            Log::warning('[hikvision-notification] Asistencia gestión omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
+            return;
+        }
+
+        $perfil = (int) $usuario['usuario']->perfil;
+
+        if (in_array($perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+            Log::info('[hikvision-notification] Asistencia gestión omitida: perfil excluido', [
+                'idUsuario' => $idUsuario,
+                'perfil' => $perfil,
+            ]);
+            return;
+        }
+
+        $ahora = now();
+
+        $resultado = $this->asistencia_gestion_service->registrarAsistencia(
+            $idUsuario,
+            $ahora->format('Y-m-d'),
+            $ahora->format('H:i:s')
+        );
+
+        if ($resultado['error']) {
+            Log::error('[hikvision-notification] Fallo al registrar asistencia gestión', [
                 'idUsuario' => $idUsuario,
                 'message' => $resultado['message'] ?? null,
             ]);

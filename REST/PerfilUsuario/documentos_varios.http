@@ -1,0 +1,115 @@
+### ============================================
+### DOCUMENTOS VARIOS — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+### DOCUMENTOS VARIOS
+### ============================================
+
+### 1. VER documentos por usuario
+GET http://localhost:8000/api/documentos-varios?id_usuario=3123
+
+### 2. VER documentos por tipo
+GET http://localhost:8000/api/documentos-varios/porTipo?tipo_doc=Contrato&id_usuario=3123
+
+### 3. VER conteo de documentos por tipo
+GET http://localhost:8000/api/documentos-varios/conteo?id_usuario=3123
+
+### 4. CREAR documento (multipart/form-data)
+POST http://localhost:8000/api/documentos-varios
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_doc"
+
+Contrato Laboral
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="archivo"; filename="contrato.pdf"; filename*="UTF-8''contrato.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 5. CREAR otro documento
+POST http://localhost:8000/api/documentos-varios
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_doc"
+
+Certificado
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="archivo"; filename="certificado.pdf"; filename*="UTF-8''certificado.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 6. ACTUALIZAR documento con nuevo archivo
+### NOTA: usar POST + _method=PUT para multipart/form-data en Laravel
+POST http://localhost:8000/api/documentos-varios
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="_method"
+
+PUT
+--WebAppBoundary
+Content-Disposition: form-data; name="id"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_doc"
+
+Contrato Laboral Actualizado
+--WebAppBoundary
+Content-Disposition: form-data; name="archivo"; filename="contrato_v2.pdf"; filename*="UTF-8''contrato_v2.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 7. ELIMINAR documento por id
+DELETE http://localhost:8000/api/documentos-varios
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### 8. ELIMINAR todos los documentos de un usuario
+DELETE http://localhost:8000/api/documentos-varios/usuario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_usuario": 3123
+}
+
+### 9. ELIMINAR todos los documentos de un tipo específico
+DELETE http://localhost:8000/api/documentos-varios/tipo
+Content-Type: application/json
+Accept: application/json
+
+{
+    "tipo_doc": "Certificado",
+    "id_usuario": 3123
+}

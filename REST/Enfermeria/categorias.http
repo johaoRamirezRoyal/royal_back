@@ -1,0 +1,143 @@
+### ============================================
+### ENFERMERÍA — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### ============================================
+### CATEGORÍAS — OBTENER
+### ============================================
+
+### 1. Obtener todas las categorías (paginado)
+GET http://localhost:8000/api/enfermeria/categorias
+
+### 2. Obtener categorías — buscar por nombre
+GET http://localhost:8000/api/enfermeria/categorias?search=herida
+
+### 3. Obtener categorías — paginado con búsqueda
+GET http://localhost:8000/api/enfermeria/categorias?search=infeccion&per-page=5
+
+### 4. Obtener categorías activas
+GET http://localhost:8000/api/enfermeria/categorias/activas
+
+### 5. Obtener select de categorías (para dropdowns)
+GET http://localhost:8000/api/enfermeria/categorias/select
+
+### 6. Obtener categorías con conteo (tabla admin)
+GET http://localhost:8000/api/enfermeria/categorias/conteo
+
+### 7. Obtener estadísticas
+GET http://localhost:8000/api/enfermeria/categorias/estadisticas
+
+### 8. Obtener categoría por ID
+GET http://localhost:8000/api/enfermeria/categorias/1
+
+### ============================================
+### CATEGORÍAS — VERIFICAR NOMBRE
+### ============================================
+
+### 9. Verificar si un nombre existe
+GET http://localhost:8000/api/enfermeria/categorias/verificar-nombre?nombre=Heridas
+
+### 10. Verificar nombre ignorando un ID (para edición)
+GET http://localhost:8000/api/enfermeria/categorias/verificar-nombre?nombre=Heridas&id=1
+
+### ============================================
+### CATEGORÍAS — CREAR
+### ============================================
+
+### 11. Crear categoría — exitoso
+POST http://localhost:8000/api/enfermeria/categorias
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Heridas menores",
+    "tratamiento_sugerido": "Lavar con agua y jabón, aplicar antiséptico y cubrir con vendaje estéril."
+}
+
+### 12. Crear categoría — exitoso (sin tratamiento)
+POST http://localhost:8000/api/enfermeria/categorias
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Fiebre"
+}
+
+### 13. Crear categoría — error (sin nombre)
+POST http://localhost:8000/api/enfermeria/categorias
+Content-Type: application/json
+Accept: application/json
+
+{
+    "tratamiento_sugerido": "Descanso y líquidos"
+}
+
+### ============================================
+### CATEGORÍAS — ACTUALIZAR
+### ============================================
+
+### 14. Actualizar categoría — exitoso
+PUT http://localhost:8000/api/enfermeria/categorias/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Heridas menores actualizado",
+    "tratamiento_sugerido": "Tratamiento actualizado: lavar, desinfectar, cubrir."
+}
+
+### 15. Actualizar categoría — solo tratamiento
+PUT http://localhost:8000/api/enfermeria/categorias/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "tratamiento_sugerido": "Solo actualizar el tratamiento sugerido."
+}
+
+### ============================================
+### CATEGORÍAS — CAMBIAR ESTADO
+### ============================================
+
+### 16. Activar categoría (estado = 1)
+PUT http://localhost:8000/api/enfermeria/categorias/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "estado": 1
+}
+
+### 17. Desactivar categoría (estado = 0)
+PUT http://localhost:8000/api/enfermeria/categorias/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "estado": 0
+}
+
+### 18. Cambiar estado masivo
+PUT http://localhost:8000/api/enfermeria/categorias/estado-masivo
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2, 3],
+    "estado": 0
+}
+
+### ============================================
+### CATEGORÍAS — ELIMINAR
+### ============================================
+
+### 19. Eliminar categoría
+DELETE http://localhost:8000/api/enfermeria/categorias/1

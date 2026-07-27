@@ -1,0 +1,128 @@
+### ============================================
+### EXPERIENCIA LABORAL — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+### EXPERIENCIA LABORAL
+### ============================================
+
+### 1. VER experiencias por usuario
+GET http://localhost:8000/api/info-perfil/experiencias?id_usuario=1
+
+### 2. VER experiencias activas (sin fecha de retiro)
+GET http://localhost:8000/api/info-perfil/experiencias/activas?id_usuario=1
+
+### 3. VER resumen de experiencias (total empresas, años, activas)
+GET http://localhost:8000/api/info-perfil/experiencias/resumen?id_usuario=1
+
+### 4. CREAR experiencia laboral con certificado (multipart/form-data)
+POST http://localhost:8000/api/info-perfil/experiencias
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+11047
+--WebAppBoundary
+Content-Disposition: form-data; name="nombre_empresa"
+
+Tech Solutions S.A.S
+--WebAppBoundary
+Content-Disposition: form-data; name="cargo"
+
+Desarrollador Full Stack
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_ingreso"
+
+2022-03-01
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_retiro"
+
+2024-06-15
+--WebAppBoundary
+Content-Disposition: form-data; name="certificado_trabajo"; filename="certificado.pdf"; filename*="UTF-8''certificado.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_certificado"
+
+2024-06-20
+--WebAppBoundary--
+
+### 5. CREAR experiencia actual sin certificado
+POST http://localhost:8000/api/info-perfil/experiencias
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="nombre_empresa"
+
+InnovateTech Ltda
+--WebAppBoundary
+Content-Disposition: form-data; name="cargo"
+
+Líder Técnico
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_ingreso"
+
+2024-07-01
+--WebAppBoundary--
+
+### 6. ACTUALIZAR experiencia con nuevo certificado (reemplaza el anterior)
+### NOTA: usar POST + _method=PUT para multipart/form-data en Laravel
+POST http://localhost:8000/api/info-perfil/experiencias
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="_method"
+
+PUT
+--WebAppBoundary
+Content-Disposition: form-data; name="id"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+1
+--WebAppBoundary
+Content-Disposition: form-data; name="cargo"
+
+Desarrollador Senior
+--WebAppBoundary
+Content-Disposition: form-data; name="certificado_trabajo"; filename="certificado_nuevo.pdf"; filename*="UTF-8''certificado_nuevo.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 7. ELIMINAR experiencia por id
+DELETE http://localhost:8000/api/info-perfil/experiencias
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### 8. ELIMINAR todas las experiencias de un usuario
+DELETE http://localhost:8000/api/info-perfil/experiencias/usuario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_usuario": 1
+}

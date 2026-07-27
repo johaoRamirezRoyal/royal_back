@@ -296,4 +296,29 @@ class UsuariosController extends Controller
             UsuarioInscripcionResource::class
         );
     }
+
+    // GET /usuarios/firma
+    public function verFirma(Request $request)
+    {
+        $id_user = $request->user()->id_user;
+
+        $response = $this->service_usuarios->verFirmaUsuario($id_user);
+
+        return response()->json(['firma_url' => $response['firma_url'] ?? null]);
+    }
+
+    // POST /usuarios/firma (multipart, campo firma)
+    public function subirFirma(Request $request)
+    {
+        $request->validate(['firma' => 'required|file']);
+
+        $id_user = $request->user()->id_user;
+        $response = $this->service_usuarios->subirFirmaUsuario($id_user, $request->file('firma'));
+
+        if ($response['error']) {
+            return response()->json(['error' => true, 'message' => $response['message']], 400);
+        }
+
+        return response()->json(['firma_url' => $response['firma_url']]);
+    }
 }

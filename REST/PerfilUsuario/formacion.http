@@ -1,0 +1,161 @@
+### ============================================
+### FORMACIÓN — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+### FORMACIÓN
+### ============================================
+
+### 1. VER formaciones por usuario
+GET http://localhost:8000/api/info-perfil/formaciones?id_usuario=3123
+
+### 2. VER formaciones por usuario y tipo
+GET http://localhost:8000/api/info-perfil/formaciones/porTipo?id_usuario=3123&tipo_formacion=informal
+
+### 3. CREAR formación con certificado (multipart/form-data)
+POST http://localhost:8000/api/info-perfil/formaciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_formacion"
+
+informal
+--WebAppBoundary
+Content-Disposition: form-data; name="programa"
+
+AWS Cloud Begginer
+--WebAppBoundary
+Content-Disposition: form-data; name="institucion"
+
+Amazon Web Services
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_grado"
+
+2026-03-15
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_expedicion_certi"
+
+2026-07-01
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+5
+--WebAppBoundary
+Content-Disposition: form-data; name="certificado"; filename="certificado.pdf"; filename*="UTF-8''certificado.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 4. CREAR formación sin certificado
+POST http://localhost:8000/api/info-perfil/formaciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_formacion"
+
+pregrado
+--WebAppBoundary
+Content-Disposition: form-data; name="programa"
+
+Ingeniería de Sistemas
+--WebAppBoundary
+Content-Disposition: form-data; name="institucion"
+
+Universidad Nacional
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_grado"
+
+2023-06-15
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_expedicion_certi"
+
+2023-07-01
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+5
+--WebAppBoundary--
+
+### 5. ACTUALIZAR formación con nuevo certificado
+### NOTA: usar POST + _method=PUT para multipart/form-data en Laravel
+POST http://localhost:8000/api/info-perfil/formaciones
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="_method"
+
+PUT
+--WebAppBoundary
+Content-Disposition: form-data; name="id"
+
+535
+--WebAppBoundary
+Content-Disposition: form-data; name="id_user"
+
+3123
+--WebAppBoundary
+Content-Disposition: form-data; name="tipo_formacion"
+
+informal
+--WebAppBoundary
+Content-Disposition: form-data; name="programa"
+
+AWS Cloud Practitioner
+--WebAppBoundary
+Content-Disposition: form-data; name="institucion"
+
+Amazon Web Services
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_grado"
+
+2026-03-15
+--WebAppBoundary
+Content-Disposition: form-data; name="fecha_expedicion_certi"
+
+2026-07-01
+--WebAppBoundary
+Content-Disposition: form-data; name="duracion"
+
+5
+--WebAppBoundary
+Content-Disposition: form-data; name="certificado"; filename="certificado_nuevo.pdf"; filename*="UTF-8''certificado_nuevo.pdf"
+Content-Type: application/pdf
+
+< C:/Users/Soporte/Downloads/seguimiento_equipo_computo_2026-07-03-08-28-49.pdf
+--WebAppBoundary--
+
+### 6. ELIMINAR formación por id (borra certificado de storage)
+DELETE http://localhost:8000/api/info-perfil/formaciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1
+}
+
+### 7. ELIMINAR todas las formaciones de un usuario
+DELETE http://localhost:8000/api/info-perfil/formaciones/usuario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_usuario": 1
+}

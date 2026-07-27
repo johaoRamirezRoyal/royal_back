@@ -783,14 +783,6 @@ class HistoriaClinicaService extends Service
 
             $data = $registro->toArray();
 
-            // Generar URLs de las firmas si existen
-            foreach (['firma_padre', 'firma_madre', 'firma_psicologa'] as $campo) {
-                if (!empty($data[$campo])) {
-                    $urlResult = $this->cloudinaryService->getFileUrl($data[$campo]);
-                    $data[$campo . '_url'] = $urlResult['error'] ? null : $urlResult['data']['url'];
-                }
-            }
-
             return [
                 'error' => false,
                 'message' => 'Registro obtenido correctamente.',
@@ -874,7 +866,7 @@ class HistoriaClinicaService extends Service
     public function subirFirma(int $id, string $campo, UploadedFile $file): array
     {
         try {
-            $camposPermitidos = ['firma_padre', 'firma_madre', 'firma_psicologa'];
+            $camposPermitidos = ['firma_padre', 'firma_madre'];
 
             if (!in_array($campo, $camposPermitidos)) {
                 return [
@@ -894,7 +886,6 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // Eliminar firma anterior si existe
             if ($registro->{$campo}) {
                 $this->cloudinaryService->deleteFile($registro->{$campo});
             }
@@ -910,7 +901,8 @@ class HistoriaClinicaService extends Service
             }
 
             $registro->update([
-                $campo => $resultado['data']['public_id']
+                $campo . '_url' => $resultado['data']['url'],
+                $campo => $resultado['data']['public_id'],
             ]);
 
             return [
@@ -942,8 +934,8 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // Eliminar firmas de Cloudinary
-            foreach (['firma_padre', 'firma_madre', 'firma_psicologa'] as $campo) {
+            // Eliminar firmas de Cloudinary (firma_psicologa no tiene public_id propio: es la firma del usuario)
+            foreach (['firma_padre', 'firma_madre'] as $campo) {
                 if ($registro->{$campo}) {
                     $this->cloudinaryService->deleteFile($registro->{$campo});
                 }

@@ -64,6 +64,11 @@ class Inscripcion extends Model
         return $this->hasMany(Documento::class, 'id_inscripcion', 'id');
     }
 
+    public function citasPsicologia()
+    {
+        return $this->hasMany(CitaPsicologia::class, 'id_inscripcion', 'id');
+    }
+
     public function referenciaFamiliares()
     {
         return $this->hasMany(ReferenciasFamiliares::class, 'id_inscripcion');

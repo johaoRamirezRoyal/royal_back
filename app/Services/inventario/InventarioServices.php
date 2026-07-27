@@ -6,6 +6,7 @@ use App\Models\AnioEscolar\Anio;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
+use App\Models\Inventario\InventarioLog;
 use App\Models\Inventario\Reportes;
 use App\Services\MailService;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,25 @@ class InventarioServices
     private array $mailTo = [
         'hernando.ramirez@royalschool.edu.co'
     ];
+
+    private function registrarLog(array $items, int $estado, ?int $idUser, ?int $idArea = null): void
+    {
+        $registros = array_map(function ($item) use ($estado, $idUser, $idArea) {
+            $idInventario = is_object($item) ? $item->id : $item;
+            $area = $idArea ?? (is_object($item) ? $item->id_area : null);
+
+            return [
+                'id_inventario' => $idInventario,
+                'id_user' => $idUser,
+                'id_area' => $area,
+                'id_log' => $idUser,
+                'estado' => $estado,
+                'id_super_empresa' => null,
+            ];
+        }, $items);
+
+        InventarioLog::insert($registros);
+    }
 
     /**
      * Summary of obtenerListadoInventario
@@ -110,6 +130,8 @@ class InventarioServices
         try {
             $inventario = Inventario::create($inventario);
 
+            $this->registrarLog([$inventario], $inventario->estado, null);
+
             return [
                 'error' => false,
                 'data' => $inventario->toArray(),
@@ -163,6 +185,8 @@ class InventarioServices
                 }
 
                 InventarioDescontinuado::insert($registros);
+
+                $this->registrarLog($inventario->all(), 5, $id_log);
 
                 return [
                     "error" => false,
@@ -232,6 +256,8 @@ class InventarioServices
 
                 InventarioLiberado::insert($registros);
 
+                $this->registrarLog($inventario->all(), 4, $id_log);
+
                 return [
                     "error" => false,
                     "message" => "Inventario Liberado correctamente",
@@ -291,6 +317,8 @@ class InventarioServices
                     'id_area' => $id_area,
                     'id_user' => $id_usuario,
                 ]);
+
+            $this->registrarLog($inventario_liberado->all(), 1, null, $id_area);
 
             $titulo = "Notificación | Inventario Asignado";
             $contenido = "Se han Asignado los siguientes elementos:\n\n";
@@ -371,6 +399,8 @@ class InventarioServices
                         'periodo' => $id_periodo
                     ]);
                 }
+
+                $this->registrarLog($inventario->all(), 2, $id_log);
 
                 return [
                     'error' => false,
@@ -526,6 +556,8 @@ class InventarioServices
                         'estado' => 3,
                         'observacion' => $descripcion
                     ]);
+
+                    $this->registrarLog([$reporte->inventario], 3, $id_resp, $reporte->id_area);
                 }
 
                 return [
