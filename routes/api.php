@@ -174,4 +174,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/documentos-varios')->group(function () {
         require __DIR__ . '/api/documentosVarios.php';
     });
+
+    // ASISTENCIA TRABAJADORES
+    Route::prefix('/asistencia-gestion')->group(function () {
+        require __DIR__ . '/api/asistenciaGestion.php';
+    });
 });
