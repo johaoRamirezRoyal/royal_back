@@ -217,6 +217,181 @@ class AsistenciaGestionService extends Service
         }
     }
 
+    public function topUsuariosLlegadasTarde(array $filtros): array
+    {
+        try {
+            $limite = $filtros['top'] ?? 10;
+            $horaLimite = $filtros['hora_limite'] ?? '07:15:00';
+
+            $query = DB::table('asistencia_gestion as ag')
+                ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
+                ->select(
+                    'ag.id_user',
+                    'u.nombre',
+                    'u.perfil',
+                    DB::raw('COUNT(*) as total_llegadas_tarde')
+                )
+                ->where('ag.hora_asistencia', '>', $horaLimite)
+                ->groupBy('ag.id_user', 'u.nombre', 'u.perfil');
+
+            if (!empty($filtros['id_perfil'])) {
+                $query->where('u.perfil', $filtros['id_perfil']);
+            }
+
+            if (!empty($filtros['fecha_desde'])) {
+                $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
+            }
+
+            if (!empty($filtros['fecha_hasta'])) {
+                $query->where('ag.fecha_asistencia', '<=', $filtros['fecha_hasta']);
+            }
+
+            $resultados = $query->orderByDesc('total_llegadas_tarde')
+                ->limit($limite)
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Top de llegadas tardías obtenido',
+                'data' => $resultados,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener top de llegadas tardías');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener top de llegadas tardías',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function distribucionHorasLlegada(array $filtros): array
+    {
+        try {
+            $query = DB::table('asistencia_gestion as ag')
+                ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
+                ->select(
+                    DB::raw('HOUR(ag.hora_asistencia) as hora'),
+                    DB::raw('COUNT(*) as total'),
+                    DB::raw('COUNT(DISTINCT ag.id_user) as usuarios_unicos')
+                )
+                ->groupBy(DB::raw('HOUR(ag.hora_asistencia)'));
+
+            if (!empty($filtros['id_perfil'])) {
+                $query->where('u.perfil', $filtros['id_perfil']);
+            }
+
+            if (!empty($filtros['fecha_desde'])) {
+                $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
+            }
+
+            if (!empty($filtros['fecha_hasta'])) {
+                $query->where('ag.fecha_asistencia', '<=', $filtros['fecha_hasta']);
+            }
+
+            $resultados = $query->orderBy('hora')->get();
+
+            return [
+                'error' => false,
+                'message' => 'Distribución de horas obtenida',
+                'data' => $resultados,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener distribución de horas');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener distribución de horas',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function promedioHoraLlegadaPorUsuario(array $filtros): array
+    {
+        try {
+            $query = DB::table('asistencia_gestion as ag')
+                ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
+                ->select(
+                    'ag.id_user',
+                    DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nombre_completo"),
+                    'u.perfil',
+                    DB::raw('COUNT(*) as total_marcaciones'),
+                    DB::raw('MIN(ag.hora_asistencia) as primera_llegada'),
+                    DB::raw('MAX(ag.hora_asistencia) as ultima_llegada'),
+                    DB::raw('AVG(TIME_TO_SEC(ag.hora_asistencia)) as promedio_segundos')
+                )
+                ->groupBy('ag.id_user', 'nombre_completo', 'u.perfil');
+
+            if (!empty($filtros['id_usuario'])) {
+                $query->where('ag.id_user', $filtros['id_usuario']);
+            }
+
+            if (!empty($filtros['id_perfil'])) {
+                $query->where('u.perfil', $filtros['id_perfil']);
+            }
+
+            if (!empty($filtros['fecha_desde'])) {
+                $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
+            }
+
+            if (!empty($filtros['fecha_hasta'])) {
+                $query->where('ag.fecha_asistencia', '<=', $filtros['fecha_hasta']);
+            }
+
+            $perPage = $filtros['per_page'] ?? 20;
+            $resultados = $query->orderBy('nombre_completo')
+                ->paginate($perPage);
+
+            $data = $resultados->through(fn ($r) => [
+                'id_user' => $r->id_user,
+                'nombre' => $r->nombre_completo,
+                'perfil' => $r->perfil,
+                'total_marcaciones' => (int) $r->total_marcaciones,
+                'primera_llegada' => $r->primera_llegada,
+                'ultima_llegada' => $r->ultima_llegada,
+                'promedio_hora' => $this->segundosATiempo((int) round($r->promedio_segundos)),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Promedio de hora de llegada obtenido',
+                'data' => $data,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener promedio de hora de llegada');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener promedio de hora de llegada',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function ultimosRegistrosUsuario(int $idUsuario, int $limite = 30): array
+    {
+        try {
+            $registros = AsistenciaGestion::with('usuario')
+                ->porUsuario($idUsuario)
+                ->orderBy('fecha_asistencia', 'desc')
+                ->orderBy('hora_asistencia', 'desc')
+                ->limit($limite)
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Últimos registros obtenidos',
+                'data' => $registros,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener últimos registros');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener últimos registros',
+                'data' => null,
+            ];
+        }
+    }
+
     public function eliminarAsistencia(array $ids): array
     {
         try {
