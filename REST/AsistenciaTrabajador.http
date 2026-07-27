@@ -1,0 +1,101 @@
+### ============================================
+### ASISTENCIA TRABAJADORES — REST Client
+### ============================================
+### Primero haz login para obtener la cookie 'token'.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### ============================================
+### REGISTRAR ASISTENCIA
+### ============================================
+
+### 1. Registrar asistencia manualmente
+POST http://localhost:8000/api/asistencia-gestion
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_user": 100,
+    "fecha_asistencia": "2026-07-27",
+    "hora_asistencia": "08:30:00"
+}
+
+### ============================================
+### CONSULTAR ASISTENCIA
+### ============================================
+
+### 2. Obtener asistencia (todas)
+GET http://localhost:8000/api/asistencia-gestion
+Accept: application/json
+
+### 3. Obtener asistencia — filtrar por usuario
+GET http://localhost:8000/api/asistencia-gestion?id_usuario=100
+Accept: application/json
+
+### 4. Obtener asistencia — filtrar por perfil
+GET http://localhost:8000/api/asistencia-gestion?id_perfil=3
+Accept: application/json
+
+### 5. Obtener asistencia — filtrar por rango de fechas
+GET http://localhost:8000/api/asistencia-gestion?fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### 6. Obtener asistencia — filtrar por fecha específica
+GET http://localhost:8000/api/asistencia-gestion?fecha=2026-07-27
+Accept: application/json
+
+### 7. Obtener asistencia — filtrar por rango de horas
+GET http://localhost:8000/api/asistencia-gestion?hora_desde=07:00:00&hora_hasta=12:00:00
+Accept: application/json
+
+### 8. Obtener asistencia — combinación de filtros
+GET http://localhost:8000/api/asistencia-gestion?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27&per_page=20
+Accept: application/json
+
+### ============================================
+### RESUMEN POR USUARIO
+### ============================================
+
+### 9. Resumen de asistencia por usuario (total, primera, última, promedio)
+GET http://localhost:8000/api/asistencia-gestion/resumen
+Accept: application/json
+
+### 10. Resumen — filtrar por usuario específico
+GET http://localhost:8000/api/asistencia-gestion/resumen?id_usuario=100
+Accept: application/json
+
+### 11. Resumen — filtrar por perfil
+GET http://localhost:8000/api/asistencia-gestion/resumen?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### ============================================
+### DATOS PARA GRÁFICAS
+### ============================================
+
+### 12. Datos de gráfica — últimos 30 días (default)
+GET http://localhost:8000/api/asistencia-gestion/grafica
+Accept: application/json
+
+### 13. Datos de gráfica — filtrar por rango de fechas
+GET http://localhost:8000/api/asistencia-gestion/grafica?fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### 14. Datos de gráfica — filtrar por perfil
+GET http://localhost:8000/api/asistencia-gestion/grafica?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### ============================================
+### ELIMINAR ASISTENCIA
+### ============================================
+
+### 15. Eliminar registros de asistencia por IDs
+DELETE http://localhost:8000/api/asistencia-gestion
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2, 3]
+}

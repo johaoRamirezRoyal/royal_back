@@ -1,0 +1,13 @@
+### ============================================
+### HIKVISION ASISTENCIA — REST Client
+### ============================================
+### Primero haz login para obtener la cookie 'token'.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### OBTENER asistencia de un empleado específico
+GET http://localhost:8000/api/hikvision/asistencia?id_empleado=1&start_date=2026-01-01&end_date=2026-07-27
+Accept: application/json
