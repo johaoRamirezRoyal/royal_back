@@ -72,7 +72,7 @@ GET http://localhost:8000/api/asistencia-gestion/resumen?id_perfil=3&fecha_desde
 Accept: application/json
 
 ### ============================================
-### DATOS PARA GRÁFICAS
+### GRÁFICAS
 ### ============================================
 
 ### 12. Datos de gráfica — últimos 30 días (default)
@@ -87,11 +87,59 @@ Accept: application/json
 GET http://localhost:8000/api/asistencia-gestion/grafica?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27
 Accept: application/json
 
+### 15. Top 10 usuarios con más llegadas tarde (después de 7:15 AM)
+GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas
+Accept: application/json
+
+### 16. Top 5 — con hora límite personalizada
+GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas?top=5&hora_limite=08:00:00
+Accept: application/json
+
+### 17. Top 10 — filtrado por perfil y rango de fechas
+GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### 18. Distribución de horas de llegada — todos
+GET http://localhost:8000/api/asistencia-gestion/grafica/distribucion-horas
+Accept: application/json
+
+### 19. Distribución de horas — filtrar por perfil
+GET http://localhost:8000/api/asistencia-gestion/grafica/distribucion-horas?id_perfil=3
+Accept: application/json
+
+### 20. Distribución de horas — filtrar por rango de fechas
+GET http://localhost:8000/api/asistencia-gestion/grafica/distribucion-horas?fecha_desde=2026-07-01&fecha_hasta=2026-07-27
+Accept: application/json
+
+### 21. Promedio de hora de llegada por usuario — todos (paginado, 20 por página)
+GET http://localhost:8000/api/asistencia-gestion/grafica/promedio-por-usuario
+Accept: application/json
+
+### 22. Promedio — filtrar por perfil
+GET http://localhost:8000/api/asistencia-gestion/grafica/promedio-por-usuario?id_perfil=3
+Accept: application/json
+
+### 23. Promedio — usuario específico
+GET http://localhost:8000/api/asistencia-gestion/grafica/promedio-por-usuario?id_usuario=100
+Accept: application/json
+
+### 24. Promedio — filtrar por fechas y paginación
+GET http://localhost:8000/api/asistencia-gestion/grafica/promedio-por-usuario?fecha_desde=2026-07-01&fecha_hasta=2026-07-27&per_page=50
+Accept: application/json
+
+### 25. Últimos 30 registros de un usuario
+GET http://localhost:8000/api/asistencia-gestion/ultimos-registros?id_usuario=100
+Accept: application/json
+
+### 26. Últimos 10 registros
+GET http://localhost:8000/api/asistencia-gestion/ultimos-registros?id_usuario=100&limite=10
+Accept: application/json
+
 ### ============================================
 ### ELIMINAR ASISTENCIA
 ### ============================================
 
-### 15. Eliminar registros de asistencia por IDs
+### 27. Eliminar registros de asistencia por IDs
 DELETE http://localhost:8000/api/asistencia-gestion
 Content-Type: application/json
 Accept: application/json
