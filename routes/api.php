@@ -168,6 +168,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/llegadasTarde.php';
     });
 
+    // ASISTENCIAS TRABAJADOR
+    Route::prefix("/asistencias-trabajador")->group(function () {
+        require __DIR__ . '/api/asistenciasTrabajador.php';
+    });
+
     // GESTIÓN ACADÉMICA
     Route::prefix('/gestion-academica')->group(function () {
         require __DIR__ . '/api/gestionAcademica.php';

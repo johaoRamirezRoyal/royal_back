@@ -592,28 +592,40 @@ class HikvisionController extends Controller
     }
 
     /**
-     * Registra una llegada tarde si el usuario es estudiante y el servidor
-     * recibió el checkIn después de la hora límite. Se usa la hora del
-     * servidor (no la del dispositivo) porque el reloj del equipo no es confiable.
+     * Despacha el checkIn recibido según el perfil del usuario: a los estudiantes
+     * solo se les registra si llegaron tarde (ver registrarLlegadaTardeSiAplica); a
+     * cualquier otro perfil activo (trabajador) se le registra la llegada siempre,
+     * sin importar la hora. Se usa la hora del servidor (no la del dispositivo)
+     * porque el reloj del equipo no es confiable.
      */
-    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
+    private function procesarLlegada(int $idUsuario): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
         if ($usuario['error'] || ! $usuario['usuario']) {
-            Log::warning('[hikvision-notification] Llegada tarde omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
+            Log::warning('[hikvision-notification] Llegada omitida: usuario no encontrado', ['idUsuario' => $idUsuario]);
             return;
         }
 
-        if ($usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
-            Log::info('[hikvision-notification] Llegada tarde omitida: no aplica (no es estudiante activo)', [
-                'idUsuario' => $idUsuario,
-                'estado' => $usuario['usuario']->estado,
-                'perfil' => $usuario['usuario']->perfil,
-            ]);
+        if ($usuario['usuario']->estado !== 'activo') {
+            Log::info('[hikvision-notification] Llegada omitida: usuario inactivo', ['idUsuario' => $idUsuario]);
             return;
         }
 
+        if ((int) $usuario['usuario']->perfil === self::PERFIL_ESTUDIANTE) {
+            $this->registrarLlegadaTardeSiAplica($idUsuario);
+            return;
+        }
+
+        $this->registrarLlegadaTrabajador($idUsuario);
+    }
+
+    /**
+     * Registra una llegada tarde si el servidor recibió el checkIn después de la
+     * hora límite. Asume que el caller ya validó que el usuario es un estudiante activo.
+     */
+    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
+    {
         $ahora = now();
 
         if ($ahora->format('H:i:s') <= self::HORA_LIMITE_LLEGADA) {
