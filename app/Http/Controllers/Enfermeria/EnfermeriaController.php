@@ -42,9 +42,12 @@ class EnfermeriaController extends Controller
     /**
      * GET /api/enfermeria/categorias/activas
      */
-    public function obtenerCategoriasActivas(): JsonResponse
+    public function obtenerCategoriasActivas(Request $request): JsonResponse
     {
-        $response = $this->enfermeriaServices->obtenerCategoriasActivas();
+        $perPage = $request->input('per_page');
+        $response = $this->enfermeriaServices->obtenerCategoriasActivas(
+            $perPage ? (int) $perPage : null
+        );
 
         return $this->paginatedResponse($response);
     }
