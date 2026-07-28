@@ -16,7 +16,7 @@ Accept: application/json
 ### ============================================
 
 ### 1. VER información del perfil por id_usuario
-GET http://localhost:8000/api/info-perfil?id_usuario=1
+GET http://localhost:8000/api/info-perfil?id_usuario=3123
 
 ### HOJA DE VIDA DE UN USUARIO
 GET http://localhost:8000/api/info-perfil/hoja-de-vida?id_usuario=3123

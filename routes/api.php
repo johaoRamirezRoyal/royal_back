@@ -23,6 +23,11 @@ Route::group(['prefix' => 'auth'], function () {
 Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '.+');
 
+// Documentos del storage público (disponible para cualquier módulo autenticado)
+Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
+    Route::get('/', [App\Http\Controllers\Documentos\DocumentoController::class, 'descargar']);
+});
+
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
 Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
 
