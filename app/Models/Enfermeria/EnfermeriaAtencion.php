@@ -20,6 +20,7 @@ class EnfermeriaAtencion extends Model
         'tratamiento',
         'envio',
         'enviado',
+        'envio_tardio',
         'id_log',
         'fechareg',
     ];
@@ -29,12 +30,14 @@ class EnfermeriaAtencion extends Model
         'motivo' => 'integer',
         'envio' => 'integer',
         'enviado' => 'integer',
+        'envio_tardio' => 'integer',
         'fechareg' => 'datetime',
     ];
 
     protected $attributes = [
         'envio' => 0,
         'enviado' => 0,
+        'envio_tardio' => 0,
     ];
 
     /**
