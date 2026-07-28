@@ -267,6 +267,10 @@ class AsistenciaGestionService extends Service
                 $porDia->where('u.perfil', $filtros['id_perfil']);
             }
 
+            if (!empty($filtros['id_usuario'])) {
+                $porDia->where('ag.id_user', $filtros['id_usuario']);
+            }
+
             $porDia = $porDia->groupBy('ag.fecha_asistencia')
                 ->orderBy('ag.fecha_asistencia')
                 ->get();
@@ -275,6 +279,7 @@ class AsistenciaGestionService extends Service
                 ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
                 ->select('u.perfil', DB::raw('COUNT(DISTINCT ag.id_user) as total_usuarios'))
                 ->whereBetween('ag.fecha_asistencia', [$rangoFechas['desde'], $rangoFechas['hasta']])
+                ->when(!empty($filtros['id_usuario']), fn ($q) => $q->where('ag.id_user', $filtros['id_usuario']))
                 ->groupBy('u.perfil')
                 ->get();
 
@@ -284,6 +289,7 @@ class AsistenciaGestionService extends Service
                     DB::raw('COUNT(*) as total')
                 )
                 ->whereBetween('fecha_asistencia', [$rangoFechas['desde'], $rangoFechas['hasta']])
+                ->when(!empty($filtros['id_usuario']), fn ($q) => $q->where('id_user', $filtros['id_usuario']))
                 ->groupBy(DB::raw('HOUR(hora_asistencia)'))
                 ->orderBy('hora')
                 ->get();
@@ -329,6 +335,10 @@ class AsistenciaGestionService extends Service
                 $query->where('u.perfil', $filtros['id_perfil']);
             }
 
+            if (!empty($filtros['id_usuario'])) {
+                $query->where('ag.id_user', $filtros['id_usuario']);
+            }
+
             if (!empty($filtros['fecha_desde'])) {
                 $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
             }
@@ -370,6 +380,10 @@ class AsistenciaGestionService extends Service
 
             if (!empty($filtros['id_perfil'])) {
                 $query->where('u.perfil', $filtros['id_perfil']);
+            }
+
+            if (!empty($filtros['id_usuario'])) {
+                $query->where('ag.id_user', $filtros['id_usuario']);
             }
 
             if (!empty($filtros['fecha_desde'])) {
