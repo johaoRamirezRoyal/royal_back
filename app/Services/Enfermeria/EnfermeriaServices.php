@@ -559,9 +559,13 @@ class EnfermeriaServices extends Service
         ?int $idCategoria = null,
         ?string $fechaDesde = null,
         ?string $fechaHasta = null,
-        ?int $perPage = 15
+        ?int $perPage = 15,
+        ?string $sort = null,
+        string $dir = 'desc'
     ): array {
         try {
+            $dir = strtolower($dir) === 'asc' ? 'asc' : 'desc';
+
             $atenciones = EnfermeriaAtencion::query()
                 ->with([
                     'estudiante:id_user,nombre,apellido,documento,correo',
@@ -572,12 +576,14 @@ class EnfermeriaServices extends Service
                     ->where('nombre', 'like', "%{$search}%")
                     ->orWhere('apellido', 'like', "%{$search}%")
                     ->orWhere('documento', 'like', "%{$search}%")
+                    ->orWhere('id_user', 'like', "%{$search}%")
                 ))
                 ->when($idEstudiante, fn($q) => $q->where('id_user', $idEstudiante))
                 ->when($idCategoria, fn($q) => $q->where('motivo', $idCategoria))
                 ->when($fechaDesde, fn($q) => $q->whereDate('fechareg', '>=', $fechaDesde))
                 ->when($fechaHasta, fn($q) => $q->whereDate('fechareg', '<=', $fechaHasta))
-                ->orderByDesc('id')
+                ->when($sort === 'fechareg', fn($q) => $q->orderBy('fechareg', $dir))
+                ->when($sort !== 'fechareg', fn($q) => $q->orderByDesc('id'))
                 ->paginate($perPage);
 
             return [

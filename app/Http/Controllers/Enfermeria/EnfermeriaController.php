@@ -175,12 +175,14 @@ class EnfermeriaController extends Controller
     public function obtenerAtenciones(Request $request): JsonResponse
     {
         $response = $this->enfermeriaServices->obtenerAtenciones(
-            $request->input('search'),
+            $request->input('s') ?? $request->input('search'),
             $request->input('id_estudiante'),
             $request->input('id_categoria'),
             $request->input('fecha_desde'),
             $request->input('fecha_hasta'),
-            $request->input('per-page', 15)
+            $request->input('per-page', 15),
+            $request->input('sort'),
+            $request->input('dir', 'desc')
         );
 
         return $this->paginatedResponse($response);
