@@ -16,7 +16,7 @@ Accept: application/json
 ### ============================================
 
 ### 1. VER experiencias por usuario
-GET http://localhost:8000/api/info-perfil/experiencias?id_usuario=1
+GET http://localhost:8000/api/info-perfil/experiencias?id_usuario=11047
 
 ### 2. VER experiencias activas (sin fecha de retiro)
 GET http://localhost:8000/api/info-perfil/experiencias/activas?id_usuario=1

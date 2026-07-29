@@ -14,15 +14,15 @@ Accept: application/json
 ### ============================================
 ### DOCUMENTOS VARIOS
 ### ============================================
-
-### 1. VER documentos por usuario
-GET http://localhost:8000/api/documentos-varios?id_usuario=3123
-
 ### 2. VER documentos por tipo
 GET http://localhost:8000/api/documentos-varios/porTipo?tipo_doc=Contrato&id_usuario=3123
 
 ### 3. VER conteo de documentos por tipo
 GET http://localhost:8000/api/documentos-varios/conteo?id_usuario=3123
+
+### 1. VER documentos por usuario
+GET http://localhost:8000/api/documentos-varios?id_usuario=3123
+
 
 ### 4. CREAR documento (multipart/form-data)
 POST http://localhost:8000/api/documentos-varios
