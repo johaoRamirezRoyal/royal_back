@@ -579,7 +579,9 @@ class EnfermeriaServices extends Service
 
             $atenciones = EnfermeriaAtencion::query()
                 ->with([
-                    'estudiante:id_user,nombre,apellido,documento,correo',
+                    'estudiante:id_user,nombre,apellido,documento,correo,id_nivel,id_curso',
+                    'estudiante.nivelRelacion:id,nombre',
+                    'estudiante.cursoRelacion:id,nombre',
                     'categoria:id,nombre',
                     'registradoPor:id_user,nombre,apellido',
                 ])
