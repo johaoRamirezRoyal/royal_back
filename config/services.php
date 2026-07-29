@@ -49,4 +49,12 @@ return [
         'password' => env('HIKVISION_PASSWORD'),
         'device_type' => 'DS-K1T321MFWX-B'
     ],
+
+    'sami' => [
+        'base_url' => env('SAMI_BASE_URL', 'https://sami.royalschool.edu.co'),
+        'login_path' => env('SAMI_LOGIN_PATH', '/login'),
+        'home_path' => env('SAMI_HOME_PATH', '/inicio'),
+        'cookie_name' => env('SAMI_SESSION_COOKIE_NAME', 'PHPSESSID'),
+        'cache_ttl' => env('SAMI_SSO_CACHE_TTL_MINUTES', 120),
+    ],
 ];

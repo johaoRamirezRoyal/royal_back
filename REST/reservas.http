@@ -175,7 +175,7 @@ GET http://localhost:8000/api/reservas?id_user=3123
 GET http://localhost:8000/api/reservas?id_salon=2
 
 ### 17. LISTAR reservas por fecha
-GET http://localhost:8000/api/reservas?fecha_reserva=2026-07-22
+GET http://localhost:8000/api/reservas?fecha_reserva=2026-01-22
 
 ### 18. LISTAR reservas canceladas
 GET http://localhost:8000/api/reservas?cancelado=true

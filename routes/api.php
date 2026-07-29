@@ -148,6 +148,16 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/reservas.php';
     });
 
+    // SALONES
+    Route::prefix('salones')->group(function () {
+        require __DIR__.'/api/salones.php';
+    });
+
+    // HORAS
+    Route::prefix('horas')->group(function () {
+        require __DIR__.'/api/horas.php';
+    });
+
     // CATEGORIAS
     Route::prefix('categorias')->group(function () {
         require __DIR__.'/api/categorias.php';
