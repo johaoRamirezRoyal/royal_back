@@ -2,6 +2,7 @@
 
 namespace App\Services\Hikvisionattendance;
 
+use App\Models\Hikvision\HikvisionDispositivo;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -17,9 +18,13 @@ use Illuminate\Support\Facades\Log;
 
 class hikvisionattendanceService
 {
-    protected Client $client;
+    /** @var array<int, array{id: string, protocol: string, host: string, port: mixed}> */
+    protected array $devices;
 
-    protected string $baseUrl;
+    /** @var array<string, Client> Clients memoizados por device id ("host:port"). */
+    protected array $clients = [];
+
+    protected HandlerStack $handlerStack;
 
     protected string $username;
 
@@ -101,21 +106,183 @@ class hikvisionattendanceService
     {
         $this->username = config('services.hikvision.username');
         $this->password = config('services.hikvision.password');
-        $this->baseUrl = config('services.hikvision.protocol')
-            . '://'
-            . config('services.hikvision.host')
-            . ':'
-            . config('services.hikvision.port');
+        $this->devices = $this->resolverDispositivos();
 
-        $stack = HandlerStack::create();
-        $stack->push($this->retryMiddleware(3, 1000)); // 3 intentos
+        $this->handlerStack = HandlerStack::create();
+        $this->handlerStack->push($this->retryMiddleware(3, 1000)); // 3 intentos
+    }
 
-        $this->client = new Client([
-            'base_uri' => $this->baseUrl,
-            'auth' => [$this->username, $this->password, 'digest'], // 👈 Agregar 'digest'
-            'verify' => env('HIKVISION_VERIFY_SSL', false),
-            'timeout' => 30,
-        ]);
+    /**
+     * Resuelve la lista de terminales configurados: el dispositivo "principal"
+     * (HIKVISION_HOST/PORT/PROTOCOL, como hoy) más los adicionales declarados
+     * en HIKVISION_HOSTS (formato "Nombre@host[:port],Nombre2@host2[:port2]"
+     * — el nombre es opcional, si se omite cae al propio id "host:port"; el
+     * puerto opcional cae al HIKVISION_PORT). Si no hay adicionales, el
+     * resultado es exactamente el dispositivo único de siempre.
+     *
+     * El nombre "de fábrica" resuelto aquí es solo el fallback antes de que
+     * alguien nombre el terminal desde el frontend (devicesInfo() prioriza
+     * el nombre guardado en hikvision_dispositivos sobre este).
+     *
+     * @return array<int, array{id: string, protocol: string, host: string, port: mixed, name: string}>
+     */
+    private function resolverDispositivos(): array
+    {
+        $protocol = config('services.hikvision.protocol');
+        $puertoDefault = config('services.hikvision.port');
+
+        $lista = [$this->normalizarDispositivo(
+            $protocol,
+            config('services.hikvision.host'),
+            $puertoDefault
+        )];
+
+        foreach (explode(',', (string) config('services.hikvision.extra_hosts')) as $entrada) {
+            $entrada = trim($entrada);
+
+            if ($entrada === '') {
+                continue;
+            }
+
+            [$nombre, $entrada] = str_contains($entrada, '@')
+                ? explode('@', $entrada, 2)
+                : [null, $entrada];
+
+            [$host, $puerto] = array_pad(explode(':', trim($entrada), 2), 2, null);
+            $lista[] = $this->normalizarDispositivo($protocol, $host, $puerto ?? $puertoDefault, $nombre ? trim($nombre) : null);
+        }
+
+        return collect($lista)->unique('id')->values()->all();
+    }
+
+    private function normalizarDispositivo(string $protocol, string $host, $port, ?string $name = null): array
+    {
+        $id = "{$host}:{$port}";
+
+        return ['id' => $id, 'protocol' => $protocol, 'host' => $host, 'port' => $port, 'name' => $name ?: $id];
+    }
+
+    /**
+     * Construye (y memoiza) el Client de Guzzle para un terminal dado.
+     */
+    protected function client(string $deviceId): Client
+    {
+        if (!isset($this->clients[$deviceId])) {
+            $device = collect($this->devices)->firstWhere('id', $deviceId);
+
+            if (!$device) {
+                throw new \InvalidArgumentException("Dispositivo Hikvision desconocido: {$deviceId}");
+            }
+
+            $this->clients[$deviceId] = new Client([
+                'base_uri' => "{$device['protocol']}://{$device['host']}:{$device['port']}",
+                'auth' => [$this->username, $this->password, 'digest'],
+                'verify' => env('HIKVISION_VERIFY_SSL', false),
+                'timeout' => 30,
+                'handler' => $this->handlerStack,
+            ]);
+        }
+
+        return $this->clients[$deviceId];
+    }
+
+    protected function primaryDeviceId(): string
+    {
+        return $this->devices[0]['id'];
+    }
+
+    /**
+     * Ids de todos los terminales configurados (formato "host:port").
+     */
+    public function deviceIds(): array
+    {
+        return array_column($this->devices, 'id');
+    }
+
+    /**
+     * Info legible de cada terminal configurado (id, nombre, host, puerto),
+     * para un selector de terminal que muestre nombre en vez de solo IP:puerto.
+     * El nombre guardado desde el frontend (tabla hikvision_dispositivos) tiene
+     * prioridad sobre el de .env; si ninguno existe, cae al id ("host:puerto").
+     *
+     * @return array<int, array{id: string, name: string, host: string, port: mixed}>
+     */
+    public function devicesInfo(): array
+    {
+        $nombresGuardados = HikvisionDispositivo::whereIn('device_id', $this->deviceIds())
+            ->pluck('nombre', 'device_id');
+
+        return array_map(
+            fn ($device) => [
+                'id' => $device['id'],
+                'name' => $nombresGuardados[$device['id']] ?? $device['name'],
+                'host' => $device['host'],
+                'port' => $device['port'],
+            ],
+            $this->devices
+        );
+    }
+
+    /**
+     * Guarda/actualiza el nombre legible de un terminal ya configurado, para
+     * que el frontend pueda editarlo desde la UI en vez de depender de .env.
+     */
+    public function guardarNombreDispositivo(string $deviceId, string $nombre): array
+    {
+        if (!in_array($deviceId, $this->deviceIds(), true)) {
+            return ['error' => true, 'message' => "Dispositivo desconocido: {$deviceId}", 'data' => []];
+        }
+
+        $dispositivo = HikvisionDispositivo::updateOrCreate(
+            ['device_id' => $deviceId],
+            ['nombre' => $nombre]
+        );
+
+        return ['error' => false, 'message' => 'Nombre actualizado correctamente', 'data' => $dispositivo->toArray()];
+    }
+
+    /**
+     * Ejecuta $operacion contra TODOS los terminales configurados y agrega el
+     * resultado por dispositivo. Un empleado debe poder marcar en cualquier
+     * puerta, así que el error global solo se marca si falló en TODOS; el
+     * detalle por terminal queda expuesto en 'devices' para diagnosticar un
+     * terminal específico sin tumbar la operación completa.
+     *
+     * @param  callable(Client $client, string $deviceId): array{error: bool, message?: string, data?: mixed}  $operacion
+     */
+    private function fanOut(callable $operacion): array
+    {
+        $porDispositivo = [];
+
+        foreach ($this->devices as $device) {
+            try {
+                $porDispositivo[$device['id']] = $operacion($this->client($device['id']), $device['id']);
+            } catch (\Throwable $e) {
+                $porDispositivo[$device['id']] = ['error' => true, 'message' => $this->extraerMensajeError($e)];
+            }
+        }
+
+        $huboExito = collect($porDispositivo)->contains(fn ($r) => empty($r['error']));
+
+        return [
+            'error' => !$huboExito,
+            'message' => $huboExito ? 'Proceso completado' : 'Falló en todos los dispositivos',
+            'devices' => $porDispositivo,
+        ];
+    }
+
+    /**
+     * Extrae un mensaje de error legible de una excepción de Guzzle: el cuerpo
+     * de la respuesta del dispositivo si está disponible, o el mensaje de la
+     * excepción como último recurso.
+     */
+    private function extraerMensajeError(\Throwable $e): string
+    {
+        if (method_exists($e, 'getResponse') && $e->getResponse()) {
+            return $e->getResponse()->getBody()->getContents();
+        }
+
+        return $e->getMessage();
     }
 
     /**
@@ -212,62 +379,71 @@ class hikvisionattendanceService
     }
 
     /**
-     * Summary of testConnection
-     * @return array{data: mixed, isConnected: bool|array{data: null, isConnected: int}}
+     * Health check de conectividad hacia CADA terminal configurado (útil para
+     * diagnosticar cuál falla, no solo si "algo" falla).
+     *
+     * @return array{isConnected: bool, data: array<string, array{isConnected: bool, data: mixed}>}
      */
     public function testConnection()
     {
-        try {
-            Log::info("Probando conexión con dispositivo: $this->baseUrl");
+        $porDispositivo = [];
 
-            $response = $this->client->get('/ISAPI/System/capabilities?format=json');
+        foreach ($this->devices as $device) {
+            try {
+                Log::info("Probando conexión con dispositivo: {$device['id']}");
 
-            $body = $response->getBody()->getContents();
+                $response = $this->client($device['id'])->get('/ISAPI/System/capabilities?format=json');
+                $body = $response->getBody()->getContents();
+                $data = $this->parseXmlResponse($body);
+                $isConnected = $response->getStatusCode() === 200;
 
-            $data = $this->parseXmlResponse($body);
+                Log::info('Conexión exitosa', ['device' => $device['id'], 'status' => $response->getStatusCode()]);
 
-            $isConnected = $response->getStatusCode() === 200;
+                $porDispositivo[$device['id']] = ['isConnected' => $isConnected, 'data' => $data];
+            } catch (GuzzleException $e) {
+                Log::error('Fallo en conexión con dispositivo', [
+                    'error' => $e->getMessage(),
+                    'device' => $device['id'],
+                ]);
 
-            Log::info(
-                'Conexión exitosa',
-                [
-                    'status' => $response->getStatusCode(),
-                    'data' => $data,
-                ]
-            );
-
-            return ['isConnected' => $isConnected, 'data' => $data];
-        } catch (GuzzleException $e) {
-            Log::error('Fallo en conexión con dispositivo', [
-                'error' => $e->getMessage(),
-                'base_url' => $this->baseUrl,
-            ]);
-
-            return ['isConnected' => false, 'data' => null];
+                $porDispositivo[$device['id']] = ['isConnected' => false, 'data' => null];
+            }
         }
+
+        $conectado = collect($porDispositivo)->contains(fn ($r) => $r['isConnected']);
+
+        return ['isConnected' => $conectado, 'data' => $porDispositivo];
     }
 
     /**
-     * Obtiene la configuración de los hosts HTTP a los que el dispositivo envía notificaciones de eventos.
+     * Obtiene la configuración de los hosts HTTP a los que cada dispositivo envía notificaciones de eventos.
      */
     public function obtenerHttpHosts()
     {
-        try {
-            $response = $this->client->get('/ISAPI/Event/notification/httpHosts?format=json');
+        $porDispositivo = [];
 
-            return [
-                'error' => false,
-                'data' => $this->parseXmlResponse($response->getBody()->getContents()),
-            ];
-        } catch (GuzzleException $e) {
-            Log::error('Error al obtener httpHosts', ['error' => $e->getMessage()]);
+        foreach ($this->devices as $device) {
+            try {
+                $response = $this->client($device['id'])->get('/ISAPI/Event/notification/httpHosts?format=json');
 
-            return [
-                'error' => true,
-                'message' => 'No se pudo obtener la configuración de httpHosts',
-                'data' => null,
-            ];
+                $porDispositivo[$device['id']] = [
+                    'error' => false,
+                    'data' => $this->parseXmlResponse($response->getBody()->getContents()),
+                ];
+            } catch (GuzzleException $e) {
+                Log::error('Error al obtener httpHosts', ['error' => $e->getMessage(), 'device' => $device['id']]);
+
+                $porDispositivo[$device['id']] = ['error' => true, 'data' => null];
+            }
         }
+
+        $huboExito = collect($porDispositivo)->contains(fn ($r) => !$r['error']);
+
+        return [
+            'error' => !$huboExito,
+            'message' => $huboExito ? null : 'No se pudo obtener la configuración de httpHosts de ningún dispositivo',
+            'data' => $porDispositivo,
+        ];
     }
 
     /**
@@ -275,7 +451,7 @@ class hikvisionattendanceService
      *
      * @return array['error', 'message', 'data']
      */
-    public function getAccessEvents($startTime = null, $endTime = null, $pageSize = 100)
+    public function getAccessEvents(string $deviceId, $startTime = null, $endTime = null, $pageSize = 100)
     {
         try {
             $query = [
@@ -291,7 +467,7 @@ class hikvisionattendanceService
             }
 
             // Ruta ISAPI para eventos de acceso en dispositivos de control de acceso
-            $response = $this->client->get('/ISAPI/AccessControl/AccessEvent', [
+            $response = $this->client($deviceId)->get('/ISAPI/AccessControl/AccessEvent', [
                 'query' => $query,
                 'headers' => [
                     'Accept' => 'application/json',
@@ -328,35 +504,42 @@ class hikvisionattendanceService
             $inicio = $start_date ? date('c', strtotime($start_date)) : date('c', strtotime('-30 days'));
             $final = $end_date ? date('c', strtotime($end_date)) : date('c');
 
-            $evento = $this->getAccessEvents($inicio, $final, 500);
-
-            if ($evento['error'] || ! isset($evento['data']['AccessLogSet']['AccessLog'])) {
-                return [];
-            }
-
-            $logs = (array) $evento['data']['AccessLogSet']['AccessLog'];
-
             $asistencia = [];
+            $nombreUsuario = null;
 
-            foreach ($logs as $log) {
-                if (isset($log['EmployeeNo']) && $log['EmployeeNo'] == $id_empleado) {
-                    $asistencia[] = [
-                        'employee_id' => $log['EmployeeNo'],
-                        'name' => $log['EmployeeName'] ?? null,
-                        'timestamp' => $log['AccessTime'],
-                        'method' => $this->translateAccessMethod($log['AccessMethod'] ?? 'Desconocido'),
-                        'door' => $log['DoorName'] ?? null,
-                        'status' => $log['AccessStatus'] ?? 'Desconocido',
-                        'raw_data' => $log,
-                    ];
+            foreach ($this->devices as $device) {
+                $evento = $this->getAccessEvents($device['id'], $inicio, $final, 500);
+
+                if ($evento['error'] || ! isset($evento['data']['AccessLogSet']['AccessLog'])) {
+                    continue;
                 }
+
+                $logs = (array) $evento['data']['AccessLogSet']['AccessLog'];
+
+                foreach ($logs as $log) {
+                    if (isset($log['EmployeeNo']) && $log['EmployeeNo'] == $id_empleado) {
+                        $asistencia[] = [
+                            'employee_id' => $log['EmployeeNo'],
+                            'name' => $log['EmployeeName'] ?? null,
+                            'timestamp' => $log['AccessTime'],
+                            'method' => $this->translateAccessMethod($log['AccessMethod'] ?? 'Desconocido'),
+                            'door' => $log['DoorName'] ?? null,
+                            'status' => $log['AccessStatus'] ?? 'Desconocido',
+                            'device' => $device['id'],
+                            'raw_data' => $log,
+                        ];
+                    }
+                }
+
+                $nombreUsuario ??= $logs[0]['EmployeeName'] ?? null;
             }
 
-            $nombre_usuario = $logs[0]['EmployeeName'] ?? 'Empleado';
+            // Se unen los eventos de todos los terminales, más recientes primero.
+            usort($asistencia, fn ($a, $b) => strcmp($b['timestamp'], $a['timestamp']));
 
             return [
                 'error' => false,
-                'message' => "Asistencia obtenida del usuario: {$nombre_usuario}",
+                'message' => 'Asistencia obtenida del usuario: ' . ($nombreUsuario ?? 'Empleado'),
                 'data' => $asistencia,
             ];
         } catch (\Exception $e) {
@@ -393,85 +576,92 @@ class hikvisionattendanceService
      */
     public function registrarEmpleado(array $datos_empleado)
     {
-        try {
-            $payload = [
-                'UserInfo' => [
-                    'employeeNo' => (string) $datos_empleado['id_user'],
-                    'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
-                    'userType' => 'normal',
-                    'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
-                    'gender' => 'male',
-                    'localUIRight' => false,
-                    'doorRight' => '1',
-                    'RightPlan' => [
-                        ['doorNo' => 1, 'planTemplateNo' => '1'],
-                    ],
-                    'Valid' => [
-                        'enable' => true,
-                        // beginTime fijo (no now()): el dispositivo recalcula este campo con
-                        // su propio reloj si se le manda "now" del servidor, y el desfase de
-                        // zona horaria lo deja adelantado respecto a su hora local, provocando
-                        // que rechace al usuario como "permiso expirado".
-                        'beginTime' => '2024-01-01T00:00:00',
-                        'endTime' => '2035-12-31T23:59:59',
-                        'timeType' => 'local',
-                    ],
+        $payload = [
+            'UserInfo' => [
+                'employeeNo' => (string) $datos_empleado['id_user'],
+                'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
+                'userType' => 'normal',
+                'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
+                'gender' => 'male',
+                'localUIRight' => false,
+                'doorRight' => '1',
+                'RightPlan' => [
+                    ['doorNo' => 1, 'planTemplateNo' => '1'],
                 ],
-            ];
-
-            $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
-
-            if ($groupId !== null) {
-                $payload['UserInfo']['groupId'] = $groupId;
-            }
-
-            $response = $this->client->post(
-                '/ISAPI/AccessControl/UserInfo/Record?format=json',
-                [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                    ],
-                    'json' => $payload,
+                'Valid' => [
+                    'enable' => true,
+                    // beginTime fijo (no now()): el dispositivo recalcula este campo con
+                    // su propio reloj si se le manda "now" del servidor, y el desfase de
+                    // zona horaria lo deja adelantado respecto a su hora local, provocando
+                    // que rechace al usuario como "permiso expirado".
+                    'beginTime' => '2024-01-01T00:00:00',
+                    'endTime' => '2035-12-31T23:59:59',
+                    'timeType' => 'local',
                 ],
-            );
+            ],
+        ];
 
-            if ($response->getStatusCode() === 201 || $response->getStatusCode() === 200) {
-                // POST .../UserInfo/Record ignora el Valid.beginTime que se le manda y el
-                // equipo le pone su propio "ahora" al crear, dejando al usuario recién
-                // creado con permiso "expirado" hasta esa hora. PUT .../Modify sí respeta
-                // el Valid enviado, así que se fuerza justo después de crear.
-                $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
-                    'headers' => [
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
+        $groupId = $this->obtenerGroupIdPorPerfil((int) $datos_empleado['perfil']);
+
+        if ($groupId !== null) {
+            $payload['UserInfo']['groupId'] = $groupId;
+        }
+
+        $resultado = $this->fanOut(function (Client $client) use ($payload, $datos_empleado) {
+            try {
+                $response = $client->post(
+                    '/ISAPI/AccessControl/UserInfo/Record?format=json',
+                    [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Accept' => 'application/json',
+                        ],
+                        'json' => $payload,
                     ],
-                    'json' => $payload,
+                );
+
+                if ($response->getStatusCode() === 201 || $response->getStatusCode() === 200) {
+                    // POST .../UserInfo/Record ignora el Valid.beginTime que se le manda y el
+                    // equipo le pone su propio "ahora" al crear, dejando al usuario recién
+                    // creado con permiso "expirado" hasta esa hora. PUT .../Modify sí respeta
+                    // el Valid enviado, así que se fuerza justo después de crear.
+                    $client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Accept' => 'application/json',
+                        ],
+                        'json' => $payload,
+                    ]);
+
+                    return ['error' => false, 'message' => 'Usuario creado con exito'];
+                }
+
+                return ['error' => true, 'message' => 'Error al registrar el usuario'];
+            } catch (GuzzleException $e) {
+                // El dispositivo ya tiene a este employeeNo (típico al reintentar un
+                // registrarEmpleado que ya había tenido éxito en este terminal pero
+                // falló en otro): el objetivo real ("que esté en el dispositivo") ya
+                // se cumple, así que se trata como éxito en vez de bloquear el reintento.
+                $bodyDecoded = json_decode($this->extraerMensajeError($e), true);
+
+                if (($bodyDecoded['subStatusCode'] ?? null) === 'employeeNoAlreadyExist') {
+                    return ['error' => false, 'message' => 'Ya estaba registrado en el dispositivo'];
+                }
+
+                Log::error('Error registrando al empleado: ' . $e->getMessage(), [
+                    'payload' => $payload,
                 ]);
 
-                return [
-                    'error' => false,
-                    'id_user' => $datos_empleado['id_user'],
-                    'message' => 'Usuario creado con exito',
-                ];
+                return ['error' => true, 'message' => $this->extraerMensajeError($e)];
             }
+        });
 
-            return [
-                'error' => true,
-                'message' => 'Error al registrar el usuario',
-                'id_user' => $datos_empleado['id_user'],
-            ];
-        } catch (GuzzleException $e) {
-            Log::error('Error registrando al empleado: ' . $e->getMessage(), [
-                'payload' => $payload ?? null,
-            ]);
-
-            return [
-                'error' => true,
-                'message' => $e->getMessage(),
-                'id_user' => $datos_empleado['id_user'],
-            ];
-        }
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al registrar el usuario' : 'Usuario creado con exito',
+            'id_user' => $datos_empleado['id_user'],
+            'devices' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -479,14 +669,64 @@ class hikvisionattendanceService
      *
      * @return array{data: array, error: bool, message: string}
      */
+    /**
+     * Registra el lote en TODOS los terminales, uno tras otro (no paralelo entre
+     * terminales: es un alta administrativa por lote, no un flujo en vivo, así
+     * que sumar tiempo entre 2-5 dispositivos es aceptable). Un usuario cuenta
+     * como éxito global si se registró en al menos un terminal.
+     */
     public function registrarEmpleadosMasivo(array $usuarios, int $concurrencias = 5)
+    {
+        $porDispositivo = [];
+
+        foreach ($this->devices as $device) {
+            $porDispositivo[$device['id']] = $this->ejecutarPoolMasivo($usuarios, $this->client($device['id']), $concurrencias);
+        }
+
+        $exitosos = [];
+        $fallidos = [];
+
+        foreach ($usuarios as $usuario) {
+            $id = $usuario['id_user'];
+            $dispositivosConExito = 0;
+
+            foreach ($porDispositivo as $resultado) {
+                if (in_array($id, array_column($resultado['success'], 'id_user'))) {
+                    $dispositivosConExito++;
+                }
+            }
+
+            if ($dispositivosConExito > 0) {
+                $exitosos[] = [
+                    'id_user' => $id,
+                    'message' => "Registrado en {$dispositivosConExito}/" . count($this->devices) . ' dispositivos',
+                ];
+            } else {
+                $fallidos[] = ['id_user' => $id, 'message' => 'Falló en todos los dispositivos'];
+            }
+        }
+
+        return [
+            'error' => false,
+            'message' => 'Proceso completado',
+            'data' => ['success' => $exitosos, 'error' => $fallidos, 'porDispositivo' => $porDispositivo],
+        ];
+    }
+
+    /**
+     * Cuerpo original de registrarEmpleadosMasivo, parametrizado por Client
+     * para poder correrlo una vez por cada terminal.
+     *
+     * @return array{success: array, error: array}
+     */
+    private function ejecutarPoolMasivo(array $usuarios, Client $client, int $concurrencias): array
     {
         $result = [
             'success' => [],
             'error' => [],
         ];
 
-        $requests = function () use ($usuarios) {
+        $requests = function () use ($usuarios, $client) {
             foreach ($usuarios as $usuario) {
                 // Estructura JSON que espera Hikvision
                 $data = [
@@ -517,8 +757,8 @@ class hikvisionattendanceService
                     $data['UserInfo']['groupId'] = $groupId;
                 }
 
-                yield function () use ($data) {
-                    return $this->client->postAsync(
+                yield function () use ($data, $client) {
+                    return $client->postAsync(
                         '/ISAPI/AccessControl/UserInfo/Record?format=json', // Forzamos el formato en la URL
                         [
                             'headers' => [
@@ -532,15 +772,15 @@ class hikvisionattendanceService
             }
         };
 
-        $pool = new Pool($this->client, $requests(), [
+        $pool = new Pool($client, $requests(), [
             'concurrency' => $concurrencias,
 
-            'fulfilled' => function ($response, $index) use (&$result, $usuarios) {
+            'fulfilled' => function ($response, $index) use (&$result, $usuarios, $client) {
                 $usuario = $usuarios[$index];
 
                 // Mismo motivo que en registrarEmpleado: el POST de creación ignora el
                 // Valid.beginTime enviado, así que se fuerza con un Modify justo después.
-                $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                $client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
                     'headers' => [
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
@@ -605,11 +845,7 @@ class hikvisionattendanceService
         $promise = $pool->promise();
         $promise->wait();
 
-        return [
-            'error' => false,
-            'message' => 'Proceso completado',
-            'data' => $result,
-        ];
+        return $result;
     }
 
     /**
@@ -618,56 +854,113 @@ class hikvisionattendanceService
      * @param int $pagina
      * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
+    /**
+     * Une los empleados registrados de TODOS los terminales, deduplicados por
+     * employeeNo (un mismo empleado suele existir en varios terminales por el
+     * modelo fan-out).
+     */
     public function obtenerEmpleadosRegistrados(int $pageSize = 30, int $pagina = 1)
     {
-        try {
-            $todosLosEmpleados = [];
-            $pageSize = 30;
-            $offset = 0;
+        $todosLosEmpleados = [];
+        $vistos = [];
 
-            do {
-                $response = $this->client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
-                    'json' => [
-                        'UserInfoSearchCond' => [
-                            'searchID' => '1',
-                            'searchResultPosition' => $offset,
-                            'maxResults' => $pageSize,
-                        ],
-                    ],
-                ]);
+        foreach ($this->devices as $device) {
+            try {
+                $empleadosDispositivo = $this->obtenerEmpleadosRegistradosDeDispositivo($device['id']);
+            } catch (\Exception $e) {
+                Log::error('Error obteniendo empleados de un dispositivo: ' . $e->getMessage(), ['device' => $device['id']]);
 
-                $data = json_decode($response->getBody()->getContents(), true);
+                continue;
+            }
 
-                $usuarios = $data['UserInfoSearch']['UserInfo'] ?? [];
-                $totalMatch = $data['UserInfoSearch']['totalMatches'] ?? 0;
+            foreach ($empleadosDispositivo as $empleado) {
+                $employeeNo = $empleado['employeeNo'] ?? null;
 
-                $todosLosEmpleados = array_merge($todosLosEmpleados, $usuarios);
+                if ($employeeNo !== null && isset($vistos[$employeeNo])) {
+                    continue;
+                }
 
-                $offset += $pageSize;
-            } while ($offset < $totalMatch);
-
-            foreach ($todosLosEmpleados as &$empleado) {
                 if (!empty($empleado['faceURL'])) {
-                    $empleado['faceURL'] = $this->proxyImagenUrl($empleado['faceURL']);
+                    $empleado['faceURL'] = $this->proxyImagenUrl($empleado['faceURL'], $device['id']);
                 }
 
                 $empleado['contrasenaVigente'] = $this->tieneContrasenaVigente($empleado);
-            }
-            unset($empleado);
 
+                $todosLosEmpleados[] = $empleado;
+
+                if ($employeeNo !== null) {
+                    $vistos[$employeeNo] = true;
+                }
+            }
+        }
+
+        return [
+            'error' => false,
+            'message' => 'Usuarios registrados obtenidos',
+            'data' => $todosLosEmpleados,
+        ];
+    }
+
+    /**
+     * Igual que obtenerEmpleadosRegistrados() pero de UN solo terminal, sin
+     * fan-out ni dedupe (usado por el comando hikvision:wipe-all para previsualizar
+     * antes de borrar un dispositivo específico).
+     *
+     * @return array{error: bool, message: string, data: array}
+     */
+    public function listarEmpleadosDeDispositivo(string $deviceId): array
+    {
+        if (!in_array($deviceId, $this->deviceIds(), true)) {
+            return ['error' => true, 'message' => "Dispositivo desconocido: {$deviceId}", 'data' => []];
+        }
+
+        try {
             return [
                 'error' => false,
-                'message' => "Usuarios registrados obtenidos",
-                'data' => $todosLosEmpleados
+                'message' => 'Usuarios registrados obtenidos',
+                'data' => $this->obtenerEmpleadosRegistradosDeDispositivo($deviceId),
             ];
         } catch (\Exception $e) {
-            Log::error('Error obteniendo todos los empleados: ' . $e->getMessage());
-            return [
-                'error' => true,
-                'message' => "Error obteniendo a los usuarios registrados en hikvision",
-                'data' => null,
-            ];
+            Log::error('Error obteniendo empleados del dispositivo: ' . $e->getMessage(), ['device' => $deviceId]);
+
+            return ['error' => true, 'message' => 'Error obteniendo a los usuarios registrados en hikvision', 'data' => []];
         }
+    }
+
+    /**
+     * Trae el listado paginado completo de empleados de UN terminal específico
+     * (sin proxy de imagen ni dedupe: eso lo resuelve el llamador según necesite
+     * fan-out o un único dispositivo, como eliminarTodosLosUsuariosDelDispositivo).
+     */
+    private function obtenerEmpleadosRegistradosDeDispositivo(string $deviceId): array
+    {
+        $client = $this->client($deviceId);
+        $todosLosEmpleados = [];
+        $pageSize = 30;
+        $offset = 0;
+
+        do {
+            $response = $client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+                'json' => [
+                    'UserInfoSearchCond' => [
+                        'searchID' => '1',
+                        'searchResultPosition' => $offset,
+                        'maxResults' => $pageSize,
+                    ],
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            $usuarios = $data['UserInfoSearch']['UserInfo'] ?? [];
+            $totalMatch = $data['UserInfoSearch']['totalMatches'] ?? 0;
+
+            $todosLosEmpleados = array_merge($todosLosEmpleados, $usuarios);
+
+            $offset += $pageSize;
+        } while ($offset < $totalMatch);
+
+        return $todosLosEmpleados;
     }
 
     /**
@@ -710,12 +1003,15 @@ class hikvisionattendanceService
      * para que el frontend nunca necesite conocer la IP ni las credenciales del dispositivo.
      *
      * @param string $path Ruta relativa dentro del dispositivo (p. ej. "/LOCALS/pic/enrlFace/0/0000000001.jpg@WEB000000000002")
+     * @param string|null $deviceId Terminal de origen de la imagen; por defecto el principal (cubre URLs viejas cacheadas en el navegador).
      * @return array{error: bool, message: string, data: array{contenido: string, contentType: string}|null}
      */
-    public function obtenerImagenEmpleado(string $path): array
+    public function obtenerImagenEmpleado(string $path, ?string $deviceId = null): array
     {
+        $deviceId ??= $this->primaryDeviceId();
+
         try {
-            $rutaRelativa = $this->extraerRutaRelativa($path);
+            $rutaRelativa = $this->extraerRutaRelativa($path, $deviceId);
 
             if (str_contains($rutaRelativa, '://')) {
                 throw new \InvalidArgumentException('Ruta de imagen inválida');
@@ -725,7 +1021,7 @@ class hikvisionattendanceService
                 $rutaRelativa = '/' . $rutaRelativa;
             }
 
-            $response = $this->client->get($rutaRelativa);
+            $response = $this->client($deviceId)->get($rutaRelativa);
 
             return [
                 'error' => false,
@@ -747,26 +1043,47 @@ class hikvisionattendanceService
 
     /**
      * Convierte la URL absoluta del dispositivo (faceURL) en una ruta proxy propia
-     * del backend, para que el frontend nunca reciba la IP ni las credenciales del dispositivo.
+     * del backend (con el device de origen incluido), para que el frontend nunca
+     * reciba la IP ni las credenciales del dispositivo.
      */
-    private function proxyImagenUrl(string $faceUrl): string
+    private function proxyImagenUrl(string $faceUrl, string $deviceId): string
     {
-        $rutaRelativa = $this->extraerRutaRelativa($faceUrl);
+        $rutaRelativa = $this->extraerRutaRelativa($faceUrl, $deviceId);
 
-        return '/api/hikvision/image?path=' . urlencode($rutaRelativa);
+        return '/api/hikvision/image?path=' . urlencode($rutaRelativa) . '&deviceId=' . urlencode($deviceId);
     }
 
     /**
-     * Elimina el protocolo + host del dispositivo de una URL absoluta, dejando
-     * solo la ruta relativa que se le puede pasar a $this->client (que ya trae el host configurado).
+     * Elimina el protocolo + host del terminal indicado de una URL absoluta,
+     * dejando solo la ruta relativa que se le puede pasar a $this->client() (que
+     * ya trae el host configurado).
+     *
+     * Se compara por host vía parse_url() en vez de un prefijo de string exacto:
+     * el propio dispositivo suele devolver su faceURL sin el puerto por defecto
+     * (ej. "http://20.20.20.16/..." cuando el puerto es 80), mientras que
+     * $baseUrl siempre lo incluye explícito ("http://20.20.20.16:80") — un
+     * str_starts_with exacto nunca matchea en ese caso y la URL queda intacta
+     * (con "://" adentro), lo que hacía fallar obtenerImagenEmpleado con
+     * "Ruta de imagen inválida" en el segundo paso (proxy → dispositivo).
      */
-    private function extraerRutaRelativa(string $path): string
+    private function extraerRutaRelativa(string $path, string $deviceId): string
     {
-        if (str_starts_with($path, $this->baseUrl)) {
-            return substr($path, strlen($this->baseUrl));
+        $device = collect($this->devices)->firstWhere('id', $deviceId);
+        if (!$device) {
+            return $path;
         }
 
-        return $path;
+        $partes = parse_url($path);
+        if (!isset($partes['host']) || $partes['host'] !== $device['host']) {
+            return $path;
+        }
+
+        $relativa = $partes['path'] ?? '/';
+        if (isset($partes['query'])) {
+            $relativa .= '?' . $partes['query'];
+        }
+
+        return $relativa;
     }
 
     /**
@@ -774,10 +1091,12 @@ class hikvisionattendanceService
      * @param mixed $id_usuario
      * @return array{data: array<int|string>, error: bool, message: string|array{data: array{data: null, status: int}, error: bool, message: string}}
      */
-    public function obtenerUnEmpleadoEspecifico($id_usuario)
+    public function obtenerUnEmpleadoEspecifico($id_usuario, ?string $deviceId = null)
     {
+        $deviceId ??= $this->primaryDeviceId();
+
         try {
-            $response = $this->client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+            $response = $this->client($deviceId)->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
                 'json' => [
                     'UserInfoSearchCond' => [
                         'searchID' => '1',
@@ -834,38 +1153,60 @@ class hikvisionattendanceService
                 ];
             }, $usuarios);
 
-            $response = $this->client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
-                'json' => [
-                    'UserInfoSearchCond' => [
-                        'searchID' => (string) now()->timestamp,
-                        'searchResultPosition' => 0,
-                        'maxResults' => count($usuarios), // importante
-                        'EmployeeNoList' => $employeeList,
-                    ],
-                ],
-            ]);
-
-            $body = $response->getBody()->getContents();
-            $data = json_decode($body, true);
-
             $groupIdPorEmployeeNo = [];
             foreach ($usuarios as $usuario) {
                 $groupIdPorEmployeeNo[(string) $usuario['id_user']] = $this->obtenerGroupIdPorPerfil((int) $usuario['perfil']);
             }
 
-            if (isset($data['UserInfoSearch']['UserInfo']) && is_array($data['UserInfoSearch']['UserInfo'])) {
-                foreach ($data['UserInfoSearch']['UserInfo'] as &$infoUsuario) {
-                    $infoUsuario['groupId'] = $groupIdPorEmployeeNo[(string) ($infoUsuario['employeeNo'] ?? '')] ?? null;
+            // Se busca en TODOS los terminales y se deduplica por employeeNo (un
+            // mismo empleado suele existir en varios por el modelo fan-out).
+            $vistos = [];
+            $usuariosEncontrados = [];
+
+            foreach ($this->devices as $device) {
+                try {
+                    $response = $this->client($device['id'])->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+                        'json' => [
+                            'UserInfoSearchCond' => [
+                                'searchID' => (string) now()->timestamp,
+                                'searchResultPosition' => 0,
+                                'maxResults' => count($usuarios), // importante
+                                'EmployeeNoList' => $employeeList,
+                            ],
+                        ],
+                    ]);
+
+                    $data = json_decode($response->getBody()->getContents(), true);
+
+                    foreach ($data['UserInfoSearch']['UserInfo'] ?? [] as $infoUsuario) {
+                        $employeeNo = (string) ($infoUsuario['employeeNo'] ?? '');
+
+                        if ($employeeNo !== '' && isset($vistos[$employeeNo])) {
+                            continue;
+                        }
+
+                        $infoUsuario['groupId'] = $groupIdPorEmployeeNo[$employeeNo] ?? null;
+                        $usuariosEncontrados[] = $infoUsuario;
+
+                        if ($employeeNo !== '') {
+                            $vistos[$employeeNo] = true;
+                        }
+                    }
+                } catch (GuzzleException $e) {
+                    Log::error('Error al obtener empleados por lista', [
+                        'error' => $e->getMessage(),
+                        'device' => $device['id'],
+                        'usuarios' => $usuarios,
+                    ]);
                 }
-                unset($infoUsuario);
             }
 
             return [
                 'error' => false,
                 'message' => 'Información obtenida correctamente',
-                'data' => $data,
+                'data' => ['UserInfoSearch' => ['UserInfo' => $usuariosEncontrados]],
             ];
-        } catch (GuzzleException $e) {
+        } catch (\Throwable $e) {
             Log::error('Error al obtener empleados por lista', [
                 'error' => $e->getMessage(),
                 'usuarios' => $usuarios
@@ -907,8 +1248,8 @@ class hikvisionattendanceService
             ],
         ];
 
-        try{
-            $response = $this->client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
+        $resultado = $this->fanOut(function (Client $client) use ($body) {
+            $response = $client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
                 'headers' => [
                     'Content-Type' => 'application/json',
                     'Accept'       => 'application/json',
@@ -916,26 +1257,18 @@ class hikvisionattendanceService
                 'json' => $body
             ]);
 
-            return [
-                'error' => false,
-                'message' => "Usuarios borrados",
-                'data' => json_decode($response->getBody()->getContents(), true),
-            ];
-        }catch(\Exception $e){
-            $errorMsg = $e->getMessage();
+            return ['error' => false, 'message' => 'OK', 'data' => json_decode($response->getBody()->getContents(), true)];
+        });
 
-            // Si el error es 400, intentemos ver qué dijo el equipo exactamente
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                $errorMsg = $e->getResponse()->getBody()->getContents();
-            }
-
-            Log::error("Error eliminando en Hikvision: " . $errorMsg);
-
-            return [
-                'error' => true,
-                'message' => "Error al borrar: " . $errorMsg
-            ];
+        if ($resultado['error']) {
+            Log::error('Error eliminando en Hikvision', ['devices' => $resultado['devices']]);
         }
+
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al borrar' : 'Usuarios borrados',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -944,26 +1277,37 @@ class hikvisionattendanceService
      * manuales/admin que nunca pasaron por esta app. Acción destructiva e irreversible,
      * pensada para limpiar registros erróneos — no para uso recurrente desde la UI.
      */
-    public function eliminarTodosLosUsuariosDelDispositivo(): array
+    /**
+     * Requiere $deviceId explícito a propósito: a diferencia del resto de
+     * operaciones de escritura (fan-out a todos los terminales), un wipe-all
+     * NUNCA debe hacerse implícitamente en todos los dispositivos — sería
+     * demasiado fácil vaciar varias puertas por error.
+     */
+    public function eliminarTodosLosUsuariosDelDispositivo(string $deviceId): array
     {
-        $listado = $this->obtenerEmpleadosRegistrados();
-
-        if ($listado['error']) {
-            return $listado;
+        if (!in_array($deviceId, $this->deviceIds(), true)) {
+            return ['error' => true, 'message' => "Dispositivo desconocido: {$deviceId}"];
         }
 
-        $empleados = $listado['data'];
+        try {
+            $empleados = $this->obtenerEmpleadosRegistradosDeDispositivo($deviceId);
+        } catch (\Exception $e) {
+            Log::error('Error listando empleados del dispositivo: ' . $e->getMessage(), ['device' => $deviceId]);
+
+            return ['error' => true, 'message' => 'No se pudo listar los empleados del dispositivo'];
+        }
 
         if (empty($empleados)) {
             return ['error' => false, 'message' => 'El dispositivo no tiene usuarios registrados', 'data' => []];
         }
 
         $employeeNos = array_map(fn ($empleado) => (string) $empleado['employeeNo'], $empleados);
+        $client = $this->client($deviceId);
 
         try {
             // El dispositivo limita el tamaño del lote de borrado, igual que en la búsqueda paginada.
             foreach (array_chunk($employeeNos, 30) as $lote) {
-                $this->client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
+                $client->put('/ISAPI/AccessControl/UserInfo/Delete?format=json', [
                     'headers' => [
                         'Content-Type' => 'application/json',
                         'Accept'       => 'application/json',
@@ -983,13 +1327,9 @@ class hikvisionattendanceService
                 'data' => ['employeeNos' => $employeeNos],
             ];
         } catch (\Exception $e) {
-            $errorMsg = $e->getMessage();
+            $errorMsg = $this->extraerMensajeError($e);
 
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                $errorMsg = $e->getResponse()->getBody()->getContents();
-            }
-
-            Log::error('Error eliminando TODOS los usuarios en Hikvision: '.$errorMsg);
+            Log::error('Error eliminando TODOS los usuarios en Hikvision: '.$errorMsg, ['device' => $deviceId]);
 
             return [
                 'error' => true,
@@ -1005,60 +1345,57 @@ class hikvisionattendanceService
      * @return array{data: array, error: bool, message: string|array{data: mixed, error: bool, message: string}}
      */
     public function desactivarUsuario(array $usuario, int $estado){
-        try{
-            $enable = ($estado == 1) ? true : false;
-            $message = ($estado == 1) ? "Usuario Activado" : "Usuario Desactivado";
+        $enable = ($estado == 1) ? true : false;
+        $message = ($estado == 1) ? "Usuario Activado" : "Usuario Desactivado";
 
-            if(!isset($usuario['id_user'])){
-                return [
-                    'error' => true,
-                    'message' => "El usuario debe contener información, mínimo el id_user",
-                    'data' => [],
-                ];
-            }
-
-            $body = [
-                'UserInfo' => [
-                    'employeeNo' => (string) $usuario['id_user'],
-                    'name' => substr($usuario['nombre'], 0, 30),
-                    'userType' => 'normal',
-                    'Valid' => [
-                        'enable' => $enable, // Activamos/desactivamos el acceso
-                        // beginTime fijo (no now()): el dispositivo recalcula este campo con
-                        // su propio reloj si se le manda "now" del servidor, y el desfase de
-                        // zona horaria lo deja adelantado respecto a su hora local, provocando
-                        // que rechace al usuario como "permiso expirado" justo al reactivarlo.
-                        'beginTime' => '2024-01-01T00:00:00',
-                        'endTime' => '2035-12-31T23:59:59', // Fecha lejana
-                        'timeType' => 'local',
-                    ],
-                ],
+        if(!isset($usuario['id_user'])){
+            return [
+                'error' => true,
+                'message' => "El usuario debe contener información, mínimo el id_user",
+                'data' => [],
             ];
+        }
 
+        $body = [
+            'UserInfo' => [
+                'employeeNo' => (string) $usuario['id_user'],
+                'name' => substr($usuario['nombre'], 0, 30),
+                'userType' => 'normal',
+                'Valid' => [
+                    'enable' => $enable, // Activamos/desactivamos el acceso
+                    // beginTime fijo (no now()): el dispositivo recalcula este campo con
+                    // su propio reloj si se le manda "now" del servidor, y el desfase de
+                    // zona horaria lo deja adelantado respecto a su hora local, provocando
+                    // que rechace al usuario como "permiso expirado" justo al reactivarlo.
+                    'beginTime' => '2024-01-01T00:00:00',
+                    'endTime' => '2035-12-31T23:59:59', // Fecha lejana
+                    'timeType' => 'local',
+                ],
+            ],
+        ];
+
+        $resultado = $this->fanOut(function (Client $client) use ($body) {
             // CAMBIO: Endpoint /Modify y método PUT
-            $response = $this->client->put("/ISAPI/AccessControl/UserInfo/Modify?format=json", [
+            $response = $client->put("/ISAPI/AccessControl/UserInfo/Modify?format=json", [
                 'headers' => [
                     'Content-Type' => 'application/json',
                     'Accept'       => 'application/json',
                 ],
                 'json' => $body,
             ]);
-    
-            $data = json_decode($response->getBody()->getContents());
-    
-            return [
-                'error' => false,
-                'message' => $message,
-                'data' => $data,
-            ];
-        }catch(\Exception $e){
-            Log::error("Error al desactivar el usuario: " . $e->getMessage());
-            return[
-                'error' => true,
-                'message' => "Error desactivando al usuario",
-                'data' => [],
-            ];
+
+            return ['error' => false, 'message' => 'OK', 'data' => json_decode($response->getBody()->getContents())];
+        });
+
+        if ($resultado['error']) {
+            Log::error('Error al desactivar el usuario', ['devices' => $resultado['devices']]);
         }
+
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error desactivando al usuario' : $message,
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -1107,33 +1444,39 @@ class hikvisionattendanceService
                 'UserInfo' => $payload_user
             ];
 
-            $response = $this->client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept'       => 'application/json',
-                ],
-                'json' => $body,
-            ]);
+            $resultado = $this->fanOut(function (Client $client) use ($body) {
+                try {
+                    $response = $client->put('/ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                        'headers' => [
+                            'Content-Type' => 'application/json',
+                            'Accept'       => 'application/json',
+                        ],
+                        'json' => $body,
+                    ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                    return ['error' => false, 'message' => 'OK', 'data' => json_decode($response->getBody()->getContents(), true)];
+                } catch (\Exception $e) {
+                    $errorMsg = $this->extraerMensajeError($e);
+                    Log::error("Error actualizando usuario en Hikvision: " . $errorMsg);
+
+                    return ['error' => true, 'message' => $errorMsg, 'data' => null];
+                }
+            });
 
             return [
-                'error' => false,
-                'message' => 'Información del usuario actualizada correctamente',
-                'data' => $data,
+                'error' => $resultado['error'],
+                'message' => $resultado['error']
+                    ? 'No se pudo actualizar la información del usuario'
+                    : 'Información del usuario actualizada correctamente',
+                'data' => $resultado['devices'],
             ];
         } catch (\Exception $e) {
-            $errorMsg = $e->getMessage();
-            if (method_exists($e, 'getResponse') && $e->getResponse()) {
-                $errorMsg = $e->getResponse()->getBody()->getContents();
-            }
-
-            Log::error("Error actualizando usuario en Hikvision: " . $errorMsg);
+            Log::error('Error actualizando usuario en Hikvision: ' . $e->getMessage());
 
             return [
                 'error' => true,
-                'message' => "No se pudo actualizar la información del usuario",
-                'data' => $errorMsg,
+                'message' => 'No se pudo actualizar la información del usuario',
+                'data' => null,
             ];
         }
     }
@@ -1148,7 +1491,7 @@ class hikvisionattendanceService
      */
     public function registrarContrasenaEmpleado(string $employeeNo, ?string $documento): array
     {
-        if ($this->obtenerInfoUsuarioDispositivo($employeeNo) === null) {
+        if ($this->obtenerInfoUsuarioDispositivo($employeeNo, $this->primaryDeviceId()) === null) {
             return [
                 'error' => true,
                 'message' => 'El empleado no está registrado en el dispositivo',
@@ -1193,9 +1536,11 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    public function registrarHuellaEmpleado(string $employeeNo, int $fingerPrintID = 1): array
+    public function registrarHuellaEmpleado(string $employeeNo, int $fingerPrintID = 1, ?string $deviceId = null): array
     {
-        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+        $deviceId ??= $this->primaryDeviceId();
+
+        if (!$this->empleadoExisteEnDispositivo($employeeNo, $deviceId)) {
             return [
                 'error' => true,
                 'message' => 'El empleado no está registrado en el dispositivo',
@@ -1203,7 +1548,7 @@ class hikvisionattendanceService
             ];
         }
 
-        $captura = $this->capturarHuella($fingerPrintID);
+        $captura = $this->capturarHuella($deviceId, $fingerPrintID);
 
         if ($captura['error']) {
             return $captura;
@@ -1212,19 +1557,19 @@ class hikvisionattendanceService
         return $this->vincularHuellaEmpleado($employeeNo, $fingerPrintID, $captura['data']['fingerData']);
     }
 
-    private function empleadoExisteEnDispositivo(string $employeeNo): bool
+    private function empleadoExisteEnDispositivo(string $employeeNo, string $deviceId): bool
     {
-        return $this->obtenerInfoUsuarioDispositivo($employeeNo) !== null;
+        return $this->obtenerInfoUsuarioDispositivo($employeeNo, $deviceId) !== null;
     }
 
     /**
-     * Obtiene el UserInfo del empleado tal como lo reporta el dispositivo (incluye
-     * campos como 'password' que no se exponen a través de los demás métodos públicos),
-     * o null si el empleado no existe en el dispositivo.
+     * Obtiene el UserInfo del empleado tal como lo reporta el dispositivo indicado
+     * (incluye campos como 'password' que no se exponen a través de los demás
+     * métodos públicos), o null si el empleado no existe en ese dispositivo.
      */
-    private function obtenerInfoUsuarioDispositivo(string $employeeNo): ?object
+    private function obtenerInfoUsuarioDispositivo(string $employeeNo, string $deviceId): ?object
     {
-        $resultado = $this->obtenerUnEmpleadoEspecifico($employeeNo);
+        $resultado = $this->obtenerUnEmpleadoEspecifico($employeeNo, $deviceId);
 
         if ($resultado['error']) {
             return null;
@@ -1246,7 +1591,7 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    private function capturarHuella(int $fingerNo): array
+    private function capturarHuella(string $deviceId, int $fingerNo): array
     {
         try {
             // Este submódulo del dispositivo ignora "?format=json" y solo acepta/devuelve XML,
@@ -1255,7 +1600,7 @@ class hikvisionattendanceService
                 . $fingerNo
                 . '</fingerNo></CaptureFingerPrintCond>';
 
-            $response = $this->client->post('/ISAPI/AccessControl/CaptureFingerPrint', [
+            $response = $this->client($deviceId)->post('/ISAPI/AccessControl/CaptureFingerPrint', [
                 'headers' => [
                     'Content-Type' => 'application/xml',
                 ],
@@ -1308,46 +1653,51 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
+    /**
+     * Vincula la huella capturada en TODOS los terminales (el template es el
+     * mismo hardware/modelo en todos, así que un mismo fingerData es válido en
+     * cualquiera), para que el empleado pueda marcar en cualquier puerta.
+     */
     private function vincularHuellaEmpleado(string $employeeNo, int $fingerPrintID, string $fingerData): array
     {
-        try {
-            $response = $this->client->post('/ISAPI/AccessControl/FingerPrintDownload?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept'       => 'application/json',
-                ],
-                'json' => [
-                    'FingerPrintCfg' => [
-                        'employeeNo'       => $employeeNo,
-                        'fingerPrintID'    => $fingerPrintID,
-                        'fingerType'       => 'normalFP',
-                        'fingerData'       => $fingerData,
-                        'enableCardReader' => [1],
+        $resultado = $this->fanOut(function (Client $client) use ($employeeNo, $fingerPrintID, $fingerData) {
+            try {
+                $response = $client->post('/ISAPI/AccessControl/FingerPrintDownload?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept'       => 'application/json',
                     ],
-                ],
-            ]);
+                    'json' => [
+                        'FingerPrintCfg' => [
+                            'employeeNo'       => $employeeNo,
+                            'fingerPrintID'    => $fingerPrintID,
+                            'fingerType'       => 'normalFP',
+                            'fingerData'       => $fingerData,
+                            'enableCardReader' => [1],
+                        ],
+                    ],
+                ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Huella vinculada a empleado', ['employeeNo' => $employeeNo, 'fingerPrintID' => $fingerPrintID, 'data' => $data]);
+                Log::info('Huella vinculada a empleado', ['employeeNo' => $employeeNo, 'fingerPrintID' => $fingerPrintID, 'data' => $data]);
 
-            return [
-                'error' => false,
-                'message' => 'Huella registrada correctamente',
-                'data' => $data ?? [],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error vinculando huella en Hikvision: ' . $e->getMessage(), [
-                'employeeNo' => $employeeNo,
-                'fingerPrintID' => $fingerPrintID,
-            ]);
+                return ['error' => false, 'message' => 'Huella registrada correctamente', 'data' => $data ?? []];
+            } catch (\Exception $e) {
+                Log::error('Error vinculando huella en Hikvision: ' . $e->getMessage(), [
+                    'employeeNo' => $employeeNo,
+                    'fingerPrintID' => $fingerPrintID,
+                ]);
 
-            return [
-                'error' => true,
-                'message' => $this->traducirErrorHuella($e),
-                'data' => [],
-            ];
-        }
+                return ['error' => true, 'message' => $this->traducirErrorHuella($e), 'data' => []];
+            }
+        });
+
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al registrar la huella en el dispositivo' : 'Huella registrada correctamente',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -1397,46 +1747,42 @@ class hikvisionattendanceService
      */
     public function eliminarTodasLasHuellasEmpleado(string $employeeNo): array
     {
-        try {
-            $response = $this->client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept'       => 'application/json',
-                ],
-                'json' => [
-                    'FingerPrintDelete' => [
-                        'mode' => 'byEmployeeNo',
-                        'EmployeeNoDetail' => [
-                            'employeeNo' => $employeeNo,
+        $resultado = $this->fanOut(function (Client $client) use ($employeeNo) {
+            try {
+                $response = $client->put('/ISAPI/AccessControl/FingerPrint/Delete?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept'       => 'application/json',
+                    ],
+                    'json' => [
+                        'FingerPrintDelete' => [
+                            'mode' => 'byEmployeeNo',
+                            'EmployeeNoDetail' => [
+                                'employeeNo' => $employeeNo,
+                            ],
                         ],
                     ],
-                ],
-            ]);
+                ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Huellas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
+                Log::info('Huellas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
 
-            return [
-                'error' => false,
-                'message' => 'Huellas eliminadas correctamente',
-                'data' => $data ?? [],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error eliminando huellas en Hikvision: ' . $e->getMessage(), [
-                'employeeNo' => $employeeNo,
-            ]);
+                return ['error' => false, 'message' => 'Huellas eliminadas correctamente', 'data' => $data ?? []];
+            } catch (\Exception $e) {
+                Log::error('Error eliminando huellas en Hikvision: ' . $e->getMessage(), [
+                    'employeeNo' => $employeeNo,
+                ]);
 
-            $body = (method_exists($e, 'getResponse') && $e->getResponse())
-                ? $e->getResponse()->getBody()->getContents()
-                : null;
+                return ['error' => true, 'message' => $this->extraerMensajeError($e), 'data' => []];
+            }
+        });
 
-            return [
-                'error' => true,
-                'message' => $body ?? 'Error al eliminar las huellas del dispositivo',
-                'data' => [],
-            ];
-        }
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al eliminar las huellas del dispositivo' : 'Huellas eliminadas correctamente',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -1446,9 +1792,11 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    public function registrarTarjetaEmpleadoConCaptura(string $employeeNo, string $cardType = 'normalCard'): array
+    public function registrarTarjetaEmpleadoConCaptura(string $employeeNo, string $cardType = 'normalCard', ?string $deviceId = null): array
     {
-        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+        $deviceId ??= $this->primaryDeviceId();
+
+        if (!$this->empleadoExisteEnDispositivo($employeeNo, $deviceId)) {
             return [
                 'error' => true,
                 'message' => 'El empleado no está registrado en el dispositivo',
@@ -1456,7 +1804,7 @@ class hikvisionattendanceService
             ];
         }
 
-        $captura = $this->capturarTarjeta();
+        $captura = $this->capturarTarjeta($deviceId);
 
         if ($captura['error']) {
             return $captura;
@@ -1474,10 +1822,10 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    private function capturarTarjeta(): array
+    private function capturarTarjeta(string $deviceId): array
     {
         try {
-            $response = $this->client->get('/ISAPI/AccessControl/CaptureCardInfo?format=json', [
+            $response = $this->client($deviceId)->get('/ISAPI/AccessControl/CaptureCardInfo?format=json', [
                 'timeout' => 25,
             ]);
 
@@ -1554,9 +1902,15 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
+    /**
+     * Vincula la tarjeta en TODOS los terminales, para que el empleado pueda
+     * marcar en cualquier puerta. El chequeo previo de existencia se hace solo
+     * contra el dispositivo principal (sanity check rápido); si el empleado no
+     * llegó a existir en algún otro terminal, ese fallo queda expuesto en 'devices'.
+     */
     public function registrarTarjetaEmpleado(string $employeeNo, string $cardNo, string $cardType = 'normalCard'): array
     {
-        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+        if (!$this->empleadoExisteEnDispositivo($employeeNo, $this->primaryDeviceId())) {
             return [
                 'error' => true,
                 'message' => 'El empleado no está registrado en el dispositivo',
@@ -1564,42 +1918,52 @@ class hikvisionattendanceService
             ];
         }
 
-        try {
-            $response = $this->client->post('/ISAPI/AccessControl/CardInfo/Record?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-                'json' => [
-                    'CardInfo' => [
-                        'employeeNo' => $employeeNo,
-                        'cardNo' => $cardNo,
-                        'cardType' => $cardType,
+        $resultado = $this->fanOut(function (Client $client) use ($employeeNo, $cardNo, $cardType) {
+            try {
+                $response = $client->post('/ISAPI/AccessControl/CardInfo/Record?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
                     ],
-                ],
-            ]);
+                    'json' => [
+                        'CardInfo' => [
+                            'employeeNo' => $employeeNo,
+                            'cardNo' => $cardNo,
+                            'cardType' => $cardType,
+                        ],
+                    ],
+                ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Tarjeta registrada a empleado', ['employeeNo' => $employeeNo, 'cardNo' => $cardNo, 'data' => $data]);
+                Log::info('Tarjeta registrada a empleado', ['employeeNo' => $employeeNo, 'cardNo' => $cardNo, 'data' => $data]);
 
-            return [
-                'error' => false,
-                'message' => 'Tarjeta registrada correctamente',
-                'data' => $data ?? [],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error registrando tarjeta en Hikvision: ' . $e->getMessage(), [
-                'employeeNo' => $employeeNo,
-                'cardNo' => $cardNo,
-            ]);
+                return ['error' => false, 'message' => 'Tarjeta registrada correctamente', 'data' => $data ?? []];
+            } catch (\Exception $e) {
+                // El dispositivo ya tiene esta tarjeta vinculada (típico al reintentar
+                // un registro que ya había tenido éxito en este terminal pero falló en
+                // otro): el objetivo real ("que la tarjeta quede en el dispositivo") ya
+                // se cumple, así que se trata como éxito en vez de bloquear el reintento.
+                $bodyDecoded = json_decode($this->extraerMensajeError($e), true);
 
-            return [
-                'error' => true,
-                'message' => $this->traducirErrorTarjeta($e),
-                'data' => [],
-            ];
-        }
+                if (in_array($bodyDecoded['subStatusCode'] ?? null, ['cardNoAlreadyExist', 'cardNoExist'], true)) {
+                    return ['error' => false, 'message' => 'La tarjeta ya estaba registrada en el dispositivo'];
+                }
+
+                Log::error('Error registrando tarjeta en Hikvision: ' . $e->getMessage(), [
+                    'employeeNo' => $employeeNo,
+                    'cardNo' => $cardNo,
+                ]);
+
+                return ['error' => true, 'message' => $this->traducirErrorTarjeta($e), 'data' => []];
+            }
+        });
+
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al registrar la tarjeta en el dispositivo' : 'Tarjeta registrada correctamente',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -1609,46 +1973,42 @@ class hikvisionattendanceService
      */
     public function eliminarTarjetaEmpleado(string $employeeNo): array
     {
-        try {
-            $response = $this->client->put('/ISAPI/AccessControl/CardInfo/Delete?format=json', [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-                'json' => [
-                    'CardInfoDelCond' => [
-                        'mode' => 'byEmployeeNo',
-                        'EmployeeNoList' => [
-                            ['employeeNo' => $employeeNo],
+        $resultado = $this->fanOut(function (Client $client) use ($employeeNo) {
+            try {
+                $response = $client->put('/ISAPI/AccessControl/CardInfo/Delete?format=json', [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ],
+                    'json' => [
+                        'CardInfoDelCond' => [
+                            'mode' => 'byEmployeeNo',
+                            'EmployeeNoList' => [
+                                ['employeeNo' => $employeeNo],
+                            ],
                         ],
                     ],
-                ],
-            ]);
+                ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Tarjetas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
+                Log::info('Tarjetas eliminadas del empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
 
-            return [
-                'error' => false,
-                'message' => 'Tarjetas eliminadas correctamente',
-                'data' => $data ?? [],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error eliminando tarjetas en Hikvision: ' . $e->getMessage(), [
-                'employeeNo' => $employeeNo,
-            ]);
+                return ['error' => false, 'message' => 'Tarjetas eliminadas correctamente', 'data' => $data ?? []];
+            } catch (\Exception $e) {
+                Log::error('Error eliminando tarjetas en Hikvision: ' . $e->getMessage(), [
+                    'employeeNo' => $employeeNo,
+                ]);
 
-            $body = (method_exists($e, 'getResponse') && $e->getResponse())
-                ? $e->getResponse()->getBody()->getContents()
-                : null;
+                return ['error' => true, 'message' => $this->extraerMensajeError($e), 'data' => []];
+            }
+        });
 
-            return [
-                'error' => true,
-                'message' => $body ?? 'Error al eliminar las tarjetas del dispositivo',
-                'data' => [],
-            ];
-        }
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al eliminar las tarjetas del dispositivo' : 'Tarjetas eliminadas correctamente',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**
@@ -1697,9 +2057,11 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    public function registrarRostroEmpleado(string $employeeNo, string $faceLibraryId = '1'): array
+    public function registrarRostroEmpleado(string $employeeNo, string $faceLibraryId = '1', ?string $deviceId = null): array
     {
-        if (!$this->empleadoExisteEnDispositivo($employeeNo)) {
+        $deviceId ??= $this->primaryDeviceId();
+
+        if (!$this->empleadoExisteEnDispositivo($employeeNo, $deviceId)) {
             return [
                 'error' => true,
                 'message' => 'El empleado no está registrado en el dispositivo',
@@ -1707,9 +2069,9 @@ class hikvisionattendanceService
             ];
         }
 
-        Cache::forget($this->cancelacionRostroCacheKey($employeeNo));
+        Cache::forget($this->cancelacionRostroCacheKey($employeeNo, $deviceId));
 
-        $captura = $this->capturarRostro($employeeNo);
+        $captura = $this->capturarRostro($employeeNo, $deviceId);
 
         if ($captura['error']) {
             return $captura;
@@ -1723,9 +2085,11 @@ class hikvisionattendanceService
      * el bucle de polling de capturarRostro() (que corre en la petición de registrarRostroEmpleado,
      * potencialmente en otro proceso PHP-FPM) la detecte y se detenga antes de agotar sus reintentos.
      */
-    public function cancelarRegistroRostro(string $employeeNo): array
+    public function cancelarRegistroRostro(string $employeeNo, ?string $deviceId = null): array
     {
-        Cache::put($this->cancelacionRostroCacheKey($employeeNo), true, now()->addSeconds(30));
+        $deviceId ??= $this->primaryDeviceId();
+
+        Cache::put($this->cancelacionRostroCacheKey($employeeNo, $deviceId), true, now()->addSeconds(30));
 
         return [
             'error' => false,
@@ -1734,9 +2098,11 @@ class hikvisionattendanceService
         ];
     }
 
-    private function cancelacionRostroCacheKey(string $employeeNo): string
+    // Namespaced por deviceId: dos terminales capturando el mismo employeeNo en
+    // paralelo no deben pisarse la cancelación entre sí.
+    private function cancelacionRostroCacheKey(string $employeeNo, string $deviceId): string
     {
-        return "hikvision:cancelar-captura-rostro:{$employeeNo}";
+        return "hikvision:cancelar-captura-rostro:{$deviceId}:{$employeeNo}";
     }
 
     /**
@@ -1750,13 +2116,14 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
-    private function capturarRostro(string $employeeNo, int $maxIntentos = 25, int $intervaloMs = 700): array
+    private function capturarRostro(string $employeeNo, string $deviceId, int $maxIntentos = 25, int $intervaloMs = 700): array
     {
         $xml = '<?xml version="1.0" encoding="UTF-8"?><CaptureFaceDataCond><captureInfrared>false</captureInfrared><dataType>binary</dataType></CaptureFaceDataCond>';
+        $client = $this->client($deviceId);
 
         try {
             for ($intento = 1; $intento <= $maxIntentos; $intento++) {
-                if (Cache::pull($this->cancelacionRostroCacheKey($employeeNo))) {
+                if (Cache::pull($this->cancelacionRostroCacheKey($employeeNo, $deviceId))) {
                     Log::info('Captura de rostro cancelada por el usuario', ['employeeNo' => $employeeNo]);
 
                     return [
@@ -1766,7 +2133,7 @@ class hikvisionattendanceService
                     ];
                 }
 
-                $response = $this->client->post('/ISAPI/AccessControl/CaptureFaceData', [
+                $response = $client->post('/ISAPI/AccessControl/CaptureFaceData', [
                     'headers' => [
                         'Content-Type' => 'application/xml',
                     ],
@@ -1859,49 +2226,53 @@ class hikvisionattendanceService
      *
      * @return array{error: bool, message: string, data: array}
      */
+    /**
+     * Sube la misma imagen capturada en un terminal a la biblioteca de rostros
+     * de TODOS los terminales, para que el empleado pueda marcar en cualquier puerta.
+     */
     private function vincularRostroEmpleado(string $employeeNo, string $faceLibraryId, string $imagenJpeg): array
     {
-        try {
-            $response = $this->client->put('/ISAPI/Intelligent/FDLib/FDSetUp?format=json', [
-                'multipart' => [
-                    [
-                        'name' => 'FaceDataRecord',
-                        'contents' => json_encode([
-                            'faceLibType' => 'blackFD',
-                            'FDID' => $faceLibraryId,
-                            'FPID' => $employeeNo,
-                        ]),
-                        'headers' => ['Content-Type' => 'application/json'],
+        $resultado = $this->fanOut(function (Client $client) use ($employeeNo, $faceLibraryId, $imagenJpeg) {
+            try {
+                $response = $client->put('/ISAPI/Intelligent/FDLib/FDSetUp?format=json', [
+                    'multipart' => [
+                        [
+                            'name' => 'FaceDataRecord',
+                            'contents' => json_encode([
+                                'faceLibType' => 'blackFD',
+                                'FDID' => $faceLibraryId,
+                                'FPID' => $employeeNo,
+                            ]),
+                            'headers' => ['Content-Type' => 'application/json'],
+                        ],
+                        [
+                            'name' => 'img',
+                            'contents' => $imagenJpeg,
+                            'filename' => 'face.jpg',
+                            'headers' => ['Content-Type' => 'image/jpeg'],
+                        ],
                     ],
-                    [
-                        'name' => 'img',
-                        'contents' => $imagenJpeg,
-                        'filename' => 'face.jpg',
-                        'headers' => ['Content-Type' => 'image/jpeg'],
-                    ],
-                ],
-            ]);
+                ]);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                $data = json_decode($response->getBody()->getContents(), true);
 
-            Log::info('Rostro vinculado a empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
+                Log::info('Rostro vinculado a empleado', ['employeeNo' => $employeeNo, 'data' => $data]);
 
-            return [
-                'error' => false,
-                'message' => 'Rostro registrado correctamente',
-                'data' => $data ?? [],
-            ];
-        } catch (\Exception $e) {
-            Log::error('Error vinculando rostro en Hikvision: ' . $e->getMessage(), [
-                'employeeNo' => $employeeNo,
-            ]);
+                return ['error' => false, 'message' => 'Rostro registrado correctamente', 'data' => $data ?? []];
+            } catch (\Exception $e) {
+                Log::error('Error vinculando rostro en Hikvision: ' . $e->getMessage(), [
+                    'employeeNo' => $employeeNo,
+                ]);
 
-            return [
-                'error' => true,
-                'message' => $this->traducirErrorRostro($e),
-                'data' => [],
-            ];
-        }
+                return ['error' => true, 'message' => $this->traducirErrorRostro($e), 'data' => []];
+            }
+        });
+
+        return [
+            'error' => $resultado['error'],
+            'message' => $resultado['error'] ? 'Error al registrar el rostro en el dispositivo' : 'Rostro registrado correctamente',
+            'data' => $resultado['devices'],
+        ];
     }
 
     /**

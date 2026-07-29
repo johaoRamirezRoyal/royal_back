@@ -14,6 +14,8 @@ Route::post("/password/enroll", [HikvisionController::class, 'registrarContrasen
 Route::post("/face/enroll", [HikvisionController::class, 'registrarRostroEmpleado']);
 Route::post("/face/enroll/cancelar", [HikvisionController::class, 'cancelarRegistroRostro']);
 Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
+Route::get('/devices', [HikvisionController::class, 'listarDispositivos']);
+Route::put('/devices', [HikvisionController::class, 'guardarNombreDispositivo']);
 Route::get('/httpHosts', [HikvisionController::class, 'obtenerHttpHosts']);
 Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
 Route::get('/image', [HikvisionController::class, 'obtenerImagenEmpleado']);
