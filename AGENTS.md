@@ -57,8 +57,10 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
 
 - Attendance device (DS-K1T321MFWX-B) via ISAPI protocol.
 - Digest auth, 3 retry attempts.
-- Config in `config/services.php` and `.env` (`HIKVISION_HOST`, `HIKVISION_PORT`, `HIKVISION_USERNAME`, `HIKVISION_PASSWORD`).
-- Service: `app/Services/Hikvisionattendance/hikvisionattendanceService.php` (770 lines).
+- Multi-terminal (fan-out): config in `config/services.php` and `.env` (`HIKVISION_HOST/PORT/PROTOCOL/USERNAME/PASSWORD` for the primary device, `HIKVISION_HOSTS` for additional ones, same credentials, format `"host[:port],host2[:port2]"`). Empty/unset `HIKVISION_HOSTS` = single device, unchanged behavior.
+- Identity writes (register/update/delete, fingerprint/card/face binding) run on ALL configured terminals so a person can check in from any door; biometric capture (`capturarHuella`/`capturarTarjeta`/`capturarRostro`) targets one explicit terminal (`deviceId` param) since the person is physically at one device. `hikvisionattendanceService::client(string $deviceId)` memoizes one Guzzle Client per terminal; `fanOut()` is the shared helper for the "all terminals" operations.
+- `GET /hikvision/devices` lists configured terminal ids for a frontend terminal selector.
+- Service: `app/Services/Hikvisionattendance/hikvisionattendanceService.php` (~2200 lines).
 
 ## Other
 

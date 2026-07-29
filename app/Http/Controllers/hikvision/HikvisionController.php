@@ -173,7 +173,7 @@ class HikvisionController extends Controller
             ], 400);
         }
 
-        $resultado = $this->hikvision_service->obtenerImagenEmpleado($path);
+        $resultado = $this->hikvision_service->obtenerImagenEmpleado($path, $request->input('deviceId'));
 
         if ($resultado['error']) {
             return response()->json($resultado, 400);
@@ -392,6 +392,7 @@ class HikvisionController extends Controller
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
             'fingerPrintID' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'deviceId' => ['nullable', 'string'],
         ]);
 
         if ($validator->fails()) {
@@ -404,7 +405,8 @@ class HikvisionController extends Controller
 
         $resultado = $this->hikvision_service->registrarHuellaEmpleado(
             $request->input('employeeNo'),
-            (int) $request->input('fingerPrintID', 1)
+            (int) $request->input('fingerPrintID', 1),
+            $request->input('deviceId')
         );
 
         return $this->apiResponse($resultado);
@@ -440,6 +442,7 @@ class HikvisionController extends Controller
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
             'cardType' => ['nullable', 'string', 'in:normalCard,disabledCard,blockCard,patrolCard,dutyCard,visitorCard'],
+            'deviceId' => ['nullable', 'string'],
         ]);
 
         if ($validator->fails()) {
@@ -452,7 +455,8 @@ class HikvisionController extends Controller
 
         $resultado = $this->hikvision_service->registrarTarjetaEmpleadoConCaptura(
             $request->input('employeeNo'),
-            $request->input('cardType', 'normalCard')
+            $request->input('cardType', 'normalCard'),
+            $request->input('deviceId')
         );
 
         return $this->apiResponse($resultado);
@@ -518,6 +522,7 @@ class HikvisionController extends Controller
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
             'faceLibraryId' => ['nullable', 'string'],
+            'deviceId' => ['nullable', 'string'],
         ]);
 
         if ($validator->fails()) {
@@ -530,7 +535,8 @@ class HikvisionController extends Controller
 
         $resultado = $this->hikvision_service->registrarRostroEmpleado(
             $request->input('employeeNo'),
-            $request->input('faceLibraryId', '1')
+            $request->input('faceLibraryId', '1'),
+            $request->input('deviceId')
         );
 
         return $this->apiResponse($resultado);
@@ -540,6 +546,7 @@ class HikvisionController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'employeeNo' => ['required', 'string'],
+            'deviceId' => ['nullable', 'string'],
         ]);
 
         if ($validator->fails()) {
@@ -551,7 +558,47 @@ class HikvisionController extends Controller
         }
 
         $resultado = $this->hikvision_service->cancelarRegistroRostro(
-            $request->input('employeeNo')
+            $request->input('employeeNo'),
+            $request->input('deviceId')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    /**
+     * Lista los terminales configurados (id, nombre, host, puerto), para que
+     * el frontend pueda ofrecer un selector de terminal antes de una captura.
+     */
+    public function listarDispositivos()
+    {
+        return $this->apiResponse([
+            'error' => false,
+            'message' => 'OK',
+            'data' => $this->hikvision_service->devicesInfo(),
+        ]);
+    }
+
+    /**
+     * Guarda/edita el nombre legible de un terminal ya configurado (ej. "Garita abajo").
+     */
+    public function guardarNombreDispositivo(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'deviceId' => ['required', 'string'],
+            'nombre' => ['required', 'string', 'max:100'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+                'data' => [],
+            ], 400);
+        }
+
+        $resultado = $this->hikvision_service->guardarNombreDispositivo(
+            $request->input('deviceId'),
+            $request->input('nombre')
         );
 
         return $this->apiResponse($resultado);

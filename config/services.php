@@ -47,6 +47,11 @@ return [
         'port' => env('HIKVISION_PORT', 8000),
         'username' => env('HIKVISION_USERNAME'),
         'password' => env('HIKVISION_PASSWORD'),
-        'device_type' => 'DS-K1T321MFWX-B'
+        'device_type' => 'DS-K1T321MFWX-B',
+        // Terminales adicionales (fan-out), mismas credenciales de arriba.
+        // Formato: "Nombre@host[:port],Nombre2@host2[:port2]" - nombre y puerto
+        // opcionales (puerto cae a HIKVISION_PORT). Vacío/ausente = un solo
+        // dispositivo (comportamiento actual, sin cambios).
+        'extra_hosts' => env('HIKVISION_HOSTS'),
     ],
 ];
