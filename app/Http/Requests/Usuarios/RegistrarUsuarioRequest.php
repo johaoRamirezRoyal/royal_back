@@ -19,6 +19,7 @@ class RegistrarUsuarioRequest extends FormRequest
             'nombre' => trim($this->nombre),
             'apellido' => $this->apellido ? trim($this->apellido) : null,
             'telefono' => $this->telefono ? trim($this->telefono) : null,
+            'id_curso' => $this->id_curso ?: ($this->curso > 0 ? $this->curso : null),
         ]);
     }
 
@@ -87,6 +88,12 @@ class RegistrarUsuarioRequest extends FormRequest
                 'nullable',
                 'integer',
                 Rule::exists('cursos', 'id'),
+            ],
+
+            'asignatura' => [
+                'nullable',
+                'string',
+                'max:255',
             ],
         ];
     }
@@ -161,8 +168,16 @@ class RegistrarUsuarioRequest extends FormRequest
         if ($this->filled('pass')) $data['pass'] = $this->pass;
         if ($this->has('perfil')) $data['perfil'] = $this->perfil;
         if ($this->has('id_nivel')) $data['id_nivel'] = $this->id_nivel;
-        if ($this->has('id_curso')) $data['id_curso'] = $this->id_curso;
+
+        // El frontend envía "curso" en vez de "id_curso"
+        if ($this->has('id_curso')) {
+            $data['id_curso'] = $this->id_curso;
+        } elseif ($this->has('curso')) {
+            $data['id_curso'] = $this->curso;
+        }
+
         if ($this->has('telefono')) $data['telefono'] = $this->telefono;
+        if ($this->has('asignatura')) $data['asignatura'] = $this->asignatura;
 
         $data['fecha_editado'] = now();
 
