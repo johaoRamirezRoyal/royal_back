@@ -27,13 +27,13 @@ class SalonRequest extends FormRequest
             ],
             'portatil' => [
                 $isRequired,
-                'integer',
-                'min:0',
+                'string',
+                'in:si,no',
             ],
             'sonido' => [
                 $isRequired,
-                'integer',
-                'in:0,1',
+                'string',
+                'in:si,no',
             ],
         ];
     }
@@ -46,11 +46,11 @@ class SalonRequest extends FormRequest
             'nombre.max' => 'El nombre no puede superar los 150 caracteres',
             'nombre.unique' => 'Ya existe un salón activo con ese nombre',
 
-            'portatil.integer' => 'La capacidad de portátiles debe ser un número entero',
-            'portatil.min' => 'La capacidad de portátiles no puede ser negativa',
+            'portatil.string' => 'El campo portátil debe ser una cadena de texto',
+            'portatil.in' => 'El campo portátil debe ser "si" o "no"',
 
-            'sonido.integer' => 'El campo sonido debe ser un número entero',
-            'sonido.in' => 'El campo sonido debe ser 0 (no tiene) o 1 (sí tiene)',
+            'sonido.string' => 'El campo sonido debe ser una cadena de texto',
+            'sonido.in' => 'El campo sonido debe ser "si" o "no"',
         ];
     }
 }

@@ -20,7 +20,9 @@ abstract class Controller
                 'success' => true,
                 'data' => $data,
             ],
-            $status
+            $status,
+            [],
+            JSON_INVALID_UTF8_SUBSTITUTE
         )
             ->header('Accept', 'application/json');
     }
@@ -82,7 +84,7 @@ abstract class Controller
         $isError = $response['error'] ?? false;
 
         if (!$isError) {
-            return response()->json($response, 200);
+            return response()->json($response, 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
         }
 
         $message = $response['message'] ?? 'Error interno del servidor';
