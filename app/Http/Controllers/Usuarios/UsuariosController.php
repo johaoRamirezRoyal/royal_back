@@ -10,8 +10,7 @@ use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
-
-use function Illuminate\Log\log;
+use Illuminate\Support\Facades\Log;
 
 class UsuariosController extends Controller
 {
@@ -107,7 +106,7 @@ class UsuariosController extends Controller
         $dir = $request->input('dir', 'asc');
         $per_page = $request->input('per-page', 10);
 
-        log($datos);
+        Log::debug('Datos de filtro de usuarios', $datos);
 
         $filtro = $this->service_usuarios->filtrarUsuarios($datos, $search, $sort, $dir, $per_page);
 
@@ -173,13 +172,20 @@ class UsuariosController extends Controller
     {
         $data = $request->toUsuarioFormatCreate();
 
+        // La tabla legacy requiere estos campos en algunos entornos; si el
+        // frontend no los envía, los rellenamos antes del insert.
+        $data['fechareg'] = $data['fechareg'] ?? now();
+        $data['user_log'] = auth('api')->id() ?? $data['user_log'] ?? 1;
+
         $response = $this->service_usuarios->agregarUsuario($data);
 
         if ($response['error']) {
+            Log::error('Error creando usuario', ['message' => $response['message'], 'data' => $data]);
+
             return response()->json([
                 'error' => true,
                 'message' => $response['message'],
-            ]);
+            ], 500);
         }
 
         return response()->json([
