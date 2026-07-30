@@ -12,6 +12,7 @@ use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ReservasServices extends Service
@@ -392,6 +393,105 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener las reservas.',
+                'data' => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |             SALONES
+    |
+    -------------------------------------------------
+    */
+
+    public function crearSalon(array $datos): array
+    {
+        try {
+            $salon = Salones::create([
+                ...$datos,
+                'id_user' => Auth::id(),
+                'activo' => 1,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Salón creado correctamente.',
+                'data' => $salon->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear el salón');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al crear el salón.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function actualizarSalon(array $datos, int $id): array
+    {
+        try {
+            $salon = Salones::activo()->find($id);
+
+            if (!$salon) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el salón con id: {$id}.",
+                    'data' => []
+                ];
+            }
+
+            $salon->update($datos);
+
+            return [
+                'error' => false,
+                'message' => 'Salón actualizado correctamente.',
+                'data' => $salon->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar el salón');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar el salón.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Baja lógica (activo=0): un hard delete dejaría huérfanas las reservas
+     * históricas que apuntan a id_salon (no hay FK en BD para esa columna).
+     */
+    public function eliminarSalon(int $id): array
+    {
+        try {
+            $salon = Salones::activo()->find($id);
+
+            if (!$salon) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el salón con id: {$id}.",
+                    'data' => []
+                ];
+            }
+
+            $salon->update(['activo' => 0]);
+
+            return [
+                'error' => false,
+                'message' => 'Salón eliminado correctamente.',
+                'data' => []
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al eliminar el salón');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar el salón.',
                 'data' => []
             ];
         }

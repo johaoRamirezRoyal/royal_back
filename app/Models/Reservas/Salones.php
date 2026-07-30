@@ -16,6 +16,7 @@ class Salones extends Model
     protected $primaryKey = 'id';
 
     const CREATED_AT = "fechareg";
+    const UPDATED_AT = null;
 
     protected $fillable = [
         'nombre',
