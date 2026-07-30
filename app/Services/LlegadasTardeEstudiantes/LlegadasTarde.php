@@ -34,12 +34,6 @@ class LlegadasTarde extends Service
                 ->orderByDesc('fecha_inicio')
                 ->first();
 
-            $data = [
-                'id_alumno' => $id_alumno,
-                'fecha' => $fecha,
-                'hora' => $hora,
-            ];
-
             if (!$periodo_academico) {
                 return [
                     'error' => true,
@@ -48,15 +42,20 @@ class LlegadasTarde extends Service
                 ];
             }
 
-            $data['id_periodo_academico'] = $periodo_academico->id;
+            // firstOrCreate() intenta el create() y, si choca con el índice único
+            // (llegadas_tardes_alumno_fecha_unique), reconsulta en vez de fallar:
+            // así dos pushes casi simultáneos del mismo alumno (p. ej. un
+            // reintento del dispositivo) no pueden duplicar la fila.
+            $llegadaTarde = ModelsLlegadasTarde::firstOrCreate(
+                ['id_alumno' => $id_alumno, 'fecha' => $fecha],
+                ['hora' => $hora, 'id_periodo_academico' => $periodo_academico->id]
+            );
 
-            $llegadaTarde = ModelsLlegadasTarde::create($data);
-
-            if (!$llegadaTarde) {
+            if (!$llegadaTarde->wasRecentlyCreated) {
                 return [
-                    'error' => true,
-                    'message' => "No se ha podido crear la llegada tarde",
-                    'data' => $data
+                    'error' => false,
+                    'message' => 'El alumno ya tiene una llegada tarde registrada hoy',
+                    'data' => []
                 ];
             }
 

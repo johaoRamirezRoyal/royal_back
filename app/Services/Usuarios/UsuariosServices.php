@@ -2,6 +2,7 @@
 
 namespace App\Services\Usuarios;
 
+use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
@@ -269,6 +270,7 @@ class UsuariosServices
                 'id_curso',
                 'id_grupo',
                 'estado',
+                'foto_carnet',
             ])
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
@@ -304,6 +306,8 @@ class UsuariosServices
                 ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
 
+            $this->adjuntarFotoYAcudientes($usuarios->getCollection());
+
             return [
                 'error' => false,
                 'message' => 'Datos obtenidos satisfactoriamente',
@@ -315,6 +319,41 @@ class UsuariosServices
                 'message' => 'Ha ocurrido un error inesperado',
                 'data' => $e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Agrega foto y acudientes a cada usuario con perfil estudiante (16) de la colección.
+     * No hay columna de parentesco en estudiantes_padres, por lo que ese dato siempre viaja null.
+     */
+    private function adjuntarFotoYAcudientes($usuarios): void
+    {
+        $idsEstudiantes = $usuarios->where('perfil', 16)->pluck('id_user');
+
+        $acudientesPorEstudiante = EstudiantesPadre::whereIn('id_estudiante', $idsEstudiantes)
+            ->where('activo', 1)
+            ->with('acudiente:id_user,nombre,apellido,telefono,correo')
+            ->get()
+            ->filter(fn ($padre) => $padre->acudiente)
+            ->groupBy('id_estudiante');
+
+        foreach ($usuarios as $usuario) {
+            $usuario->foto = $usuario->foto_carnet;
+
+            if ($usuario->perfil != 16) {
+                $usuario->acudientes = null;
+                continue;
+            }
+
+            $acudientes = $acudientesPorEstudiante->get($usuario->id_user, collect());
+
+            $usuario->acudientes = $acudientes->isEmpty() ? null : $acudientes->map(fn ($padre) => [
+                'nombre' => $padre->acudiente->nombre,
+                'apellido' => $padre->acudiente->apellido,
+                'parentesco' => null,
+                'telefono' => $padre->celular ?: $padre->acudiente->telefono,
+                'correo' => $padre->acudiente->correo,
+            ])->values()->all();
         }
     }
 

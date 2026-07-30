@@ -10,6 +10,7 @@ use App\Services\FileStorageService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class PerfilUsuarioService extends Service {
 
@@ -91,9 +92,9 @@ class PerfilUsuarioService extends Service {
                 'data' => [
                     'usuario' => $usuario->toArray(),
                     'informacion_adicional' => $infoAdicional?->toArray(),
-                    'formaciones' => $formaciones->toArray(),
-                    'experiencias_laborales' => $experiencias->toArray(),
-                    'producciones_intelectuales' => $producciones->toArray(),
+                    'formaciones' => $this->adjuntarUrlsDocumentos($formaciones->toArray(), 'formacion'),
+                    'experiencias_laborales' => $this->adjuntarUrlsDocumentos($experiencias->toArray(), 'experiencia_laboral'),
+                    'producciones_intelectuales' => $this->adjuntarUrlsDocumentos($producciones->toArray(), 'produccion_intelectual'),
                 ]
             ];
         } catch (Exception $e) {
@@ -276,7 +277,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Formaciones obtenidas correctamente.',
-                'data' => $formaciones->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($formaciones->toArray(), 'formacion')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener las formaciones del usuario.');
@@ -306,7 +307,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Formación creada correctamente.',
-                'data' => $formacion->load('certificados')->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($formacion->load('certificados')->toArray(), 'formacion')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al crear la formación.');
@@ -353,7 +354,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Formación actualizada correctamente.',
-                'data' => $formacion->fresh()->load('certificados')->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($formacion->fresh()->load('certificados')->toArray(), 'formacion')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar la formación.');
@@ -414,7 +415,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Formaciones obtenidas correctamente.',
-                'data' => $formaciones->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($formaciones->toArray(), 'formacion')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener las formaciones por tipo.');
@@ -478,7 +479,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Experiencias laborales obtenidas correctamente.',
-                'data' => $experiencias->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($experiencias->toArray(), 'experiencia_laboral')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener las experiencias laborales del usuario.');
@@ -504,7 +505,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Experiencia laboral creada correctamente.',
-                'data' => $experiencia->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($experiencia->toArray(), 'experiencia_laboral')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al crear la experiencia laboral.');
@@ -543,7 +544,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Experiencia laboral actualizada correctamente.',
-                'data' => $experiencia->fresh()->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($experiencia->fresh()->toArray(), 'experiencia_laboral')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar la experiencia laboral.');
@@ -602,7 +603,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Experiencias activas obtenidas correctamente.',
-                'data' => $experiencias->toArray()
+                'data' => $this->adjuntarUrlsDocumentos($experiencias->toArray(), 'experiencia_laboral')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener las experiencias activas.');
@@ -698,7 +699,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Producción intelectual creada correctamente.',
-                'data' => $produccion
+                'data' => $this->adjuntarUrlsDocumentos($produccion->toArray(), 'produccion_intelectual')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al crear la producción intelectual.');
@@ -734,7 +735,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Producción intelectual actualizada correctamente.',
-                'data' => $produccion
+                'data' => $this->adjuntarUrlsDocumentos($produccion->fresh()->toArray(), 'produccion_intelectual')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar la producción intelectual.');
@@ -790,7 +791,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Producciones obtenidas correctamente.',
-                'data' => $producciones
+                'data' => $this->adjuntarUrlsDocumentos($producciones->toArray(), 'produccion_intelectual')
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener las producciones del usuario.');
@@ -822,5 +823,33 @@ class PerfilUsuarioService extends Service {
                 'data' => []
             ];
         }
+    }
+
+    /**
+     * Adjunta la URL pública de cada documento a la respuesta.
+     */
+    private function adjuntarUrlsDocumentos(array $items, string $tipo): array
+    {
+        foreach ($items as &$item) {
+            if ($tipo === 'formacion') {
+                foreach ($item['certificados'] ?? [] as &$certificado) {
+                    if (!empty($certificado['nombre_archivo'])) {
+                        $certificado['url_documento'] = Storage::disk('public')->url($certificado['nombre_archivo']);
+                    }
+                }
+                unset($certificado);
+            }
+
+            if ($tipo === 'experiencia_laboral' && !empty($item['certificado_trabajo'])) {
+                $item['url_documento'] = Storage::disk('public')->url($item['certificado_trabajo']);
+            }
+
+            if ($tipo === 'produccion_intelectual' && !empty($item['evidencia_pdf'])) {
+                $item['url_documento'] = Storage::disk('public')->url($item['evidencia_pdf']);
+            }
+        }
+        unset($item);
+
+        return $items;
     }
 }

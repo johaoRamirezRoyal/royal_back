@@ -27,6 +27,8 @@ class ReservaController extends Controller
             id_user: $request->input('id_user'),
             id_salon: $request->input('id_salon'),
             fechaReserva: $request->input('fecha_reserva'),
+            fechaDesde: $request->input('fecha_desde'),
+            fechaHasta: $request->input('fecha_hasta'),
             cancelado: $request->boolean('cancelado') ?: null,
             perpage: $request->input('per_page', 10),
         );

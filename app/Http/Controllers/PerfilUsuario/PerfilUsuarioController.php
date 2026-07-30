@@ -271,4 +271,5 @@ class PerfilUsuarioController extends Controller
 
         return $this->apiResponse($this->service->eliminarProduccionesPorUsuario($id_usuario));
     }
+
 }

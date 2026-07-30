@@ -47,6 +47,19 @@ return [
         'port' => env('HIKVISION_PORT', 8000),
         'username' => env('HIKVISION_USERNAME'),
         'password' => env('HIKVISION_PASSWORD'),
-        'device_type' => 'DS-K1T321MFWX-B'
+        'device_type' => 'DS-K1T321MFWX-B',
+        // Terminales adicionales (fan-out), mismas credenciales de arriba.
+        // Formato: "Nombre@host[:port],Nombre2@host2[:port2]" - nombre y puerto
+        // opcionales (puerto cae a HIKVISION_PORT). Vacío/ausente = un solo
+        // dispositivo (comportamiento actual, sin cambios).
+        'extra_hosts' => env('HIKVISION_HOSTS'),
+    ],
+
+    'sami' => [
+        'base_url' => env('SAMI_BASE_URL', 'https://sami.royalschool.edu.co'),
+        'login_path' => env('SAMI_LOGIN_PATH', '/login'),
+        'home_path' => env('SAMI_HOME_PATH', '/inicio'),
+        'cookie_name' => env('SAMI_SESSION_COOKIE_NAME', 'PHPSESSID'),
+        'cache_ttl' => env('SAMI_SSO_CACHE_TTL_MINUTES', 120),
     ],
 ];

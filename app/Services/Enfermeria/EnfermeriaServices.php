@@ -529,7 +529,14 @@ class EnfermeriaServices extends Service
                 ];
             }
 
+            $eraPrimerEnvio = (int) $atencion->envio === 0;
+
             $this->enviarCorreoAcudiente($atencion);
+
+            $atencion->update(array_merge(
+                ['envio' => 1],
+                $eraPrimerEnvio ? ['envio_tardio' => 1] : []
+            ));
 
             $atencion->refresh();
 
@@ -538,7 +545,11 @@ class EnfermeriaServices extends Service
                 'message' => $atencion->enviado
                     ? 'Correo enviado correctamente'
                     : 'No se pudo enviar el correo. Verifique que el estudiante tenga acudientes con correo registrado.',
-                'data' => ['enviado' => $atencion->enviado],
+                'data' => [
+                    'enviado' => $atencion->enviado,
+                    'envio' => $atencion->envio,
+                    'envio_tardio' => $atencion->envio_tardio,
+                ],
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al reenviar correo de atención');
@@ -568,7 +579,9 @@ class EnfermeriaServices extends Service
 
             $atenciones = EnfermeriaAtencion::query()
                 ->with([
-                    'estudiante:id_user,nombre,apellido,documento,correo',
+                    'estudiante:id_user,nombre,apellido,documento,correo,id_nivel,id_curso',
+                    'estudiante.nivelRelacion:id,nombre',
+                    'estudiante.cursoRelacion:id,nombre',
                     'categoria:id,nombre',
                     'registradoPor:id_user,nombre,apellido',
                 ])

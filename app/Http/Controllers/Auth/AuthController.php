@@ -7,6 +7,7 @@ use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Auth\AuthServices;
 use App\Services\JwtService;
+use App\Services\Sami\SamiSsoService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -24,8 +25,12 @@ class AuthController extends Controller
 
     protected $service_auth;
 
-    public function __construct(UsuariosServices $usuariosServices, AuthServices $service_auth, private JwtService $jwt)
-    {
+    public function __construct(
+        UsuariosServices $usuariosServices,
+        AuthServices $service_auth,
+        private JwtService $jwt,
+        private SamiSsoService $samiSso,
+    ) {
         $this->service_usuarios = $usuariosServices;
         $this->service_auth = $service_auth;
     }
@@ -185,6 +190,9 @@ class AuthController extends Controller
             ], 403);
         }
 
+        // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla)
+        $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
+
         return response()
             ->json(['Message' => 'Login Exitoso'])
             ->withCookie('token', $this->jwt->generateToken($usuario));
@@ -286,6 +294,12 @@ class AuthController extends Controller
 
             if ($token) {
                 JWTAuth::setToken($token)->invalidate();
+            }
+
+            // Limpiar sesión SAMI
+            $user = auth('api')->user();
+            if ($user) {
+                $this->samiSso->olvidarSesion($user->id_user);
             }
 
             return response()->json([

@@ -17,30 +17,14 @@ class JwtFromCookie
 
             $token = $request->cookie('admissions_token') ?? $request->cookie('token');
 
-            Log::debug('JwtFromCookie: ruta compartida', [
-                'path' => $request->path(),
-                'admissions_token_exists' => !is_null($request->cookie('admissions_token')),
-                'token_exists' => !is_null($request->cookie('token')),
-            ]);
-
         } elseif ($request->is('api/admisiones/*')) {
 
             $token = $request->cookie('admissions_token');
-
-            Log::debug('JwtFromCookie: ruta admisiones/tipos-documentos', [
-                'path' => $request->path(),
-                'admissions_token_exists' => !is_null($token),
-                'admissions_token_length' => $token ? strlen($token) : 0,
-            ]);
 
         } else {
 
             $token = $request->cookie('token');
 
-            Log::debug('JwtFromCookie: ruta general', [
-                'path' => $request->path(),
-                'token_exists' => !is_null($token),
-            ]);
         }
 
         if ($token && ! $request->headers->has('Authorization')) {

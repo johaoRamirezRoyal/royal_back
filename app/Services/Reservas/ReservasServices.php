@@ -222,6 +222,27 @@ class ReservasServices extends Service
                 ];
             }
 
+            // Finalizar (devuelve portátiles, marca como completada)
+            if (!empty($data['finalizar'])) {
+                $prestamos = PrestamosInventario::where('observacion', 'like', "%reserva #{$reserva->id}")
+                    ->whereNull('fecha_devolucion')
+                    ->get();
+
+                foreach ($prestamos as $prestamo) {
+                    $prestamo->update(['fecha_devolucion' => now()]);
+                    $prestamo->inventario()->update(['estado' => 1]);
+                }
+
+                $reserva->update(['confirmado' => 1]);
+
+                DB::commit();
+                return [
+                    'error' => false,
+                    'message' => 'Reserva finalizada correctamente.',
+                    'data' => $reserva->fresh()->toArray()
+                ];
+            }
+
             // Cancelación
             if (!empty($data['cancelar'])) {
                 $reserva->update([
@@ -285,7 +306,7 @@ class ReservasServices extends Service
                 }
             }
 
-            unset($data['id'], $data['cancelar']);
+            unset($data['id'], $data['cancelar'], $data['finalizar']);
             $reserva->update($data);
 
             DB::commit();
@@ -312,6 +333,8 @@ class ReservasServices extends Service
         ?int $id_user,
         ?int $id_salon,
         ?string $fechaReserva,
+        ?string $fechaDesde,
+        ?string $fechaHasta,
         ?bool $cancelado,
         ?int $perpage = 10
     ): array {
@@ -331,6 +354,12 @@ class ReservasServices extends Service
                 ->when($fechaReserva, function ($query) use ($fechaReserva) {
                     $query->whereDate('fecha_reserva', $fechaReserva);
                 })
+                ->when($fechaDesde, function ($query) use ($fechaDesde) {
+                    $query->whereDate('fecha_reserva', '>=', $fechaDesde);
+                })
+                ->when($fechaHasta, function ($query) use ($fechaHasta) {
+                    $query->whereDate('fecha_reserva', '<=', $fechaHasta);
+                })
                 ->when(!is_null($cancelado), function ($query) use ($cancelado) {
                     if ($cancelado) {
                         $query->whereNotNull('fecha_cancelado');
@@ -339,6 +368,7 @@ class ReservasServices extends Service
                     }
                 })
                 ->orderBy('fecha_reserva')
+                ->orderBy('id_salon')
                 ->orderBy('hora_reserva')
                 ->paginate($perpage);
 

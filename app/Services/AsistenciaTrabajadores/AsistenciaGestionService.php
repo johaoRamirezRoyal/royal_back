@@ -37,24 +37,22 @@ class AsistenciaGestionService extends Service
     public function registrarAsistencia(int $idUsuario, string $fecha, string $hora): array
     {
         try {
-            $existe = AsistenciaGestion::where('id_user', $idUsuario)
-                ->where('fecha_asistencia', $fecha)
-                ->exists();
+            // firstOrCreate() intenta el create() y, si choca con el índice único
+            // (asistencia_gestion_user_fecha_unique), reconsulta en vez de fallar:
+            // así dos pushes casi simultáneos del mismo usuario (p. ej. un
+            // reintento del dispositivo) no pueden duplicar la fila.
+            $asistencia = AsistenciaGestion::firstOrCreate(
+                ['id_user' => $idUsuario, 'fecha_asistencia' => $fecha],
+                ['hora_asistencia' => $hora, 'fechareg' => now()]
+            );
 
-            if ($existe) {
+            if (!$asistencia->wasRecentlyCreated) {
                 return [
                     'error' => false,
                     'message' => 'Ya existe un registro de asistencia para este usuario en esta fecha',
                     'data' => null,
                 ];
             }
-
-            $asistencia = AsistenciaGestion::create([
-                'id_user' => $idUsuario,
-                'fecha_asistencia' => $fecha,
-                'hora_asistencia' => $hora,
-                'fechareg' => now(),
-            ]);
 
             return [
                 'error' => false,
