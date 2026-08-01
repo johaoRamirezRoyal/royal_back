@@ -11,6 +11,9 @@ class AsistenciaGestion extends Model
     // Después de esta hora una llegada registrada cuenta como "atrasado"
     public const HORA_LIMITE_PUNTUALIDAD = '07:15:00';
 
+    // Desde esta hora (inclusive) hasta HORA_LIMITE_PUNTUALIDAD (inclusive) cuenta como "Justo a tiempo"
+    public const HORA_INICIO_JUSTO_A_TIEMPO = '07:00:00';
+
     protected $table = 'asistencia_gestion';
     protected $primaryKey = 'id';
     public $timestamps = false;
@@ -36,9 +39,17 @@ class AsistenciaGestion extends Model
             return null;
         }
 
-        return $this->hora_asistencia->format('H:i:s') > self::HORA_LIMITE_PUNTUALIDAD
-            ? 'atrasado'
-            : 'a tiempo';
+        $hora = $this->hora_asistencia->format('H:i:s');
+
+        if ($hora > self::HORA_LIMITE_PUNTUALIDAD) {
+            return 'atrasado';
+        }
+
+        if ($hora >= self::HORA_INICIO_JUSTO_A_TIEMPO) {
+            return 'Justo a tiempo';
+        }
+
+        return 'a tiempo';
     }
 
     // Toda fila en esta tabla es, por definición, una llegada registrada.
