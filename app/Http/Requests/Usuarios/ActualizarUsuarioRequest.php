@@ -90,16 +90,16 @@ class ActualizarUsuarioRequest extends FormRequest
 
     public function toUsuarioData(): array
     {
-        $data = [
-            'documento' => $this->documento,
-            'nombre' => $this->nombre,
-            'apellido' => $this->apellido,
-            'correo' => $this->correo,
-            'perfil' => $this->perfil,
-            'id_nivel' => $this->id_nivel,
-            'id_curso' => $this->id_curso,
-            'telefono' => $this->telefono,
-        ];
+        $data = $this->only([
+            'documento',
+            'nombre',
+            'apellido',
+            'correo',
+            'perfil',
+            'id_nivel',
+            'id_curso',
+            'telefono',
+        ]);
 
         // Solo agregar contraseña si viene (útil para update)
         if ($this->filled('pass')) {

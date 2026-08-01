@@ -159,7 +159,8 @@ class UsuariosServices
                             $sub->where('nombre', 'LIKE', "%$palabra%")
                                 ->orWhere('apellido', 'LIKE', "%$palabra%")
                                 ->orWhere('documento', 'LIKE', "%$palabra%")
-                                ->orWhere('correo', 'LIKE', "%$palabra%");
+                                ->orWhere('correo', 'LIKE', "%$palabra%")
+                                ->orWhere('id_user', 'LIKE', "%$palabra%");
                         });
                     }
                 });
