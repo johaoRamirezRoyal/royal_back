@@ -375,12 +375,12 @@ class ReservasServices extends Service
 
             if ($reservas->isEmpty()) {
                 return [
-                    'error' => true,
+                    'error' => false,
                     'message' => 'No se encontraron reservas con los filtros indicados.',
                     'data' => []
                 ];
             }
-
+            
             return [
                 'error' => false,
                 'message' => 'Se obtuvieron correctamente las reservas.',
