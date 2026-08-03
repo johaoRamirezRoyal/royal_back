@@ -22,10 +22,10 @@ class PazYSalvoPdfService
     private const TABLE_LEFT = 31.2;
     private const TABLE_RIGHT = 556.2;
 
-    /** Límites X de las 8 columnas de la tabla (9 valores = 8 columnas) */
-    private const COL_X = [31.2, 96.8, 162.4, 228.1, 293.7, 359.3, 425.0, 490.6, 556.2];
+    /** Límites X de las 8 columnas de la tabla (9 valores = 8 columnas) — paz_y_salvo / listado (libros) */
+    private const COL_X_LIBROS = [31.2, 96.8, 162.4, 228.1, 293.7, 359.3, 425.0, 490.6, 556.2];
 
-    private const COLUMNS = [
+    private const COLUMNS_LIBROS = [
         ['key' => 'no_prestamo',       'header' => ['No.', 'PRESTAMO']],
         ['key' => 'libro',             'header' => ['LIBRO']],
         ['key' => 'num_ejemplar',      'header' => ['#EJEMPLAR']],
@@ -35,6 +35,37 @@ class PazYSalvoPdfService
         ['key' => 'fecha_devolucion',  'header' => ['FECHA', 'DEVOLUCIÓN']],
         ['key' => 'estado',            'header' => ['ESTADO']],
     ];
+
+    /** 6 columnas para listado_paquetes (sin categoría/subcategoría) — espaciadas uniformemente en el mismo ancho de tabla. */
+    private const COLUMNS_PAQUETES = [
+        ['key' => 'no_prestamo',       'header' => ['No.', 'PRESTAMO']],
+        ['key' => 'paquete',           'header' => ['PAQUETE']],
+        ['key' => 'codigo',            'header' => ['#CÓDIGO']],
+        ['key' => 'fecha_prestamo',    'header' => ['FECHA', 'PRESTAMO']],
+        ['key' => 'fecha_devolucion',  'header' => ['FECHA', 'DEVOLUCION']],
+        ['key' => 'estado',            'header' => ['ESTADO']],
+    ];
+
+    private function resolveColumnas(string $tipo): array
+    {
+        return $tipo === 'listado_paquetes' ? self::COLUMNS_PAQUETES : self::COLUMNS_LIBROS;
+    }
+
+    /** COL_X_LIBROS ya viene medido a mano; para paquetes (menos columnas) se reparte el mismo ancho en partes iguales. */
+    private function resolveColX(string $tipo): array
+    {
+        if ($tipo !== 'listado_paquetes') {
+            return self::COL_X_LIBROS;
+        }
+
+        $numColumnas = count(self::COLUMNS_PAQUETES);
+        $ancho = (self::TABLE_RIGHT - self::TABLE_LEFT) / $numColumnas;
+
+        return array_map(
+            fn ($i) => self::TABLE_LEFT + $i * $ancho,
+            range(0, $numColumnas)
+        );
+    }
 
     private string $logoPath;
     private string $selloPath;
@@ -88,12 +119,18 @@ class PazYSalvoPdfService
     public function generate(array $data): string
     {
         $tipo = $data['tipo'] ?? 'paz_y_salvo';
-        $esListado = $tipo === 'listado';
+        $esListado = in_array($tipo, ['listado', 'listado_paquetes'], true);
+        $columnas = $this->resolveColumnas($tipo);
+        $colX = $this->resolveColX($tipo);
 
         $pdf = new TCPDF('P', 'pt', [self::PAGE_W, self::PAGE_H], true, 'UTF-8', false);
         $pdf->SetCreator('Paz y Salvo Generator (TCPDF / Laravel)');
         $pdf->SetAuthor($data['institucion'] ?? 'Institución');
-        $pdf->SetTitle($esListado ? 'Listado de Prestamos Biblioteca' : 'Paz y Salvo Biblioteca');
+        $pdf->SetTitle(match ($tipo) {
+            'listado' => 'Listado de Prestamos Biblioteca',
+            'listado_paquetes' => 'Listado de Prestamos de Paquetes Biblioteca',
+            default => 'Paz y Salvo Biblioteca',
+        });
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetMargins(0, 0, 0);
@@ -105,9 +142,9 @@ class PazYSalvoPdfService
         $numeroPagina = $data['numero_pagina'] ?? 1;
 
         $this->drawLogo($pdf);
-        $this->drawTitulo($pdf, $esListado);
-        $this->drawParrafo($pdf, $data, $esListado);
-        $tableBottom = $this->drawTabla($pdf, $data['prestamos'] ?? [], $esListado, $numeroPagina);
+        $this->drawTitulo($pdf, $tipo);
+        $this->drawParrafo($pdf, $data, $tipo);
+        $tableBottom = $this->drawTabla($pdf, $data['prestamos'] ?? [], $tipo, $numeroPagina, $columnas, $colX);
 
         // Posiciones "de diseño" (medidas del PDF original); si la tabla las
         // supera, el contenido se corre debajo de ella en vez de solaparse.
@@ -166,33 +203,54 @@ class PazYSalvoPdfService
         }
     }
 
-    private function drawTitulo(TCPDF $pdf, bool $esListado): void
+    private function drawTitulo(TCPDF $pdf, string $tipo): void
     {
-        $texto = $esListado ? 'LISTADO DE PRESTAMOS BIBLIOTECA' : 'PAZ Y SALVO BIBLIOTECA';
+        $texto = match ($tipo) {
+            'listado' => 'LISTADO DE PRESTAMOS BIBLIOTECA',
+            'listado_paquetes' => 'LISTADO DE PRESTAMOS (PAQUETES) BIBLIOTECA',
+            default => 'PAZ Y SALVO BIBLIOTECA',
+        };
 
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetXY(0, 101.5);
         $pdf->Cell(self::PAGE_W, 14, $texto, 0, 0, 'C');
     }
 
-    private function drawParrafo(TCPDF $pdf, array $data, bool $esListado): void
+    private function drawParrafo(TCPDF $pdf, array $data, string $tipo): void
     {
         $institucion = (string) ($data['institucion'] ?? '');
         $nombre = (string) ($data['nombre_trabajador'] ?? '');
         $documento = (string) ($data['numero_documento'] ?? '');
+        $esListado = in_array($tipo, ['listado', 'listado_paquetes'], true);
 
-        // Segmentos [texto, negrita]
-        $segments = [
-            ['El ', false],
-            ["{$institucion} ", true],
-            ['certifica que el trabajador ', false],
-            $esListado ? [" {$nombre} , ", true] : [" {$nombre} ,, ", true],
-            ['identificado con número de documento ', false],
-            ["{$documento} ", true],
-            $esListado
-                ? ['tiene en posesión los siguientes libros.', false]
-                : ['se encuentra a paz y salvo por concepto de prestamo de libros.', false],
-        ];
+        if ($tipo === 'listado_paquetes') {
+            $curso = (string) ($data['curso'] ?? '');
+            $segments = [
+                ['El ', false],
+                ["{$institucion} ", true],
+                ['certifica que el Estudiante ', false],
+                [" {$nombre} , ", true],
+                ...($curso !== '' ? [['perteneciente al curso ', false], ["{$curso} , ", true]] : []),
+                ['identificado con número de documento ', false],
+                ["{$documento} ", true],
+                ['tiene en posesión los siguientes paquetes.', false],
+            ];
+        } else {
+            // Segmentos [texto, negrita]
+            $segments = [
+                ['El ', false],
+                ["{$institucion} ", true],
+                ['certifica que el trabajador ', false],
+                $esListado ? [" {$nombre} , ", true] : [" {$nombre} ,, ", true],
+                ['identificado con número de documento ', false],
+                ["{$documento} ", true],
+                $esListado
+                    ? ['tiene en posesión los siguientes libros.', false]
+                    // 'listado' (solo libros) sigue diciendo "libros"; solo el paz_y_salvo real
+                    // menciona ambos porque generarPazYSalvoPdf ya fusiona libros y paquetes.
+                    : ['se encuentra a paz y salvo por concepto de prestamo de libros y paquetes.', false],
+            ];
+        }
 
         $this->drawMixedParagraph($pdf, $segments, 28.4, 154.6, self::PAGE_W - 28.4 * 2, 10, 12.6);
     }
@@ -258,7 +316,7 @@ class PazYSalvoPdfService
      * página nueva cuando las filas no caben en la actual. Devuelve el Y
      * donde termina la tabla (en la última página que ocupó).
      */
-    private function drawTabla(TCPDF $pdf, array $prestamos, bool $esListado, int &$numeroPagina): float
+    private function drawTabla(TCPDF $pdf, array $prestamos, string $tipo, int &$numeroPagina, array $columnas, array $colX): float
     {
         $titleRowH = 16.6;
         $headerRowH = 27.3;
@@ -268,8 +326,16 @@ class PazYSalvoPdfService
         $cellLineHeight = 9.5;
         $limiteInferior = self::PAGE_H - 50;
 
-        $tituloTabla = $esListado ? 'LISTADO DE PRESTAMOS' : 'HISTORIAL DE PRESTAMOS';
-        $mensajeVacio = $esListado ? 'No hay prestamos registrados' : 'No hay prestamos pendientes';
+        $tituloTabla = match ($tipo) {
+            'listado' => 'LISTADO DE PRESTAMOS',
+            'listado_paquetes' => 'LISTADO DE PRESTAMOS (PAQUETES)',
+            default => 'HISTORIAL DE PRESTAMOS',
+        };
+        $mensajeVacio = match ($tipo) {
+            'listado_paquetes' => 'No hay prestamos de paquetes registrados',
+            'listado' => 'No hay prestamos registrados',
+            default => 'No hay prestamos pendientes',
+        };
 
         // --- Calcula altura de cada fila de datos (o la fila "sin préstamos") ---
         $rowHeights = [];
@@ -280,8 +346,8 @@ class PazYSalvoPdfService
             $pdf->SetFont('helvetica', '', $cellFontSize);
             foreach ($prestamos as $row) {
                 $lineCounts = [];
-                foreach (self::COLUMNS as $i => $col) {
-                    $colWidth = self::COL_X[$i + 1] - self::COL_X[$i] - 6;
+                foreach ($columnas as $i => $col) {
+                    $colWidth = $colX[$i + 1] - $colX[$i] - 6;
                     $text = (string) ($row[$col['key']] ?? '');
                     $numLines = max(1, $pdf->getNumLines($text, $colWidth));
                     $lineCounts[] = $numLines;
@@ -292,7 +358,7 @@ class PazYSalvoPdfService
         }
 
         // Dibuja título + encabezados de columna en $top y devuelve [headerRowTop, bodyTop]
-        $dibujarCabecera = function (float $top) use ($pdf, $titleRowH, $headerRowH, $headerFontSize, $tituloTabla): array {
+        $dibujarCabecera = function (float $top) use ($pdf, $titleRowH, $headerRowH, $headerFontSize, $tituloTabla, $columnas, $colX): array {
             $headerRowTop = $top + $titleRowH;
             $bodyTop = $headerRowTop + $headerRowH;
 
@@ -300,9 +366,9 @@ class PazYSalvoPdfService
             $pdf->SetXY(self::TABLE_LEFT, $top + 3);
             $pdf->Cell(self::TABLE_RIGHT - self::TABLE_LEFT, $titleRowH - 3, $tituloTabla, 0, 0, 'C');
 
-            foreach (self::COLUMNS as $i => $col) {
-                $x0 = self::COL_X[$i];
-                $w = self::COL_X[$i + 1] - $x0;
+            foreach ($columnas as $i => $col) {
+                $x0 = $colX[$i];
+                $w = $colX[$i + 1] - $x0;
                 foreach ($col['header'] as $li => $linea) {
                     $pdf->SetXY($x0, $headerRowTop + 3.5 + $li * 10.7);
                     $pdf->Cell($w, 10, $linea, 0, 0, 'C');
@@ -330,7 +396,7 @@ class PazYSalvoPdfService
                 $rowH = $rowHeights[$rIdx];
 
                 if ($rowTop + $rowH > $limiteInferior) {
-                    $this->drawTablaGrid($pdf, $paginaTop, $paginaHeaderRowTop, $rowTop, $rowYsPagina);
+                    $this->drawTablaGrid($pdf, $paginaTop, $paginaHeaderRowTop, $rowTop, $rowYsPagina, $colX);
                     $this->drawFooter($pdf, $numeroPagina);
                     $pdf->AddPage();
                     $numeroPagina++;
@@ -343,9 +409,9 @@ class PazYSalvoPdfService
                     $pdf->SetFont('helvetica', '', $cellFontSize);
                 }
 
-                foreach (self::COLUMNS as $i => $col) {
-                    $x0 = self::COL_X[$i] + 3;
-                    $colWidth = self::COL_X[$i + 1] - self::COL_X[$i] - 6;
+                foreach ($columnas as $i => $col) {
+                    $x0 = $colX[$i] + 3;
+                    $colWidth = $colX[$i + 1] - $colX[$i] - 6;
                     $text = (string) ($row[$col['key']] ?? '');
                     $pdf->MultiCell(
                         $colWidth,
@@ -372,7 +438,7 @@ class PazYSalvoPdfService
             }
         }
 
-        $this->drawTablaGrid($pdf, $paginaTop, $paginaHeaderRowTop, $rowTop, $rowYsPagina);
+        $this->drawTablaGrid($pdf, $paginaTop, $paginaHeaderRowTop, $rowTop, $rowYsPagina, $colX);
 
         return $rowTop;
     }
@@ -382,7 +448,7 @@ class PazYSalvoPdfService
      * una sola página (líneas horizontales de $rowYs, verticales entre
      * $headerRowTop y $tableBottom, y el borde exterior desde $tableTop).
      */
-    private function drawTablaGrid(TCPDF $pdf, float $tableTop, float $headerRowTop, float $tableBottom, array $rowYs): void
+    private function drawTablaGrid(TCPDF $pdf, float $tableTop, float $headerRowTop, float $tableBottom, array $rowYs, array $colX): void
     {
         $pdf->SetLineWidth(0.75);
         $pdf->SetDrawColor(0, 0, 0);
@@ -391,7 +457,7 @@ class PazYSalvoPdfService
             $pdf->Line(self::TABLE_LEFT, $y, self::TABLE_RIGHT, $y);
         }
 
-        foreach (self::COL_X as $x) {
+        foreach ($colX as $x) {
             $pdf->Line($x, $headerRowTop, $x, $tableBottom);
         }
 

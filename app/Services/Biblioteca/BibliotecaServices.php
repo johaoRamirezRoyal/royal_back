@@ -1343,12 +1343,19 @@ class BibliotecaServices extends Service
                     ->whereNull('id_devuelto')
                     ->count();
 
-                if ($cantidadLibros === 0) {
+                $cantidadPaquetes = PaquetePrestamos::where('id_usuario', $usuario->id_user)
+                    ->whereNull('id_devuelto')
+                    ->count();
+
+                if ($cantidadLibros === 0 && $cantidadPaquetes === 0) {
                     $sin_prestamos_pendientes[] = $usuario->id_user;
                     continue;
                 }
 
-                if (empty($usuario->correo)) {
+                // filter_var (no solo empty()) porque hay correos "basura" (ej. ".") que no
+                // están vacíos pero MailService los descarta igual — sin este check el usuario
+                // no caía en ningún bucket: el envío fallaba en silencio y no se reportaba.
+                if (empty($usuario->correo) || filter_var($usuario->correo, FILTER_VALIDATE_EMAIL) === false) {
                     $sin_correo[] = $usuario->id_user;
                     continue;
                 }
@@ -1363,7 +1370,8 @@ class BibliotecaServices extends Service
                     $usuario->nombre,
                     $cantidadLibros,
                     $pdf['data']['contenido'],
-                    $pdf['data']['nombre_archivo']
+                    $pdf['data']['nombre_archivo'],
+                    $cantidadPaquetes
                 ));
 
                 if ($enviado) {
@@ -1391,8 +1399,94 @@ class BibliotecaServices extends Service
     }
 
     /**
-     * Genera el PDF de "Paz y Salvo" con los libros que el usuario aún no ha
-     * devuelto. Se genera en memoria, no se guarda en el servidor.
+     * Envía por correo el PDF de paz y salvo a los usuarios indicados (o a todos
+     * los usuarios activos si no se especifican), sin importar si tienen o no
+     * préstamos pendientes por devolver.
+     * @param array|string|int $ids_usuarios
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function enviarPazYSalvoGlobal(array|string|int $ids_usuarios = []): array
+    {
+        try {
+            $ids_usuarios = array_filter(Arr::wrap($ids_usuarios));
+
+            $query = Usuario::query();
+            if (!empty($ids_usuarios)) {
+                $query->whereIn('id_user', $ids_usuarios);
+            } else {
+                $query->where('estado', 'activo');
+            }
+            $usuarios = $query->get(['id_user', 'nombre', 'correo']);
+
+            $mailService = app(MailService::class);
+
+            $enviados = [];
+            $sin_prestamos_pendientes = [];
+            $sin_correo = [];
+
+            foreach ($usuarios as $usuario) {
+                // filter_var (no solo empty()) porque hay correos "basura" (ej. ".") que no
+                // están vacíos pero MailService los descarta igual — sin este check el usuario
+                // no caía en ningún bucket: el envío fallaba en silencio y no se reportaba.
+                if (empty($usuario->correo) || filter_var($usuario->correo, FILTER_VALIDATE_EMAIL) === false) {
+                    $sin_correo[] = $usuario->id_user;
+                    continue;
+                }
+
+                $cantidadLibros = PrestamosEjemplar::where('id_usuario', $usuario->id_user)
+                    ->whereNull('id_devuelto')
+                    ->count();
+
+                $cantidadPaquetes = PaquetePrestamos::where('id_usuario', $usuario->id_user)
+                    ->whereNull('id_devuelto')
+                    ->count();
+
+                if ($cantidadLibros === 0 && $cantidadPaquetes === 0) {
+                    $sin_prestamos_pendientes[] = $usuario->id_user;
+                }
+
+                $pdf = $this->generarPazYSalvoPdf($usuario->id_user);
+
+                if ($pdf['error']) {
+                    continue;
+                }
+
+                $enviado = $mailService->send($usuario->correo, new RecordatorioPrestamosEmail(
+                    $usuario->nombre,
+                    $cantidadLibros,
+                    $pdf['data']['contenido'],
+                    $pdf['data']['nombre_archivo'],
+                    $cantidadPaquetes
+                ));
+
+                if ($enviado) {
+                    $enviados[] = $usuario->id_user;
+                }
+            }
+
+            return [
+                'error' => false,
+                'message' => "Paz y salvo enviado",
+                'data' => [
+                    'enviados' => $enviados,
+                    'sin_prestamos_pendientes' => $sin_prestamos_pendientes,
+                    'sin_correo' => $sin_correo,
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al enviar el paz y salvo global");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al enviar el paz y salvo global",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Genera el PDF de "Paz y Salvo" con los libros Y paquetes que el usuario aún
+     * no ha devuelto (ambos, no solo libros — un paz y salvo real debe reflejar
+     * cualquier préstamo pendiente). Se genera en memoria, no se guarda en el servidor.
      * @param int $id_usuario
      * @return array{data: array, error: bool, message: string}
      */
@@ -1409,7 +1503,7 @@ class BibliotecaServices extends Service
                 ];
             }
 
-            $prestamos = PrestamosEjemplar::with([
+            $prestamosLibros = PrestamosEjemplar::with([
                 'ejemplar:id,codigo,id_libro',
                 'ejemplar.libro:id,titulo,id_categoria,id_subcategoria',
                 'ejemplar.libro.categoria:id,nombre',
@@ -1419,14 +1513,30 @@ class BibliotecaServices extends Service
                 ->orderBy('fecha_prestamo', 'desc')
                 ->get();
 
+            $prestamosPaquetes = PaquetePrestamos::with(['paquete:id,nombre,codigo'])
+                ->where('id_usuario', $id_usuario)
+                ->whereNull('id_devuelto')
+                ->orderBy('fecha_prestamo', 'desc')
+                ->get();
+
+            // Se renumera "no_prestamo" tras fusionar para que la tabla quede correlativa (1..n), sin huecos ni duplicados.
+            $filas = array_merge(
+                $this->construirFilasPrestamosPdf($prestamosLibros),
+                $this->construirFilasPaquetesPdf($prestamosPaquetes)
+            );
+            foreach ($filas as $indice => &$fila) {
+                $fila['no_prestamo'] = (string) ($indice + 1);
+            }
+            unset($fila);
+
             $pdfService = app(PazYSalvoPdfService::class);
             $contenido = $pdfService->generate([
                 'tipo' => 'paz_y_salvo',
                 'institucion' => config('app.name'),
                 'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
                 'numero_documento' => (string) $usuario->documento,
-                'prestamos' => $this->construirFilasPrestamosPdf($prestamos),
-                'sin_pendientes' => $prestamos->isEmpty(),
+                'prestamos' => $filas,
+                'sin_pendientes' => $prestamosLibros->isEmpty() && $prestamosPaquetes->isEmpty(),
             ]);
 
             return [
@@ -1504,6 +1614,30 @@ class BibliotecaServices extends Service
     }
 
     /**
+     * Estado de un préstamo (libro o paquete) para las tablas de PazYSalvoPdfService:
+     * ya devuelto -> a tiempo/antes/tarde comparando fecha_devuelto vs fecha_devolucion;
+     * no devuelto -> vencido/por vencer comparando fecha_devolucion vs hoy.
+     */
+    private function calcularEstadoPrestamo($idDevuelto, $fechaDevolucion, $fechaDevuelto, $hoy): string
+    {
+        if ($idDevuelto) {
+            if ($fechaDevolucion && $fechaDevuelto) {
+                $entrega = $fechaDevuelto->toDateString();
+                $limite = $fechaDevolucion->toDateString();
+                return match (true) {
+                    $entrega < $limite => 'DEVUELTO ANTES DE TIEMPO',
+                    $entrega > $limite => 'DEVOLUCION TARDIA',
+                    default => 'JUSTO A TIEMPO',
+                };
+            }
+            return 'JUSTO A TIEMPO';
+        }
+
+        $vencido = $fechaDevolucion && $fechaDevolucion->lt($hoy);
+        return $vencido ? 'VENCIDO' : 'POR VENCER';
+    }
+
+    /**
      * Mapea préstamos de ejemplar al formato de fila que espera PazYSalvoPdfService.
      * @param \Illuminate\Support\Collection<int, PrestamosEjemplar> $prestamos
      */
@@ -1512,22 +1646,6 @@ class BibliotecaServices extends Service
         $hoy = now()->startOfDay();
 
         return $prestamos->values()->map(function ($prestamo, $indice) use ($hoy) {
-            if ($prestamo->id_devuelto) {
-                $estado = 'JUSTO A TIEMPO';
-                if ($prestamo->fecha_devolucion && $prestamo->fecha_devuelto) {
-                    $entrega = $prestamo->fecha_devuelto->toDateString();
-                    $limite = $prestamo->fecha_devolucion->toDateString();
-                    $estado = match (true) {
-                        $entrega < $limite => 'DEVUELTO ANTES DE TIEMPO',
-                        $entrega > $limite => 'DEVOLUCION TARDIA',
-                        default => 'JUSTO A TIEMPO',
-                    };
-                }
-            } else {
-                $vencido = $prestamo->fecha_devolucion && $prestamo->fecha_devolucion->lt($hoy);
-                $estado = $vencido ? 'VENCIDO' : 'POR VENCER';
-            }
-
             return [
                 'no_prestamo' => (string) ($indice + 1),
                 'libro' => $prestamo->ejemplar->libro->titulo ?? '-',
@@ -1536,7 +1654,109 @@ class BibliotecaServices extends Service
                 'subcategoria' => $prestamo->ejemplar->libro->subcategoria->nombre ?? '-',
                 'fecha_prestamo' => $prestamo->fecha_prestamo?->format('d/m/Y') ?? '-',
                 'fecha_devolucion' => $prestamo->fecha_devolucion?->format('d/m/Y') ?? '-',
-                'estado' => $estado,
+                'estado' => $this->calcularEstadoPrestamo($prestamo->id_devuelto, $prestamo->fecha_devolucion, $prestamo->fecha_devuelto, $hoy),
+            ];
+        })->all();
+    }
+
+    /**
+     * Mapea préstamos de paquete al formato de fila de construirFilasPrestamosPdf (libros)
+     * para que ambos puedan fusionarse en una sola tabla de paz y salvo — 'categoria' se
+     * usa como indicador de tipo ("Paquete") ya que la tabla de paz_y_salvo/listado no
+     * tiene una columna de tipo propia y no se quiso alterar su layout medido a pixel.
+     * @param \Illuminate\Support\Collection<int, PaquetePrestamos> $prestamos
+     */
+    private function construirFilasPaquetesPdf($prestamos): array
+    {
+        $hoy = now()->startOfDay();
+
+        return $prestamos->values()->map(function ($prestamo) use ($hoy) {
+            return [
+                'no_prestamo' => '', // se renumera al fusionar con los de libros en generarPazYSalvoPdf
+                'libro' => $prestamo->paquete->nombre ?? '-',
+                'num_ejemplar' => $prestamo->paquete->codigo ?? '-',
+                'categoria' => 'Paquete',
+                'subcategoria' => '-',
+                'fecha_prestamo' => $prestamo->fecha_prestamo?->format('d/m/Y') ?? '-',
+                'fecha_devolucion' => $prestamo->fecha_devolucion?->format('d/m/Y') ?? '-',
+                'estado' => $this->calcularEstadoPrestamo($prestamo->id_devuelto, $prestamo->fecha_devolucion, $prestamo->fecha_devuelto, $hoy),
+            ];
+        })->all();
+    }
+
+    /**
+     * Genera el PDF "Listado de Prestamos (Paquetes)" con todos los préstamos de
+     * paquetes (devueltos o no) que ha realizado el usuario. Mismo estilo que
+     * generarListadoPrestamosPdf (libros), vía PazYSalvoPdfService::generate con
+     * tipo 'listado_paquetes'.
+     * @param int $id_usuario
+     * @return array{data: array, error: bool, message: string}
+     */
+    public function generarListadoPrestamosPaquetesPdf(int $id_usuario): array
+    {
+        try {
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'id_curso'])
+                ->with('cursoRelacion:id,nombre')
+                ->find($id_usuario);
+
+            if (!$usuario) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el usuario con ID: {$id_usuario}",
+                    'data' => [],
+                ];
+            }
+
+            $prestamos = PaquetePrestamos::with(['paquete:id,nombre,codigo'])
+                ->where('id_usuario', $id_usuario)
+                ->orderBy('fecha_prestamo', 'desc')
+                ->get();
+
+            $pdfService = app(PazYSalvoPdfService::class);
+            $contenido = $pdfService->generate([
+                'tipo' => 'listado_paquetes',
+                'institucion' => config('app.name'),
+                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'numero_documento' => (string) $usuario->documento,
+                'curso' => $usuario->cursoRelacion->nombre ?? '',
+                'prestamos' => $this->construirFilasPrestamosPaquetesPdf($prestamos),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "PDF generado correctamente",
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => "listado_prestamos_paquetes_{$id_usuario}.pdf",
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al generar el PDF de listado de préstamos de paquetes");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al generar el PDF de listado de préstamos de paquetes",
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Mapea préstamos de paquete al formato de fila que espera PazYSalvoPdfService
+     * (tipo 'listado_paquetes').
+     * @param \Illuminate\Support\Collection<int, PaquetePrestamos> $prestamos
+     */
+    private function construirFilasPrestamosPaquetesPdf($prestamos): array
+    {
+        $hoy = now()->startOfDay();
+
+        return $prestamos->values()->map(function ($prestamo, $indice) use ($hoy) {
+            return [
+                'no_prestamo' => (string) ($indice + 1),
+                'paquete' => $prestamo->paquete->nombre ?? '-',
+                'codigo' => $prestamo->paquete->codigo ?? '-',
+                'fecha_prestamo' => $prestamo->fecha_prestamo?->format('d/m/Y') ?? '-',
+                'fecha_devolucion' => $prestamo->fecha_devolucion?->format('d/m/Y') ?? '-',
+                'estado' => $this->calcularEstadoPrestamo($prestamo->id_devuelto, $prestamo->fecha_devolucion, $prestamo->fecha_devuelto, $hoy),
             ];
         })->all();
     }
@@ -1758,6 +1978,40 @@ class BibliotecaServices extends Service
         }
     }
 
+    /**
+     * Elimina en lote contenido de un paquete (borrado real, no desactivación).
+     * Scoped por id_paquete, igual que cambiarEstadoContenidoPaqueteBiblioteca.
+     */
+    public function eliminarContenidoPaqueteBiblioteca(array $ids, int $id_paquete)
+    {
+        try {
+            $contenidos = PaqueteContenido::whereIn('id', $ids)->where('id_paquete', $id_paquete);
+
+            if (!$contenidos->exists()) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el contenido a eliminar",
+                    'data' => []
+                ];
+            }
+
+            $eliminados = $contenidos->delete();
+
+            return [
+                'error' => false,
+                'message' => "Contenido eliminado correctamente",
+                'data' => ["eliminados" => $eliminados],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al eliminar el contenido");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al eliminar el contenido",
+                'data' => []
+            ];
+        }
+    }
+
     public function editarDatosContenidoPaqueteBiblioteca(array $data, int $id_contenido)
     {
         try {
@@ -1841,20 +2095,61 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function generarPrestamoPaqueteUsuario(int $id_usuario, int $id_paquete, string $fecha_devolucion, string $observacion)
+    /**
+     * Verifica un paquete por código (mismo rol que verificarEjemplarBiblioteca):
+     * confirma existencia y disponibilidad antes de generar el préstamo.
+     */
+    public function verificarPaqueteBiblioteca(string $codigo): array
+    {
+        try {
+            $paquete = Paquetes::where('codigo', $codigo)->first();
+
+            if (!$paquete) {
+                return [
+                    'error' => true,
+                    'message' => 'El paquete no existe',
+                    'data' => ['existe' => false],
+                ];
+            }
+
+            $disponible = $paquete->estado == 1 && $paquete->activo == 1;
+
+            return [
+                'error' => false,
+                'message' => $disponible
+                    ? 'El paquete está disponible para préstamo'
+                    : 'El paquete existe pero no está disponible para préstamo',
+                'data' => [
+                    'existe' => true,
+                    'disponible' => $disponible,
+                    'estado' => $paquete->estado,
+                    'paquete' => $paquete,
+                ],
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, "Error al tratar de verificar el paquete");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al verificar el paquete",
+                'data' => [],
+            ];
+        }
+    }
+
+    public function generarPrestamoPaqueteUsuario(int $id_usuario, string $codigo_paquete, string $fecha_devolucion, ?string $observacion = null)
     {
         try {
 
             $prestamo = DB::transaction(function () use (
                 $id_usuario,
-                $id_paquete,
+                $codigo_paquete,
                 $fecha_devolucion,
                 $observacion
             ) {
-                $paquete = Paquetes::lockForUpdate()->find($id_paquete);
+                $paquete = Paquetes::where('codigo', $codigo_paquete)->lockForUpdate()->first();
 
                 if (!$paquete) {
-                    throw new Exception("No se encontro el paquete");
+                    throw new Exception("No se encontró el paquete con ese código");
                 }
 
                 if ($paquete->estado == 2) {
@@ -1862,7 +2157,7 @@ class BibliotecaServices extends Service
                 }
 
                 $prestamo = PaquetePrestamos::create([
-                    'id_paquete'        => $id_paquete,
+                    'id_paquete'        => $paquete->id,
                     'id_usuario'        => $id_usuario,
                     'fecha_prestamo'    => now(),
                     'fecha_devolucion'  => $fecha_devolucion,
@@ -1891,32 +2186,31 @@ class BibliotecaServices extends Service
         }
     }
 
-    public function devolverPrestamoPaqueteUsuario(int $id_prestamo, string $observacion)
+    public function devolverPrestamoPaqueteUsuario(string $codigo_paquete, ?string $observacion = null)
     {
         try {
             $prestamo = DB::transaction(function () use (
-                $id_prestamo,
+                $codigo_paquete,
                 $observacion
             ) {
 
-                $prestamo = PaquetePrestamos::lockForUpdate()->find($id_prestamo);
-
-                if (!$prestamo) {
-                    throw new Exception("No se encontró el préstamo");
-                }
-
-                if ($prestamo->id_devuelto) {
-                    throw new Exception("El préstamo ya fue devuelto");
-                }
-
-                $paquete = Paquetes::lockForUpdate()->find($prestamo->id_paquete);
+                $paquete = Paquetes::where('codigo', $codigo_paquete)->lockForUpdate()->first();
 
                 if (!$paquete) {
-                    throw new Exception("No se encontró el paquete");
+                    throw new Exception("No se encontró el paquete con ese código");
                 }
 
                 if ($paquete->estado == 1) {
-                    throw new Exception("El paquete ya se encuentra disponible para préstamo");
+                    throw new Exception("Este paquete no se encuentra en préstamo");
+                }
+
+                $prestamo = PaquetePrestamos::where('id_paquete', $paquete->id)
+                    ->whereNull('id_devuelto')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$prestamo) {
+                    throw new Exception("No se encontró un préstamo activo para este paquete");
                 }
 
                 $prestamo->update([
@@ -1943,6 +2237,246 @@ class BibliotecaServices extends Service
                 'error' => true,
                 'message' => $e->getMessage(),
                 'data' => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |             METRICAS BIBLIOTECA
+    |
+    -------------------------------------------------
+    */
+
+    /**
+     * KPI de paquetes para la pestaña "Paquetes" de Métricas — análogo a
+     * estadisticasEjemplaresBiblioteca (libros).
+     */
+    public function estadisticasPaquetesBiblioteca(): array
+    {
+        try {
+            $counts = Paquetes::selectRaw('estado, count(*) as total')
+                ->where('activo', 1)
+                ->groupBy('estado')
+                ->pluck('total', 'estado');
+
+            return [
+                'error' => false,
+                'message' => 'Estadísticas obtenidas',
+                'data' => [
+                    'disponibles' => (int) ($counts[1] ?? 0),
+                    'prestados' => (int) ($counts[2] ?? 0),
+                    'paquetes_total' => Paquetes::count(),
+                    'contenido_total' => PaqueteContenido::where('activo', 1)->count(),
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener estadísticas de paquetes');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener estadísticas de paquetes',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Libros con más préstamos en el rango de fechas dado. */
+    public function librosMasPrestados(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $prestamos = PrestamosEjemplar::with(['ejemplar:id,id_libro', 'ejemplar.libro:id,titulo'])
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->get()
+                ->filter(fn ($p) => $p->ejemplar?->libro);
+
+            $resultado = $prestamos->groupBy(fn ($p) => $p->ejemplar->id_libro)
+                ->map(fn ($grupo) => [
+                    'libro_id' => $grupo->first()->ejemplar->id_libro,
+                    'libro_titulo' => $grupo->first()->ejemplar->libro->titulo,
+                    'total_prestamos' => $grupo->count(),
+                ])
+                ->sortByDesc('total_prestamos')
+                ->take($limite)
+                ->values();
+
+            return [
+                'error' => false,
+                'message' => 'Libros más prestados obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener libros más prestados');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener libros más prestados',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Categorías de libro con más préstamos en el rango de fechas dado. */
+    public function categoriasLibrosMasPrestadas(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $prestamos = PrestamosEjemplar::with(['ejemplar:id,id_libro', 'ejemplar.libro:id,id_categoria', 'ejemplar.libro.categoria:id,nombre'])
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->get()
+                ->filter(fn ($p) => $p->ejemplar?->libro?->categoria);
+
+            $resultado = $prestamos->groupBy(fn ($p) => $p->ejemplar->libro->id_categoria)
+                ->map(fn ($grupo) => [
+                    'categoria_id' => $grupo->first()->ejemplar->libro->id_categoria,
+                    'categoria_nombre' => $grupo->first()->ejemplar->libro->categoria->nombre,
+                    'total_prestamos' => $grupo->count(),
+                ])
+                ->sortByDesc('total_prestamos')
+                ->take($limite)
+                ->values();
+
+            return [
+                'error' => false,
+                'message' => 'Categorías más prestadas obtenidas',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener categorías más prestadas');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener categorías más prestadas',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Cursos con más préstamos de libros en el rango de fechas dado. */
+    public function cursosConMasPrestamosLibros(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $usuariosConPrestamo = PrestamosEjemplar::when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->pluck('id_usuario');
+
+            $cursos = \App\Models\Areas\Cursos::select('id', 'nombre')
+                ->whereIn('id', fn ($q) => $q->select('id_curso')
+                    ->from('usuarios')
+                    ->whereIn('id_user', $usuariosConPrestamo))
+                ->get();
+
+            $resultado = [];
+            foreach ($cursos as $curso) {
+                $usuariosDelCurso = Usuario::where('id_curso', $curso->id)
+                    ->whereIn('id_user', $usuariosConPrestamo)
+                    ->pluck('id_user');
+
+                $totalPrestamos = PrestamosEjemplar::whereIn('id_usuario', $usuariosDelCurso)
+                    ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                    ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                    ->count();
+
+                $resultado[] = [
+                    'curso_id' => $curso->id,
+                    'curso_nombre' => $curso->nombre,
+                    'total_prestamos' => $totalPrestamos,
+                    'usuarios_con_prestamo' => $usuariosDelCurso->count(),
+                ];
+            }
+
+            usort($resultado, fn ($a, $b) => $b['total_prestamos'] <=> $a['total_prestamos']);
+            $resultado = array_slice($resultado, 0, $limite);
+
+            return [
+                'error' => false,
+                'message' => 'Cursos con más préstamos de libros obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener cursos con más préstamos de libros');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener cursos con más préstamos de libros',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Paquetes con más préstamos en el rango de fechas dado. */
+    public function paquetesMasPrestados(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $resultado = PaquetePrestamos::select('id_paquete', DB::raw('COUNT(*) as total_prestamos'))
+                ->with('paquete:id,nombre,codigo')
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->groupBy('id_paquete')
+                ->orderByDesc('total_prestamos')
+                ->limit($limite)
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Paquetes más prestados obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener paquetes más prestados');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener paquetes más prestados',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Cursos con más préstamos de paquetes en el rango de fechas dado. */
+    public function cursosConMasPrestamosPaquetes(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $usuariosConPrestamo = PaquetePrestamos::when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->pluck('id_usuario');
+
+            $cursos = \App\Models\Areas\Cursos::select('id', 'nombre')
+                ->whereIn('id', fn ($q) => $q->select('id_curso')
+                    ->from('usuarios')
+                    ->whereIn('id_user', $usuariosConPrestamo))
+                ->get();
+
+            $resultado = [];
+            foreach ($cursos as $curso) {
+                $usuariosDelCurso = Usuario::where('id_curso', $curso->id)
+                    ->whereIn('id_user', $usuariosConPrestamo)
+                    ->pluck('id_user');
+
+                $totalPrestamos = PaquetePrestamos::whereIn('id_usuario', $usuariosDelCurso)
+                    ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                    ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                    ->count();
+
+                $resultado[] = [
+                    'curso_id' => $curso->id,
+                    'curso_nombre' => $curso->nombre,
+                    'total_prestamos' => $totalPrestamos,
+                    'usuarios_con_prestamo' => $usuariosDelCurso->count(),
+                ];
+            }
+
+            usort($resultado, fn ($a, $b) => $b['total_prestamos'] <=> $a['total_prestamos']);
+            $resultado = array_slice($resultado, 0, $limite);
+
+            return [
+                'error' => false,
+                'message' => 'Cursos con más préstamos de paquetes obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener cursos con más préstamos de paquetes');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener cursos con más préstamos de paquetes',
+                'data' => [],
             ];
         }
     }

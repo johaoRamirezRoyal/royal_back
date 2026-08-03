@@ -8,7 +8,9 @@ use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
 use App\Models\Inventario\InventarioLog;
 use App\Models\Inventario\Reportes;
+use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -23,8 +25,17 @@ class InventarioServices
      * @var array
      */
     private array $mailTo = [
-        'hernando.ramirez@royalschool.edu.co'
+        'cronograma.sistemas@royalschool.edu.co'
     ];
+
+    private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null): array
+    {
+        $destinatarios = $this->mailTo;
+        foreach (array_filter([$responsableCorreo, $reportadorCorreo]) as $correo) {
+            $destinatarios[] = $correo;
+        }
+        return array_values(array_unique($destinatarios));
+    }
 
     private function registrarLog(array $items, int $estado, ?int $idUser, ?int $idArea = null): void
     {
@@ -268,12 +279,21 @@ class InventarioServices
             if (!$result['error']) {
                 $titulo = "Notificación | Inventario Liberado";
                 $contenido = "Se han Liberado los siguientes elementos:\n\n";
+                $destinatarios = $this->mailTo;
 
                 foreach ($result['data'] as $inv) {
                     $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
+
+                    $responsable = Usuario::find($inv->id_user)?->correo;
+                    $ultimoReporte = $inv->reportes()->latest('id')->first();
+                    $reportador = $ultimoReporte?->id_user ? Usuario::find($ultimoReporte->id_user)?->correo : null;
+
+                    foreach (array_filter([$responsable, $reportador]) as $correo) {
+                        $destinatarios[] = $correo;
+                    }
                 }
 
-                $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
+                $this->mailService->sendGeneric(array_values(array_unique($destinatarios)), $titulo, $contenido);
             }
 
             return $result;
@@ -365,7 +385,7 @@ class InventarioServices
 
         try {
 
-            return DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
+            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
 
                 $inventario = Inventario::whereIn('id', $ids)
                     ->whereNotIn('estado', [2, 5])
@@ -408,6 +428,19 @@ class InventarioServices
                     'data' => $inventario
                 ];
             });
+
+            if (!$resultado['error']) {
+                $reportador = Usuario::find($id_log)?->correo;
+
+                foreach ($resultado['data'] as $item) {
+                    $responsable = Usuario::find($item->id_user)?->correo;
+                    $titulo = "Notificación | Inventario Reportado";
+                    $contenido = "Se ha reportado el inventario:\n\n- {$item->descripcion} (Código: {$item->codigo})\n\nDescripción: {$descripcion}";
+                    $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador), $titulo, $contenido);
+                }
+            }
+
+            return $resultado;
         } catch (\Throwable $e) {
 
             return [
@@ -426,17 +459,29 @@ class InventarioServices
         ?string $search,
         ?int $estado,
         ?int $tipo_categoria,
-        ?int $per_page
+        ?int $per_page,
+        ?int $tipo_reporte = null,
+        ?bool $sin_solucion = false
     ): array {
         try {
 
             $query = Reportes::query()
                 ->with([
-                    'inventario',
+                    'inventario.categoria',
+                    'inventario.estado',
+                    'inventario.area',
                     'usuario',
                     'anio',
                     'periodo'
                 ])
+                ->whereHas('inventario.categoria', function ($categoria) {
+                    $categoria->where('activo', 1);
+                })
+                ->whereHas('inventario', function ($inventario) {
+                    $inventario->whereNotIn('estado', [3, 4, 5]);
+                })
+                ->whereNull('id_reporte')
+                ->whereDoesntHave('solucion')
                 ->when(!empty($id_inventario), function ($q) use ($id_inventario) {
                     $q->whereIn('id_inventario', $id_inventario);
                 })
@@ -452,6 +497,12 @@ class InventarioServices
                 ->when(!is_null($estado), function ($q) use ($estado) {
                     $q->where('estado', $estado);
                 })
+                ->when($tipo_reporte, function ($q) use ($tipo_reporte) {
+                    $q->where('tipo_reporte', $tipo_reporte);
+                })
+                ->when($sin_solucion, function ($q) {
+                    $q->whereDoesntHave('solucion');
+                })
                 ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
                     $q->whereHas('inventario.categoria', function ($categoria) use ($tipo_categoria) {
                         $categoria->where('tipo_categoria', $tipo_categoria);
@@ -459,13 +510,18 @@ class InventarioServices
                 })
                 ->when($search, function ($q) use ($search) {
                     $q->where(function ($query) use ($search) {
-                        $query->where('descripcion', 'like', "%{$search}%")
+                        $query->where('id', 'like', "%{$search}%")
+                            ->orWhere('id_inventario', 'like', "%{$search}%")
+                            ->orWhere('descripcion', 'like', "%{$search}%")
                             ->orWhereHas('inventario', function ($inventario) use ($search) {
                                 $inventario->where('codigo', 'like', "%{$search}%")
-                                    ->orWhere('descripcion', 'like', "%{$search}%");
+                                    ->orWhere('descripcion', 'like', "%{$search}%")
+                                    ->orWhere('marca', 'like', "%{$search}%")
+                                    ->orWhere('modelo', 'like', "%{$search}%");
                             })
                             ->orWhereHas('usuario', function ($usuario) use ($search) {
-                                $usuario->where('nombre', 'like', "%{$search}%");
+                                $usuario->where('nombre', 'like', "%{$search}%")
+                                    ->orWhere('apellido', 'like', "%{$search}%");
                             });
                     });
                 })
@@ -505,8 +561,7 @@ class InventarioServices
         string $descripcion
     ): array {
         try {
-
-            return DB::transaction(function () use ($id_reporte, $id_resp, $fecha_respuesta, $descripcion) {
+            $resultado = DB::transaction(function () use ($id_reporte, $id_resp, $fecha_respuesta, $descripcion) {
 
                 $reporte = Reportes::with('inventario')->find($id_reporte);
 
@@ -566,6 +621,17 @@ class InventarioServices
                     'data' => $solucion->fresh()
                 ];
             });
+
+            if (!$resultado['error']) {
+                $reporteFresco = Reportes::with('inventario.usuario')->find($id_reporte);
+                $responsable = $reporteFresco?->inventario?->usuario?->correo;
+                $reportador = Usuario::find($reporteFresco?->id_user)?->correo;
+                $titulo = "Notificación | Reporte Solucionado";
+                $contenido = "Se ha solucionado el reporte #{$id_reporte} del inventario \"{$reporteFresco?->inventario?->descripcion}\" (Código: {$reporteFresco?->inventario?->codigo}).\n\nSolución: {$descripcion}\n\nEn caso de no recibir nuevamente el reporte de este inventario se tomará como satisfecha la solución al reporte.";
+                $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador), $titulo, $contenido);
+            }
+
+            return $resultado;
         } catch (\Throwable $e) {
 
             return [
@@ -576,13 +642,23 @@ class InventarioServices
         }
     }
 
+    /**
+     * Programa mantenimientos preventivos para los inventarios dados. A cada
+     * inventario se le asigna una fecha aleatoria dentro de [fecha_inicio, fecha_fin],
+     * en día hábil (lunes a viernes) y entre 07:30 y 15:45.
+     *
+     * @param bool $conSolucion Si es true, además crea la solución del mantenimiento
+     *                          en la misma fecha indicada + 45 minutos.
+     */
     public function programarMantenimientoPreventivo(
         array $ids,
         string $fecha_inicio,
+        string $fecha_fin,
         int $id_log,
-        string $observacion,
+        string $descripcion,
         ?int $id_anio,
-        ?int $periodo
+        ?int $periodo,
+        bool $conSolucion = false
     ): array {
         try {
             $inventarios = Inventario::whereIn('id', $ids)
@@ -598,23 +674,9 @@ class InventarioServices
             }
 
             $idAnio = $id_anio;
-            $idPeriodo = $periodo;
 
-            if (is_null($idAnio) || is_null($idPeriodo)) {
-                $ultimoAnioEscolar = Anio::with([
-                    'periodos:id,id_anio,numero,fecha_inicio,fecha_fin'
-                ])
-                    ->where('activo', 1)
-                    ->latest('id')
-                    ->first();
-
-                if (is_null($idPeriodo)) {
-                    return [
-                        'error' => true,
-                        'message' => "Debes añadir el periodo escolar para el mantenimiento",
-                        'data' => []
-                    ];
-                }
+            if (is_null($idAnio)) {
+                $ultimoAnioEscolar = Anio::where('activo', 1)->latest('id')->first();
 
                 if (!$ultimoAnioEscolar) {
                     return [
@@ -624,19 +686,26 @@ class InventarioServices
                     ];
                 }
 
-                $idAnio ??= $ultimoAnioEscolar->id;
+                $idAnio = $ultimoAnioEscolar->id;
             }
 
             DB::transaction(function () use (
                 $inventarios,
                 $fecha_inicio,
+                $fecha_fin,
                 $id_log,
-                $observacion,
+                $descripcion,
                 $idAnio,
-                $idPeriodo
+                $periodo,
+                $conSolucion
             ) {
+                $inicio = Carbon::parse($fecha_inicio);
+                $fin = Carbon::parse($fecha_fin);
+
                 foreach ($inventarios as $inventario) {
-                    Reportes::create([
+                    $fecha = $this->fechaMantenimientoAleatoria($inicio, $fin);
+
+                    $reporte = Reportes::create([
                         'id_inventario' => $inventario->id,
                         'id_area' => $inventario->id_area,
                         'observacion' => 'Mantenimiento Preventivo',
@@ -645,16 +714,34 @@ class InventarioServices
                         'id_log' => $id_log,
                         'id_resp' => $inventario->id_user,
                         'tipo_reporte' => 2,
-                        'descripcion' => $observacion,
+                        'descripcion' => $descripcion,
                         'id_anio' => $idAnio,
-                        'periodo' => $idPeriodo,
-                        'fechareg' => $fecha_inicio,
+                        'periodo' => $periodo,
+                        'fechareg' => $fecha,
                     ]);
 
                     $inventario->update([
                         'estado' => 6,
-                        'observacion' => $observacion,
+                        'observacion' => $descripcion,
                     ]);
+
+                    if ($conSolucion) {
+                        Reportes::create([
+                            'id_reporte' => $reporte->id,
+                            'id_inventario' => $inventario->id,
+                            'id_area' => $inventario->id_area,
+                            'observacion' => 'Mantenimiento Preventivo Realizado',
+                            'estado' => 3,
+                            'id_user' => $inventario->id_user,
+                            'id_log' => $id_log,
+                            'id_resp' => $id_log,
+                            'tipo_reporte' => 2,
+                            'descripcion' => $descripcion,
+                            'fecha_respuesta' => $fecha->copy()->addMinutes(45),
+                            'id_anio' => $idAnio,
+                            'periodo' => $periodo,
+                        ]);
+                    }
                 }
             });
 
@@ -670,5 +757,30 @@ class InventarioServices
                 'data' => []
             ];
         }
+    }
+
+    /**
+     * Fecha aleatoria dentro de [inicio, fin], día hábil (L-V) y hora entre 07:30 y 15:45.
+     */
+    private function fechaMantenimientoAleatoria(Carbon $inicio, Carbon $fin): Carbon
+    {
+        $dias = [];
+        $cursor = $inicio->copy()->startOfDay();
+
+        while ($cursor->lte($fin)) {
+            if ($cursor->isWeekday()) {
+                $dias[] = $cursor->copy();
+            }
+            $cursor->addDay();
+        }
+
+        if (empty($dias)) {
+            $dias[] = $inicio->copy();
+        }
+
+        $dia = $dias[array_rand($dias)];
+        $minuto = random_int(0, 495); // 07:30 → 15:45 (495 minutos de rango)
+
+        return $dia->setTime(7, 30)->addMinutes($minuto);
     }
 }

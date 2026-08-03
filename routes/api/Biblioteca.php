@@ -91,6 +91,12 @@ Route::get("/prestamosEjemplar/historial", [BibliotecaController::class, 'obtene
 }
  */
 Route::post("/prestamosEjemplar/recordatorio", [BibliotecaController::class, 'enviarRecordatorioPrestamosPendientes']);
+/**
+{
+  "ids": [1, 2, 3] // opcional: si se omite, envía a todos los usuarios activos
+}
+ */
+Route::post("/prestamosEjemplar/pazYSalvoGlobal", [BibliotecaController::class, 'enviarPazYSalvoGlobal']);
 Route::get("/prestamosEjemplar/pazYSalvo", [BibliotecaController::class, 'generarPazYSalvoPdf']);
 Route::get("/prestamosEjemplar/listadoPdf", [BibliotecaController::class, 'generarListadoPrestamosPdf']);
 Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
@@ -148,8 +154,26 @@ Route::put("/paquetes/contenido/estado", [BibliotecaController::class, 'cambiarE
  */
 Route::put("/paquetes/contenido", [BibliotecaController::class, 'editarDatosContenidoPaqueteBiblioteca']);
 
+/**
+{
+  "ids": [553],
+  "id_paquete": 33
+}
+ */
+Route::delete("/paquetes/contenido", [BibliotecaController::class, 'eliminarContenidoPaqueteBiblioteca']);
+
+Route::get("/paquetes/verificar", [BibliotecaController::class, 'verificarPaqueteBiblioteca']);
 Route::post("/paquetes/prestamo", [BibliotecaController::class, 'generarPrestamoPaqueteUsuario']);
 Route::put("/paquetes/prestamo/devolver", [BibliotecaController::class, 'devolverPrestamoPaqueteUsuario']);
 Route::get("/paquetes/prestamo/historial", [BibliotecaController::class, 'mostrarHistorialPrestamosPaquetesUsuario']);
+Route::get("/paquetes/prestamo/listadoPdf", [BibliotecaController::class, 'generarListadoPrestamosPaquetesPdf']);
+
+// METRICAS
+Route::get("/estadisticas/paquetes", [BibliotecaController::class, 'estadisticasPaquetesBiblioteca']);
+Route::get("/estadisticas/libros-mas-prestados", [BibliotecaController::class, 'librosMasPrestados']);
+Route::get("/estadisticas/categorias-mas-prestadas", [BibliotecaController::class, 'categoriasLibrosMasPrestadas']);
+Route::get("/estadisticas/cursos-libros", [BibliotecaController::class, 'cursosConMasPrestamosLibros']);
+Route::get("/estadisticas/paquetes-mas-prestados", [BibliotecaController::class, 'paquetesMasPrestados']);
+Route::get("/estadisticas/cursos-paquetes", [BibliotecaController::class, 'cursosConMasPrestamosPaquetes']);
 
 
