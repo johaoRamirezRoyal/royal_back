@@ -153,10 +153,12 @@ class InventariosController extends Controller
             $request->input('id_user'),
             $request->input('id_anio'),
             $request->input('id_periodo'),
-            $request->input('search'),
+            $request->input('s', $request->input('search')),
             $request->input('estado'),
             $request->input('tipo_categoria'),
-            $request->input('per_page')
+            $request->input('per_page', $request->input('per-page')),
+            $request->input('tipo_reporte'),
+            $request->boolean('sin_solucion')
         );
 
         if ($resultado['error']) {
@@ -179,6 +181,43 @@ class InventariosController extends Controller
             $data['id_resp'],
             $data['fecha_respuesta'],
             $data['descripcion']
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function programarMantenimientoPreventivo(Request $request)
+    {
+        $data = $request->all();
+
+        $validator = Validator::make($data, [
+            "ids" => "required|array|min:1",
+            "ids.*" => "integer|distinct|exists:inventario,id",
+            "fecha_inicio" => "required|date",
+            "fecha_fin" => "required|date|after_or_equal:fecha_inicio",
+            "descripcion" => "required|string",
+            "id_anio" => "required|integer|exists:anio_escolar,id",
+            "periodo" => "required|integer|in:1,2",
+            "id_log" => "required|integer|exists:usuarios,id_user",
+            "con_solucion" => "boolean",
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $resultado = $this->inventario_services->programarMantenimientoPreventivo(
+            $data['ids'],
+            $data['fecha_inicio'],
+            $data['fecha_fin'],
+            $data['id_log'],
+            $data['descripcion'],
+            $data['id_anio'],
+            $data['periodo'],
+            $data['con_solucion'] ?? false
         );
 
         return $this->apiResponse($resultado);
