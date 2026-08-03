@@ -155,16 +155,30 @@
 
             <div class="body">
                 <p class="greeting">Hola {{ $nombre }},</p>
-                <p class="intro">Este es un recordatorio de tus préstamos de biblioteca pendientes por devolver.
-                    Adjunto encontrarás el PDF con el detalle de cada libro y su fecha límite de devolución.</p>
+                @if ($cantidadLibros > 0 || $cantidadPaquetes > 0)
+                    <p class="intro">Este es un recordatorio de tus préstamos de biblioteca pendientes por devolver.
+                        Adjunto encontrarás el PDF con el detalle de cada préstamo y su fecha límite de devolución.</p>
 
-                <div class="code-box">
-                    <p class="code-label">Libros pendientes por devolver</p>
-                    <p class="code-number">{{ $cantidadLibros }}</p>
-                </div>
+                    @if ($cantidadLibros > 0)
+                        <div class="code-box">
+                            <p class="code-label">Libros pendientes por devolver</p>
+                            <p class="code-number">{{ $cantidadLibros }}</p>
+                        </div>
+                    @endif
 
-                <p class="note">Por favor acércate a la biblioteca para gestionar la devolución antes de la fecha
-                    límite indicada en el documento adjunto.</p>
+                    @if ($cantidadPaquetes > 0)
+                        <div class="code-box">
+                            <p class="code-label">Paquetes pendientes por devolver</p>
+                            <p class="code-number">{{ $cantidadPaquetes }}</p>
+                        </div>
+                    @endif
+
+                    <p class="note">Por favor acércate a la biblioteca para gestionar la devolución antes de la fecha
+                        límite indicada en el documento adjunto.</p>
+                @else
+                    <p class="intro">No tienes préstamos de biblioteca pendientes por devolver. Adjunto encontrarás tu
+                        paz y salvo.</p>
+                @endif
             </div>
 
             <div class="footer">
