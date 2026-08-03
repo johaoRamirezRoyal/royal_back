@@ -7,14 +7,33 @@ use App\Http\Requests\AsistenciaGestion\FiltroAsistenciaGestionRequest;
 use App\Http\Requests\AsistenciaGestion\GraficaAsistenciaRequest;
 use App\Http\Requests\AsistenciaGestion\StoreAsistenciaGestionRequest;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
+use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AsistenciaGestionController extends Controller
 {
+    // Opción de "/permisos" que habilita ver la asistencia de todos los usuarios,
+    // no solo la propia (misma opción que ya gatea la ruta en el frontend).
+    private const OPCION_VER_TODAS = 63;
+
     public function __construct(
-        private AsistenciaGestionService $asistenciaService
+        private AsistenciaGestionService $asistenciaService,
+        private UsuariosServices $usuariosService,
     ) {}
+
+    /**
+     * Sin el permiso de "ver todas", se ignora cualquier id_usuario solicitado por el
+     * cliente y se fuerza el propio: la restricción de "llegadas de trabajadores" a
+     * las asistencias propias debe cumplirse en el servidor, no solo ocultarse en la UI.
+     */
+    private function idUsuarioPermitido(Request $request, ?int $idUsuarioSolicitado): ?int
+    {
+        $usuarioAuth = $request->user();
+        $puedeVerTodas = $this->usuariosService->tienePermiso(self::OPCION_VER_TODAS, $usuarioAuth->perfil)['permiso'] ?? false;
+
+        return $puedeVerTodas ? $idUsuarioSolicitado : $usuarioAuth->id_user;
+    }
 
     public function registrarAsistencia(StoreAsistenciaGestionRequest $request): JsonResponse
     {
@@ -31,7 +50,10 @@ class AsistenciaGestionController extends Controller
 
     public function obtenerAsistencia(FiltroAsistenciaGestionRequest $request): JsonResponse
     {
-        $resultado = $this->asistenciaService->obtenerAsistencia($request->validated());
+        $filtros = $request->validated();
+        $filtros['id_usuario'] = $this->idUsuarioPermitido($request, $filtros['id_usuario'] ?? null);
+
+        $resultado = $this->asistenciaService->obtenerAsistencia($filtros);
 
         return $this->apiResponse($resultado);
     }

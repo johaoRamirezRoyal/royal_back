@@ -16,7 +16,8 @@ class RecordatorioPrestamosEmail extends Mailable
         public readonly string $nombre,
         public readonly int $cantidadLibros,
         public readonly string $pdfContenido,
-        public readonly string $pdfNombre
+        public readonly string $pdfNombre,
+        public readonly int $cantidadPaquetes = 0
     ) {
     }
 
@@ -34,6 +35,7 @@ class RecordatorioPrestamosEmail extends Mailable
             with: [
                 'nombre' => $this->nombre,
                 'cantidadLibros' => $this->cantidadLibros,
+                'cantidadPaquetes' => $this->cantidadPaquetes,
             ],
         );
     }

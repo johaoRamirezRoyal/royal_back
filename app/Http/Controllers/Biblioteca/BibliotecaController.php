@@ -338,6 +338,15 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function enviarPazYSalvoGlobal(Request $request)
+    {
+        $response = $this->biblioteca_services->enviarPazYSalvoGlobal(
+            $request->input('ids', [])
+        );
+
+        return $this->apiResponse($response);
+    }
+
     public function generarPazYSalvoPdf(Request $request)
     {
         $response = $this->biblioteca_services->generarPazYSalvoPdf(
@@ -357,6 +366,22 @@ class BibliotecaController extends Controller
     public function generarListadoPrestamosPdf(Request $request)
     {
         $response = $this->biblioteca_services->generarListadoPrestamosPdf(
+            $request->integer('id_usuario')
+        );
+
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
+        return response($response['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $response['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
+    public function generarListadoPrestamosPaquetesPdf(Request $request)
+    {
+        $response = $this->biblioteca_services->generarListadoPrestamosPaquetesPdf(
             $request->integer('id_usuario')
         );
 
@@ -443,6 +468,15 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function eliminarContenidoPaqueteBiblioteca(Request $request){
+        $ids = $request->input('ids');
+        $id_paquete = $request->input('id_paquete');
+
+        $response = $this->biblioteca_services->eliminarContenidoPaqueteBiblioteca($ids, $id_paquete);
+
+        return $this->apiResponse($response);
+    }
+
     public function editarDatosContenidoPaqueteBiblioteca(ContenidoPaqueteRequest $request){
         $body = $request->validated();
 
@@ -460,9 +494,16 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function verificarPaqueteBiblioteca(Request $request)
+    {
+        $response = $this->biblioteca_services->verificarPaqueteBiblioteca($request->input('codigo'));
+
+        return $this->apiResponse($response);
+    }
+
     public function generarPrestamoPaqueteUsuario(Request $request){
         $id_usuario = $request->input('id_usuario');
-        $id_paquete = $request->input('id_paquete');
+        $codigo_paquete = $request->input('codigo_paquete');
 
         #Generamos una fecha aleatoria de ahora + 1 mes
         $fecha = date('Y-m-d', strtotime('+1 month'));
@@ -470,16 +511,80 @@ class BibliotecaController extends Controller
         $fecha_devolucion = $request->input('fecha_devolucion', $fecha);
         $observacion = $request->input('observacion');
 
-        $response = $this->biblioteca_services->generarPrestamoPaqueteUsuario($id_usuario, $id_paquete, $fecha_devolucion, $observacion);
+        $response = $this->biblioteca_services->generarPrestamoPaqueteUsuario($id_usuario, $codigo_paquete, $fecha_devolucion, $observacion);
 
         return $this->apiResponse($response);
     }
 
     public function devolverPrestamoPaqueteUsuario(Request $request){
-        $id_prestamo = $request->input('id_prestamo');
+        $codigo_paquete = $request->input('codigo_paquete');
         $observacion = $request->input('observacion');
 
-        $response = $this->biblioteca_services->devolverPrestamoPaqueteUsuario($id_prestamo, $observacion);
+        $response = $this->biblioteca_services->devolverPrestamoPaqueteUsuario($codigo_paquete, $observacion);
+
+        return $this->apiResponse($response);
+    }
+
+    // METRICAS
+
+    public function estadisticasPaquetesBiblioteca()
+    {
+        $response = $this->biblioteca_services->estadisticasPaquetesBiblioteca();
+
+        return $this->apiResponse($response);
+    }
+
+    public function librosMasPrestados(Request $request)
+    {
+        $response = $this->biblioteca_services->librosMasPrestados(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function categoriasLibrosMasPrestadas(Request $request)
+    {
+        $response = $this->biblioteca_services->categoriasLibrosMasPrestadas(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function cursosConMasPrestamosLibros(Request $request)
+    {
+        $response = $this->biblioteca_services->cursosConMasPrestamosLibros(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function paquetesMasPrestados(Request $request)
+    {
+        $response = $this->biblioteca_services->paquetesMasPrestados(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function cursosConMasPrestamosPaquetes(Request $request)
+    {
+        $response = $this->biblioteca_services->cursosConMasPrestamosPaquetes(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
 
         return $this->apiResponse($response);
     }
