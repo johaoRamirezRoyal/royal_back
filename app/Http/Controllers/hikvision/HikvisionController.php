@@ -63,6 +63,21 @@ class HikvisionController extends Controller
         $contentType = $request->header('Content-Type', '');
 
         if (str_contains($contentType, 'multipart/form-data')) {
+            // Multipart trae la parte de control (JSON/XML) más, opcionalmente, una
+            // foto: se loguean los campos y solo nombre/tamaño de archivos (no los
+            // bytes) para no inflar el log con binarios.
+            Log::info('[hikvision-notification] Request cruda del dispositivo (multipart)', [
+                'contentType' => $contentType,
+                'post' => $request->post(),
+                'files' => array_map(
+                    fn ($archivo) => array_map(
+                        fn ($f) => ['name' => $f->getClientOriginalName(), 'size' => $f->getSize()],
+                        is_array($archivo) ? $archivo : [$archivo]
+                    ),
+                    $request->allFiles()
+                ),
+            ]);
+
             foreach ($request->post() as $valor) {
                 $decoded = $this->intentarDecodificar((string) $valor);
                 if ($decoded !== null) {
@@ -83,7 +98,14 @@ class HikvisionController extends Controller
             return null;
         }
 
-        return $this->intentarDecodificar($request->getContent());
+        $raw = $request->getContent();
+
+        Log::info('[hikvision-notification] Request cruda del dispositivo', [
+            'contentType' => $contentType,
+            'raw' => $raw,
+        ]);
+
+        return $this->intentarDecodificar($raw);
     }
 
     private function intentarDecodificar(string $raw): ?array
