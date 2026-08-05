@@ -24,11 +24,11 @@ class RegistrarInventarioRequest extends FormRequest
     public function rules(): array
     {
         return [
-            "descripcion" => ['required', 'string', 'max:255'],
+            "descripcion" => ['required', 'string', 'max:200'],
 
-            "marca" => ['nullable', 'string', 'max:100'],
+            "marca" => ['nullable', 'string', 'max:200'],
 
-            "modelo" => ['nullable', 'string', 'max:100'],
+            "modelo" => ['nullable', 'string', 'max:200'],
 
             "precio" => ['nullable', 'numeric', 'min:0'],
 
@@ -68,7 +68,11 @@ class RegistrarInventarioRequest extends FormRequest
             "id_compra" => [
                 'nullable',
                 'integer',
-            ]
+            ],
+
+            "codigo" => ['nullable', 'string', 'max:200'],
+
+            "detalles" => ['nullable', 'string', 'max:300'],
         ];
     }
 
@@ -78,15 +82,15 @@ class RegistrarInventarioRequest extends FormRequest
             // descripcion
             'descripcion.required' => 'La descripción es obligatoria',
             'descripcion.string' => 'La descripción debe ser un texto',
-            'descripcion.max' => 'La descripción no puede superar los 255 caracteres',
+            'descripcion.max' => 'La descripción no puede superar los 200 caracteres',
 
             // marca
             'marca.string' => 'La marca debe ser un texto',
-            'marca.max' => 'La marca no puede superar los 100 caracteres',
+            'marca.max' => 'La marca no puede superar los 200 caracteres',
 
             // modelo
             'modelo.string' => 'El modelo debe ser un texto',
-            'modelo.max' => 'El modelo no puede superar los 100 caracteres',
+            'modelo.max' => 'El modelo no puede superar los 200 caracteres',
 
             // precio
             'precio.numeric' => 'El precio debe ser un valor numérico',
@@ -121,6 +125,12 @@ class RegistrarInventarioRequest extends FormRequest
 
             // id_compra
             'id_compra.integer' => 'El ID de compra debe ser un número válido',
+
+            'codigo.string' => 'El código serial debe ser un texto',
+            'codigo.max' => 'El código serial no puede superar los 200 caracteres',
+
+            'detalles.string' => 'Los detalles deben ser un texto',
+            'detalles.max' => 'Los detalles no pueden superar los 300 caracteres',
         ];
     }
 
@@ -141,6 +151,8 @@ class RegistrarInventarioRequest extends FormRequest
             'id_area' => $this->id_area,
             'id_categoria' => $this->id_categoria,
             'id_compra' => $this->id_compra,
+            'codigo' => $this->codigo,
+            'detalles' => $this->detalles,
         ];
     }
 }

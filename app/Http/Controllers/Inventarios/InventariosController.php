@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Inventarios;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inventario\ActualizarInventarioRequest;
 use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
@@ -43,9 +44,11 @@ class InventariosController extends Controller
 
     public function obtenerListadoInventario(Request $request){
         $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
-        $search = $request->input('search', null);
+        $search = $request->input('s', null);
         $datos = $request->only(['id_area', 'id_categoria', 'estado', 'id_usuario']);
-        $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos);
+        $sort = $request->input('sort'); // 'usuario' o 'cantidad'
+        $dir = $request->input('dir', 'asc');
+        $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos, $sort, $dir);
 
         if($listado_inventario['error']){
             return response()->json([
@@ -60,6 +63,18 @@ class InventariosController extends Controller
             'message' => $listado_inventario['message'],
             'data' => $listado_inventario['data']
         ]);
+    }
+
+    public function actualizarInventario(ActualizarInventarioRequest $request, int $id){
+        $resultado = $this->inventario_services->actualizarInventario($id, $request->toInventarioUpdate());
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function historialInventario(int $id){
+        $resultado = $this->inventario_services->historialInventario($id);
+
+        return $this->apiResponse($resultado);
     }
 
     public function descontinuarInventario(Request $request){

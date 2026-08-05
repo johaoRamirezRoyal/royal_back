@@ -61,16 +61,20 @@ class InventarioServices
      * @param mixed $perPage
      * @param mixed $search
      * @param mixed $datos
+     * @param string|null $sort 'usuario' o 'cantidad'
+     * @param string $dir 'asc' o 'desc'
      * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
-    public function obtenerListadoInventario($perPage = 15, $search = null, $datos = [])
+    public function obtenerListadoInventario($perPage = 15, $search = null, $datos = [], $sort = null, $dir = 'asc')
     {
         try {
+            $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+
             $listado = Inventario::select(
-                'id_user',
-                'id_area',
-                'descripcion',
-                'id_categoria',
+                'inventario.id_user',
+                'inventario.id_area',
+                'inventario.descripcion',
+                'inventario.id_categoria',
                 DB::raw("
                 CONCAT(
                     '[',
@@ -82,7 +86,8 @@ class InventarioServices
                             'precio', inventario.precio,
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
-                            'codigo', inventario.codigo
+                            'codigo', inventario.codigo,
+                            'fecha_compra', inventario.fecha_compra
                         )
                     ),
                     ']'
@@ -90,6 +95,7 @@ class InventarioServices
             ")
             )
                 ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
+                ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
                 ->with([
                     'usuario:id_user,nombre,apellido',
                     'area:id,nombre',
@@ -97,18 +103,26 @@ class InventarioServices
                 ])
                 ->when($search, function ($query, $search) {
                     $query->where(function ($q) use ($search) {
-                        $q->where('descripcion', 'like', "%{$search}%");
+                        $q->where('inventario.descripcion', 'like', "%{$search}%");
                     });
                 })->when($datos['id_area'] ?? null, function ($query) use ($datos) {
-                    $query->whereIn('id_area', $datos['id_area']);
+                    $query->whereIn('inventario.id_area', $datos['id_area']);
                 })->when($datos['id_categoria'] ?? null, function ($query) use ($datos) {
-                    $query->whereIn('id_categoria', $datos['id_categoria']);
+                    $query->whereIn('inventario.id_categoria', $datos['id_categoria']);
                 })->when($datos['estado'] ?? null, function ($query) use ($datos) {
-                    $query->whereIn('estado', $datos['estado']);
+                    $query->whereIn('inventario.estado', $datos['estado']);
                 })->when($datos['id_usuario'] ?? null, function ($query) use ($datos) {
-                    $query->where('id_user', $datos['id_usuario']);
+                    $query->where('inventario.id_user', $datos['id_usuario']);
                 })
-                ->groupBy('id_user', 'id_area', 'descripcion', 'id_categoria')
+                // u.nombre se agrega al GROUP BY solo para satisfacer ONLY_FULL_GROUP_BY: es
+                // funcionalmente dependiente de id_user (join 1:1 por PK), no cambia los grupos.
+                ->groupBy('inventario.id_user', 'inventario.id_area', 'inventario.descripcion', 'inventario.id_categoria', 'u.nombre')
+                ->when($sort === 'usuario', function ($query) use ($dir) {
+                    $query->orderBy('u.nombre', $dir);
+                })
+                ->when($sort === 'cantidad', function ($query) use ($dir) {
+                    $query->orderByRaw("COUNT(inventario.id) {$dir}");
+                })
                 ->paginate($perPage);
 
             // convertir string a JSON real
@@ -127,6 +141,92 @@ class InventarioServices
                 'error' => true,
                 'data' => null,
                 'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Actualiza los datos básicos de un ítem (descripcion/marca/modelo/precio/fecha_compra).
+     * No toca estado/área/usuario: eso sigue gestionado por liberar/asignar/reportar/descontinuar.
+     * @param int $id
+     * @param array $data
+     * @return array{data: array|null, error: bool, message: string}
+     */
+    public function actualizarInventario(int $id, array $data): array
+    {
+        try {
+            $inventario = Inventario::find($id);
+
+            if (!$inventario) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'No se encontró el ítem de inventario.',
+                ];
+            }
+
+            $inventario->update($data);
+
+            return [
+                'error' => false,
+                'data' => $inventario->fresh()->toArray(),
+                'message' => 'Inventario actualizado correctamente',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Historial completo de un ítem: reportes y mantenimientos preventivos
+     * (tipo_reporte 1 y 2 respectivamente) por separado, incluyendo los ya
+     * resueltos con su solución — a diferencia de mostrarReportesDeInventario(),
+     * que solo trae pendientes (para la bandeja de reportes).
+     * @param int $idInventario
+     * @return array{data: array{item: Inventario, reportes: array, mantenimientos: array}|null, error: bool, message: string}
+     */
+    public function historialInventario(int $idInventario): array
+    {
+        try {
+            $item = Inventario::with([
+                'usuario:id_user,nombre,apellido',
+                'area:id,nombre',
+                'categoria:id,nombre',
+            ])->find($idInventario);
+
+            if (!$item) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'No se encontró el artículo de inventario.',
+                ];
+            }
+
+            $query = fn (int $tipoReporte) => Reportes::where('id_inventario', $idInventario)
+                ->where('tipo_reporte', $tipoReporte)
+                ->whereNull('id_reporte') // solo reportes originales, no las filas de solución
+                ->with(['solucion', 'usuario', 'responsable', 'area:id,nombre'])
+                ->orderByDesc('fechareg')
+                ->get();
+
+            return [
+                'error' => false,
+                'data' => [
+                    'item' => $item,
+                    'reportes' => $query(1),
+                    'mantenimientos' => $query(2),
+                ],
+                'message' => 'Historial obtenido correctamente.',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
             ];
         }
     }
