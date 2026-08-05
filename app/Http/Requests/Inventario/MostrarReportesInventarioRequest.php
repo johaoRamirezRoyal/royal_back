@@ -20,6 +20,8 @@ class MostrarReportesInventarioRequest extends FormRequest
             'id_user' => ['nullable', 'integer', Rule::exists('usuarios', 'id_user')],
             'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
             'id_periodo' => ['nullable', 'integer'],
+            'id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
+            'estado_solucion' => ['nullable', 'string', 'in:pendiente,solucionado'],
             'search' => ['nullable', 'string', 'max:100'],
             'estado' => ['nullable', 'integer'],
             'tipo_categoria' => ['nullable', 'integer', 'in:1,2'],

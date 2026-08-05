@@ -158,7 +158,9 @@ class InventariosController extends Controller
             $request->input('tipo_categoria'),
             $request->input('per_page', $request->input('per-page')),
             $request->input('tipo_reporte'),
-            $request->boolean('sin_solucion')
+            $request->boolean('sin_solucion'),
+            $request->input('id_categoria'),
+            $request->input('estado_solucion')
         );
 
         if ($resultado['error']) {
