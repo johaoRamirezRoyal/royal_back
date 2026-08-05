@@ -638,9 +638,11 @@ class HikvisionController extends Controller
             return;
         }
 
-        // Con el modo "salida" desactivado en el equipo, el dispositivo deja de
-        // mandar checkIn/checkOut y manda "undefined" en toda marcación válida.
-        // Mientras esté así, todo evento con persona asociada es una entrada.
+        // El modelo configurado (DS-K1T321MFWX-B) reporta attendanceStatus checkIn/
+        // checkOut vía ISAPI cuando el modo de asistencia está activo en el equipo.
+        // Con ese modo desactivado, el dispositivo manda "undefined" en toda
+        // marcación válida y no distingue entrada de salida por sí mismo; en ese
+        // caso el tipo se infiere del estado del día dentro de AsistenciaGestionService.
         $esCheckIn = $attendanceStatus === 'checkIn' || $attendanceStatus === 'undefined';
 
         Log::info('[hikvision-notification] Evento de asistencia recibido', [
@@ -652,10 +654,12 @@ class HikvisionController extends Controller
 
         $idUsuario = (int) $employeeNoString;
 
+        // La llegada tarde de estudiantes solo tiene sentido para la entrada.
         if ($esCheckIn) {
             $this->registrarLlegadaTardeSiAplica($idUsuario);
-            $this->registrarAsistenciaGestionSiAplica($idUsuario);
         }
+
+        $this->registrarAsistenciaGestionSiAplica($idUsuario, $attendanceStatus);
     }
 
     /**
@@ -702,10 +706,12 @@ class HikvisionController extends Controller
     }
 
     /**
-     * Registra la asistencia en asistencia_gestion si el usuario no está en
-     * la lista de perfiles excluidos (estudiantes, admin, etc.).
+     * Registra la marcación (entrada o salida) en asistencia_gestion si el usuario
+     * no está en la lista de perfiles excluidos (estudiantes, admin, etc.). El tipo
+     * lo resuelve AsistenciaGestionService::registrarMarcacion() según el estado
+     * del día y el attendanceStatus reportado por el dispositivo.
      */
-    private function registrarAsistenciaGestionSiAplica(int $idUsuario): void
+    private function registrarAsistenciaGestionSiAplica(int $idUsuario, ?string $attendanceStatus): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
@@ -726,10 +732,11 @@ class HikvisionController extends Controller
 
         $ahora = now();
 
-        $resultado = $this->asistencia_gestion_service->registrarAsistencia(
+        $resultado = $this->asistencia_gestion_service->registrarMarcacion(
             $idUsuario,
             $ahora->format('Y-m-d'),
-            $ahora->format('H:i:s')
+            $ahora->format('H:i:s'),
+            $attendanceStatus
         );
 
         if ($resultado['error']) {
@@ -737,6 +744,14 @@ class HikvisionController extends Controller
                 'idUsuario' => $idUsuario,
                 'message' => $resultado['message'] ?? null,
             ]);
+
+            return;
         }
+
+        Log::info('[hikvision-notification] Marcación de asistencia registrada', [
+            'idUsuario' => $idUsuario,
+            'tipo' => $resultado['data']['tipo'] ?? null,
+            'message' => $resultado['message'],
+        ]);
     }
 }

@@ -28,6 +28,8 @@ Accept: application/json
 ### ============================================
 
 ### 2. Obtener asistencia (todas)
+### Cada fila ahora incluye "hora_salida" (nullable: null = aún no marcó salida)
+### junto a "hora_asistencia" (hora de entrada). Ver ASISTENCIA_ENTRADA_SALIDA_FRONTEND.md
 GET http://localhost:8000/api/asistencia-gestion
 Accept: application/json
 
