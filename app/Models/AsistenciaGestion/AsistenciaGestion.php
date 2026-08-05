@@ -22,12 +22,14 @@ class AsistenciaGestion extends Model
         'id_user',
         'fecha_asistencia',
         'hora_asistencia',
+        'hora_salida',
         'fechareg',
     ];
 
     protected $casts = [
         'fecha_asistencia' => 'date',
         'hora_asistencia' => 'date:H:i:s',
+        'hora_salida' => 'date:H:i:s',
         'fechareg' => 'datetime',
     ];
 

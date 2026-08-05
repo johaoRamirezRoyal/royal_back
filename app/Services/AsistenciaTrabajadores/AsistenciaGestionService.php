@@ -69,6 +69,111 @@ class AsistenciaGestionService extends Service
         }
     }
 
+    /**
+     * Registra la marcación del día (entrada o salida) para dispositivos Hikvision
+     * que reportan attendanceStatus (checkIn/checkOut/undefined vía ISAPI
+     * AccessControllerEvent — confirmado compatible con el modelo configurado,
+     * DS-K1T321MFWX-B). Reglas de negocio (un solo día, sin timestamps propios):
+     *   - Sin entrada registrada hoy -> esta marcación es la entrada.
+     *   - Con entrada y sin salida -> esta marcación es la salida.
+     *   - Con entrada y salida ya registradas -> se descarta (tercer evento del día).
+     *   - "checkOut" sin entrada previa -> se rechaza explícitamente (no se puede
+     *     marcar salida sin haber marcado entrada).
+     * Si el dispositivo no distingue (attendanceStatus "undefined", modo asistencia
+     * desactivado en el equipo) el tipo se infiere del estado del día.
+     */
+    public function registrarMarcacion(int $idUsuario, string $fecha, string $hora, ?string $attendanceStatus = null): array
+    {
+        try {
+            $asistencia = AsistenciaGestion::where('id_user', $idUsuario)
+                ->where('fecha_asistencia', $fecha)
+                ->first();
+
+            $tieneEntrada = $asistencia !== null;
+            $tieneSalida = $asistencia !== null && $asistencia->hora_salida !== null;
+
+            $esSalida = $attendanceStatus === 'checkOut'
+                || ($attendanceStatus !== 'checkIn' && $tieneEntrada && !$tieneSalida);
+
+            if (!$esSalida) {
+                if ($tieneEntrada) {
+                    return [
+                        'error' => false,
+                        'message' => 'Ya existe un registro de entrada para este usuario en esta fecha',
+                        'data' => null,
+                    ];
+                }
+
+                // firstOrCreate() por la misma razón que en registrarAsistencia(): dos
+                // pushes casi simultáneos del mismo usuario no deben duplicar la fila.
+                $asistencia = AsistenciaGestion::firstOrCreate(
+                    ['id_user' => $idUsuario, 'fecha_asistencia' => $fecha],
+                    ['hora_asistencia' => $hora, 'fechareg' => now()]
+                );
+
+                if (!$asistencia->wasRecentlyCreated) {
+                    return [
+                        'error' => false,
+                        'message' => 'Ya existe un registro de entrada para este usuario en esta fecha',
+                        'data' => null,
+                    ];
+                }
+
+                return [
+                    'error' => false,
+                    'message' => 'Entrada registrada correctamente',
+                    'data' => array_merge($asistencia->toArray(), ['tipo' => 'Entry']),
+                ];
+            }
+
+            if (!$tieneEntrada) {
+                return [
+                    'error' => true,
+                    'message' => 'No se puede registrar la salida sin haber marcado la entrada',
+                    'data' => null,
+                ];
+            }
+
+            if ($tieneSalida) {
+                return [
+                    'error' => false,
+                    'message' => 'Ya existe un registro de salida para este usuario en esta fecha',
+                    'data' => null,
+                ];
+            }
+
+            // Guard atómico: si otro proceso (reintento del dispositivo) ya registró
+            // la salida entre el check de arriba y este update, whereNull no afecta
+            // ninguna fila y quedamos en el mismo caso "ya existe salida".
+            $actualizado = AsistenciaGestion::where('id', $asistencia->id)
+                ->whereNull('hora_salida')
+                ->update(['hora_salida' => $hora]);
+
+            if ($actualizado === 0) {
+                return [
+                    'error' => false,
+                    'message' => 'Ya existe un registro de salida para este usuario en esta fecha',
+                    'data' => null,
+                ];
+            }
+
+            $asistencia->refresh();
+
+            return [
+                'error' => false,
+                'message' => 'Salida registrada correctamente',
+                'data' => array_merge($asistencia->toArray(), ['tipo' => 'Exit']),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al registrar marcación de asistencia');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al registrar la marcación',
+                'data' => null,
+            ];
+        }
+    }
+
     public function obtenerAsistencia(array $filtros): array
     {
         try {

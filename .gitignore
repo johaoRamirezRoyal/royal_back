@@ -54,3 +54,6 @@ coverage/
 
 #HTTP
 ./REST/*
+
+# All migrations archive
+./database/all_migrations.sql
