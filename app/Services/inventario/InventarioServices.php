@@ -561,9 +561,13 @@ class InventarioServices
         ?int $tipo_categoria,
         ?int $per_page,
         ?int $tipo_reporte = null,
-        ?bool $sin_solucion = false
+        ?bool $sin_solucion = false,
+        ?int $id_categoria = null,
+        ?string $estado_solucion = null
     ): array {
         try {
+
+            $esSolucionado = $estado_solucion === 'solucionado';
 
             $query = Reportes::query()
                 ->with([
@@ -572,16 +576,23 @@ class InventarioServices
                     'inventario.area',
                     'usuario',
                     'anio',
-                    'periodo'
+                    'periodo',
+                    'solucion.responsable',
+                    'solucion.usuario'
                 ])
                 ->whereHas('inventario.categoria', function ($categoria) {
                     $categoria->where('activo', 1);
                 })
-                ->whereHas('inventario', function ($inventario) {
-                    $inventario->whereNotIn('estado', [3, 4, 5]);
+                ->whereHas('inventario', function ($inventario) use ($esSolucionado) {
+                    $inventario->whereNotIn('estado', $esSolucionado ? [4, 5] : [3, 4, 5]);
                 })
                 ->whereNull('id_reporte')
-                ->whereDoesntHave('solucion')
+                ->when($esSolucionado, function ($q) {
+                    $q->whereHas('solucion');
+                })
+                ->when(!$esSolucionado && ($sin_solucion || $estado_solucion === 'pendiente'), function ($q) {
+                    $q->whereDoesntHave('solucion');
+                })
                 ->when(!empty($id_inventario), function ($q) use ($id_inventario) {
                     $q->whereIn('id_inventario', $id_inventario);
                 })
@@ -600,8 +611,10 @@ class InventarioServices
                 ->when($tipo_reporte, function ($q) use ($tipo_reporte) {
                     $q->where('tipo_reporte', $tipo_reporte);
                 })
-                ->when($sin_solucion, function ($q) {
-                    $q->whereDoesntHave('solucion');
+                ->when($id_categoria, function ($q) use ($id_categoria) {
+                    $q->whereHas('inventario', function ($inventario) use ($id_categoria) {
+                        $inventario->where('id_categoria', $id_categoria);
+                    });
                 })
                 ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
                     $q->whereHas('inventario.categoria', function ($categoria) use ($tipo_categoria) {
