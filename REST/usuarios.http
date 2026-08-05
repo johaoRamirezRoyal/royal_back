@@ -1,0 +1,185 @@
+### ============================================
+### USUARIOS — REST Client
+### ============================================
+### Todos los endpoints requieren token JWT (cookie `token`) con system:general.
+### Primero haz login para obtener el token.
+###
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### { "user": "1193377218", "pass": "1193377218" }
+###
+### Base: http://localhost:8000/api/usuarios
+### ============================================
+
+### ============================================
+### LISTADOS
+### ============================================
+
+### 1. OBTENER usuarios activos paginados (excluye perfiles 17, 16 y 6)
+GET http://localhost:8000/api/usuarios?per-page=10
+
+### 2. OBTENER todos los usuarios (sin paginación, excluye perfiles 17, 16 y 6)
+GET http://localhost:8000/api/usuarios/all
+
+### 3. OBTENER usuarios activos (SELECT crudo, sin paginación)
+GET http://localhost:8000/api/usuarios/all/activos
+
+### 4. OBTENER todos los usuarios activos paginados (con relaciones perfil/nivel/curso)
+GET http://localhost:8000/api/usuarios/all/general?per-page=10
+
+### 5. OBTENER usuarios paginados con filtros combinados
+GET http://localhost:8000/api/usuarios/paginados?per-page=10&perfiles[]=2&niveles[]=1&cursos[]=5&estado=activo&sort=nombre&dir=asc
+
+### 6. OBTENER usuarios paginados — buscar por nombre/apellido/documento/correo
+GET http://localhost:8000/api/usuarios/paginados?per-page=10&s=Pepito
+
+### 7. OBTENER usuarios — filtrar por perfil
+GET http://localhost:8000/api/usuarios/paginados?perfiles[]=2
+
+### 8. OBTENER usuarios — filtrar por nivel y curso
+GET http://localhost:8000/api/usuarios/paginados?niveles[]=1&cursos[]=5
+
+### 9. OBTENER usuarios — filtrar por estado
+GET http://localhost:8000/api/usuarios/paginados?estado=inactivo
+
+### 10. OBTENER usuarios — filtro flexible (búsqueda + orden + perfil/nivel/grupo)
+GET http://localhost:8000/api/usuarios/filtro?s=Pepito&sort=nombre&dir=asc&per-page=10&perfiles[]=2
+
+### 11. OBTENER usuarios con inscripciones paginados (relaciones inscripción/estado/año/aspirante)
+GET http://localhost:8000/api/usuarios/inscripcionesUsuarios?per-page=10
+
+### ============================================
+### CATÁLOGOS
+### ============================================
+
+### 12. OBTENER todos los perfiles
+GET http://localhost:8000/api/usuarios/perfiles
+
+### 13. OBTENER todos los niveles
+GET http://localhost:8000/api/usuarios/niveles
+
+### ============================================
+### PERMISOS
+### ============================================
+
+### 14. OBTENER si un perfil tiene permiso sobre una opción (200 = sí, 405 = no)
+GET http://localhost:8000/api/usuarios/permiso?opt=1&per=2
+
+### ============================================
+### DETALLE
+### ============================================
+
+### 15. OBTENER información de un usuario por ID
+GET http://localhost:8000/api/usuarios/3123
+
+### ============================================
+### CREAR
+### ============================================
+
+### 16. AGREGAR usuario — exitoso
+POST http://localhost:8000/api/usuarios
+Content-Type: application/json
+Accept: application/json
+
+{
+    "documento": 10203040,
+    "nombre": "Pepito",
+    "apellido": "Pérez",
+    "correo": "pepito_perez@royalschool.edu.co",
+    "perfil": 2,
+    "id_nivel": 1,
+    "user": "aperez2026",
+    "pass": "secret123",
+    "grupo": 1,
+    "curso": 5,
+    "telefono": "3001234567"
+}
+
+### 17. AGREGAR usuario — sin campos obligatorios (debe fallar 422)
+POST http://localhost:8000/api/usuarios
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Pepito"
+}
+
+### 18. AGREGAR usuario — correo no institucional (debe fallar 422)
+POST http://localhost:8000/api/usuarios
+Content-Type: application/json
+Accept: application/json
+
+{
+    "documento": 10203041,
+    "nombre": "Pepito",
+    "apellido": "Pérez",
+    "correo": "pepito@gmail.com",
+    "perfil": 2,
+    "id_nivel": 1,
+    "user": "aperez2026",
+    "pass": "secret123"
+}
+
+### ============================================
+### ACTUALIZAR
+### ============================================
+
+### 19. ACTUALIZAR usuario por ID — exitoso (la contraseña solo se cambia si se envía)
+PUT http://localhost:8000/api/usuarios/3123
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Pepito",
+    "apellido": "Pérez López",
+    "correo": "pepito_perez@royalschool.edu.co",
+    "telefono": "3001234567",
+    "pass": "nuevapass123"
+}
+
+### 20. ACTUALIZAR usuario — ID inexistente (debe fallar 404)
+PUT http://localhost:8000/api/usuarios/99999
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Pepito"
+}
+
+### 21. CAMBIAR estado de varios usuarios — exitoso
+PUT http://localhost:8000/api/usuarios/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [11, 12, 13],
+    "estado": "inactivo"
+}
+
+### 22. CAMBIAR estado — sin array de IDs (debe fallar)
+PUT http://localhost:8000/api/usuarios/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "estado": "inactivo"
+}
+
+### ============================================
+### FIRMA
+### ============================================
+
+### 23. OBTENER URL de la firma del usuario autenticado
+GET http://localhost:8000/api/usuarios/firma
+
+### 24. SUBIR firma del usuario autenticado (multipart, campo `firma`)
+POST http://localhost:8000/api/usuarios/firma
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+
+------WebKitFormBoundary
+Content-Disposition: form-data; name="firma"; filename="firma.png"
+Content-Type: image/png
+
+< C:\Users\Soporte\Desktop\firma.png
+------WebKitFormBoundary--
