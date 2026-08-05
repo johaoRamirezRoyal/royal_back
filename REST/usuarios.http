@@ -29,7 +29,7 @@ GET http://localhost:8000/api/usuarios/all/activos
 GET http://localhost:8000/api/usuarios/all/general?per-page=10
 
 ### 5. OBTENER usuarios paginados con filtros combinados
-GET http://localhost:8000/api/usuarios/paginados?per-page=10&perfiles[]=2&niveles[]=1&cursos[]=5&estado=activo&sort=nombre&dir=asc
+GET http://localhost:8000/api/usuarios/paginados?per-page=10 
 
 ### 6. OBTENER usuarios paginados — buscar por nombre/apellido/documento/correo
 GET http://localhost:8000/api/usuarios/paginados?per-page=10&s=Pepito
