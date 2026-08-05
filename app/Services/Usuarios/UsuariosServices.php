@@ -268,6 +268,7 @@ class UsuariosServices
                 'apellido',
                 'correo',
                 'perfil',
+                'user',
                 'id_nivel',
                 'id_curso',
                 'id_grupo',
