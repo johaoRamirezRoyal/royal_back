@@ -24,6 +24,7 @@ class AsistenciaGestion extends Model
         'hora_asistencia',
         'hora_salida',
         'fechareg',
+        'QR',
     ];
 
     protected $casts = [
