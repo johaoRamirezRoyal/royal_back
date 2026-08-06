@@ -588,4 +588,26 @@ class BibliotecaController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    public function perfilesConMasPrestamosLibros(Request $request)
+    {
+        $response = $this->biblioteca_services->perfilesConMasPrestamosLibros(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
+
+    public function perfilesConMasPrestamosPaquetes(Request $request)
+    {
+        $response = $this->biblioteca_services->perfilesConMasPrestamosPaquetes(
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+            $request->input('limite', 10)
+        );
+
+        return $this->apiResponse($response);
+    }
 }

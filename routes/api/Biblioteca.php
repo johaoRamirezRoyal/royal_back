@@ -175,5 +175,7 @@ Route::get("/estadisticas/categorias-mas-prestadas", [BibliotecaController::clas
 Route::get("/estadisticas/cursos-libros", [BibliotecaController::class, 'cursosConMasPrestamosLibros']);
 Route::get("/estadisticas/paquetes-mas-prestados", [BibliotecaController::class, 'paquetesMasPrestados']);
 Route::get("/estadisticas/cursos-paquetes", [BibliotecaController::class, 'cursosConMasPrestamosPaquetes']);
+Route::get("/estadisticas/perfiles-libros", [BibliotecaController::class, 'perfilesConMasPrestamosLibros']);
+Route::get("/estadisticas/perfiles-paquetes", [BibliotecaController::class, 'perfilesConMasPrestamosPaquetes']);
 
 

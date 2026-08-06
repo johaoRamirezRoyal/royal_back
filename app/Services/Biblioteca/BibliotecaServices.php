@@ -10,6 +10,7 @@ use App\Models\Biblioteca\PaquetePrestamos;
 use App\Models\Biblioteca\Paquetes;
 use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
+use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Mail\RecordatorioPrestamosEmail;
 use App\Services\FileStorageService;
@@ -2476,6 +2477,106 @@ class BibliotecaServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener cursos con más préstamos de paquetes',
+                'data' => [],
+            ];
+        }
+    }
+
+    public function perfilesConMasPrestamosLibros(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $usuariosConPrestamo = PrestamosEjemplar::when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->pluck('id_usuario');
+
+            $perfiles = Perfil::select('id_perfil', 'nombre')
+                ->whereIn('id_perfil', fn ($q) => $q->select('perfil')
+                    ->from('usuarios')
+                    ->whereIn('id_user', $usuariosConPrestamo))
+                ->get();
+
+            $resultado = [];
+            foreach ($perfiles as $perfil) {
+                $usuariosDelPerfil = Usuario::where('perfil', $perfil->id_perfil)
+                    ->whereIn('id_user', $usuariosConPrestamo)
+                    ->pluck('id_user');
+
+                $totalPrestamos = PrestamosEjemplar::whereIn('id_usuario', $usuariosDelPerfil)
+                    ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                    ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                    ->count();
+
+                $resultado[] = [
+                    'perfil_id' => $perfil->id_perfil,
+                    'perfil_nombre' => $perfil->nombre,
+                    'total_prestamos' => $totalPrestamos,
+                    'usuarios_con_prestamo' => $usuariosDelPerfil->count(),
+                ];
+            }
+
+            usort($resultado, fn ($a, $b) => $b['total_prestamos'] <=> $a['total_prestamos']);
+            $resultado = array_slice($resultado, 0, $limite);
+
+            return [
+                'error' => false,
+                'message' => 'Perfiles con más préstamos de libros obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener perfiles con más préstamos de libros');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener perfiles con más préstamos de libros',
+                'data' => [],
+            ];
+        }
+    }
+
+    public function perfilesConMasPrestamosPaquetes(?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $usuariosConPrestamo = PaquetePrestamos::when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->pluck('id_usuario');
+
+            $perfiles = Perfil::select('id_perfil', 'nombre')
+                ->whereIn('id_perfil', fn ($q) => $q->select('perfil')
+                    ->from('usuarios')
+                    ->whereIn('id_user', $usuariosConPrestamo))
+                ->get();
+
+            $resultado = [];
+            foreach ($perfiles as $perfil) {
+                $usuariosDelPerfil = Usuario::where('perfil', $perfil->id_perfil)
+                    ->whereIn('id_user', $usuariosConPrestamo)
+                    ->pluck('id_user');
+
+                $totalPrestamos = PaquetePrestamos::whereIn('id_usuario', $usuariosDelPerfil)
+                    ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                    ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                    ->count();
+
+                $resultado[] = [
+                    'perfil_id' => $perfil->id_perfil,
+                    'perfil_nombre' => $perfil->nombre,
+                    'total_prestamos' => $totalPrestamos,
+                    'usuarios_con_prestamo' => $usuariosDelPerfil->count(),
+                ];
+            }
+
+            usort($resultado, fn ($a, $b) => $b['total_prestamos'] <=> $a['total_prestamos']);
+            $resultado = array_slice($resultado, 0, $limite);
+
+            return [
+                'error' => false,
+                'message' => 'Perfiles con más préstamos de paquetes obtenidos',
+                'data' => $resultado,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener perfiles con más préstamos de paquetes');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener perfiles con más préstamos de paquetes',
                 'data' => [],
             ];
         }
