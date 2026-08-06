@@ -41,7 +41,7 @@ GET http://localhost:8000/api/inventario/listado-consolidado?per_page=10
 GET http://localhost:8000/api/inventario/listado-consolidado?id_usuario=3123
 
 ### 6.3. CONSOLIDADO — filtrar por área
-GET http://localhost:8000/api/inventario/listado-consolidado?id_area[]=1
+GET http://localhost:8000/api/inventario/listado-consolidado?id_area[]=4
 
 ### 6.4. CONSOLIDADO — filtrar por categoría y subcategoría (tipo_categoria)
 GET http://localhost:8000/api/inventario/listado-consolidado?id_categoria[]=9&tipo_categoria=1
