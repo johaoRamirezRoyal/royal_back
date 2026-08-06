@@ -188,15 +188,16 @@ class InventarioServices
                     ->orderByDesc('inventario.id')
                     ->paginate($perPage);
             } else {
-                // Modo agrupado (query 1)
+                // Modo agrupado (query 1): un solo grupo por (usuario, área, descripción).
+                // estado_nombre/categoria_nombre = los del ítem más reciente del grupo.
                 $listado = $query
                     ->select(
                         'inventario.id_user',
                         'inventario.id_area',
                         'inventario.descripcion',
-                        'inventario.id_categoria',
-                        'c.nombre as categoria_nombre',
-                        'e.nombre as estado_nombre',
+                        DB::raw("CAST(SUBSTRING_INDEX(GROUP_CONCAT(inventario.id_categoria ORDER BY inventario.id DESC), ',', 1) AS UNSIGNED) as id_categoria"),
+                        DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(c.nombre ORDER BY inventario.id DESC), ',', 1) as categoria_nombre"),
+                        DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(e.nombre ORDER BY inventario.id DESC), ',', 1) as estado_nombre"),
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
                         DB::raw('COUNT(inventario.id) as cantidad')
@@ -205,9 +206,6 @@ class InventarioServices
                         'inventario.id_user',
                         'inventario.id_area',
                         'inventario.descripcion',
-                        'inventario.id_categoria',
-                        'c.nombre',
-                        'e.nombre',
                         'u.nombre',
                         'u.apellido',
                         'a.nombre'
