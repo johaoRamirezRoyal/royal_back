@@ -146,6 +146,91 @@ class InventarioServices
     }
 
     /**
+     * Listado consolidado: sin 'descripcion' agrupa por (usuario, área, descripción)
+     * con cantidad; con 'descripcion' trae los ítems individuales de ese grupo.
+     * @param array $filtros {id_usuario, id_area, id_categoria, tipo_categoria, estado, s, descripcion}
+     * @return array
+     */
+    public function obtenerListadoConsolidado(array $filtros, int $perPage = 15)
+    {
+        try {
+            $query = Inventario::query()
+                ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
+                ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
+                ->leftJoin('areas as a', 'inventario.id_area', '=', 'a.id')
+                ->leftJoin('categoria as c', 'inventario.id_categoria', '=', 'c.id')
+                ->where('inventario.activo', 1)
+                ->whereNotIn('inventario.estado', [4, 5])
+                ->when($filtros['id_usuario'] ?? null, fn ($q, $v) => $q->where('inventario.id_user', $v))
+                ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_area', $v))
+                ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
+                ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
+                ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
+                ->when($filtros['s'] ?? null, function ($q, $s) {
+                    $q->where(function ($q) use ($s) {
+                        $q->where('inventario.descripcion', 'like', "%{$s}%")
+                            ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$s}%"])
+                            ->orWhere('u.documento', 'like', "%{$s}%")
+                            ->orWhere('c.nombre', 'like', "%{$s}%");
+                    });
+                });
+
+            // Modo detalle: ítems sueltos de un grupo (query 2)
+            if (!empty($filtros['descripcion'])) {
+                $listado = $query
+                    ->where('inventario.descripcion', $filtros['descripcion'])
+                    ->select(
+                        'inventario.*',
+                        'e.nombre as estado_nombre',
+                        DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
+                        'a.nombre as nom_area'
+                    )
+                    ->orderByDesc('inventario.id')
+                    ->paginate($perPage);
+            } else {
+                // Modo agrupado (query 1)
+                $listado = $query
+                    ->select(
+                        'inventario.id_user',
+                        'inventario.id_area',
+                        'inventario.descripcion',
+                        'inventario.id_categoria',
+                        'c.nombre as categoria_nombre',
+                        'e.nombre as estado_nombre',
+                        DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
+                        'a.nombre as nom_area',
+                        DB::raw('COUNT(inventario.id) as cantidad')
+                    )
+                    ->groupBy(
+                        'inventario.id_user',
+                        'inventario.id_area',
+                        'inventario.descripcion',
+                        'inventario.id_categoria',
+                        'c.nombre',
+                        'e.nombre',
+                        'u.nombre',
+                        'u.apellido',
+                        'a.nombre'
+                    )
+                    ->orderByDesc(DB::raw('MAX(inventario.id)'))
+                    ->paginate($perPage);
+            }
+
+            return [
+                'error' => false,
+                'data' => $listado,
+                'message' => 'Listado de inventario obtenido',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Actualiza los datos básicos de un ítem (descripcion/marca/modelo/precio/fecha_compra).
      * No toca estado/área/usuario: eso sigue gestionado por liberar/asignar/reportar/descontinuar.
      * @param int $id
