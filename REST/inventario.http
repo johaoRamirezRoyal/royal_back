@@ -60,7 +60,48 @@ GET http://localhost:8000/api/inventario/listado-consolidado?id_usuario=3123&id_
 GET http://localhost:8000/api/inventario/listado-consolidado?descripcion=Monitor%20Dell%2024%20pulgadas
 
 ### 6.9. CONSOLIDADO — detalle de un grupo acotado por área y usuario (URL codificada)
-GET http://localhost:8000/api/inventario/listado-consolidado?descripcion=SILLA%20ESTRUCTURA%20METALICA%20COLOR%20GRIS,%20ASIENTO%20Y%20ESPALDAR%20COLOR%20AZUL%20PARA%20ESTUDIANTES&id_area=137&id_usuario=64
+GET http://localhost:8000/api/inventario/listado-consolidado?descripcion=SILLA%ESTUDIANTE%METALICA%AZUL&id_area=137&id_usuario=64
+
+### ============================================
+### CONSOLIDADO — ACCIONES SOBRE EL GRUPO
+### ============================================
+
+### 6.10. EDITAR descripción de todos los ítems del grupo
+PUT http://localhost:8000/api/inventario/listado-consolidado/descripcion
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTRUCTURA METALICA COLOR GRIS, ASIENTO Y ESPALDAR COLOR AZUL PARA ESTUDIANTES",
+    "nueva_descripcion": "SILLA ESTUDIANTE METALICA AZUL",
+    "id_area": 137,
+    "id_usuario": 64
+}
+
+### 6.11. AUMENTAR cantidad del grupo (clona las características)
+POST http://localhost:8000/api/inventario/listado-consolidado/incrementar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTUDIANTE METALICA AZUL",
+    "id_area": 137,
+    "id_usuario": 64,
+    "cantidad": 3
+}
+
+### 6.12. DISMINUIR cantidad del grupo (descontinúa los ítems más antiguos)
+POST http://localhost:8000/api/inventario/listado-consolidado/disminuir
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTRUCTURA METALICA COLOR GRIS, ASIENTO Y ESPALDAR COLOR AZUL PARA ESTUDIANTES",
+    "id_area": 137,
+    "id_usuario": 64,
+    "cantidad": 2,
+    "id_log": 3123
+}
 
 ### ============================================
 ### AGREGAR
