@@ -3,16 +3,22 @@
 namespace App\Models\AsistenciaGestion;
 
 use App\Models\Usuarios\Usuario;
+use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class AsistenciaGestion extends Model
 {
-    // Después de esta hora una llegada registrada cuenta como "atrasado"
+    // Fallback cuando ninguna institución configuró horarios/bandas todavía (ver
+    // getPuntualidadAttribute) — mismos cortes que existían antes de que la puntualidad
+    // fuera configurable.
     public const HORA_LIMITE_PUNTUALIDAD = '07:15:00';
-
-    // Desde esta hora (inclusive) hasta HORA_LIMITE_PUNTUALIDAD (inclusive) cuenta como "Justo a tiempo"
     public const HORA_INICIO_JUSTO_A_TIEMPO = '07:00:00';
+
+    // Cache en memoria por request: los horarios/bandas activos se piden una sola vez
+    // sin importar cuántas filas de AsistenciaGestion se serialicen en la misma respuesta.
+    private static ?Collection $horariosCache = null;
 
     protected $table = 'asistencia_gestion';
     protected $primaryKey = 'id';
@@ -23,6 +29,7 @@ class AsistenciaGestion extends Model
         'fecha_asistencia',
         'hora_asistencia',
         'hora_salida',
+        'observacion',
         'fechareg',
         'QR',
     ];
@@ -43,16 +50,42 @@ class AsistenciaGestion extends Model
         }
 
         $hora = $this->hora_asistencia->format('H:i:s');
+        $grupoId = $this->usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $this->usuario->perfil] ?? null) : null;
+        $horario = self::horarioAplicable($grupoId);
 
-        if ($hora > self::HORA_LIMITE_PUNTUALIDAD) {
-            return 'atrasado';
+        if (!$horario) {
+            return match (true) {
+                $hora > self::HORA_LIMITE_PUNTUALIDAD => 'atrasado',
+                $hora >= self::HORA_INICIO_JUSTO_A_TIEMPO => 'Justo a tiempo',
+                default => 'a tiempo',
+            };
         }
 
-        if ($hora >= self::HORA_INICIO_JUSTO_A_TIEMPO) {
-            return 'Justo a tiempo';
+        foreach ($horario->bandas as $banda) {
+            $desdeOk = $banda->hora_desde === null || $hora >= $banda->hora_desde;
+            $hastaOk = $banda->hora_hasta === null || $hora <= $banda->hora_hasta;
+
+            if ($desdeOk && $hastaOk) {
+                return $banda->nombre;
+            }
         }
 
-        return 'a tiempo';
+        return null;
+    }
+
+    /**
+     * Horario activo del grupo dado, o el horario global (grupo_id null) si no hay uno
+     * específico. Público: también lo usa AsistenciaGestionService::cerrarAsistenciasVencidas()
+     * para saber la hora de salida esperada de cada usuario con marcación abierta.
+     */
+    public static function horarioAplicable(?int $grupoId): ?AsistenciaHorario
+    {
+        if (self::$horariosCache === null) {
+            self::$horariosCache = AsistenciaHorario::with('bandas')->where('activo', true)->get();
+        }
+
+        return self::$horariosCache->firstWhere('grupo_id', $grupoId)
+            ?? self::$horariosCache->firstWhere('grupo_id', null);
     }
 
     // Toda fila en esta tabla es, por definición, una llegada registrada.

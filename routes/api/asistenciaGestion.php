@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController;
+use App\Http\Controllers\AsistenciaGestion\AsistenciaHorariosController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/', [AsistenciaGestionController::class, 'registrarAsistencia']);
@@ -12,3 +13,16 @@ Route::get('/grafica/distribucion-horas', [AsistenciaGestionController::class, '
 Route::get('/grafica/promedio-por-usuario', [AsistenciaGestionController::class, 'promedioHoraLlegadaPorUsuario']);
 Route::get('/ultimos-registros', [AsistenciaGestionController::class, 'ultimosRegistrosUsuario']);
 Route::delete('/', [AsistenciaGestionController::class, 'eliminarAsistencia']);
+
+// CONFIGURACIÓN — horarios estándar y bandas de puntualidad (solo RH/Administradores, ver AsistenciaHorariosController)
+Route::prefix('/horarios')->group(function () {
+    Route::get('/', [AsistenciaHorariosController::class, 'index']);
+    Route::post('/', [AsistenciaHorariosController::class, 'store']);
+    Route::put('/{id}', [AsistenciaHorariosController::class, 'update']);
+    Route::delete('/{id}', [AsistenciaHorariosController::class, 'destroy']);
+    Route::post('/{id}/bandas', [AsistenciaHorariosController::class, 'storeBanda']);
+});
+// Antes de /bandas/{id}: si no, "orden" matchea el wildcard {id} y nunca llega acá.
+Route::put('/bandas/orden', [AsistenciaHorariosController::class, 'reordenarBandas']);
+Route::put('/bandas/{id}', [AsistenciaHorariosController::class, 'updateBanda']);
+Route::delete('/bandas/{id}', [AsistenciaHorariosController::class, 'destroyBanda']);

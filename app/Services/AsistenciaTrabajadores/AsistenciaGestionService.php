@@ -5,12 +5,19 @@ namespace App\Services\AsistenciaTrabajadores;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
+use App\Services\MailService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class AsistenciaGestionService extends Service
 {
+    public function __construct(private MailService $mailService) {}
+
+    // Mismo patrón que AdmisionesServices/LlegadasTarde: correo fijo del encargado de RH
+    // que se notifica cuando el sistema cierra una salida automáticamente.
+    private array $mailTo = ['hernando.ramirez@royalschool.edu.co'];
+
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
     public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
 
@@ -70,19 +77,16 @@ class AsistenciaGestionService extends Service
     }
 
     /**
-     * Registra la marcación del día (entrada o salida) para dispositivos Hikvision
-     * que reportan attendanceStatus (checkIn/checkOut/undefined vía ISAPI
-     * AccessControllerEvent — confirmado compatible con el modelo configurado,
-     * DS-K1T321MFWX-B). Reglas de negocio (un solo día, sin timestamps propios):
+     * Registra la marcación del día (entrada o salida) a partir de un evento de
+     * marcación biométrica genérico (el dispositivo ya no distingue entrada/salida por
+     * sí mismo — cada evento es solo "este usuario se marcó a esta hora"). El tipo se
+     * resuelve con un typecheck sobre el estado del día, no sobre lo que reporte el
+     * dispositivo:
      *   - Sin entrada registrada hoy -> esta marcación es la entrada.
      *   - Con entrada y sin salida -> esta marcación es la salida.
      *   - Con entrada y salida ya registradas -> se descarta (tercer evento del día).
-     *   - "checkOut" sin entrada previa -> se rechaza explícitamente (no se puede
-     *     marcar salida sin haber marcado entrada).
-     * Si el dispositivo no distingue (attendanceStatus "undefined", modo asistencia
-     * desactivado en el equipo) el tipo se infiere del estado del día.
      */
-    public function registrarMarcacion(int $idUsuario, string $fecha, string $hora, ?string $attendanceStatus = null): array
+    public function registrarMarcacion(int $idUsuario, string $fecha, string $hora): array
     {
         try {
             $asistencia = AsistenciaGestion::where('id_user', $idUsuario)
@@ -92,18 +96,7 @@ class AsistenciaGestionService extends Service
             $tieneEntrada = $asistencia !== null;
             $tieneSalida = $asistencia !== null && $asistencia->hora_salida !== null;
 
-            $esSalida = $attendanceStatus === 'checkOut'
-                || ($attendanceStatus !== 'checkIn' && $tieneEntrada && !$tieneSalida);
-
-            if (!$esSalida) {
-                if ($tieneEntrada) {
-                    return [
-                        'error' => false,
-                        'message' => 'Ya existe un registro de entrada para este usuario en esta fecha',
-                        'data' => null,
-                    ];
-                }
-
+            if (!$tieneEntrada) {
                 // firstOrCreate() por la misma razón que en registrarAsistencia(): dos
                 // pushes casi simultáneos del mismo usuario no deben duplicar la fila.
                 $asistencia = AsistenciaGestion::firstOrCreate(
@@ -123,14 +116,6 @@ class AsistenciaGestionService extends Service
                     'error' => false,
                     'message' => 'Entrada registrada correctamente',
                     'data' => array_merge($asistencia->toArray(), ['tipo' => 'Entry']),
-                ];
-            }
-
-            if (!$tieneEntrada) {
-                return [
-                    'error' => true,
-                    'message' => 'No se puede registrar la salida sin haber marcado la entrada',
-                    'data' => null,
                 ];
             }
 
@@ -623,6 +608,77 @@ class AsistenciaGestionService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Cierra automáticamente las asistencias del día que tienen entrada pero no salida y ya
+     * pasaron la hora_salida_esperada del horario aplicable al usuario (por grupo, o global
+     * si no hay uno específico) — pensado para correr periódicamente desde el scheduler
+     * (ver CerrarAsistenciasVencidasCommand). Sin horario resoluble para el usuario, esa
+     * fila se deja igual (no hay base para saber a qué hora cerrarla).
+     */
+    public function cerrarAsistenciasVencidas(): array
+    {
+        try {
+            $abiertas = AsistenciaGestion::with('usuario')
+                ->where('fecha_asistencia', now()->toDateString())
+                ->whereNotNull('hora_asistencia')
+                ->whereNull('hora_salida')
+                ->get();
+
+            $horaActual = now()->format('H:i:s');
+            $cerradas = [];
+
+            foreach ($abiertas as $asistencia) {
+                $perfil = $asistencia->usuario?->perfil;
+                $grupoId = $perfil !== null ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $perfil] ?? null) : null;
+                $horario = AsistenciaGestion::horarioAplicable($grupoId);
+
+                if (!$horario || $horaActual < $horario->hora_salida_esperada) {
+                    continue;
+                }
+
+                $horaEsperada = substr($horario->hora_salida_esperada, 0, 5);
+
+                $asistencia->update([
+                    'hora_salida' => $horario->hora_salida_esperada,
+                    'observacion' => "Salida marcada automáticamente: el usuario no registró su salida antes de la hora esperada ({$horaEsperada}).",
+                ]);
+
+                $usuario = $asistencia->usuario;
+                $nombreCompleto = trim(($usuario->nombre ?? '') . ' ' . ($usuario->apellido ?? ''));
+                $fecha = $asistencia->fecha_asistencia->format('Y-m-d');
+
+                if ($usuario?->correo) {
+                    $this->mailService->sendGeneric(
+                        $usuario->correo,
+                        'Salida marcada automáticamente',
+                        "Hola {$nombreCompleto},\n\nNo registraste tu salida el {$fecha} antes de la hora esperada ({$horaEsperada}), así que el sistema la marcó automáticamente a esa hora.\n\nSi esto es un error, comunícate con Recursos Humanos."
+                    );
+                }
+
+                $this->mailService->sendGeneric(
+                    $this->mailTo,
+                    'Salida automática registrada',
+                    "El usuario {$nombreCompleto} (documento {$usuario->documento}) no registró su salida el {$fecha} antes de la hora esperada ({$horaEsperada}). El sistema la marcó automáticamente a esa hora."
+                );
+
+                $cerradas[] = ['id_user' => $asistencia->id_user, 'nombre' => $nombreCompleto, 'fecha' => $fecha];
+            }
+
+            return [
+                'error' => false,
+                'message' => count($cerradas) . ' asistencia(s) cerrada(s) automáticamente',
+                'data' => ['cerradas' => count($cerradas), 'detalle' => $cerradas],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al cerrar asistencias vencidas');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al cerrar asistencias vencidas',
                 'data' => null,
             ];
         }
