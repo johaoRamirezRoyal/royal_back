@@ -231,6 +231,150 @@ class InventarioServices
     }
 
     /**
+     * Items visibles de un grupo del listado consolidado (activo + estado válido).
+     */
+    private function itemsDeGrupo(string $descripcion, int $idArea, int $idUsuario)
+    {
+        return Inventario::where('descripcion', $descripcion)
+            ->where('id_area', $idArea)
+            ->where('id_user', $idUsuario)
+            ->where('activo', 1)
+            ->whereNotIn('estado', [4, 5]);
+    }
+
+    /**
+     * Edita la descripción de todos los ítems de un grupo del listado consolidado.
+     * @return array
+     */
+    public function editarDescripcionGrupo(string $descripcion, string $nuevaDescripcion, int $idArea, int $idUsuario): array
+    {
+        try {
+            $query = $this->itemsDeGrupo($descripcion, $idArea, $idUsuario);
+
+            if ($query->count() === 0) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'No se encontró el grupo de inventario con esos datos.',
+                ];
+            }
+
+            $query->update(['descripcion' => $nuevaDescripcion]);
+
+            return [
+                'error' => false,
+                'data' => ['descripcion' => $nuevaDescripcion, 'items_actualizados' => $query->count()],
+                'message' => 'Descripción actualizada para el grupo de inventario.',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Aumenta la cantidad de un grupo clonando las características de sus ítems.
+     * @return array
+     */
+    public function incrementarCantidadGrupo(string $descripcion, int $idArea, int $idUsuario, int $cantidad): array
+    {
+        try {
+            $template = $this->itemsDeGrupo($descripcion, $idArea, $idUsuario)
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$template) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'No se encontró el grupo de inventario con esos datos.',
+                ];
+            }
+
+            $nuevos = DB::transaction(function () use ($template, $cantidad) {
+                $creados = [];
+
+                for ($i = 0; $i < $cantidad; $i++) {
+                    $creados[] = Inventario::create([
+                        'descripcion' => $template->descripcion,
+                        'marca' => $template->marca,
+                        'modelo' => $template->modelo,
+                        'precio' => $template->precio,
+                        'estado' => $template->estado,
+                        'activo' => 1,
+                        'fecha_compra' => $template->fecha_compra,
+                        'observacion' => $template->observacion,
+                        'id_user' => $template->id_user,
+                        'id_area' => $template->id_area,
+                        'id_categoria' => $template->id_categoria,
+                        'codigo' => $template->codigo,
+                        'id_compra' => $template->id_compra,
+                        'detalles' => $template->detalles,
+                    ]);
+                }
+
+                $this->registrarLog($creados, $template->estado, null, $template->id_area);
+
+                return $creados;
+            });
+
+            return [
+                'error' => false,
+                'data' => $nuevos,
+                'message' => "Se agregaron {$cantidad} ítem(s) al grupo de inventario.",
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Disminuye la cantidad de un grupo descontinuando los ítems más antiguos.
+     * @return array
+     */
+    public function disminuirCantidadGrupo(string $descripcion, int $idArea, int $idUsuario, int $cantidad, ?int $idLog): array
+    {
+        try {
+            $ids = $this->itemsDeGrupo($descripcion, $idArea, $idUsuario)
+                ->orderBy('id')
+                ->limit($cantidad)
+                ->pluck('id')
+                ->all();
+
+            if (empty($ids)) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'No se encontró el grupo de inventario con esos datos.',
+                ];
+            }
+
+            if (count($ids) < $cantidad) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => "El grupo solo tiene {$this->itemsDeGrupo($descripcion, $idArea, $idUsuario)->count()} ítem(s) disponibles, no se pueden descontinuar {$cantidad}.",
+                ];
+            }
+
+            return $this->descontinuarInventario($ids, $idLog);
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Actualiza los datos básicos de un ítem (descripcion/marca/modelo/precio/fecha_compra).
      * No toca estado/área/usuario: eso sigue gestionado por liberar/asignar/reportar/descontinuar.
      * @param int $id
