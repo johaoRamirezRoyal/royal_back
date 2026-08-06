@@ -202,4 +202,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/enfermeria')->group(function () {
         require __DIR__ . '/api/enfermeria.php';
     });
+
+    // MODULOS (métricas de módulos más visitados — Home)
+    Route::prefix('/modulos')->group(function () {
+        require __DIR__ . '/api/modulos.php';
+    });
 });
