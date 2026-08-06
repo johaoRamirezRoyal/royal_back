@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Inventarios;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventario\ActualizarInventarioRequest;
+use App\Http\Requests\Inventario\EditarDescripcionListadoInventarioRequest;
+use App\Http\Requests\Inventario\GestionarCantidadListadoInventarioRequest;
+use App\Http\Requests\Inventario\ListadoInventarioRequest;
 use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
@@ -63,6 +66,61 @@ class InventariosController extends Controller
             'message' => $listado_inventario['message'],
             'data' => $listado_inventario['data']
         ]);
+    }
+
+    public function listadoConsolidado(ListadoInventarioRequest $request){
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion']);
+        $per_page = $request->input('per_page', 15);
+
+        $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
+
+        if($listado['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $listado['message'],
+                'data' => $listado['data']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'message' => $listado['message'],
+            'data' => $listado['data']
+        ]);
+    }
+
+    public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request){
+        $resultado = $this->inventario_services->editarDescripcionGrupo(
+            $request->input('descripcion'),
+            $request->input('nueva_descripcion'),
+            $request->input('id_area'),
+            $request->input('id_usuario')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function incrementarCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+        $resultado = $this->inventario_services->incrementarCantidadGrupo(
+            $request->input('descripcion'),
+            $request->input('id_area'),
+            $request->input('id_usuario'),
+            $request->input('cantidad')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function disminuirCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+        $resultado = $this->inventario_services->disminuirCantidadGrupo(
+            $request->input('descripcion'),
+            $request->input('id_area'),
+            $request->input('id_usuario'),
+            $request->input('cantidad'),
+            $request->input('id_log')
+        );
+
+        return $this->apiResponse($resultado);
     }
 
     public function actualizarInventario(ActualizarInventarioRequest $request, int $id){

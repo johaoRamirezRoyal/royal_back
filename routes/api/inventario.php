@@ -4,6 +4,10 @@ use App\Http\Controllers\Inventarios\InventariosController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario']);
+Route::get('/listado-consolidado', [InventariosController::class, 'listadoConsolidado']);
+Route::put('/listado-consolidado/descripcion', [InventariosController::class, 'editarDescripcionGrupo']);
+Route::post('/listado-consolidado/incrementar', [InventariosController::class, 'incrementarCantidadGrupo']);
+Route::post('/listado-consolidado/disminuir', [InventariosController::class, 'disminuirCantidadGrupo']);
 /**
  *  Ejemplo de JSON para obtener el listado de inventario paginado:
             {

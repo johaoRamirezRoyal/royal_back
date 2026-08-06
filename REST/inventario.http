@@ -31,6 +31,79 @@ GET http://localhost:8000/api/inventario/listado?estado[]=2
 GET http://localhost:8000/api/inventario/listado?id_usuario=3123
 
 ### ============================================
+### LISTADO CONSOLIDADO (agrupado + detalle)
+### ============================================
+
+### 6.1. CONSOLIDADO — agrupado por (usuario, área, descripción) con cantidad
+GET http://localhost:8000/api/inventario/listado-consolidado?per_page=10
+
+### 6.2. CONSOLIDADO — filtrar por usuario
+GET http://localhost:8000/api/inventario/listado-consolidado?id_usuario=3123
+
+### 6.3. CONSOLIDADO — filtrar por área
+GET http://localhost:8000/api/inventario/listado-consolidado?id_area[]=4
+
+### 6.4. CONSOLIDADO — filtrar por categoría y subcategoría (tipo_categoria)
+GET http://localhost:8000/api/inventario/listado-consolidado?id_categoria[]=9&tipo_categoria=1
+
+### 6.5. CONSOLIDADO — filtrar por estados
+GET http://localhost:8000/api/inventario/listado-consolidado?estado[]=1&estado[]=2
+
+### 6.6. CONSOLIDADO — búsqueda por descripción, nombre/cedula de usuario o categoría
+GET http://localhost:8000/api/inventario/listado-consolidado?s=computador
+
+### 6.7. CONSOLIDADO — todos los filtros combinados
+GET http://localhost:8000/api/inventario/listado-consolidado?id_usuario=3123&id_area[]=1&id_categoria[]=9&estado[]=1&s=computador&per_page=5
+
+### 6.8. CONSOLIDADO — detalle: ítems individuales de un grupo (descripcion)
+### IMPORTANTE: la descripcion debe ir URL-encoded (espacios=%20, comas=%2C, etc.)
+GET http://localhost:8000/api/inventario/listado-consolidado?descripcion=Monitor%20Dell%2024%20pulgadas
+
+### 6.9. CONSOLIDADO — detalle de un grupo acotado por área y usuario (URL codificada)
+GET http://localhost:8000/api/inventario/listado-consolidado?descripcion=SILLA%ESTUDIANTE%METALICA%AZUL&id_area=137&id_usuario=64
+
+### ============================================
+### CONSOLIDADO — ACCIONES SOBRE EL GRUPO
+### ============================================
+
+### 6.10. EDITAR descripción de todos los ítems del grupo
+PUT http://localhost:8000/api/inventario/listado-consolidado/descripcion
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTRUCTURA METALICA COLOR GRIS, ASIENTO Y ESPALDAR COLOR AZUL PARA ESTUDIANTES",
+    "nueva_descripcion": "SILLA ESTUDIANTE METALICA AZUL",
+    "id_area": 137,
+    "id_usuario": 64
+}
+
+### 6.11. AUMENTAR cantidad del grupo (clona las características)
+POST http://localhost:8000/api/inventario/listado-consolidado/incrementar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTUDIANTE METALICA AZUL",
+    "id_area": 137,
+    "id_usuario": 64,
+    "cantidad": 3
+}
+
+### 6.12. DISMINUIR cantidad del grupo (descontinúa los ítems más antiguos)
+POST http://localhost:8000/api/inventario/listado-consolidado/disminuir
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "SILLA ESTRUCTURA METALICA COLOR GRIS, ASIENTO Y ESPALDAR COLOR AZUL PARA ESTUDIANTES",
+    "id_area": 137,
+    "id_usuario": 64,
+    "cantidad": 2,
+    "id_log": 3123
+}
+
+### ============================================
 ### AGREGAR
 ### ============================================
 
