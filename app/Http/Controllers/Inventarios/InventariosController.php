@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Inventarios;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventario\ActualizarInventarioRequest;
+use App\Http\Requests\Inventario\ListadoInventarioRequest;
 use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
@@ -62,6 +63,27 @@ class InventariosController extends Controller
             'error' => false,
             'message' => $listado_inventario['message'],
             'data' => $listado_inventario['data']
+        ]);
+    }
+
+    public function listadoConsolidado(ListadoInventarioRequest $request){
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion']);
+        $per_page = $request->input('per_page', 15);
+
+        $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
+
+        if($listado['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $listado['message'],
+                'data' => $listado['data']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'message' => $listado['message'],
+            'data' => $listado['data']
         ]);
     }
 
