@@ -12,7 +12,8 @@ Route::get('/', function () {
     ]);
 });
 
-Route::post('/pushNotification', [HikvisionController::class, 'testNotificationHikvision']);
+Route::post('/pushNotification', [HikvisionController::class, 'testNotificationHikvision'])
+    ->middleware('hikvision.device');
 
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
