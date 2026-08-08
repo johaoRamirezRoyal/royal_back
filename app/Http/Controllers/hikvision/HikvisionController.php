@@ -8,6 +8,7 @@ use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -18,6 +19,10 @@ class HikvisionController extends Controller
 
     // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
     const HORA_LIMITE_LLEGADA = '07:15:00';
+
+    // Ventana de debounce para descartar reintentos/rebotes del dispositivo (mismo
+    // usuario marcando "de nuevo" a los pocos segundos de su marcación anterior).
+    const SEGUNDOS_DEBOUNCE_MARCACION = 15;
 
     protected hikvisionattendanceService $hikvision_service;
 
@@ -743,6 +748,18 @@ class HikvisionController extends Controller
                 'idUsuario' => $idUsuario,
                 'perfil' => $perfil,
             ]);
+            return;
+        }
+
+        // Cache::add() es atómico (falla si la clave ya existe): si el dispositivo
+        // reenvía el mismo evento físico segundos después (reintento/rebote), esta
+        // segunda petición se descarta aquí en vez de llegar a registrarMarcacion(),
+        // donde se interpretaría erróneamente como la salida del usuario.
+        if (!Cache::add("hikvision:marcacion:{$idUsuario}", true, self::SEGUNDOS_DEBOUNCE_MARCACION)) {
+            Log::info('[hikvision-notification] Marcación descartada: petición duplicada dentro de la ventana de debounce', [
+                'idUsuario' => $idUsuario,
+            ]);
+
             return;
         }
 

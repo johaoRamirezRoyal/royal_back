@@ -9,6 +9,9 @@ use App\Services\Enfermeria\EnfermeriaServices;
 use App\Services\HistoriaClinica\HistoriaClinicaService;
 use App\Services\JwtService;
 use App\Services\PerfilUsuario\PerfilUsuarioService;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -45,6 +48,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Cuota propia por dispositivo/IP (no por usuario autenticado): un kiosco
+        // compartido donde marcan varios trabajadores no debe agotar la cuota de
+        // uno por las marcaciones de otro.
+        RateLimiter::for('asistencia', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }
 }
