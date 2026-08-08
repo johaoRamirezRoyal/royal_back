@@ -4,9 +4,10 @@ use App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController;
 use App\Http\Controllers\AsistenciaGestion\AsistenciaHorariosController;
 use Illuminate\Support\Facades\Route;
 
-// throttle: 5 peticiones/min por usuario autenticado — evita que un doble-tap o un
-// retry del cliente dispare varias marcaciones seguidas para el mismo trabajador.
-Route::post('/', [AsistenciaGestionController::class, 'registrarAsistencia'])->middleware('throttle:5,1');
+// throttle: 20 peticiones/min por IP de dispositivo (ver AppServiceProvider::boot) —
+// evita que un doble-tap o un retry dispare varias marcaciones seguidas, sin que un
+// kiosco compartido por varios trabajadores agote la cuota entre ellos.
+Route::post('/', [AsistenciaGestionController::class, 'registrarAsistencia'])->middleware('throttle:asistencia');
 Route::get('/', [AsistenciaGestionController::class, 'obtenerAsistencia']);
 Route::get('/resumen', [AsistenciaGestionController::class, 'obtenerResumenPorUsuario']);
 Route::get('/grafica', [AsistenciaGestionController::class, 'obtenerDatosGrafica']);
