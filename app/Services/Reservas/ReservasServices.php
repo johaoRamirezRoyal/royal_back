@@ -100,14 +100,41 @@ class ReservasServices extends Service
                 ];
             }
 
-            $limite = Carbon::parse($combo['fecha'])->subDay()->setTime(12, 0, 0);
+            $fechaReserva = Carbon::parse($combo['fecha'])->startOfDay();
+            $hoy = Carbon::today();
 
-            if (now() > $limite) {
+            if ($fechaReserva->lt($hoy)) {
                 return [
                     'error' => true,
-                    'message' => "La reserva para el {$combo['fecha']} debe hacerse antes de las 12:00 del día anterior.",
+                    'message' => "La fecha de la reserva no puede ser anterior a hoy.",
                     'data' => []
                 ];
+            }
+
+            if ($fechaReserva->gt($hoy->copy()->addDay())) {
+                return [
+                    'error' => true,
+                    'message' => "La reserva solo puede hacerse para hoy o el día siguiente.",
+                    'data' => []
+                ];
+            }
+
+            if ($fechaReserva->isTomorrow()) {
+                if (now()->gte($hoy->copy()->setTime(12, 0, 0))) {
+                    return [
+                        'error' => true,
+                        'message' => "La reserva para mañana ({$combo['fecha']}) debe hacerse antes de las 12:00 del mediodía.",
+                        'data' => []
+                    ];
+                }
+
+                if ($hoy->isWeekend() || $fechaReserva->isWeekend()) {
+                    return [
+                        'error' => true,
+                        'message' => "No se puede reservar de un día laboral a otro a través del fin de semana.",
+                        'data' => []
+                    ];
+                }
             }
 
             $hora = Horas::find($combo['hora']);

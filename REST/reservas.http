@@ -230,3 +230,123 @@ Accept: application/json
     "portatil": 1,
     "titulo": "Clase multiple - combinatoria"
 }
+
+### ============================================
+### VALIDACIÓN DE HORARIOS / DÍAS (REGLAS NUEVAS)
+### ============================================
+### Las reglas comparan contra la fecha/hora ACTUAL al ejecutar.
+### Ajusta las fechas según el día de hoy antes de correr.
+### Escenarios de referencia usados abajo: hoy = sábado 2026-08-08.
+###
+### - Solo se reserva para HOY o el DÍA SIGUIENTE.
+### - Si es para mañana: debe hacerse antes de las 12:00 del mediodía.
+### - No se cruza el fin de semana (viernes/sábado/domingo → lunes).
+
+### 24. HOY mismo día — permitido en cualquier horario (debe pasar)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-08",
+    "hora_reserva": [1, 2, 3],
+    "id_user": 3123,
+    "titulo": "Mismo dia - varias horas"
+}
+
+### 25. MAÑANA es domingo (hoy sábado) — cruza fin de semana (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-09",
+    "hora_reserva": [1, 2],
+    "id_user": 3123
+}
+### esperado: "No se puede reservar de un día laboral a otro a través del fin de semana."
+
+### 26. SÁBADO → LUNES — más de un día de anticipación (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-10",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+### esperado: "La reserva solo puede hacerse para hoy o el día siguiente."
+
+### 27. VIERNES → LUNES — más de un día de anticipación (debe fallar 400)
+### Ajustar fecha_reserva al lunes siguiente cuando hoy sea viernes.
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-10",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+### esperado: "La reserva solo puede hacerse para hoy o el día siguiente."
+
+### 28. MAÑANA laborable ANTES de 12:00 — permitido (debe pasar)
+### Correr antes del mediodía. Ajustar fechas a hoy+1 laborable.
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-04",
+    "hora_reserva": [1, 2, 3],
+    "id_user": 3123,
+    "portatil": 1,
+    "titulo": "Manana laborable - varias horas"
+}
+
+### 29. MAÑANA laborable DESPUÉS de 12:00 — rechazado (debe fallar 400)
+### Correr después del mediodía. Ajustar fechas a hoy+1 laborable.
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-08-04",
+    "hora_reserva": [1, 2],
+    "id_user": 3123
+}
+### esperado: "La reserva para mañana (2026-08-04) debe hacerse antes de las 12:00 del mediodía."
+
+### 30. FECHA PASADA — rechazada (debe fallar 400)
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": "2026-07-01",
+    "hora_reserva": 1,
+    "id_user": 3123
+}
+### esperado: "La fecha de la reserva no puede ser anterior a hoy."
+
+### 31. MULTI FECHA + MULTI HORA — un combo inválido invalida todo el lote
+### Mezcla fecha pasada con fecha válida; el lote completo debe fallar.
+POST http://localhost:8000/api/reservas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_salon": 2,
+    "fecha_reserva": ["2026-07-01", "2026-08-08"],
+    "hora_reserva": [1, 2],
+    "id_user": 3123
+}
+### esperado: "La fecha de la reserva no puede ser anterior a hoy."
