@@ -652,42 +652,36 @@ class HikvisionController extends Controller
         $data = $this->extraerDatos($request);
 
         $employeeNoString = $data['AccessControllerEvent']['employeeNoString'] ?? null;
-        $attendanceStatus = $data['AccessControllerEvent']['attendanceStatus'] ?? null;
 
         // Ignorar ruido: apertura/cierre de puerta y pings periódicos del equipo
-        // sin persona asociada. Solo nos interesa el evento real de asistencia.
-        if ($employeeNoString === null || ! in_array($attendanceStatus, ['checkIn', 'checkOut', 'undefined'], true)) {
+        // sin persona asociada. Solo nos interesa el evento real de marcación biométrica.
+        if ($employeeNoString === null) {
             return;
         }
 
-        // El modelo configurado (DS-K1T321MFWX-B) reporta attendanceStatus checkIn/
-        // checkOut vía ISAPI cuando el modo de asistencia está activo en el equipo.
-        // Con ese modo desactivado, el dispositivo manda "undefined" en toda
-        // marcación válida y no distingue entrada de salida por sí mismo; en ese
-        // caso el tipo se infiere del estado del día dentro de AsistenciaGestionService.
-        $esCheckIn = $attendanceStatus === 'checkIn' || $attendanceStatus === 'undefined';
-
         Log::info('[hikvision-notification] Evento de asistencia recibido', [
             'employeeNoString' => $employeeNoString,
-            'attendanceStatus' => $attendanceStatus,
             'dateTime' => $data['dateTime'] ?? null,
             'raw' => $data,
         ]);
 
         $idUsuario = (int) $employeeNoString;
 
-        // La llegada tarde de estudiantes solo tiene sentido para la entrada.
-        if ($esCheckIn) {
-            $this->registrarLlegadaTardeSiAplica($idUsuario);
-        }
+        // El dispositivo ya no distingue entrada/salida (eventos de marcación biométrica
+        // genéricos) — cada método decide por su cuenta, con un typecheck sobre el estado
+        // del día, si esta marcación aplica como entrada (llegada tarde solo tiene sentido
+        // ahí) y es idempotente por día, así que llamarlo en cada evento es seguro.
+        $this->registrarLlegadaTardeSiAplica($idUsuario);
 
-        $this->registrarAsistenciaGestionSiAplica($idUsuario, $attendanceStatus);
+        $this->registrarAsistenciaGestionSiAplica($idUsuario);
     }
 
     /**
-     * Registra una llegada tarde si el usuario es estudiante y el servidor
-     * recibió el checkIn después de la hora límite. Se usa la hora del
-     * servidor (no la del dispositivo) porque el reloj del equipo no es confiable.
+     * Registra una llegada tarde si el usuario es estudiante y el servidor recibió el
+     * evento después de la hora límite. Se usa la hora del servidor (no la del
+     * dispositivo) porque el reloj del equipo no es confiable. Idempotente por día
+     * (ver LlegadasTarde::agregarLlegadaTarde), así que es seguro invocarlo en cada
+     * marcación del día, no solo en la primera.
      */
     private function registrarLlegadaTardeSiAplica(int $idUsuario): void
     {
@@ -730,10 +724,10 @@ class HikvisionController extends Controller
     /**
      * Registra la marcación (entrada o salida) en asistencia_gestion si el usuario
      * no está en la lista de perfiles excluidos (estudiantes, admin, etc.). El tipo
-     * lo resuelve AsistenciaGestionService::registrarMarcacion() según el estado
-     * del día y el attendanceStatus reportado por el dispositivo.
+     * lo resuelve AsistenciaGestionService::registrarMarcacion() con un typecheck sobre
+     * el estado del día (ver docblock de ese método).
      */
-    private function registrarAsistenciaGestionSiAplica(int $idUsuario, ?string $attendanceStatus): void
+    private function registrarAsistenciaGestionSiAplica(int $idUsuario): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
@@ -757,8 +751,7 @@ class HikvisionController extends Controller
         $resultado = $this->asistencia_gestion_service->registrarMarcacion(
             $idUsuario,
             $ahora->format('Y-m-d'),
-            $ahora->format('H:i:s'),
-            $attendanceStatus
+            $ahora->format('H:i:s')
         );
 
         if ($resultado['error']) {
