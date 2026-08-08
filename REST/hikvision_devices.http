@@ -1,0 +1,34 @@
+### ============================================
+### HIKVISION DISPOSITIVOS — REST Client
+### ============================================
+### Primero haz login para obtener la cookie 'token'.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### 1. LISTAR terminales con test de conexión por dispositivo
+### Devuelve [{ id, name, host, port, isConnected: true|false }, ...]
+### isConnected = true si la conexión al terminal es exitosa, false si no.
+GET http://localhost:8000/api/hikvision/devices
+Accept: application/json
+
+### 2. TEST de conexión global (respuesta original)
+GET http://localhost:8000/api/hikvision/testHikvision
+Accept: application/json
+
+### 3. LISTAR terminales — renombrar un terminal (opcional)
+### Guarda/actualiza el nombre legible del terminal.
+PUT http://localhost:8000/api/hikvision/devices
+Content-Type: application/json
+Accept: application/json
+
+{
+    "device_id": "192.168.1.64",
+    "nombre": "Garita principal"
+}
+
+### 4. LISTAR terminales — verificar el nombre guardado
+GET http://localhost:8000/api/hikvision/devices
+Accept: application/json
