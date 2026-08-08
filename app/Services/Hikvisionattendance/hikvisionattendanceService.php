@@ -200,6 +200,16 @@ class hikvisionattendanceService
     }
 
     /**
+     * Hosts (IPs) de todos los terminales configurados en .env (HIKVISION_HOST +
+     * HIKVISION_HOSTS), sin I/O extra — usado para validar el origen de las
+     * peticiones entrantes en /pushNotification (ver RestrictToHikvisionDevices).
+     */
+    public function deviceHosts(): array
+    {
+        return array_column($this->devices, 'host');
+    }
+
+    /**
      * Info legible de cada terminal configurado (id, nombre, host, puerto),
      * para un selector de terminal que muestre nombre en vez de solo IP:puerto.
      * El nombre guardado desde el frontend (tabla hikvision_dispositivos) tiene
