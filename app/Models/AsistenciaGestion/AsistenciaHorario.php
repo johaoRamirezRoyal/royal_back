@@ -15,11 +15,13 @@ class AsistenciaHorario extends Model
         'grupo_id',
         'hora_llegada_esperada',
         'hora_salida_esperada',
+        'dias_habiles',
         'activo',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'dias_habiles' => 'array',
     ];
 
     public function bandas()

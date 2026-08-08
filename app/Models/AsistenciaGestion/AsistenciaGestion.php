@@ -75,8 +75,12 @@ class AsistenciaGestion extends Model
 
     /**
      * Horario activo del grupo dado, o el horario global (grupo_id null) si no hay uno
-     * específico. Público: también lo usa AsistenciaGestionService::cerrarAsistenciasVencidas()
-     * para saber la hora de salida esperada de cada usuario con marcación abierta.
+     * específico, que además incluya el día de la semana actual en `dias_habiles`. Un
+     * horario que no cubre hoy (ej. Lun-Vie un sábado) no aplica, aunque esté activo y
+     * coincida el grupo — cae al fallback de horarioAplicable() == null (ver
+     * getPuntualidadAttribute). Público: también lo usa
+     * AsistenciaGestionService::cerrarAsistenciasVencidas() para saber la hora de salida
+     * esperada de cada usuario con marcación abierta.
      */
     public static function horarioAplicable(?int $grupoId): ?AsistenciaHorario
     {
@@ -84,8 +88,14 @@ class AsistenciaGestion extends Model
             self::$horariosCache = AsistenciaHorario::with('bandas')->where('activo', true)->get();
         }
 
-        return self::$horariosCache->firstWhere('grupo_id', $grupoId)
-            ?? self::$horariosCache->firstWhere('grupo_id', null);
+        $diaHoy = (int) now()->isoWeekday();
+
+        $horariosDeHoy = self::$horariosCache->filter(
+            fn (AsistenciaHorario $horario) => in_array($diaHoy, $horario->dias_habiles ?? [], true)
+        );
+
+        return $horariosDeHoy->firstWhere('grupo_id', $grupoId)
+            ?? $horariosDeHoy->firstWhere('grupo_id', null);
     }
 
     // Toda fila en esta tabla es, por definición, una llegada registrada.

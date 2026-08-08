@@ -51,6 +51,8 @@ class AsistenciaHorariosController extends Controller
             'grupo_id' => 'nullable|integer',
             'hora_llegada_esperada' => 'required|date_format:H:i',
             'hora_salida_esperada' => 'required|date_format:H:i',
+            'dias_habiles' => 'required|array|min:1',
+            'dias_habiles.*' => 'integer|between:1,7|distinct',
             'activo' => 'sometimes|boolean',
         ]);
 
@@ -72,6 +74,8 @@ class AsistenciaHorariosController extends Controller
             'grupo_id' => 'sometimes|nullable|integer',
             'hora_llegada_esperada' => 'sometimes|date_format:H:i',
             'hora_salida_esperada' => 'sometimes|date_format:H:i',
+            'dias_habiles' => 'sometimes|array|min:1',
+            'dias_habiles.*' => 'integer|between:1,7|distinct',
             'activo' => 'sometimes|boolean',
         ]);
 

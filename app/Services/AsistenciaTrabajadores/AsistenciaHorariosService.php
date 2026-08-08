@@ -33,11 +33,11 @@ class AsistenciaHorariosService extends Service
     public function crearHorario(array $datos): array
     {
         try {
-            $conflicto = $this->existeHorarioParaGrupo($datos['grupo_id'] ?? null);
+            $conflicto = $this->existeHorarioParaGrupo($datos['grupo_id'] ?? null, $datos['dias_habiles']);
             if ($conflicto) {
                 return [
                     'error' => true,
-                    'message' => 'Ya existe un horario activo para ese grupo',
+                    'message' => 'Ya existe un horario activo para ese grupo que se superpone en al menos un día',
                     'data' => null,
                 ];
             }
@@ -72,12 +72,15 @@ class AsistenciaHorariosService extends Service
                 ];
             }
 
-            if (array_key_exists('grupo_id', $datos)) {
-                $conflicto = $this->existeHorarioParaGrupo($datos['grupo_id'], excluirId: $id);
+            if (array_key_exists('grupo_id', $datos) || array_key_exists('dias_habiles', $datos)) {
+                $grupoId = array_key_exists('grupo_id', $datos) ? $datos['grupo_id'] : $horario->grupo_id;
+                $diasHabiles = $datos['dias_habiles'] ?? $horario->dias_habiles;
+
+                $conflicto = $this->existeHorarioParaGrupo($grupoId, $diasHabiles, excluirId: $id);
                 if ($conflicto) {
                     return [
                         'error' => true,
-                        'message' => 'Ya existe un horario activo para ese grupo',
+                        'message' => 'Ya existe un horario activo para ese grupo que se superpone en al menos un día',
                         'data' => null,
                     ];
                 }
@@ -253,11 +256,17 @@ class AsistenciaHorariosService extends Service
         }
     }
 
-    private function existeHorarioParaGrupo(?int $grupoId, ?int $excluirId = null): bool
+    /**
+     * Ya no basta con "mismo grupo" para ser conflicto: dos horarios activos del mismo
+     * grupo pueden coexistir si cubren días distintos (ej. Lun-Vie vs Sábado). Solo hay
+     * conflicto si además comparten al menos un día en `dias_habiles`.
+     */
+    private function existeHorarioParaGrupo(?int $grupoId, array $diasHabiles, ?int $excluirId = null): bool
     {
         return AsistenciaHorario::where('grupo_id', $grupoId)
             ->where('activo', true)
             ->when($excluirId, fn ($q) => $q->where('id', '!=', $excluirId))
-            ->exists();
+            ->get()
+            ->contains(fn (AsistenciaHorario $horario) => array_intersect($horario->dias_habiles ?? [], $diasHabiles) !== []);
     }
 }
