@@ -205,12 +205,14 @@ class hikvisionattendanceService
      * El nombre guardado desde el frontend (tabla hikvision_dispositivos) tiene
      * prioridad sobre el de .env; si ninguno existe, cae al id ("host:puerto").
      *
-     * @return array<int, array{id: string, name: string, host: string, port: mixed}>
+     * @return array<int, array{id: string, name: string, host: string, port: mixed, isConnected: bool}>
      */
     public function devicesInfo(): array
     {
         $nombresGuardados = HikvisionDispositivo::whereIn('device_id', $this->deviceIds())
             ->pluck('nombre', 'device_id');
+
+        $conexion = $this->testConnection()['data'];
 
         return array_map(
             fn ($device) => [
@@ -218,6 +220,7 @@ class hikvisionattendanceService
                 'name' => $nombresGuardados[$device['id']] ?? $device['name'],
                 'host' => $device['host'],
                 'port' => $device['port'],
+                'isConnected' => $conexion[$device['id']]['isConnected'] ?? false,
             ],
             $this->devices
         );
