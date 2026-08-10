@@ -132,4 +132,18 @@ class AsistenciaGestionController extends Controller
 
         return $this->apiResponse($resultado);
     }
+
+    public function actualizarObservacion(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'observacion' => ['nullable', 'string', 'max:255'],
+        ], [
+            'observacion.string' => 'La observación debe ser texto.',
+            'observacion.max' => 'La observación no puede superar los 255 caracteres.',
+        ]);
+
+        $resultado = $this->asistenciaService->actualizarObservacion($id, $request->input('observacion'));
+
+        return $this->apiResponse($resultado);
+    }
 }

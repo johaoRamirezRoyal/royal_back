@@ -1,0 +1,8 @@
+POST https://saminuevo.royalschool.edu.co/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}

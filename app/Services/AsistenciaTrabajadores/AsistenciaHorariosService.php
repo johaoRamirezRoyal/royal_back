@@ -42,6 +42,14 @@ class AsistenciaHorariosService extends Service
                 ];
             }
 
+            if (!empty($datos['hora_cierre_automatico']) && $datos['hora_cierre_automatico'] < $datos['hora_salida_esperada']) {
+                return [
+                    'error' => true,
+                    'message' => 'La hora de cierre automático no puede ser anterior a la hora de salida esperada',
+                    'data' => null,
+                ];
+            }
+
             $horario = AsistenciaHorario::create($datos);
 
             return [
@@ -84,6 +92,17 @@ class AsistenciaHorariosService extends Service
                         'data' => null,
                     ];
                 }
+            }
+
+            $horaSalida = $datos['hora_salida_esperada'] ?? $horario->hora_salida_esperada;
+            $horaCierre = array_key_exists('hora_cierre_automatico', $datos) ? $datos['hora_cierre_automatico'] : $horario->hora_cierre_automatico;
+
+            if (!empty($horaCierre) && $horaCierre < $horaSalida) {
+                return [
+                    'error' => true,
+                    'message' => 'La hora de cierre automático no puede ser anterior a la hora de salida esperada',
+                    'data' => null,
+                ];
             }
 
             $horario->update($datos);
