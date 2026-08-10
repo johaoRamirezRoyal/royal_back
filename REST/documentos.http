@@ -8,14 +8,15 @@
 ### 2) Pégalo en @token (dura 60 min)
 ### ============================================
 
-@base = http://localhost:8000/api
+@base = https://saminuevo.royalschool.edu.co/api
 @token = PEGA_AQUI_EL_TOKEN
 
 ### 1. VER imagen en subcarpeta (foto de un libro)
 GET {{base}}/public/biblioteca/78247f47-aa69-4f50-ae97-85397b21b545.jpeg 
 
 ### 2. VER archivo en la raíz del disco (ej. foto de perfil — foto_perfil.nombre_foto)
-GET {{base}}/public/00a72d70e2f75bc605099a7b3ba55da9.jpg
+GET {{base}}/public/00053f93db557c5b306fd1af5db76dc0.jpeg
+Accept: application/json
 
 ### 3. VER un PDF
 GET {{base}}/public/cb1bf0951f27ffc0b86bcc251d202a16.pdf
