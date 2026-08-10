@@ -38,8 +38,8 @@ Route::delete('/{id}', [LlegadasTardeController::class, 'eliminarLlegadaTarde'])
 
 /**
  * Configuración estándar (hora límite y cantidad límite de llegadas tarde).
- * PUT body opcional: { "hora_limite": "07:15", "cantidad_limite": 5, "notificar_docentes": true }
- * notificar_docentes solo aplica si hora_limite cambió; es opt-in, no se envía por defecto.
+ * PUT body opcional: { "hora_limite": "07:15", "cantidad_limite": 5, "notificar_coordinador": true }
+ * notificar_coordinador (perfil 26) solo aplica si hora_limite cambió; es opt-in, no se envía por defecto.
  */
 Route::get('/configuracion', [LlegadasTardeConfigController::class, 'index']);
 Route::put('/configuracion', [LlegadasTardeConfigController::class, 'update']);

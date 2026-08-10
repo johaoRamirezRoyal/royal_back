@@ -21,7 +21,7 @@ class LlegadasTardeConfigController extends Controller
         $request->validate([
             'hora_limite' => 'sometimes|date_format:H:i',
             'cantidad_limite' => 'sometimes|integer|min:1',
-            'notificar_docentes' => 'sometimes|boolean',
+            'notificar_coordinador' => 'sometimes|boolean',
         ], [
             'hora_limite.date_format' => 'La hora límite debe tener el formato HH:MM.',
             'cantidad_limite.integer' => 'La cantidad límite debe ser numérica.',
@@ -29,9 +29,9 @@ class LlegadasTardeConfigController extends Controller
         ]);
 
         $datos = $request->only(['hora_limite', 'cantidad_limite']);
-        $notificarDocentes = $request->boolean('notificar_docentes');
+        $notificarCoordinador = $request->boolean('notificar_coordinador');
 
-        $resultado = $this->configService->actualizarConfiguracion($datos, $notificarDocentes);
+        $resultado = $this->configService->actualizarConfiguracion($datos, $notificarCoordinador);
 
         return $this->apiResponse($resultado);
     }
