@@ -613,12 +613,45 @@ class AsistenciaGestionService extends Service
         }
     }
 
+    public function actualizarObservacion(int $id, ?string $observacion): array
+    {
+        try {
+            $asistencia = AsistenciaGestion::find($id);
+
+            if (!$asistencia) {
+                return [
+                    'error' => true,
+                    'message' => 'Asistencia no encontrada',
+                    'data' => null,
+                    'status' => 404,
+                ];
+            }
+
+            $asistencia->update(['observacion' => $observacion]);
+
+            return [
+                'error' => false,
+                'message' => 'Observación actualizada',
+                'data' => $asistencia->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar observación de asistencia');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar observación de asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
     /**
      * Cierra automáticamente las asistencias del día que tienen entrada pero no salida y ya
-     * pasaron la hora_salida_esperada del horario aplicable al usuario (por grupo, o global
-     * si no hay uno específico) — pensado para correr periódicamente desde el scheduler
-     * (ver CerrarAsistenciasVencidasCommand). Sin horario resoluble para el usuario, esa
-     * fila se deja igual (no hay base para saber a qué hora cerrarla).
+     * pasaron la hora_cierre_automatico del horario aplicable al usuario (o hora_salida_esperada
+     * si el horario no tiene una hora de cierre propia configurada), por grupo o global si no
+     * hay uno específico — pensado para correr periódicamente desde el scheduler (ver
+     * CerrarAsistenciasVencidasCommand). El valor que se registra como hora_salida sigue
+     * siendo hora_salida_esperada, no la hora de cierre. Sin horario resoluble para el
+     * usuario, esa fila se deja igual (no hay base para saber a qué hora cerrarla).
      */
     public function cerrarAsistenciasVencidas(): array
     {
@@ -636,8 +669,9 @@ class AsistenciaGestionService extends Service
                 $perfil = $asistencia->usuario?->perfil;
                 $grupoId = $perfil !== null ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $perfil] ?? null) : null;
                 $horario = AsistenciaGestion::horarioAplicable($grupoId);
+                $horaCierre = $horario?->hora_cierre_automatico ?? $horario?->hora_salida_esperada;
 
-                if (!$horario || $horaActual < $horario->hora_salida_esperada) {
+                if (!$horario || $horaActual < $horaCierre) {
                     continue;
                 }
 
@@ -652,7 +686,7 @@ class AsistenciaGestionService extends Service
                 $nombreCompleto = trim(($usuario->nombre ?? '') . ' ' . ($usuario->apellido ?? ''));
                 $fecha = $asistencia->fecha_asistencia->format('Y-m-d');
 
-                if ($usuario?->correo) {
+                if ($horario->notificar_trabajador && $usuario?->correo) {
                     $this->mailService->sendGeneric(
                         $usuario->correo,
                         'Salida marcada automáticamente',
@@ -660,11 +694,13 @@ class AsistenciaGestionService extends Service
                     );
                 }
 
-                $this->mailService->sendGeneric(
-                    $this->mailTo,
-                    'Salida automática registrada',
-                    "El usuario {$nombreCompleto} (documento {$usuario->documento}) no registró su salida el {$fecha} antes de la hora esperada ({$horaEsperada}). El sistema la marcó automáticamente a esa hora."
-                );
+                if ($horario->notificar_rh) {
+                    $this->mailService->sendGeneric(
+                        $this->mailTo,
+                        'Salida automática registrada',
+                        "El usuario {$nombreCompleto} (documento {$usuario->documento}) no registró su salida el {$fecha} antes de la hora esperada ({$horaEsperada}). El sistema la marcó automáticamente a esa hora."
+                    );
+                }
 
                 $cerradas[] = ['id_user' => $asistencia->id_user, 'nombre' => $nombreCompleto, 'fecha' => $fecha];
             }

@@ -15,12 +15,17 @@ class AsistenciaHorario extends Model
         'grupo_id',
         'hora_llegada_esperada',
         'hora_salida_esperada',
+        'hora_cierre_automatico',
+        'notificar_trabajador',
+        'notificar_rh',
         'dias_habiles',
         'activo',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'notificar_trabajador' => 'boolean',
+        'notificar_rh' => 'boolean',
         'dias_habiles' => 'array',
     ];
 
