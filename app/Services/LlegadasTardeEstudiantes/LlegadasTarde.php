@@ -3,16 +3,19 @@
 namespace App\Services\LlegadasTardeEstudiantes;
 
 use App\Models\AnioEscolar\PeriodoAcademico;
+use App\Models\Estudiantes\EstudiantesPadre;
+use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\LlegadasTarde\LlegadasTarde as ModelsLlegadasTarde;
 use App\Models\Usuarios\Usuario;
+use App\Services\MailService;
 use App\Services\Service;
 use Exception;
 
 class LlegadasTarde extends Service
 {
-    private array $mailTo = [
-        'hernando.ramirez@royalschool.edu.co'
-    ];
+    private array $mailToVicerrectoria = ['hernando.ramirez@royalschool.edu.co'];
+
+    public function __construct(private MailService $mailService) {}
 
     public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora): array
     {
@@ -59,10 +62,20 @@ class LlegadasTarde extends Service
                 ];
             }
 
+            $totalEnPeriodo = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
+                ->where('id_periodo_academico', $periodo_academico->id)
+                ->count();
+
+            $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
+            $limiteAlcanzado = $cantidadLimite > 0 && $totalEnPeriodo % $cantidadLimite === 0;
+            $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
+
+            $this->notificarLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
+
             return [
                 'error' => false,
                 'message' => "Llegada tarde creada correctamente",
-                'data' => $llegadaTarde->toArray()
+                'data' => array_merge($llegadaTarde->toArray(), ['total_llegadas_tarde_periodo' => $totalEnPeriodo])
             ];
         } catch (Exception $e) {
             $this->sendError($e, "Error al agregar la llegada tarde");
@@ -112,6 +125,18 @@ class LlegadasTarde extends Service
                     'data' => []
                 ];
             }
+
+            // Conteo por alumno dentro de este período (no filtrado por id_alumno: si se
+            // pidió un alumno puntual solo hay una llave, pero si se listó el período
+            // completo cada fila trae cuántas lleva SU alumno, no el total de todos).
+            $conteoPorAlumno = ModelsLlegadasTarde::where('id_periodo_academico', $id_periodo_academico)
+                ->selectRaw('id_alumno, count(*) as total')
+                ->groupBy('id_alumno')
+                ->pluck('total', 'id_alumno');
+
+            $llegadas_tarde->each(
+                fn($registro) => $registro->total_llegadas_tarde_periodo = $conteoPorAlumno[$registro->id_alumno] ?? 1
+            );
 
             return [
                 'error' => false,
@@ -167,6 +192,63 @@ class LlegadasTarde extends Service
                 'message' => "Error en el servidor al tratar de eliminar la llegada tarde",
                 'data' => []
             ];
+        }
+    }
+
+    /**
+     * Notifica por correo al estudiante y a sus acudientes activos cada vez que se
+     * registra una llegada tarde (siempre). Si con esta llegada el total del período
+     * llega a un múltiplo de la cantidad_limite configurada, además notifica a Vicerrectoría.
+     * sendGeneric() atrapa sus propios errores, así que un fallo de envío no afecta
+     * el registro de la llegada tarde (ya se guardó antes de llamar este método).
+     */
+    private function notificarLlegadaTarde(ModelsLlegadasTarde $llegadaTarde, int $totalEnPeriodo, bool $limiteAlcanzado): void
+    {
+        $estudiante = Usuario::find($llegadaTarde->id_alumno);
+
+        if (!$estudiante) {
+            return;
+        }
+
+        $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido}");
+        $horaCorta = substr($llegadaTarde->hora, 0, 5);
+        $fecha = $llegadaTarde->fecha;
+
+        $avisoLimite = $limiteAlcanzado
+            ? "\n\nEste estudiante ya acumula {$totalEnPeriodo} llegadas tarde en el período académico actual."
+            : '';
+
+        if ($estudiante->correo) {
+            $this->mailService->sendGeneric(
+                $estudiante->correo,
+                'Llegada tarde registrada',
+                "Hola {$nombreCompleto},\n\nSe registró tu llegada tarde el {$fecha} a las {$horaCorta}." . $avisoLimite
+            );
+        }
+
+        $correosAcudientes = Usuario::whereIn(
+            'id_user',
+            EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)->where('activo', 1)->pluck('id_acudiente')
+        )
+            ->whereNotNull('correo')
+            ->pluck('correo')
+            ->filter()
+            ->all();
+
+        if (!empty($correosAcudientes)) {
+            $this->mailService->sendGeneric(
+                $correosAcudientes,
+                'Llegada tarde registrada',
+                "Se registró una llegada tarde del estudiante {$nombreCompleto} el {$fecha} a las {$horaCorta}." . $avisoLimite
+            );
+        }
+
+        if ($limiteAlcanzado) {
+            $this->mailService->sendGeneric(
+                $this->mailToVicerrectoria,
+                'Falta por llegadas tarde acumuladas',
+                "El estudiante {$nombreCompleto} (documento {$estudiante->documento}) acumula {$totalEnPeriodo} llegadas tarde en el período académico actual. Última llegada tarde: {$fecha} a las {$horaCorta}."
+            );
         }
     }
 }
