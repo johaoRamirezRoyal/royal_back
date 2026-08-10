@@ -16,7 +16,12 @@ class LlegadasTarde extends Model
         'id_alumno',
         'id_periodo_academico',
         'fecha',
-        'hora'
+        'hora',
+        'limite_alcanzado',
+    ];
+
+    protected $casts = [
+        'limite_alcanzado' => 'boolean',
     ];
 
     public function alumno(){

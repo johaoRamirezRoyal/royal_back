@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\LlegadasTarde\LlegadasTardeConfigController;
 use App\Http\Controllers\LlegadasTarde\LlegadasTardeController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,9 +19,10 @@ Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
 /**
  * GET /api/llegadas-tarde
  * Query params:
- *   id_periodo_academico (int, requerido)
- *   id_alumno           (int, opcional) — filtrar por alumno
- * Ejemplo: /api/compartido/llegadas-tarde?id_periodo_academico=1&id_alumno=5
+ *   id_periodo_academico (int, opcional) — default: período académico activo
+ *   id_alumno            (int, opcional) — filtrar por alumno
+ * Cada registro trae total_llegadas_tarde_periodo: cuántas lleva ESE alumno en el
+ * período consultado (no el total de todos los alumnos del período).
  */
 Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
 
@@ -33,3 +35,11 @@ Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
  */
 Route::delete('/', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
 Route::delete('/{id}', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
+
+/**
+ * Configuración estándar (hora límite y cantidad límite de llegadas tarde).
+ * PUT body opcional: { "hora_limite": "07:15", "cantidad_limite": 5, "notificar_docentes": true }
+ * notificar_docentes solo aplica si hora_limite cambió; es opt-in, no se envía por defecto.
+ */
+Route::get('/configuracion', [LlegadasTardeConfigController::class, 'index']);
+Route::put('/configuracion', [LlegadasTardeConfigController::class, 'update']);

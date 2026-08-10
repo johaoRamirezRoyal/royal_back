@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
+use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
@@ -16,9 +17,6 @@ class HikvisionController extends Controller
 {
     // Perfil de Estudiante en la tabla perfiles
     const PERFIL_ESTUDIANTE = 16;
-
-    // Hora límite de llegada: después de las 7:05 a.m. se considera tarde
-    const HORA_LIMITE_LLEGADA = '07:15:00';
 
     // Ventana de debounce para descartar reintentos/rebotes del dispositivo (mismo
     // usuario marcando "de nuevo" a los pocos segundos de su marcación anterior).
@@ -707,8 +705,9 @@ class HikvisionController extends Controller
         }
 
         $ahora = now();
+        $horaLimite = ConfiguracionLlegadasTarde::find(1)?->hora_limite ?? '07:15:00';
 
-        if ($ahora->format('H:i:s') <= self::HORA_LIMITE_LLEGADA) {
+        if ($ahora->format('H:i:s') <= $horaLimite) {
             return;
         }
 
