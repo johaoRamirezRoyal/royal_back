@@ -9,9 +9,10 @@ use Illuminate\Support\Facades\Schedule;
 // Cada 15 min: distintos horarios pueden tener distinta hora_salida_esperada, así que no
 // alcanza con correrlo una sola vez al día.
 // NOTA OPERATIVA: esto por sí solo no hace nada en producción — Laravel solo dispara tareas
-// programadas cuando algo invoca `php artisan schedule:run` cada minuto. Hay que agregar un
-// cron de sistema o un `royal-back-scheduler.service`/`.timer` con `schedule:work`, igual que
-// ya existe `deploy/royal-back-queue.service` para el queue worker.
+// programadas cuando algo invoca `php artisan schedule:run` cada minuto. Ese disparo lo da
+// deploy/royal-back-scheduler.timer + deploy/royal-back-scheduler.service (instalar y
+// habilitar en el servidor), igual que ya existe deploy/royal-back-queue.service para el
+// queue worker.
 Schedule::command('asistencia:cerrar-vencidas')->everyFifteenMinutes();
 
 Artisan::command('inspire', function () {

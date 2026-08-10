@@ -1,0 +1,102 @@
+### ============================================
+### AREAS — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### ============================================
+### LISTADO
+### ============================================
+
+### 1. OBTENER todas las áreas
+GET http://localhost:8000/api/areas
+
+### ============================================
+### FILTRO
+### ============================================
+
+### 2. FILTRAR áreas por nombre
+GET http://localhost:8000/api/areas/filtro?filtro=S40
+
+### 3. FILTRAR áreas — sin coincidencias (debe retornar data vacío)
+GET http://localhost:8000/api/areas/filtro?filtro=areainexistentexyz
+
+### ============================================
+### ACTUALIZAR
+### ============================================
+
+### 4. ACTUALIZAR área — exitoso
+PUT http://localhost:8000/api/areas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 1,
+    "nombre": "S40 (1B)",
+    "user_log": 1,
+    "activo": 1
+}
+
+### 5. ACTUALIZAR área — ID inexistente (debe fallar)
+PUT http://localhost:8000/api/areas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id": 99999,
+    "nombre": "Área fantasma",
+    "user_log": 1,
+    "activo": 1
+}
+
+### ============================================
+### ESTADO
+### ============================================
+
+### 6. CAMBIAR estado de áreas — desactivar
+POST http://localhost:8000/api/areas/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2, 3, 4, 5],
+    "estado": 0
+}
+
+### 7. CAMBIAR estado de áreas — reactivar
+POST http://localhost:8000/api/areas/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2, 3, 4, 5],
+    "estado": 1
+}
+
+### ============================================
+### ASIGNAR
+### ============================================
+
+### 8. ASIGNAR área a un usuario (actualiza inventario de esa área)
+POST http://localhost:8000/api/areas/asignar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_user": 3123,
+    "id_area": 104
+}
+
+### 9. ASIGNAR área — sin inventario en el área (debe fallar)
+POST http://localhost:8000/api/areas/asignar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_user": 3123,
+    "id_area": 99999
+}

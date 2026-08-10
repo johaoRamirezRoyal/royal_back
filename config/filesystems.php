@@ -16,6 +16,12 @@ return [
     'default' => env('FILESYSTEM_DISK', 'local'),
 
     /*
+    | Disco que usa FileStorageService para los archivos subidos.
+    | En producción: UPLOADS_DISK=sami
+    */
+    'uploads_disk' => env('UPLOADS_DISK', 'public'),
+
+    /*
     |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
@@ -42,6 +48,16 @@ return [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
+        // Carpeta public/upload servida directamente por el web server del VPS
+        'sami' => [
+            'driver' => 'local',
+            'root' => env('SAMI_UPLOAD_ROOT', public_path('upload')),
+            'url' => rtrim(env('SAMI_UPLOAD_URL', env('APP_URL').'/public/upload'), '/'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

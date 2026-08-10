@@ -834,18 +834,18 @@ class PerfilUsuarioService extends Service {
             if ($tipo === 'formacion') {
                 foreach ($item['certificados'] ?? [] as &$certificado) {
                     if (!empty($certificado['nombre_archivo'])) {
-                        $certificado['url_documento'] = Storage::disk('public')->url($certificado['nombre_archivo']);
+                        $certificado['url_documento'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($certificado['nombre_archivo']);
                     }
                 }
                 unset($certificado);
             }
 
             if ($tipo === 'experiencia_laboral' && !empty($item['certificado_trabajo'])) {
-                $item['url_documento'] = Storage::disk('public')->url($item['certificado_trabajo']);
+                $item['url_documento'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($item['certificado_trabajo']);
             }
 
             if ($tipo === 'produccion_intelectual' && !empty($item['evidencia_pdf'])) {
-                $item['url_documento'] = Storage::disk('public')->url($item['evidencia_pdf']);
+                $item['url_documento'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($item['evidencia_pdf']);
             }
         }
         unset($item);

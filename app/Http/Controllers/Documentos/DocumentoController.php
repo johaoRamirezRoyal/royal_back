@@ -28,15 +28,35 @@ class DocumentoController extends Controller
         }
 
         $ruta = $directorio . '/' . $nombreDocumento;
+        $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
 
-        if (!Storage::disk('public')->exists($ruta)) {
+        if (!$disk->exists($ruta)) {
             return $this->error('Documento no encontrado.', 404);
         }
 
         if ($request->boolean('download')) {
-            return Storage::disk('public')->download($ruta);
+            return $disk->download($ruta);
         }
 
-        return Storage::disk('public')->response($ruta);
+        return $disk->response($ruta);
+    }
+
+    /**
+     * Sirve cualquier archivo del disco de uploads (imagen, pdf, etc.).
+     * Requiere auth:api. La ruta puede incluir subdirectorios: /api/public/{directorio/archivo}
+     */
+    public function verPublico(string $ruta)
+    {
+        if (str_contains($ruta, '..')) {
+            abort(404);
+        }
+
+        $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
+
+        if (!$disk->exists($ruta)) {
+            abort(404);
+        }
+
+        return $disk->response($ruta);
     }
 }

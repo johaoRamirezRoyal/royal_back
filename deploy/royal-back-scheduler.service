@@ -1,0 +1,30 @@
+# Systemd unit for the Laravel scheduler tick (runs `php artisan schedule:run`).
+#
+# Laravel's Schedule:: entries in routes/console.php (ej. asistencia:cerrar-vencidas)
+# only fire when something invokes `schedule:run` once a minute — this unit is that
+# "something". It's a oneshot triggered by royal-back-scheduler.timer, not a long-running
+# process (unlike royal-back-queue.service).
+#
+# Install:
+#   sudo cp deploy/royal-back-scheduler.service /etc/systemd/system/royal-back-scheduler.service
+#   sudo cp deploy/royal-back-scheduler.timer /etc/systemd/system/royal-back-scheduler.timer
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now royal-back-scheduler.timer
+#
+# Verify:
+#   systemctl list-timers royal-back-scheduler.timer
+#   journalctl -u royal-back-scheduler -f
+#
+# Logs:
+#   journalctl -u royal-back-scheduler -f
+
+[Unit]
+Description=Royal Backend - Laravel Scheduler Tick (schedule:run)
+After=network.target mysql.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/royal_back
+ExecStart=/usr/bin/php artisan schedule:run
