@@ -545,6 +545,7 @@ class BibliotecaServices extends Service
             if (empty($id_libro)) {
                 $data['ejemplares_total'] = Ejemplares::count();
                 $data['libros_total'] = Libro::count();
+                $data['libros_inactivos'] = Libro::where('activo', 0)->count();
             }
 
             return [
@@ -2282,6 +2283,7 @@ class BibliotecaServices extends Service
                     'prestados' => (int) ($counts[2] ?? 0),
                     'paquetes_total' => Paquetes::count(),
                     'contenido_total' => PaqueteContenido::where('activo', 1)->count(),
+                    'paquetes_inactivos' => Paquetes::where('activo', 0)->count(),
                 ],
             ];
         } catch (Exception $e) {
