@@ -15,6 +15,7 @@ use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class BibliotecaController extends Controller
@@ -101,17 +102,21 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function verImagenBiblioteca(string $carpeta, string $filename)
+    public function verImagenBiblioteca(string $carpeta, ?string $filename = null)
     {
-        $ruta = storage_path("app/public/{$carpeta}/{$filename}");
-
-        if (!file_exists($ruta)) {
+        if (str_contains($carpeta, '..') || str_contains((string) $filename, '..')) {
             abort(404);
         }
 
-        return response()->file($ruta, [
-            'Content-Type' => mime_content_type($ruta)
-        ]);
+        $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
+        // Sin $filename el archivo está en la raíz del disco (ej. fotos de perfil)
+        $ruta = $filename === null ? $carpeta : "{$carpeta}/{$filename}";
+
+        if (!$disk->exists($ruta)) {
+            abort(404);
+        }
+
+        return $disk->response($ruta);
     }
 
     public function subirImagenBiblioteca(Request $request)

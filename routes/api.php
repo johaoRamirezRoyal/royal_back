@@ -23,6 +23,14 @@ Route::group(['prefix' => 'auth'], function () {
 // Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
 Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '.+');
+// Archivos en la raíz del disco de uploads (ej. fotos de perfil)
+Route::get('/biblioteca/imagen/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
+    ->where('filename', '^[^/]+$');
+
+// Cualquier archivo del disco de uploads (privado): /api/public/{directorio/opcional/archivo}
+Route::get('/public/{ruta}', [App\Http\Controllers\Documentos\DocumentoController::class, 'verPublico'])
+    ->where('ruta', '.+')
+    ->middleware('auth:api');
 
 // Documentos del storage público (disponible para cualquier módulo autenticado)
 Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {

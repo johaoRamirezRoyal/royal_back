@@ -1,0 +1,386 @@
+### ============================================
+### BIBLIOTECA — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+###
+### Las imágenes se guardan en el disco de uploads (disco 'sami'):
+###   local:  C:/xampp/htdocs/sami_royal/public/upload/biblioteca/
+###   URL:    http://localhost/sami_royal/public/upload/biblioteca/<archivo>
+### ============================================
+
+@base = http://localhost:8000/api/biblioteca
+
+### ============================================
+### CATEGORÍAS
+### ============================================
+
+### 1. LISTAR categorías
+GET {{base}}/categorias
+
+### 2. CREAR categoría
+POST {{base}}/categoria
+Content-Type: application/json
+
+{
+  "nombre": "Literatura",
+  "clasificacion": "A",
+  "color": "#3498db",
+  "activo": 1
+}
+
+### 3. CAMBIAR ESTADO categoría
+PUT {{base}}/categoria/estado
+Content-Type: application/json
+
+{
+  "ids": [1],
+  "estado": 0
+}
+
+### ============================================
+### SUBCATEGORÍAS
+### ============================================
+
+### 4. LISTAR subcategorías
+GET {{base}}/subcategorias
+
+### 5. CREAR subcategoría
+POST {{base}}/subcategorias
+Content-Type: application/json
+
+{
+  "nombre": "Novela",
+  "id_categoria": 1,
+  "activo": 1
+}
+
+### 6. CAMBIAR ESTADO subcategoría
+PUT {{base}}/subcategorias/estado
+Content-Type: application/json
+
+{
+  "ids": [1],
+  "estado": 0
+}
+
+### ============================================
+### LIBROS
+### ============================================
+
+### 7. LISTAR libros (todos)
+GET {{base}}/libros
+
+### 8. LISTAR libros — buscar por texto
+GET {{base}}/libros?search=Cien&años
+
+### 9. LISTAR libros — filtrar por categoría / subcategoría / activo
+GET {{base}}/libros?categoria[]=1&subcategoria[]=2&activo=1&page=1
+
+### 10. CREAR libro (sin foto)
+POST {{base}}/libro
+Content-Type: application/json
+
+{
+  "titulo": "Cien años de soledad",
+  "autor": "Gabriel García Márquez",
+  "editorial": "Editorial Sudamericana",
+  "edicion": "Primera edición",
+  "id_categoria": 1,
+  "id_subcategoria": 2,
+  "observacion": "Libro disponible para préstamo en excelente estado.",
+  "activo": 1
+}
+
+### 11. CREAR libro CON foto (multipart — prueba del disco sami)
+### Ajusta la ruta del archivo < ./... a una imagen real de tu equipo
+POST {{base}}/libro
+Content-Type: multipart/form-data; boundary=----BibliotecaBoundary
+
+------BibliotecaBoundary
+Content-Disposition: form-data; name="titulo"
+
+Libro con foto de prueba
+------BibliotecaBoundary
+Content-Disposition: form-data; name="autor"
+
+Tester SAMI
+------BibliotecaBoundary
+Content-Disposition: form-data; name="id_categoria"
+
+1
+------BibliotecaBoundary
+Content-Disposition: form-data; name="foto"; filename="portada.png"
+Content-Type: image/png
+
+< C:/Users/Soporte/AppData/Local/Temp/opencode/prueba_biblioteca.png
+------BibliotecaBoundary--
+
+### 12. ACTUALIZAR libro
+POST {{base}}/libro/actualizar
+Content-Type: application/json
+
+{
+  "id_libro": 2949,
+  "titulo": "Libro de Prueba Storage actualizado",
+  "id_categoria": 1,
+  "autor": "Tester SAMI"
+}
+
+### 13. CAMBIAR ESTADO libro
+PUT {{base}}/libro/estado
+Content-Type: application/json
+
+{
+  "ids": [2949],
+  "estado": 0
+}
+
+### ============================================
+### IMÁGENES
+### ============================================
+
+### 14. SUBIR imagen (multipart, opcional id_libro para asociarla)
+POST {{base}}/imagen
+Content-Type: multipart/form-data; boundary=----BibliotecaBoundary
+
+------BibliotecaBoundary
+Content-Disposition: form-data; name="id_libro"
+
+2949
+------BibliotecaBoundary
+Content-Disposition: form-data; name="foto"; filename="portada.png"
+Content-Type: image/png
+
+< C:/Users/Soporte/AppData/Local/Temp/opencode/prueba_biblioteca.png
+------BibliotecaBoundary--
+
+### 15. VER imagen (ruta pública — sirve desde el disco de uploads)
+GET {{base}}/imagen/biblioteca/78247f47-aa69-4f50-ae97-85397b21b545.png
+
+### ============================================
+### EJEMPLARES
+### ============================================
+
+### 16. LISTAR ejemplares de un libro
+GET {{base}}/ejemplares?id_libro=2479
+
+### 17. LISTAR ejemplares — filtrar por autor
+GET {{base}}/ejemplares?autor=Johao&page=1
+
+### 18. AGREGAR ejemplares a un libro
+POST {{base}}/ejemplares
+Content-Type: application/json
+
+{
+  "id_libro": 2479,
+  "cantidad": 6,
+  "id_log": 3123
+}
+
+### 19. VERIFICAR ejemplar por código
+GET {{base}}/ejemplares/verificar?codigo=EJ-0001
+
+### 20. LISTAR ejemplares deshabilitados
+GET {{base}}/ejemplares/deshabilitados
+
+### 21. CAMBIAR ESTADO ejemplar
+PUT {{base}}/ejemplares
+Content-Type: application/json
+
+{
+  "ids": [1],
+  "estado": 0,
+  "id_log": 3123
+}
+
+### ============================================
+### PRÉSTAMOS DE EJEMPLARES
+### ============================================
+
+### 22. PRESTAR ejemplar
+POST {{base}}/prestamosEjemplar
+Content-Type: application/json
+
+{
+  "codigo_ejemplar": "EJ-0001",
+  "id_usuario": 3123,
+  "fecha_devolucion": "2026-08-20",
+  "observacion": "Préstamo de prueba",
+  "id_log": 3123
+}
+
+### 23. DEVOLVER ejemplar
+PUT {{base}}/DevolverPrestamosEjemplar
+Content-Type: application/json
+
+{
+  "codigo_ejemplar": "EJ-0001",
+  "id_log": 3123
+}
+
+### 24. VER préstamos de un ejemplar
+GET {{base}}/prestamosEjemplar?codigo_ejemplar=EJ-0001
+
+### 25. PRÉSTAMOS activos
+GET {{base}}/prestamosEjemplar/activos
+
+### 26. PRÉSTAMOS devueltos
+GET {{base}}/prestamosEjemplar/devueltos
+
+### 27. HISTORIAL de préstamos de un usuario
+GET {{base}}/prestamosEjemplar/historial?id_usuario=3123
+
+### 28. PRÉSTAMOS de un libro
+GET {{base}}/prestamosLibros?id_libro=2479
+
+### 29. ENVIAR recordatorio de préstamos pendientes
+POST {{base}}/prestamosEjemplar/recordatorio
+Content-Type: application/json
+
+{
+  "ids": [1, 2, 3]
+}
+
+### 30. PAZ Y SALVO global (sin ids = todos los usuarios activos)
+POST {{base}}/prestamosEjemplar/pazYSalvoGlobal
+Content-Type: application/json
+
+{
+  "ids": [3123]
+}
+
+### 31. PAZ Y SALVO PDF de un usuario
+GET {{base}}/prestamosEjemplar/pazYSalvo?id_usuario=3123
+
+### 32. LISTADO de préstamos PDF
+GET {{base}}/prestamosEjemplar/listadoPdf
+
+### ============================================
+### PAQUETES
+### ============================================
+
+### 33. LISTAR paquetes
+GET {{base}}/paquetes?perpage=6
+
+### 34. LISTAR paquetes — buscar
+GET {{base}}/paquetes?search=Johao
+
+### 35. CREAR paquete
+POST {{base}}/paquetes
+Content-Type: application/json
+
+{
+  "nombre": "Paquete de prueba",
+  "id_log": 3123
+}
+
+### 36. CAMBIAR ESTADO paquete
+PUT {{base}}/paquetes
+Content-Type: application/json
+
+{
+  "ids": [33],
+  "estado": 0
+}
+
+### 37. AGREGAR contenido a paquete
+POST {{base}}/paquetes/contenido
+Content-Type: application/json
+
+{
+  "titulo": "Contenido de prueba",
+  "id_paquete": 33,
+  "id_log": 3123
+}
+
+### 38. EDITAR contenido de paquete
+PUT {{base}}/paquetes/contenido
+Content-Type: application/json
+
+{
+  "id_contenido": 553,
+  "titulo": "Nuevo título"
+}
+
+### 39. CAMBIAR ESTADO contenido
+PUT {{base}}/paquetes/contenido/estado
+Content-Type: application/json
+
+{
+  "ids": [553],
+  "estado": 0,
+  "id_paquete": 33
+}
+
+### 40. ELIMINAR contenido de paquete
+DELETE {{base}}/paquetes/contenido
+Content-Type: application/json
+
+{
+  "ids": [553],
+  "id_paquete": 33
+}
+
+### 41. VERIFICAR paquete por código
+GET {{base}}/paquetes/verificar?codigo=PQ-0001
+
+### 42. PRESTAR paquete a usuario
+POST {{base}}/paquetes/prestamo
+Content-Type: application/json
+
+{
+  "id_usuario": 3123,
+  "codigo_paquete": "PQ-0001",
+  "fecha_devolucion": "2026-08-20",
+  "observacion": "Préstamo de prueba"
+}
+
+### 43. DEVOLVER paquete
+PUT {{base}}/paquetes/prestamo/devolver
+Content-Type: application/json
+
+{
+  "codigo_paquete": "PQ-0001",
+  "observacion": "Devuelto en buen estado"
+}
+
+### 44. HISTORIAL de préstamos de paquetes
+GET {{base}}/paquetes/prestamo/historial?id_usuario=3123
+
+### 45. LISTADO préstamos de paquetes PDF
+GET {{base}}/paquetes/prestamo/listadoPdf
+
+### ============================================
+### ESTADÍSTICAS / MÉTRICAS
+### ============================================
+
+### 46. ESTADÍSTICAS de ejemplares
+GET {{base}}/estadisticas
+
+### 47. ESTADÍSTICAS de paquetes
+GET {{base}}/estadisticas/paquetes
+
+### 48. LIBROS más prestados
+GET {{base}}/estadisticas/libros-mas-prestados
+
+### 49. CATEGORÍAS más prestadas
+GET {{base}}/estadisticas/categorias-mas-prestadas
+
+### 50. CURSOS con más préstamos de libros
+GET {{base}}/estadisticas/cursos-libros
+
+### 51. CURSOS con más préstamos de paquetes
+GET {{base}}/estadisticas/cursos-paquetes
+
+### 52. PAQUETES más prestados
+GET {{base}}/estadisticas/paquetes-mas-prestados
+
+### 53. PERFILES con más préstamos de libros
+GET {{base}}/estadisticas/perfiles-libros
+
+### 54. PERFILES con más préstamos de paquetes
+GET {{base}}/estadisticas/perfiles-paquetes

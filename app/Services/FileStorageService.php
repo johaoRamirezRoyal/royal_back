@@ -9,9 +9,17 @@ use Illuminate\Support\Str;
 class FileStorageService
 {
     /**
+     * Disco de uploads configurado (sami en el VPS, public en local).
+     */
+    private function resolveDisk(?string $disk): string {
+        return $disk ?: config('filesystems.uploads_disk', 'public');
+    }
+
+    /**
      * Guardar archivo
      */
-    public function uploadFile(UploadedFile $archivo, string $carpeta = 'uploads', string $disk = 'public'): array {
+    public function uploadFile(UploadedFile $archivo, string $carpeta = 'uploads', ?string $disk = null): array {
+        $disk = $this->resolveDisk($disk);
         $nombre = Str::uuid() . '.' . $archivo->getClientOriginalExtension();
 
         $ruta = $archivo->storeAs($carpeta, $nombre, $disk);
@@ -20,17 +28,19 @@ class FileStorageService
             'nombre_original' => $archivo->getClientOriginalName(),
             'nombre_guardado' => $nombre,
             'ruta' => $ruta,
-            'url' => Storage::url($ruta)
+            'url' => Storage::disk($disk)->url($ruta)
         ];
     }
 
     /**
      * Eliminar archivo
      */
-    public function eliminar(?string $ruta, string $disk = 'public'): bool {
+    public function eliminar(?string $ruta, ?string $disk = null): bool {
         if (!$ruta) {
             return false;
         }
+
+        $disk = $this->resolveDisk($disk);
 
         if (Storage::disk($disk)->exists($ruta)) {
             return Storage::disk($disk)->delete($ruta);
@@ -42,7 +52,8 @@ class FileStorageService
     /**
      * Reemplazar archivo
      */
-    public function reemplazar(UploadedFile $nuevoArchivo, ?string $archivoAnterior, string $carpeta = 'uploads', string $disk = 'public'): array {
+    public function reemplazar(UploadedFile $nuevoArchivo, ?string $archivoAnterior, string $carpeta = 'uploads', ?string $disk = null): array {
+        $disk = $this->resolveDisk($disk);
         $this->eliminar($archivoAnterior, $disk);
 
         return $this->uploadFile(
