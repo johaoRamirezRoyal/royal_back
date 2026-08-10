@@ -1401,8 +1401,10 @@ class BibliotecaServices extends Service
 
     /**
      * Envía por correo el PDF de paz y salvo a los usuarios indicados (o a todos
-     * los usuarios activos si no se especifican), sin importar si tienen o no
-     * préstamos pendientes por devolver.
+     * los usuarios activos si no se especifican) que tengan al menos un registro de
+     * préstamo histórico (libro o paquete, devuelto o no) — quien nunca ha usado la
+     * biblioteca no necesita un paz y salvo y se excluye. Entre los que sí califican,
+     * se envía sin importar si tienen o no préstamos pendientes por devolver.
      * @param array|string|int $ids_usuarios
      * @return array{data: array, error: bool, message: string}
      */
@@ -1423,6 +1425,7 @@ class BibliotecaServices extends Service
 
             $enviados = [];
             $sin_prestamos_pendientes = [];
+            $sin_historial_prestamos = [];
             $sin_correo = [];
 
             foreach ($usuarios as $usuario) {
@@ -1431,6 +1434,14 @@ class BibliotecaServices extends Service
                 // no caía en ningún bucket: el envío fallaba en silencio y no se reportaba.
                 if (empty($usuario->correo) || filter_var($usuario->correo, FILTER_VALIDATE_EMAIL) === false) {
                     $sin_correo[] = $usuario->id_user;
+                    continue;
+                }
+
+                $tieneHistorialLibros = PrestamosEjemplar::where('id_usuario', $usuario->id_user)->exists();
+                $tieneHistorialPaquetes = PaquetePrestamos::where('id_usuario', $usuario->id_user)->exists();
+
+                if (!$tieneHistorialLibros && !$tieneHistorialPaquetes) {
+                    $sin_historial_prestamos[] = $usuario->id_user;
                     continue;
                 }
 
@@ -1471,6 +1482,7 @@ class BibliotecaServices extends Service
                 'data' => [
                     'enviados' => $enviados,
                     'sin_prestamos_pendientes' => $sin_prestamos_pendientes,
+                    'sin_historial_prestamos' => $sin_historial_prestamos,
                     'sin_correo' => $sin_correo,
                 ],
             ];
