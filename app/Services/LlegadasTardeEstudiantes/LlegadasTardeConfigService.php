@@ -4,7 +4,6 @@ namespace App\Services\LlegadasTardeEstudiantes;
 
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
-use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
@@ -13,6 +12,9 @@ class LlegadasTardeConfigService extends Service
 {
     // Fila única de configuración (ver migración create_configuracion_llegadas_tarde_table).
     private const ID_CONFIG = 1;
+
+    // Perfil "Coordinador" en la tabla perfiles.
+    private const PERFIL_COORDINADOR = 26;
 
     public function __construct(private MailService $mailService) {}
 
@@ -36,11 +38,11 @@ class LlegadasTardeConfigService extends Service
 
     /**
      * Actualiza la hora límite y/o la cantidad límite de llegadas tarde. Si hora_limite
-     * cambia y $notificarDocentes es true, avisa por correo a todos los docentes activos
-     * (grupoId 9 en GROUP_ID_POR_PERFIL) del nuevo horario — opt-in explícito porque no
-     * todo cambio de configuración amerita interrumpir a todo el cuerpo docente.
+     * cambia y $notificarCoordinador es true, avisa por correo a los coordinadores activos
+     * (perfil 26) del nuevo horario — opt-in explícito porque no todo cambio de
+     * configuración amerita una notificación.
      */
-    public function actualizarConfiguracion(array $datos, bool $notificarDocentes): array
+    public function actualizarConfiguracion(array $datos, bool $notificarCoordinador): array
     {
         try {
             $config = ConfiguracionLlegadasTarde::findOrFail(self::ID_CONFIG);
@@ -50,8 +52,8 @@ class LlegadasTardeConfigService extends Service
 
             $horaCambio = array_key_exists('hora_limite', $datos) && $datos['hora_limite'] !== substr($horaAnterior, 0, 5);
 
-            if ($horaCambio && $notificarDocentes) {
-                $this->notificarCambioHorarioADocentes($config->hora_limite);
+            if ($horaCambio && $notificarCoordinador) {
+                $this->notificarCambioHorarioACoordinador($config->hora_limite);
             }
 
             return [
@@ -69,14 +71,9 @@ class LlegadasTardeConfigService extends Service
         }
     }
 
-    private function notificarCambioHorarioADocentes(string $horaLimite): void
+    private function notificarCambioHorarioACoordinador(string $horaLimite): void
     {
-        $perfilesDocentes = array_keys(array_filter(
-            hikvisionattendanceService::GROUP_ID_POR_PERFIL,
-            fn ($groupId) => $groupId === 9
-        ));
-
-        $correos = Usuario::whereIn('perfil', $perfilesDocentes)
+        $correos = Usuario::where('perfil', self::PERFIL_COORDINADOR)
             ->where('estado', 'activo')
             ->whereNotNull('correo')
             ->pluck('correo')
