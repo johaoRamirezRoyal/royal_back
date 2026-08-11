@@ -27,6 +27,9 @@ Route::post('/asignar', [AreasController::class, 'asignarArea']);
                 "id_area": 104
             }
  */
+Route::get('/usuarios-asignables', [AreasController::class, 'usuariosAsignables']);
+Route::get('/usuario-responsable', [AreasController::class, 'usuariosResponsablesAreas']);
+Route::get('/usuario-responsable/{id_area}', [AreasController::class, 'usuarioResponsableArea']);
 Route::post('/estado', [AreasController::class, 'desactivarAreas']);
 /**
  * Ejemplo JSON para cambiar el estado del area:
