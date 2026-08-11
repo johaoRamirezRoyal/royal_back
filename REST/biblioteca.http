@@ -253,6 +253,14 @@ Content-Type: application/json
   "ids": [3123]
 }
 
+### 30b. PAZ Y SALVO global — por cursos (activos con id_curso en el arreglo)
+POST {{base}}/prestamosEjemplar/pazYSalvoGlobal
+Content-Type: application/json
+
+{
+  "cursos": [3, 7]
+}
+
 ### 31. PAZ Y SALVO PDF de un usuario
 GET {{base}}/prestamosEjemplar/pazYSalvo?id_usuario=3123
 

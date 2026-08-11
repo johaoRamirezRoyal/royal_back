@@ -346,7 +346,8 @@ class BibliotecaController extends Controller
     public function enviarPazYSalvoGlobal(Request $request)
     {
         $response = $this->biblioteca_services->enviarPazYSalvoGlobal(
-            $request->input('ids', [])
+            $request->input('ids', []),
+            $request->input('cursos', [])
         );
 
         return $this->apiResponse($response);

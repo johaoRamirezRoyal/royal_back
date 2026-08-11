@@ -1409,14 +1409,17 @@ class BibliotecaServices extends Service
      * @param array|string|int $ids_usuarios
      * @return array{data: array, error: bool, message: string}
      */
-    public function enviarPazYSalvoGlobal(array|string|int $ids_usuarios = []): array
+    public function enviarPazYSalvoGlobal(array|string|int $ids_usuarios = [], array|string|int $cursos = []): array
     {
         try {
             $ids_usuarios = array_filter(Arr::wrap($ids_usuarios));
+            $cursos = array_filter(Arr::wrap($cursos));
 
             $query = Usuario::query();
             if (!empty($ids_usuarios)) {
                 $query->whereIn('id_user', $ids_usuarios);
+            } elseif (!empty($cursos)) {
+                $query->where('estado', 'activo')->whereIn('id_curso', $cursos);
             } else {
                 $query->where('estado', 'activo');
             }
