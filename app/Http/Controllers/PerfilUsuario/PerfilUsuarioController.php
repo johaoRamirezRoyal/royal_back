@@ -272,4 +272,43 @@ class PerfilUsuarioController extends Controller
         return $this->apiResponse($this->service->eliminarProduccionesPorUsuario($id_usuario));
     }
 
+    // ── Foto de Perfil ──────────────────────────────────────────
+
+    public function agregarFotoPerfil(Request $request)
+    {
+        $request->validate([
+            'id_user' => 'required|integer',
+            'foto' => 'required|file|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $id_user = $request->input('id_user');
+        $archivo = $request->file('foto');
+
+        return $this->apiResponse($this->service->agregarFotoPerfil($id_user, $archivo));
+    }
+
+    public function editarFotoPerfil(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer',
+            'foto' => 'required|file|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        $id = $request->input('id');
+        $archivo = $request->file('foto');
+
+        return $this->apiResponse($this->service->editarFotoPerfil($id, $archivo));
+    }
+
+    public function eliminarFotoPerfil(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer',
+        ]);
+
+        $id = $request->input('id');
+
+        return $this->apiResponse($this->service->eliminarFotoPerfil($id));
+    }
+
 }

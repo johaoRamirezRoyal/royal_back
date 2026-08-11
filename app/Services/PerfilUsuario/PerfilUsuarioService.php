@@ -4,6 +4,7 @@ namespace App\Services\PerfilUsuario;
 use App\Models\PerfilUsuario\CertificadoFormacion;
 use App\Models\PerfilUsuario\ExperienciaLaboral;
 use App\Models\PerfilUsuario\Formacion;
+use App\Models\PerfilUsuario\FotoPerfil;
 use App\Models\PerfilUsuario\InfoAdicionalUsuario;
 use App\Models\PerfilUsuario\ProduccionIntelectual;
 use App\Services\FileStorageService;
@@ -823,6 +824,115 @@ class PerfilUsuarioService extends Service {
                 'data' => []
             ];
         }
+    }
+
+    // ── Foto de Perfil ──────────────────────────────────────────
+
+    public function agregarFotoPerfil(int $id_user, UploadedFile $archivo): array
+    {
+        try {
+            $resultado = $this->fileStorageService->uploadFile($archivo, '');
+
+            FotoPerfil::where('id_user', $id_user)->update(['activo' => 0]);
+
+            $foto = FotoPerfil::create([
+                'nombre_foto' => $resultado['ruta'],
+                'id_user' => $id_user,
+                'activo' => 1,
+                'fechareg' => now(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Foto de perfil agregada correctamente.',
+                'data' => $this->adjuntarUrlFoto($foto->toArray())
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al agregar la foto de perfil.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al agregar la foto de perfil.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function editarFotoPerfil(int $id, UploadedFile $archivo): array
+    {
+        try {
+            $foto = FotoPerfil::find($id);
+
+            if (!$foto) {
+                return [
+                    'error' => true,
+                    'message' => 'Foto de perfil no encontrada.',
+                    'data' => []
+                ];
+            }
+
+            $resultado = $this->fileStorageService->reemplazar($archivo, $foto->nombre_foto, '');
+            $foto->update([
+                'nombre_foto' => $resultado['ruta'],
+                'activo' => 1,
+                'fechareg' => now(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Foto de perfil actualizada correctamente.',
+                'data' => $this->adjuntarUrlFoto($foto->fresh()->toArray())
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la foto de perfil.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la foto de perfil.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function eliminarFotoPerfil(int $id): array
+    {
+        try {
+            $foto = FotoPerfil::find($id);
+
+            if (!$foto) {
+                return [
+                    'error' => true,
+                    'message' => 'Foto de perfil no encontrada.',
+                    'data' => []
+                ];
+            }
+
+            $this->fileStorageService->eliminar($foto->nombre_foto);
+            $foto->delete();
+
+            return [
+                'error' => false,
+                'message' => 'Foto de perfil eliminada correctamente.',
+                'data' => []
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al eliminar la foto de perfil.');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar la foto de perfil.',
+                'data' => []
+            ];
+        }
+    }
+
+    private function adjuntarUrlFoto(array $foto): array
+    {
+        if (!empty($foto['nombre_foto'])) {
+            $foto['url_foto'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($foto['nombre_foto']);
+        }
+
+        return $foto;
     }
 
     /**
