@@ -7,6 +7,7 @@ use App\Services\FileStorageService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class DocumentosVariosService extends Service
 {
@@ -32,7 +33,7 @@ class DocumentosVariosService extends Service
             return [
                 'error' => false,
                 'message' => 'Documentos obtenidos correctamente.',
-                'data' => $documentos->toArray()
+                'data' => $documentos->map(fn ($doc) => $this->adjuntarUrl($doc->toArray()))->values()
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener los documentos del usuario.');
@@ -59,7 +60,7 @@ class DocumentosVariosService extends Service
             return [
                 'error' => false,
                 'message' => 'Documentos obtenidos correctamente.',
-                'data' => $documentos->toArray()
+                'data' => $documentos->map(fn ($doc) => $this->adjuntarUrl($doc->toArray()))->values()
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener los documentos por tipo.');
@@ -82,7 +83,7 @@ class DocumentosVariosService extends Service
             return [
                 'error' => false,
                 'message' => 'Documento creado correctamente.',
-                'data' => $documento->toArray()
+                'data' => $this->adjuntarUrl($documento->toArray())
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al crear el documento.');
@@ -118,7 +119,7 @@ class DocumentosVariosService extends Service
             return [
                 'error' => false,
                 'message' => 'Documento actualizado correctamente.',
-                'data' => $documento->fresh()->toArray()
+                'data' => $this->adjuntarUrl($documento->fresh()->toArray())
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar el documento.');
@@ -230,6 +231,15 @@ class DocumentosVariosService extends Service
                 'data' => []
             ];
         }
+    }
+
+    private function adjuntarUrl(array $documento): array
+    {
+        if (!empty($documento['nombre_doc'])) {
+            $documento['url_documento'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($documento['nombre_doc']);
+        }
+
+        return $documento;
     }
 
     public function contarDocumentosPorTipo(int $id_usuario): array

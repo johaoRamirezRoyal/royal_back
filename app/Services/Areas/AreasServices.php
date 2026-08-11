@@ -4,8 +4,11 @@ namespace App\Services\Areas;
 
 use App\Models\Areas\Areas;
 use App\Models\Inventario\Inventario;
+use App\Models\Usuarios\Usuario;
+use Illuminate\Support\Facades\DB;
+use App\Services\Service;
 
-class AreasServices
+class AreasServices extends Service
 {
     public function crearArea($datos)
     {
@@ -135,6 +138,74 @@ class AreasServices
                 'message' => 'Área Asignada correctamente'
             ];
 
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function usuariosAsignables()
+    {
+        try {
+            $usuarios = Usuario::where('estado', 'activo')
+                ->whereNotIn('perfil', [6, 16, 17, 28])
+                ->select('id_user', DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"), 'perfil')
+                ->orderBy('nombre')
+                ->get();
+
+            return [
+                'error' => false,
+                'data' => $usuarios
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function usuarioResponsableArea(int $id_area): array{
+        try {
+            $responsables = Inventario::where('id_area', $id_area)
+                            ->whereNotNull('id_user')
+                            ->with('usuario:id_user,nombre,apellido')
+                            ->get()
+                            ->pluck('usuario')
+                            ->filter()
+                            ->unique('id_user')
+                            ->values();
+
+            return [
+                'error' => false,
+                'data' => $responsables
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    public function usuariosResponsablesAreas(array $ids): array
+    {
+        try {
+            $responsables = Inventario::whereIn('id_area', $ids)
+                            ->whereNotNull('id_user')
+                            ->with('usuario:id_user,nombre,apellido')
+                            ->get()
+                            ->groupBy('id_area')
+                            ->map(function ($items) {
+                                return $items->pluck('usuario')->filter()->unique('id_user')->values();
+                            });
+
+            return [
+                'error' => false,
+                'data' => $responsables
+            ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
