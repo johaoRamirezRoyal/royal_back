@@ -12,25 +12,28 @@
 ### LISTADO
 ### ============================================
 
+
+@base = http://localhost:8000/api
+
 ### 1. OBTENER todas las áreas
-GET http://localhost:8000/api/areas
+GET {{base}}/areas
 
 ### ============================================
 ### FILTRO
 ### ============================================
 
 ### 2. FILTRAR áreas por nombre
-GET http://localhost:8000/api/areas/filtro?filtro=S40
+GET {{base}}/areas/filtro?filtro=S40
 
 ### 3. FILTRAR áreas — sin coincidencias (debe retornar data vacío)
-GET http://localhost:8000/api/areas/filtro?filtro=areainexistentexyz
+GET {{base}}/areas/filtro?filtro=areainexistentexyz
 
 ### ============================================
 ### ACTUALIZAR
 ### ============================================
 
 ### 4. ACTUALIZAR área — exitoso
-PUT http://localhost:8000/api/areas
+PUT {{base}}/areas
 Content-Type: application/json
 Accept: application/json
 
@@ -42,7 +45,7 @@ Accept: application/json
 }
 
 ### 5. ACTUALIZAR área — ID inexistente (debe fallar)
-PUT http://localhost:8000/api/areas
+PUT {{base}}/areas
 Content-Type: application/json
 Accept: application/json
 
@@ -58,7 +61,7 @@ Accept: application/json
 ### ============================================
 
 ### 6. CAMBIAR estado de áreas — desactivar
-POST http://localhost:8000/api/areas/estado
+POST {{base}}/areas/estado
 Content-Type: application/json
 Accept: application/json
 
@@ -68,7 +71,7 @@ Accept: application/json
 }
 
 ### 7. CAMBIAR estado de áreas — reactivar
-POST http://localhost:8000/api/areas/estado
+POST {{base}}/areas/estado
 Content-Type: application/json
 Accept: application/json
 
@@ -82,7 +85,7 @@ Accept: application/json
 ### ============================================
 
 ### 8. ASIGNAR área a un usuario (actualiza inventario de esa área)
-POST http://localhost:8000/api/areas/asignar
+POST {{base}}/areas/asignar
 Content-Type: application/json
 Accept: application/json
 
@@ -92,7 +95,7 @@ Accept: application/json
 }
 
 ### 9. ASIGNAR área — sin inventario en el área (debe fallar)
-POST http://localhost:8000/api/areas/asignar
+POST {{base}}/areas/asignar
 Content-Type: application/json
 Accept: application/json
 
@@ -100,3 +103,16 @@ Accept: application/json
     "id_user": 3123,
     "id_area": 99999
 }
+
+### ============================================
+### USUARIO RESPONSABLE
+### ============================================
+
+### 10. OBTENER usuario responsable de un área
+GET {{base}}/areas/usuario-responsable/104
+
+### 10b. OBTENER responsables de varias áreas a la vez (una sola petición)
+GET {{base}}/areas/usuario-responsable?ids=77,78,79,80,81,82,83,84
+
+### 11. OBTENER usuarios asignables (excluye perfiles 6, 16, 17, 28)
+GET {{base}}/areas/usuarios-asignables

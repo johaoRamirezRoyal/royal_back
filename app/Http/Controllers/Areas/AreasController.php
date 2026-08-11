@@ -104,6 +104,56 @@ class AreasController extends Controller
         ]);
     }
 
+    public function usuariosAsignables(){
+        $usuarios = $this->service_areas->usuariosAsignables();
+
+        if($usuarios['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $usuarios['message']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $usuarios['data']
+        ]);
+    }
+
+    public function usuariosResponsablesAreas(Request $request){
+        $ids = array_map('intval', explode(',', $request->input('ids', '')));
+
+        $responsables = $this->service_areas->usuariosResponsablesAreas($ids);
+
+        if($responsables['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $responsables['message']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $responsables['data']
+        ]);
+    }
+
+    public function usuarioResponsableArea(int $id_area){
+        $responsables = $this->service_areas->usuarioResponsableArea($id_area);
+
+        if($responsables['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $responsables['message']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $responsables['data']
+        ]);
+    }
+
     public function asignarArea(Request $request){
         $id_user = $request->input('id_user');
         $id_area = $request->input('id_area');
