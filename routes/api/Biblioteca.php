@@ -93,7 +93,8 @@ Route::get("/prestamosEjemplar/historial", [BibliotecaController::class, 'obtene
 Route::post("/prestamosEjemplar/recordatorio", [BibliotecaController::class, 'enviarRecordatorioPrestamosPendientes']);
 /**
 {
-  "ids": [1, 2, 3] // opcional: si se omite, envía a todos los usuarios activos
+  "ids": [1, 2, 3] // opcional: si se omite y no hay "cursos", envía a todos los usuarios activos
+  "cursos": [3, 7] // opcional: solo usuarios activos con id_curso en el arreglo. Si viene "ids", "ids" tiene prioridad.
 }
  */
 Route::post("/prestamosEjemplar/pazYSalvoGlobal", [BibliotecaController::class, 'enviarPazYSalvoGlobal']);
