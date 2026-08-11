@@ -41,3 +41,9 @@ Route::post('/producciones', [PerfilUsuarioController::class, 'crearProduccionIn
 Route::put('/producciones', [PerfilUsuarioController::class, 'actualizarProduccionIntelectual']);
 Route::delete('/producciones', [PerfilUsuarioController::class, 'eliminarProduccionIntelectual']);
 Route::delete('/producciones/usuario', [PerfilUsuarioController::class, 'eliminarProduccionesPorUsuario']);
+
+// ── Foto de Perfil ────────────────────────────────────────────
+
+Route::post('/foto-perfil', [PerfilUsuarioController::class, 'agregarFotoPerfil']);
+Route::put('/foto-perfil', [PerfilUsuarioController::class, 'editarFotoPerfil']);
+Route::delete('/foto-perfil', [PerfilUsuarioController::class, 'eliminarFotoPerfil']);
