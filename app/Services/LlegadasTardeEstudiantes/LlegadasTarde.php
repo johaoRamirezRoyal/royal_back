@@ -32,10 +32,7 @@ class LlegadasTarde extends Service
                 ];
             }
 
-            //Encontramos el ultimo periodo academico agregado y activo
-            $periodo_academico = PeriodoAcademico::where('activo', true)
-                ->orderByDesc('fecha_inicio')
-                ->first();
+            $periodo_academico = $this->periodoVigente();
 
             if (!$periodo_academico) {
                 return [
@@ -104,9 +101,7 @@ class LlegadasTarde extends Service
         try {
             if ($id_periodo_academico === null) {
 
-                $periodo = PeriodoAcademico::where('activo', 1)
-                    ->latest('id')
-                    ->first();
+                $periodo = $this->periodoVigente();
 
                 if (!$periodo) {
                     return [
@@ -205,6 +200,24 @@ class LlegadasTarde extends Service
                 'data' => []
             ];
         }
+    }
+
+    /**
+     * Período académico vigente: de los marcados activo=true, el que aún no ha
+     * terminado (fecha_fin >= hoy) con la fecha_inicio más temprana. No basta con
+     * "activo=true" solo — nada impide que queden varios períodos marcados activos
+     * a la vez (el cierre automático de vencidos corre una vez al día), y ahí tomar
+     * el de fecha_inicio más reciente devuelve un período futuro en vez del actual.
+     * Tampoco exige que hoy caiga dentro de [fecha_inicio, fecha_fin]: si aún no
+     * arrancó el primer período del ciclo, sigue siendo "el vigente" hasta que
+     * empiece uno.
+     */
+    private function periodoVigente(): ?PeriodoAcademico
+    {
+        return PeriodoAcademico::where('activo', true)
+            ->whereDate('fecha_fin', '>=', now()->toDateString())
+            ->orderBy('fecha_inicio')
+            ->first();
     }
 
     /**
