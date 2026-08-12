@@ -29,6 +29,7 @@ class LogActividadMiddleware
         try {
             LogActividad::create([
                 'id_user' => auth()->id(),
+                'ip' => $request->ip(),
                 'metodo' => $request->method(),
                 'ruta' => $request->path(),
                 'status_code' => $response->getStatusCode(),

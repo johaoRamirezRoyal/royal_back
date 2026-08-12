@@ -14,11 +14,18 @@ class LogActividad extends Model
 
     protected $fillable = [
         'id_user',
+        'ip',
+        'pais',
         'metodo',
         'ruta',
         'status_code',
         'duracion_ms',
         'fechareg',
+    ];
+
+    protected $casts = [
+        // Cifrado con APP_KEY (AES-256-CBC vía Illuminate\Encryption); se desencripta solo al acceder en PHP.
+        'ip' => 'encrypted',
     ];
 
     public function usuario(): BelongsTo
