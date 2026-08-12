@@ -86,7 +86,7 @@ class InventarioServices
                     sol.observacion as sol_observacion,
                     sol.estado as sol_estado,
                     sol.id_resp as sol_id_resp,
-                    IF(sol.fecha_respuesta = '0000-00-00 00:00:00', NULL, sol.fecha_respuesta) as sol_fecha_respuesta,
+                    IF(CAST(sol.fecha_respuesta AS CHAR) = '0000-00-00 00:00:00', NULL, sol.fecha_respuesta) as sol_fecha_respuesta,
                     sol.fechareg as sol_fechareg
                 FROM (
                     SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.id_inventario ORDER BY r.fechareg DESC) as rn
