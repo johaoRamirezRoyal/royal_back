@@ -36,10 +36,20 @@ class Reportes extends Model
     ];
 
     protected $casts = [
-        'fecha_respuesta' => 'datetime',
         'fechareg' => 'datetime',
         'visto_bueno' => 'boolean',
     ];
+
+    // Legacy: filas viejas guardan '0000-00-00 00:00:00' cuando aún no hay
+    // respuesta; el cast 'datetime' lo parseaba como año "-0001" en vez de null.
+    public function getFechaRespuestaAttribute(?string $value): ?\Carbon\Carbon
+    {
+        if (empty($value) || str_starts_with($value, '0000-00-00')) {
+            return null;
+        }
+
+        return \Carbon\Carbon::parse($value);
+    }
 
     public function inventario(){
         return $this->belongsTo(Inventario::class, 'id_inventario');

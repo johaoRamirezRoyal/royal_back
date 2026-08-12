@@ -2598,4 +2598,183 @@ class BibliotecaServices extends Service
             ];
         }
     }
+
+    /** Estadísticas de un libro puntual: resumen, tendencia mensual y desglose por curso/perfil. */
+    public function estadisticasLibro(int $id, ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $libro = Libro::with('categoria:id,nombre')->find($id, ['id', 'titulo', 'autor', 'id_categoria']);
+
+            if (!$libro) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el libro con ID: {$id}",
+                    'data' => [],
+                ];
+            }
+
+            $idsEjemplares = Ejemplares::where('id_libro', $id)->pluck('id');
+
+            $counts = Ejemplares::selectRaw('estado, count(*) as total')
+                ->where('id_libro', $id)
+                ->whereIn('estado', [1, 2])
+                ->groupBy('estado')
+                ->pluck('total', 'estado');
+            $disponibles = (int) ($counts[1] ?? 0);
+            $prestados = (int) ($counts[2] ?? 0);
+
+            $prestamos = fn () => PrestamosEjemplar::whereIn('id_ejemplar', $idsEjemplares)
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta));
+
+            $totalPrestamos = $prestamos()->count();
+            $usuariosConPrestamo = $prestamos()->pluck('id_usuario');
+
+            $contarPrestamos = fn ($usuarios) => PrestamosEjemplar::whereIn('id_ejemplar', $idsEjemplares)
+                ->whereIn('id_usuario', $usuarios)
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->count();
+
+            return [
+                'error' => false,
+                'message' => 'Estadísticas del libro obtenidas',
+                'data' => [
+                    'libro' => [
+                        'id' => $libro->id,
+                        'titulo' => $libro->titulo,
+                        'autor' => $libro->autor,
+                        'categoria' => $libro->categoria
+                            ? ['id' => $libro->categoria->id, 'nombre' => $libro->categoria->nombre]
+                            : null,
+                    ],
+                    'resumen' => [
+                        'total_prestamos' => $totalPrestamos,
+                        'ejemplares_total' => $disponibles + $prestados,
+                        'disponibles' => $disponibles,
+                        'prestados' => $prestados,
+                    ],
+                    'tendencia' => $this->tendenciaMensual($prestamos()),
+                    'cursos' => $this->desglosePorGrupo($usuariosConPrestamo, 'curso', $contarPrestamos, $limite),
+                    'perfiles' => $this->desglosePorGrupo($usuariosConPrestamo, 'perfil', $contarPrestamos, $limite),
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener estadísticas del libro');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener estadísticas del libro',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Estadísticas de un paquete puntual: resumen, tendencia mensual y desglose por curso/perfil. */
+    public function estadisticasPaquete(int $id, ?string $fechaDesde = null, ?string $fechaHasta = null, ?int $limite = 10): array
+    {
+        try {
+            $paquete = Paquetes::find($id, ['id', 'nombre', 'codigo', 'estado']);
+
+            if (!$paquete) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró el paquete con ID: {$id}",
+                    'data' => [],
+                ];
+            }
+
+            $prestamos = fn () => PaquetePrestamos::where('id_paquete', $id)
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta));
+
+            $totalPrestamos = $prestamos()->count();
+            $usuariosConPrestamo = $prestamos()->pluck('id_usuario');
+
+            $contarPrestamos = fn ($usuarios) => PaquetePrestamos::where('id_paquete', $id)
+                ->whereIn('id_usuario', $usuarios)
+                ->when($fechaDesde, fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fechaDesde))
+                ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
+                ->count();
+
+            return [
+                'error' => false,
+                'message' => 'Estadísticas del paquete obtenidas',
+                'data' => [
+                    'paquete' => [
+                        'id' => $paquete->id,
+                        'nombre' => $paquete->nombre,
+                        'codigo' => $paquete->codigo,
+                    ],
+                    'resumen' => [
+                        'total_prestamos' => $totalPrestamos,
+                        'disponibles' => $paquete->estado == 1 ? 1 : 0,
+                        'prestados' => $paquete->estado == 2 ? 1 : 0,
+                    ],
+                    'tendencia' => $this->tendenciaMensual($prestamos()),
+                    'cursos' => $this->desglosePorGrupo($usuariosConPrestamo, 'curso', $contarPrestamos, $limite),
+                    'perfiles' => $this->desglosePorGrupo($usuariosConPrestamo, 'perfil', $contarPrestamos, $limite),
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener estadísticas del paquete');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener estadísticas del paquete',
+                'data' => [],
+            ];
+        }
+    }
+
+    /** Agrupa préstamos por mes ("2026-01") a partir de una query ya filtrada (libro/paquete + rango de fechas). */
+    private function tendenciaMensual($query): array
+    {
+        return $query
+            ->selectRaw("DATE_FORMAT(fecha_prestamo, '%Y-%m') as periodo, COUNT(*) as total_prestamos")
+            ->groupBy('periodo')
+            ->orderBy('periodo')
+            ->get()
+            ->map(fn ($fila) => ['periodo' => $fila->periodo, 'total_prestamos' => (int) $fila->total_prestamos])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Agrupa $usuariosConPrestamo por curso o perfil, contando préstamos por grupo vía
+     * $contarPrestamos (closure con el ámbito -libro/paquete- y rango de fechas ya aplicados).
+     */
+    private function desglosePorGrupo($usuariosConPrestamo, string $tipoGrupo, \Closure $contarPrestamos, int $limite): array
+    {
+        if ($tipoGrupo === 'curso') {
+            $campoUsuario = 'id_curso';
+            $keyId = 'curso_id';
+            $keyNombre = 'curso_nombre';
+            $grupos = \App\Models\Areas\Cursos::select('id', 'nombre')
+                ->whereIn('id', fn ($q) => $q->select('id_curso')->from('usuarios')->whereIn('id_user', $usuariosConPrestamo))
+                ->get()
+                ->map(fn ($g) => ['id' => $g->id, 'nombre' => $g->nombre]);
+        } else {
+            $campoUsuario = 'perfil';
+            $keyId = 'perfil_id';
+            $keyNombre = 'perfil_nombre';
+            $grupos = Perfil::select('id_perfil', 'nombre')
+                ->whereIn('id_perfil', fn ($q) => $q->select('perfil')->from('usuarios')->whereIn('id_user', $usuariosConPrestamo))
+                ->get()
+                ->map(fn ($g) => ['id' => $g->id_perfil, 'nombre' => $g->nombre]);
+        }
+
+        $resultado = $grupos->map(function ($grupo) use ($usuariosConPrestamo, $contarPrestamos, $campoUsuario, $keyId, $keyNombre) {
+            $usuariosDelGrupo = Usuario::where($campoUsuario, $grupo['id'])
+                ->whereIn('id_user', $usuariosConPrestamo)
+                ->pluck('id_user');
+
+            return [
+                $keyId => $grupo['id'],
+                $keyNombre => $grupo['nombre'],
+                'total_prestamos' => $contarPrestamos($usuariosDelGrupo),
+                'usuarios_con_prestamo' => $usuariosDelGrupo->count(),
+            ];
+        })->sortByDesc('total_prestamos')->take($limite)->values();
+
+        return $resultado->all();
+    }
 }

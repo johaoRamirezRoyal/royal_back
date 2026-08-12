@@ -70,6 +70,33 @@ class InventarioServices
         try {
             $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
 
+            // Último reporte/mantenimiento (id_reporte IS NULL) por ítem, con su solución si
+            // ya la tiene. Va como LEFT JOIN a una tabla derivada -en vez de subconsulta
+            // correlacionada dentro del GROUP_CONCAT- porque MariaDB (ONLY_FULL_GROUP_BY)
+            // no permite referenciar `inventario.id` desde dentro de una subconsulta ahí.
+            $ultimoReporteJoin = DB::raw("(
+                SELECT
+                    ranked.id_inventario,
+                    ranked.id,
+                    ranked.tipo_reporte,
+                    ranked.descripcion,
+                    ranked.estado,
+                    ranked.fechareg,
+                    sol.id as sol_id,
+                    sol.observacion as sol_observacion,
+                    sol.estado as sol_estado,
+                    sol.id_resp as sol_id_resp,
+                    IF(sol.fecha_respuesta = '0000-00-00 00:00:00', NULL, sol.fecha_respuesta) as sol_fecha_respuesta,
+                    sol.fechareg as sol_fechareg
+                FROM (
+                    SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.id_inventario ORDER BY r.fechareg DESC) as rn
+                    FROM reportes r
+                    WHERE r.id_reporte IS NULL
+                ) ranked
+                LEFT JOIN reportes sol ON sol.id_reporte = ranked.id
+                WHERE ranked.rn = 1
+            ) as ur");
+
             $listado = Inventario::select(
                 'inventario.id_user',
                 'inventario.id_area',
@@ -87,7 +114,22 @@ class InventarioServices
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
-                            'fecha_compra', inventario.fecha_compra
+                            'fecha_compra', inventario.fecha_compra,
+                            'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
+                                'id', ur.id,
+                                'tipo_reporte', ur.tipo_reporte,
+                                'descripcion', ur.descripcion,
+                                'estado', ur.estado,
+                                'fechareg', ur.fechareg,
+                                'solucion', IF(ur.sol_id IS NULL, NULL, JSON_OBJECT(
+                                    'id', ur.sol_id,
+                                    'observacion', ur.sol_observacion,
+                                    'estado', ur.sol_estado,
+                                    'id_resp', ur.sol_id_resp,
+                                    'fecha_respuesta', ur.sol_fecha_respuesta,
+                                    'fechareg', ur.sol_fechareg
+                                ))
+                            ))
                         )
                     ),
                     ']'
@@ -96,6 +138,7 @@ class InventarioServices
             )
                 ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
                 ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
+                ->leftJoin($ultimoReporteJoin, 'ur.id_inventario', '=', 'inventario.id')
                 ->with([
                     'usuario:id_user,nombre,apellido',
                     'area:id,nombre',
@@ -128,6 +171,19 @@ class InventarioServices
             // convertir string a JSON real
             $listado->transform(function ($item) {
                 $item->items = json_decode($item->items);
+
+                // MariaDB no anida JSON_OBJECT() dentro de JSON_OBJECT(): 'ultimo_reporte' y,
+                // dentro de este, 'solucion', llegan como strings JSON escapados en vez de
+                // objetos anidados — un decode por cada nivel de anidamiento.
+                foreach ($item->items as $articulo) {
+                    if (is_string($articulo->ultimo_reporte ?? null)) {
+                        $articulo->ultimo_reporte = json_decode($articulo->ultimo_reporte);
+                    }
+                    if (is_string($articulo->ultimo_reporte->solucion ?? null)) {
+                        $articulo->ultimo_reporte->solucion = json_decode($articulo->ultimo_reporte->solucion);
+                    }
+                }
+
                 return $item;
             });
 
@@ -436,7 +492,12 @@ class InventarioServices
             $query = fn (int $tipoReporte) => Reportes::where('id_inventario', $idInventario)
                 ->where('tipo_reporte', $tipoReporte)
                 ->whereNull('id_reporte') // solo reportes originales, no las filas de solución
-                ->with(['solucion', 'usuario', 'responsable', 'area:id,nombre'])
+                ->with([
+                    'solucion',
+                    'usuario:id_user,nombre,apellido',
+                    'responsable:id_user,nombre,apellido',
+                    'area:id,nombre',
+                ])
                 ->orderByDesc('fechareg')
                 ->get();
 
