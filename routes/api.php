@@ -216,4 +216,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/modulos')->group(function () {
         require __DIR__ . '/api/modulos.php';
     });
+
+    // LOGS DE ACTIVIDAD (auditoría escrita por LogActividadMiddleware)
+    Route::prefix('/logs-actividad')->group(function () {
+        require __DIR__ . '/api/logsActividad.php';
+    });
 });
