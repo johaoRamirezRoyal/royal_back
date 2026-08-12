@@ -8,10 +8,31 @@ use Exception;
 
 class PeriodoAcademicoServices extends Service
 {
+    public function __construct(private AnioEscolarServices $anioEscolarServices) {}
 
     public function agregarPeriodoAcademico(array $data): array
     {
         try {
+            $anioEscolar = $this->anioEscolarServices->obtenerAnioEscolarPorFecha($data['fecha_inicio']);
+
+            if (!$anioEscolar) {
+                return [
+                    'error' => true,
+                    'message' => 'No existe un año escolar registrado para la fecha de inicio indicada',
+                    'data' => []
+                ];
+            }
+
+            if ($data['fecha_fin'] > "{$anioEscolar->anio_fin}-06-30") {
+                return [
+                    'error' => true,
+                    'message' => "La fecha de finalización debe estar dentro del año escolar {$anioEscolar->anio_inicio}-{$anioEscolar->anio_fin} (hasta el 30 de junio de {$anioEscolar->anio_fin})",
+                    'data' => []
+                ];
+            }
+
+            $data['id_anio_escolar'] = $anioEscolar->id;
+
             $periodo_academico = PeriodoAcademico::create($data);
 
             if (!$periodo_academico) {
@@ -204,6 +225,33 @@ class PeriodoAcademicoServices extends Service
             return [
                 'error' => true,
                 'message' => "Error en el servidor al actualizar el estado del periodo academico",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Desactiva los periodos académicos activos cuya fecha_fin ya pasó (estrictamente
+     * antes de hoy, así que el periodo sigue activo durante todo su último día).
+     * Pensado para correr diario vía comando programado (ver DesactivarPeriodosVencidosCommand).
+     */
+    public function desactivarPeriodosVencidos(): array
+    {
+        try {
+            $desactivados = PeriodoAcademico::where('activo', true)
+                ->whereDate('fecha_fin', '<', now()->toDateString())
+                ->update(['activo' => false]);
+
+            return [
+                'error' => false,
+                'message' => "Se desactivaron {$desactivados} periodo(s) académico(s) vencido(s)",
+                'data' => ['desactivados' => $desactivados]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al desactivar los periodos académicos vencidos");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al desactivar los periodos académicos vencidos",
                 'data' => []
             ];
         }

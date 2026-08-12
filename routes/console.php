@@ -15,6 +15,13 @@ use Illuminate\Support\Facades\Schedule;
 // queue worker.
 Schedule::command('asistencia:cerrar-vencidas')->everyFifteenMinutes();
 
+// Desactiva los periodos académicos cuya fecha_fin ya pasó (ver
+// PeriodoAcademicoServices::desactivarPeriodosVencidos). A diferencia del cierre de
+// asistencias, fecha_fin es una fecha (no una hora), así que basta con correrlo una
+// vez al día. Misma nota operativa: requiere `php artisan schedule:run` corriendo
+// cada minuto en el servidor (deploy/royal-back-scheduler.timer/.service).
+Schedule::command('periodos:desactivar-vencidos')->daily();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

@@ -45,6 +45,22 @@ class LlegadasTarde extends Service
                 ];
             }
 
+            $totalActual = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
+                ->where('id_periodo_academico', $periodo_academico->id)
+                ->count();
+
+            $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
+
+            // Una vez el alumno alcanza el límite del período, no se siguen sumando llegadas
+            // tarde adicionales (aunque el dispositivo o un registro manual lo intenten).
+            if ($cantidadLimite > 0 && $totalActual >= $cantidadLimite) {
+                return [
+                    'error' => false,
+                    'message' => 'El alumno ya alcanzó el límite de llegadas tarde del período académico; no se registran más',
+                    'data' => ['total_llegadas_tarde_periodo' => $totalActual]
+                ];
+            }
+
             // firstOrCreate() intenta el create() y, si choca con el índice único
             // (llegadas_tardes_alumno_fecha_unique), reconsulta en vez de fallar:
             // así dos pushes casi simultáneos del mismo alumno (p. ej. un
@@ -62,12 +78,8 @@ class LlegadasTarde extends Service
                 ];
             }
 
-            $totalEnPeriodo = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
-                ->where('id_periodo_academico', $periodo_academico->id)
-                ->count();
-
-            $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
-            $limiteAlcanzado = $cantidadLimite > 0 && $totalEnPeriodo % $cantidadLimite === 0;
+            $totalEnPeriodo = $totalActual + 1;
+            $limiteAlcanzado = $cantidadLimite > 0 && $totalEnPeriodo >= $cantidadLimite;
             $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
 
             $this->notificarLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
@@ -197,8 +209,10 @@ class LlegadasTarde extends Service
 
     /**
      * Notifica por correo al estudiante y a sus acudientes activos cada vez que se
-     * registra una llegada tarde (siempre). Si con esta llegada el total del período
-     * llega a un múltiplo de la cantidad_limite configurada, además notifica a Vicerrectoría.
+     * registra una llegada tarde (siempre). Si con esta llegada el alumno alcanza la
+     * cantidad_limite configurada para el período, además notifica a Vicerrectoría
+     * (a partir de ahí ya no se registran más llegadas tarde en el período, así que
+     * este aviso solo puede dispararse una vez por alumno por período).
      * sendGeneric() atrapa sus propios errores, así que un fallo de envío no afecta
      * el registro de la llegada tarde (ya se guardó antes de llamar este método).
      */
