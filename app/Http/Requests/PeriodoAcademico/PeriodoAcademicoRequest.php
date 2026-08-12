@@ -16,10 +16,19 @@ class PeriodoAcademicoRequest extends FormRequest
     {
         $isRequired = $this->isMethod("post") ? 'required' : 'sometimes';
         return [
+            // El año escolar se resuelve automáticamente a partir de fecha_inicio al
+            // crear (PeriodoAcademicoServices::agregarPeriodoAcademico), así que nunca
+            // es obligatorio; solo se valida si un caller decide enviarlo explícito.
             'id_anio_escolar' => [
-                $isRequired,
+                'sometimes',
                 'integer',
                 'exists:anio_escolar,id'
+            ],
+
+            'nombre' => [
+                $isRequired,
+                'string',
+                'max:100'
             ],
 
             'fecha_inicio' => [
@@ -50,8 +59,9 @@ class PeriodoAcademicoRequest extends FormRequest
                 return;
             }
 
-            $fechaMinima = "{$anioEscolar->anio_inicio}-01-01";
-            $fechaMaxima = "{$anioEscolar->anio_fin}-12-31";
+            // Calendario B: el año escolar corre del 1 de agosto al 30 de junio del año siguiente.
+            $fechaMinima = "{$anioEscolar->anio_inicio}-08-01";
+            $fechaMaxima = "{$anioEscolar->anio_fin}-06-30";
 
             if (
                 $this->fecha_inicio &&
@@ -80,6 +90,10 @@ class PeriodoAcademicoRequest extends FormRequest
         return [
             'id_anio_escolar.required' => 'El año escolar es obligatorio.',
             'id_anio_escolar.exists' => 'El año escolar seleccionado no existe.',
+
+            'nombre.required' => 'El nombre del periodo es obligatorio.',
+            'nombre.string' => 'El nombre del periodo no es válido.',
+            'nombre.max' => 'El nombre del periodo no puede superar los 100 caracteres.',
 
             'fecha_inicio.required' => 'La fecha de inicio es obligatoria.',
             'fecha_inicio.date' => 'La fecha de inicio no es válida.',

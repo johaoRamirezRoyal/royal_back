@@ -8,8 +8,8 @@ return new class extends Migration
 {
     /**
      * Hora a la que AsistenciaGestionService::cerrarAsistenciasVencidas() marca la salida
-     * automática. Nullable: si no se define, el comando sigue usando hora_salida_esperada
-     * (comportamiento actual) como hora de cierre.
+     * automática. Nullable: si no se define, el horario no tiene cierre automático (no se
+     * marca la salida sola a hora_salida_esperada).
      */
     public function up(): void
     {

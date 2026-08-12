@@ -9,6 +9,7 @@ class PeriodoAcademico extends Model
 
     protected $fillable = [
         'id_anio_escolar',
+        'nombre',
         'fecha_inicio',
         'fecha_fin',
         'activo'

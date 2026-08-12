@@ -53,4 +53,17 @@ class AnioEscolarServices extends Service
             ];
         }
     }
+
+    /**
+     * Resuelve el año escolar (calendario B: 1 de agosto - 30 de junio del año
+     * siguiente) al que pertenece una fecha dada. Antes de agosto, la fecha cae
+     * en el año escolar que empezó en agosto del año calendario anterior.
+     */
+    public function obtenerAnioEscolarPorFecha(string $fecha): ?Anio
+    {
+        $fecha = Carbon::parse($fecha);
+        $anioInicio = $fecha->month >= 8 ? $fecha->year : $fecha->year - 1;
+
+        return Anio::where('anio_inicio', $anioInicio)->first();
+    }
 }

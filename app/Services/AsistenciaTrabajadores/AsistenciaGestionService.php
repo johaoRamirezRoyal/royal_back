@@ -646,12 +646,12 @@ class AsistenciaGestionService extends Service
 
     /**
      * Cierra automáticamente las asistencias del día que tienen entrada pero no salida y ya
-     * pasaron la hora_cierre_automatico del horario aplicable al usuario (o hora_salida_esperada
-     * si el horario no tiene una hora de cierre propia configurada), por grupo o global si no
-     * hay uno específico — pensado para correr periódicamente desde el scheduler (ver
+     * pasaron la hora_cierre_automatico del horario aplicable al usuario, por grupo o global
+     * si no hay uno específico — pensado para correr periódicamente desde el scheduler (ver
      * CerrarAsistenciasVencidasCommand). El valor que se registra como hora_salida sigue
      * siendo hora_salida_esperada, no la hora de cierre. Sin horario resoluble para el
-     * usuario, esa fila se deja igual (no hay base para saber a qué hora cerrarla).
+     * usuario, o sin hora_cierre_automatico configurada en el horario aplicable, esa fila
+     * se deja igual (no hay cierre automático).
      */
     public function cerrarAsistenciasVencidas(): array
     {
@@ -669,9 +669,10 @@ class AsistenciaGestionService extends Service
                 $perfil = $asistencia->usuario?->perfil;
                 $grupoId = $perfil !== null ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $perfil] ?? null) : null;
                 $horario = AsistenciaGestion::horarioAplicable($grupoId);
-                $horaCierre = $horario?->hora_cierre_automatico ?? $horario?->hora_salida_esperada;
 
-                if (!$horario || $horaActual < $horaCierre) {
+                // Sin hora_cierre_automatico configurada, el horario no tiene cierre
+                // automático: no se cae a hora_salida_esperada como trigger implícito.
+                if (!$horario || !$horario->hora_cierre_automatico || $horaActual < $horario->hora_cierre_automatico) {
                     continue;
                 }
 
