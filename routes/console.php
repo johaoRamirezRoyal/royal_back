@@ -107,6 +107,12 @@ Artisan::command('clear', function () {
     $this->info('Limpiando cache...');
     Artisan::call('cache:clear');
 
+    $this->info('Limpiando vistas...');
+    Artisan::call('view:clear');
+
+    $this->info('Limpiando eventos...');
+    Artisan::call('event:clear');
+
     $this->info('Optimize Clear... ');
     Artisan::call('optimize:clear');
 
