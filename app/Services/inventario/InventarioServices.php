@@ -857,76 +857,83 @@ class InventarioServices
 
             $esSolucionado = $estado_solucion === 'solucionado';
 
-            $query = Reportes::query()
-                ->with([
-                    'inventario.categoria',
-                    'inventario.estado',
-                    'inventario.area',
-                    'usuario',
-                    'anio',
-                    'periodo',
-                    'solucion.responsable',
-                    'solucion.usuario'
-                ])
-                ->whereHas('inventario.categoria', function ($categoria) {
-                    $categoria->where('activo', 1);
-                })
-                ->whereHas('inventario', function ($inventario) use ($esSolucionado) {
-                    $inventario->whereNotIn('estado', $esSolucionado ? [4, 5] : [3, 4, 5]);
-                })
-                ->whereNull('id_reporte')
+            $query = DB::table('inventario as iv')
+                ->join('reportes as rp', 'rp.id_inventario', '=', 'iv.id')
+                ->leftJoin('usuarios as u', 'u.id_user', '=', 'iv.id_user')
+                ->leftJoin('areas as ar', 'ar.id', '=', 'rp.id_area')
+                ->leftJoin('categoria as c', 'c.id', '=', 'iv.id_categoria')
+                ->leftJoin('anio_escolar as ae', 'ae.id', '=', 'rp.id_anio')
+                ->where('iv.activo', 1)
                 ->when($esSolucionado, function ($q) {
-                    $q->whereHas('solucion');
+                    $q->whereNotIn('iv.estado', [4, 5])
+                        ->whereNull('rp.id_reporte')
+                        ->whereExists(function ($query) {
+                            $query->select(DB::raw(1))
+                                ->from('reportes as rpe')
+                                ->whereColumn('rpe.id_reporte', 'rp.id')
+                                ->where('rpe.estado', 3);
+                        });
+                }, function ($q) {
+                    $q->where('iv.estado', 2)
+                        ->where('rp.estado', 2)
+                        ->whereNotExists(function ($query) {
+                            $query->select(DB::raw(1))
+                                ->from('reportes as rpe')
+                                ->whereColumn('rpe.id_reporte', 'rp.id')
+                                ->where('rpe.estado', 3);
+                        });
                 })
-                ->when(!$esSolucionado && ($sin_solucion || $estado_solucion === 'pendiente'), function ($q) {
-                    $q->whereDoesntHave('solucion');
-                })
+                ->select(
+                    'iv.*',
+                    DB::raw("(SELECT e.nombre FROM estado e WHERE e.id = iv.estado) AS nom_estado"),
+                    DB::raw("(SELECT a.nombre FROM areas a WHERE a.id = iv.id_area) AS AREA"),
+                    DB::raw("(SELECT CONCAT(u2.nombre, ' ', u2.apellido) FROM usuarios u2 WHERE u2.id_user = rp.id_user) AS usuario"),
+                    DB::raw("(SELECT r.fechareg FROM reportes r WHERE r.id_inventario = iv.id AND r.estado = 2 ORDER BY r.id DESC LIMIT 1) AS fecha_reporte"),
+                    DB::raw("(SELECT r.id FROM reportes r WHERE r.id_inventario = iv.id ORDER BY r.id DESC LIMIT 1) AS id_reporte"),
+                    DB::raw("CONCAT(u.nombre, ' ', u.apellido) AS nom_usuario"),
+                    DB::raw("CONCAT(ae.anio_inicio, ' - ', ae.anio_fin) AS anio_escolar"),
+                    'c.tipo_categoria',
+                    'c.nombre as nom_categoria',
+                    'ar.nombre as nom_area',
+                    'rp.id as reporte_id'
+                )
+                ->distinct()
                 ->when(!empty($id_inventario), function ($q) use ($id_inventario) {
-                    $q->whereIn('id_inventario', $id_inventario);
+                    $q->whereIn('iv.id', $id_inventario);
                 })
                 ->when($id_user, function ($q) use ($id_user) {
-                    $q->where('id_user', $id_user);
+                    $q->where('rp.id_user', $id_user);
                 })
                 ->when($id_anio, function ($q) use ($id_anio) {
-                    $q->where('id_anio', $id_anio);
+                    $q->where('rp.id_anio', $id_anio);
                 })
                 ->when($id_periodo, function ($q) use ($id_periodo) {
-                    $q->where('periodo', $id_periodo);
+                    $q->where('rp.periodo', $id_periodo);
                 })
                 ->when(!is_null($estado), function ($q) use ($estado) {
-                    $q->where('estado', $estado);
+                    $q->where('rp.estado', $estado);
                 })
                 ->when($tipo_reporte, function ($q) use ($tipo_reporte) {
-                    $q->where('tipo_reporte', $tipo_reporte);
+                    $q->where('rp.tipo_reporte', $tipo_reporte);
                 })
                 ->when($id_categoria, function ($q) use ($id_categoria) {
-                    $q->whereHas('inventario', function ($inventario) use ($id_categoria) {
-                        $inventario->where('id_categoria', $id_categoria);
-                    });
+                    $q->where('iv.id_categoria', $id_categoria);
                 })
                 ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
-                    $q->whereHas('inventario.categoria', function ($categoria) use ($tipo_categoria) {
-                        $categoria->where('tipo_categoria', $tipo_categoria);
-                    });
+                    $q->where('c.tipo_categoria', $tipo_categoria);
                 })
                 ->when($search, function ($q) use ($search) {
                     $q->where(function ($query) use ($search) {
-                        $query->where('id', 'like', "%{$search}%")
-                            ->orWhere('id_inventario', 'like', "%{$search}%")
-                            ->orWhere('descripcion', 'like', "%{$search}%")
-                            ->orWhereHas('inventario', function ($inventario) use ($search) {
-                                $inventario->where('codigo', 'like', "%{$search}%")
-                                    ->orWhere('descripcion', 'like', "%{$search}%")
-                                    ->orWhere('marca', 'like', "%{$search}%")
-                                    ->orWhere('modelo', 'like', "%{$search}%");
-                            })
-                            ->orWhereHas('usuario', function ($usuario) use ($search) {
-                                $usuario->where('nombre', 'like', "%{$search}%")
-                                    ->orWhere('apellido', 'like', "%{$search}%");
-                            });
+                        $query->where('iv.id', 'like', "%{$search}%")
+                            ->orWhere('iv.codigo', 'like', "%{$search}%")
+                            ->orWhere('iv.descripcion', 'like', "%{$search}%")
+                            ->orWhere('iv.marca', 'like', "%{$search}%")
+                            ->orWhere('iv.modelo', 'like', "%{$search}%")
+                            ->orWhere('rp.id', 'like', "%{$search}%")
+                            ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$search}%"]);
                     });
                 })
-                ->latest('id');
+                ->orderByDesc('fecha_reporte');
 
             $reportes = $per_page
                 ? $query->paginate($per_page)
