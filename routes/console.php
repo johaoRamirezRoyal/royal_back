@@ -22,6 +22,13 @@ Schedule::command('asistencia:cerrar-vencidas')->everyFifteenMinutes();
 // cada minuto en el servidor (deploy/royal-back-scheduler.timer/.service).
 Schedule::command('periodos:desactivar-vencidos')->daily();
 
+// Purga logs_actividad con más de 90 días (ver LogsActividadService::purgarLogsAntiguos).
+// Laravel no tiene un ->everyThreeDays() nativo, así que se usa cron directo: corre a
+// las 2am en los días del mes múltiplos de 3 (aproximación estándar de "cada 3 días" con
+// cron; no es un contador desde el último run, así que el intervalo real varía un poco
+// entre fin/inicio de mes). Misma nota operativa que los jobs de arriba.
+Schedule::command('logs-actividad:purgar-antiguos')->cron('0 2 */3 * *');
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
