@@ -27,7 +27,7 @@ Route::put('/liberar', [InventariosController::class, 'liberarInventario']);
 Route::put('/asignar', [InventariosController::class, 'asignarInventario']);
 
 Route::post('/reportar', [InventariosController::class, 'reportarInventario']);
-Route::get('/reportes', [InventariosController::class, 'mostrarReportesInventario']);
+Route::get('/reportes', [InventariosController::class, 'mostrarReportesDeInventario']);
 Route::put('/reportes/solucionar', [InventariosController::class, 'solucionarReporteInventario']);
 Route::post('/mantenimiento', [InventariosController::class, 'programarMantenimientoPreventivo']);
 
