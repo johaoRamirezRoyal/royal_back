@@ -17,11 +17,13 @@ class PrestamosController extends Controller
     public function listarPrestamos(Request $request)
     {
         $response = $this->prestamosService->mostrarPrestamosInventario(
-            descripcion: $request->input('descripcion'),
-            activo:      $request->boolean('activo') ?: null,
-            devueltos:   $request->boolean('devueltos') ?: null,
-            vencidos:    $request->boolean('vencidos') ?: null,
-            perpage:     $request->input('per_page', 10),
+            descripcion:   $request->input('descripcion'),
+            activo:        $request->boolean('activo') ?: null,
+            devueltos:     $request->boolean('devueltos') ?: null,
+            vencidos:      $request->boolean('vencidos') ?: null,
+            idUserEntrega: $request->integer('id_user_entrega') ?: null,
+            idUserPresta:  $request->integer('id_user_prestamo') ?: null,
+            perpage:       $request->input('per_page', 10),
         );
 
         if ($response['error']) {

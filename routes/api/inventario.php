@@ -20,6 +20,7 @@ Route::post('/listado-consolidado/disminuir', [InventariosController::class, 'di
 
  * URL Puede ser:
             http://localhost:8000/api/inventario/listado?page=300&per_page=10
+            http://localhost:8000/api/inventario/listado?per-page=1000&estado_not_in[]=5&id_usuario=3123
  */
 Route::put('/descontinuar', [InventariosController::class, 'descontinuarInventario']);
 Route::post('/', [InventariosController::class, 'agregarInventario']);

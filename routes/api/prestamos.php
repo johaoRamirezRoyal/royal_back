@@ -4,7 +4,7 @@ use App\Http\Controllers\Prestamos\PrestamosController;
 use Illuminate\Support\Facades\Route;
 
 /**
- * GET /api/prestamos?descripcion=...&activo=true&devueltos=true&vencidos=true&per_page=10
+ * GET /api/prestamos?descripcion=...&activo=true&devueltos=true&vencidos=true&id_user_entrega=...&id_user_prestamo=...&per_page=10
  */
 Route::get('/', [PrestamosController::class, 'listarPrestamos']);
 

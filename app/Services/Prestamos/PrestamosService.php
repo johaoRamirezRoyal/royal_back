@@ -130,8 +130,15 @@ class PrestamosService extends Service
         }
     }
 
-    public function mostrarPrestamosInventario(?string $descripcion, ?bool $activo, ?bool $devueltos, ?bool $vencidos, ?int $perpage = 10): array
-    {
+    public function mostrarPrestamosInventario(
+        ?string $descripcion,
+        ?bool $activo,
+        ?bool $devueltos,
+        ?bool $vencidos,
+        ?int $idUserEntrega = null,
+        ?int $idUserPresta = null,
+        ?int $perpage = 10
+    ): array {
         try {
             $prestamos = PrestamosInventario::with([
                 'usuarioEntrega:id_user,nombre,apellido',
@@ -152,7 +159,14 @@ class PrestamosService extends Service
                 })
                 ->when($vencidos, function ($query) {
                     $query->vencidos();
-                })->paginate($perpage);
+                })
+                ->when($idUserEntrega, function ($query) use ($idUserEntrega) {
+                    $query->where('id_user_entrega', $idUserEntrega);
+                })
+                ->when($idUserPresta, function ($query) use ($idUserPresta) {
+                    $query->where('id_user_prestamo', $idUserPresta);
+                })
+                ->paginate($perpage);
 
             if ($prestamos->count() === 0) {
                 return [
