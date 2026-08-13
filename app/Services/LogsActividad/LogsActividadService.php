@@ -96,4 +96,30 @@ class LogsActividadService extends Service
             return null;
         }
     }
+
+    /**
+     * Borra los logs de actividad con más de $diasRetencion días. Pensado para correr
+     * periódicamente desde el scheduler (ver LogsActividadPurgarCommand) y evitar que la
+     * tabla crezca sin límite. 90 días de retención por defecto: suficiente para auditoría
+     * reciente sin acumular indefinidamente.
+     */
+    public function purgarLogsAntiguos(int $diasRetencion = 90): array
+    {
+        try {
+            $eliminados = LogActividad::where('fechareg', '<', now()->subDays($diasRetencion))->delete();
+
+            return [
+                'error' => false,
+                'message' => "Se eliminaron {$eliminados} log(s) de actividad con más de {$diasRetencion} días",
+                'data' => ['eliminados' => $eliminados]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al purgar los logs de actividad antiguos');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al purgar los logs de actividad antiguos',
+                'data' => []
+            ];
+        }
+    }
 }
