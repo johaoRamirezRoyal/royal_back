@@ -13,7 +13,6 @@ use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
 use App\Services\inventario\InventarioServices as InventarioServices;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class InventariosController extends Controller
@@ -220,30 +219,22 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function mostrarReportesInventario(MostrarReportesInventarioRequest $request)
+    public function mostrarReportesDeInventario(MostrarReportesInventarioRequest $request)
     {
         $resultado = $this->inventario_services->mostrarReportesDeInventario(
             $request->input('id_inventario'),
             $request->input('id_user'),
             $request->input('id_anio'),
             $request->input('id_periodo'),
-            $request->input('s', $request->input('search')),
+            $request->input('search'),
             $request->input('estado'),
             $request->input('tipo_categoria'),
-            $request->input('per_page', $request->input('per-page')),
+            $request->input('per_page'),
             $request->input('tipo_reporte'),
-            $request->boolean('sin_solucion'),
+            $request->input('sin_solucion'),
             $request->input('id_categoria'),
             $request->input('estado_solucion')
         );
-
-        if ($resultado['error']) {
-            return $this->apiResponse($resultado);
-        }
-
-        if ($resultado['data'] instanceof \Illuminate\Pagination\LengthAwarePaginator) {
-            return $this->paginatedResponse($resultado);
-        }
 
         return $this->apiResponse($resultado);
     }
