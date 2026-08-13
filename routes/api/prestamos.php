@@ -14,6 +14,7 @@ Route::get('/', [PrestamosController::class, 'listarPrestamos']);
     "id_inventario": 1,
     "id_user_entrega": 1,
     "id_user_prestamo": 2,
+    "fecha_prestamo": "2026-08-13 09:00:00",
     "fecha_compromiso": "2026-07-15 17:00:00",
     "observacion": "Préstamo de proyector"
 }

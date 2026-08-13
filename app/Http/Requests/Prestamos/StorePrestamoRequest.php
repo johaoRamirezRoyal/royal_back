@@ -12,6 +12,15 @@ class StorePrestamoRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (!$this->has('fecha_prestamo')) {
+            $this->merge([
+                'fecha_prestamo' => now()->format('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
@@ -30,6 +39,7 @@ class StorePrestamoRequest extends FormRequest
                 'integer',
                 Rule::exists('usuarios', 'id_user')->where('estado', 'activo'),
             ],
+            'fecha_prestamo' => ['nullable', 'date_format:Y-m-d H:i:s'],
             'fecha_compromiso' => ['nullable', 'date_format:Y-m-d H:i:s'],
             'observacion' => ['nullable', 'string', 'max:500'],
         ];
@@ -50,6 +60,7 @@ class StorePrestamoRequest extends FormRequest
             'id_user_prestamo.integer'  => 'El ID del usuario que recibe el préstamo debe ser un número entero.',
             'id_user_prestamo.exists'   => 'El usuario del préstamo no existe o no está activo.',
 
+            'fecha_prestamo.date_format' => 'La fecha de préstamo debe tener el formato Y-m-d H:i:s.',
             'fecha_compromiso.date_format' => 'La fecha de compromiso debe tener el formato Y-m-d H:i:s.',
             'observacion.max' => 'La observación no debe superar los 500 caracteres.',
         ];
