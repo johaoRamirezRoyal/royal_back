@@ -154,6 +154,8 @@ class InventarioServices
                     $query->whereIn('inventario.id_categoria', $datos['id_categoria']);
                 })->when($datos['estado'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.estado', $datos['estado']);
+                })->when($datos['estado_not_in'] ?? null, function ($query) use ($datos) {
+                    $query->whereNotIn('inventario.estado', $datos['estado_not_in']);
                 })->when($datos['id_usuario'] ?? null, function ($query) use ($datos) {
                     $query->where('inventario.id_user', $datos['id_usuario']);
                 })
