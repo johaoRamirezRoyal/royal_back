@@ -1081,6 +1081,59 @@ class BibliotecaServices extends Service
         }
     }
 
+    public function aplazarPrestamoEjemplarBiblioteca(array $data): array
+    {
+        if (!$data['id'] || !$data['fecha_devolucion']) {
+            return [
+                'error' => true,
+                'message' => "Es necesario el id del préstamo y la nueva fecha de devolución",
+                'data' => $data
+            ];
+        }
+        try {
+            DB::beginTransaction();
+
+            $prestamo = PrestamosEjemplar::whereNull('fecha_devuelto')
+                ->find($data['id']);
+
+            if (!$prestamo) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => "No se encontró un préstamo activo con ese id",
+                    'data' => $data
+                ];
+            }
+
+            if ($data['fecha_devolucion'] <= $prestamo->fecha_devolucion->format('Y-m-d')) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => "La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo",
+                    'data' => $data
+                ];
+            }
+
+            $prestamo->update(['fecha_devolucion' => $data['fecha_devolucion']]);
+
+            DB::commit();
+
+            return [
+                'error' => false,
+                'message' => "Fecha de devolución aplazada exitosamente",
+                'data' => []
+            ];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->sendError($e, "Error en el servidor al tratar de aplazar el prestamo:");
+            return [
+                'error' => true,
+                'message' => "Error inesperado al aplazar el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
+                'data' => $data
+            ];
+        }
+    }
+
     /**
      * Query base compartida por los préstamos activos y devueltos: mismos filtros
      * (búsqueda, curso, nivel, rango de fechas, código de ejemplar), solo cambia
@@ -2247,6 +2300,40 @@ class BibliotecaServices extends Service
                 'error' => false,
                 'message' => 'Préstamo devuelto correctamente',
                 'data' => $prestamo->toArray()
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => []
+            ];
+        }
+    }
+
+    public function aplazarPrestamoPaqueteUsuario(int $id, string $fecha_devolucion)
+    {
+        try {
+            DB::transaction(function () use ($id, $fecha_devolucion) {
+                $prestamo = PaquetePrestamos::whereNull('id_devuelto')
+                    ->lockForUpdate()
+                    ->find($id);
+
+                if (!$prestamo) {
+                    throw new Exception("No se encontró un préstamo activo con ese id");
+                }
+
+                if ($fecha_devolucion <= $prestamo->fecha_devolucion->format('Y-m-d')) {
+                    throw new Exception("La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo");
+                }
+
+                $prestamo->update(['fecha_devolucion' => $fecha_devolucion]);
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Fecha de devolución aplazada exitosamente',
+                'data' => []
             ];
 
         } catch (Exception $e) {

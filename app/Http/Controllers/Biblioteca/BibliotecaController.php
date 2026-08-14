@@ -430,6 +430,19 @@ class BibliotecaController extends Controller
         return $this->apiResponse($response);
     }
 
+    public function aplazarPrestamoEjemplarBiblioteca(Request $request)
+    {
+        $body = [
+            "id" => $request->input("id"),
+            "fecha_devolucion" => $request->input("fecha_devolucion"),
+            "id_log" => $request->input("id_log")
+        ];
+
+        $response = $this->biblioteca_services->aplazarPrestamoEjemplarBiblioteca($body);
+
+        return $this->apiResponse($response);
+    }
+
     public function listarPaquetesBiblioteca(Request $request)
     {
         $body = $request->input("search");
@@ -527,6 +540,16 @@ class BibliotecaController extends Controller
         $observacion = $request->input('observacion');
 
         $response = $this->biblioteca_services->devolverPrestamoPaqueteUsuario($codigo_paquete, $observacion);
+
+        return $this->apiResponse($response);
+    }
+
+    public function aplazarPrestamoPaqueteUsuario(Request $request)
+    {
+        $id = $request->input('id');
+        $fecha_devolucion = $request->input('fecha_devolucion');
+
+        $response = $this->biblioteca_services->aplazarPrestamoPaqueteUsuario($id, $fecha_devolucion);
 
         return $this->apiResponse($response);
     }
