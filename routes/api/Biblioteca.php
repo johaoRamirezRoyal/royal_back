@@ -101,6 +101,7 @@ Route::post("/prestamosEjemplar/pazYSalvoGlobal", [BibliotecaController::class, 
 Route::get("/prestamosEjemplar/pazYSalvo", [BibliotecaController::class, 'generarPazYSalvoPdf']);
 Route::get("/prestamosEjemplar/listadoPdf", [BibliotecaController::class, 'generarListadoPrestamosPdf']);
 Route::put("/DevolverPrestamosEjemplar", [BibliotecaController::class, 'devolverPrestamoEjemplarBiblioteca']);
+Route::put("/prestamosEjemplar/aplazar", [BibliotecaController::class, 'aplazarPrestamoEjemplarBiblioteca']);
 Route::get("/prestamosEjemplar", [BibliotecaController::class, 'verPrestamosDeEjemplar']);
 Route::get("/prestamosLibros", [BibliotecaController::class, 'verPrestamosLibro']);
 
@@ -166,6 +167,7 @@ Route::delete("/paquetes/contenido", [BibliotecaController::class, 'eliminarCont
 Route::get("/paquetes/verificar", [BibliotecaController::class, 'verificarPaqueteBiblioteca']);
 Route::post("/paquetes/prestamo", [BibliotecaController::class, 'generarPrestamoPaqueteUsuario']);
 Route::put("/paquetes/prestamo/devolver", [BibliotecaController::class, 'devolverPrestamoPaqueteUsuario']);
+Route::put("/paquetes/prestamo/aplazar", [BibliotecaController::class, 'aplazarPrestamoPaqueteUsuario']);
 Route::get("/paquetes/prestamo/historial", [BibliotecaController::class, 'mostrarHistorialPrestamosPaquetesUsuario']);
 Route::get("/paquetes/prestamo/listadoPdf", [BibliotecaController::class, 'generarListadoPrestamosPaquetesPdf']);
 
