@@ -37,6 +37,14 @@ class LlegadasTardeController extends Controller
 
     }
 
+    public function dashboardLlegadasTarde(Request $request){
+        $id_periodo_academico = $request->input('id_periodo_academico', null);
+
+        $response = $this->llegadas_tarde->dashboardLlegadasTarde($id_periodo_academico);
+
+        return $this->apiResponse($response);
+    }
+
     public function eliminarLlegadaTarde(Request $request, ?int $id = null){
         $ids = $id !== null ? [$id] : $request->input('ids_llegadas_tarde', []);
 

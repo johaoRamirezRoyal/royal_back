@@ -10,9 +10,12 @@ use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class LlegadasTarde extends Service
 {
+    private const PERFIL_DIRECTIVO_DOCENTE = 20;
+
     private array $mailToVicerrectoria = ['hernando.ramirez@royalschool.edu.co'];
 
     public function __construct(private MailService $mailService) {}
@@ -48,9 +51,14 @@ class LlegadasTarde extends Service
 
             $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
 
-            // Una vez el alumno alcanza el límite del período, no se siguen sumando llegadas
+            // El límite configurado se cuenta como "hasta acá se permite": con cantidad_limite=5
+            // la 6ª llegada tarde es la que se registra marcada como límite alcanzado (y la que
+            // dispara el aviso a vicerrectoría); la 7ª ya no se registra.
+            $umbralLimite = $cantidadLimite > 0 ? $cantidadLimite + 1 : 0;
+
+            // Una vez el alumno supera el límite del período, no se siguen sumando llegadas
             // tarde adicionales (aunque el dispositivo o un registro manual lo intenten).
-            if ($cantidadLimite > 0 && $totalActual >= $cantidadLimite) {
+            if ($umbralLimite > 0 && $totalActual >= $umbralLimite) {
                 return [
                     'error' => false,
                     'message' => 'El alumno ya alcanzó el límite de llegadas tarde del período académico; no se registran más',
@@ -76,7 +84,7 @@ class LlegadasTarde extends Service
             }
 
             $totalEnPeriodo = $totalActual + 1;
-            $limiteAlcanzado = $cantidadLimite > 0 && $totalEnPeriodo >= $cantidadLimite;
+            $limiteAlcanzado = $umbralLimite > 0 && $totalEnPeriodo >= $umbralLimite;
             $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
 
             $this->notificarLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
@@ -158,6 +166,109 @@ class LlegadasTarde extends Service
             return [
                 'error' => true,
                 'message' => "Error en el servidor al obtener las llegadas tarde",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Resumen del período académico para un dashboard: totales, top de estudiantes,
+     * desglose por curso y por día. Si no se indica id_periodo_academico usa el vigente
+     * (mismo criterio que obtenerLlegadasTarde/agregarLlegadaTarde).
+     */
+    public function dashboardLlegadasTarde(?int $id_periodo_academico = null): array
+    {
+        try {
+            $periodo = $id_periodo_academico
+                ? PeriodoAcademico::find($id_periodo_academico)
+                : $this->periodoVigente();
+
+            if (!$periodo) {
+                return [
+                    'error' => true,
+                    'message' => $id_periodo_academico
+                        ? 'No se encontró el período académico indicado'
+                        : 'No existe un período académico activo',
+                    'data' => []
+                ];
+            }
+
+            $config = ConfiguracionLlegadasTarde::find(1);
+            $cantidadLimite = $config?->cantidad_limite ?? 5;
+
+            $totalLlegadasTarde = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)->count();
+
+            $totalEstudiantesAfectados = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->distinct()
+                ->count('id_alumno');
+
+            $totalEstudiantesLimiteAlcanzado = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('limite_alcanzado', true)
+                ->count();
+
+            $topEstudiantes = DB::table('llegadas_tardes as lt')
+                ->join('usuarios as u', 'u.id_user', '=', 'lt.id_alumno')
+                ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
+                ->where('lt.id_periodo_academico', $periodo->id)
+                ->select(
+                    'lt.id_alumno',
+                    'u.nombre',
+                    'u.apellido',
+                    'u.documento',
+                    'c.nombre as curso',
+                    DB::raw('count(*) as total_llegadas_tarde'),
+                    DB::raw('max(case when lt.limite_alcanzado then 1 else 0 end) as limite_alcanzado')
+                )
+                ->groupBy('lt.id_alumno', 'u.nombre', 'u.apellido', 'u.documento', 'c.nombre')
+                ->orderByDesc('total_llegadas_tarde')
+                ->limit(10)
+                ->get();
+
+            $porCurso = DB::table('llegadas_tardes as lt')
+                ->join('usuarios as u', 'u.id_user', '=', 'lt.id_alumno')
+                ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
+                ->where('lt.id_periodo_academico', $periodo->id)
+                ->select('c.id as id_curso', 'c.nombre as curso', DB::raw('count(*) as total'))
+                ->groupBy('c.id', 'c.nombre')
+                ->orderByDesc('total')
+                ->get();
+
+            $porDia = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->select('fecha', DB::raw('count(*) as total'))
+                ->groupBy('fecha')
+                ->orderBy('fecha')
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Dashboard de llegadas tarde obtenido',
+                'data' => [
+                    'periodo_academico' => [
+                        'id' => $periodo->id,
+                        'nombre' => $periodo->nombre,
+                        'fecha_inicio' => $periodo->fecha_inicio,
+                        'fecha_fin' => $periodo->fecha_fin,
+                    ],
+                    'configuracion' => [
+                        'hora_limite' => $config?->hora_limite,
+                        'cantidad_limite' => $cantidadLimite,
+                        'umbral_bloqueo' => $cantidadLimite > 0 ? $cantidadLimite + 1 : 0,
+                    ],
+                    'resumen' => [
+                        'total_llegadas_tarde' => $totalLlegadasTarde,
+                        'total_estudiantes_afectados' => $totalEstudiantesAfectados,
+                        'total_estudiantes_limite_alcanzado' => $totalEstudiantesLimiteAlcanzado,
+                    ],
+                    'top_estudiantes' => $topEstudiantes,
+                    'por_curso' => $porCurso,
+                    'por_dia' => $porDia,
+                ]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al obtener el dashboard de llegadas tarde");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al obtener el dashboard de llegadas tarde",
                 'data' => []
             ];
         }
@@ -245,7 +356,7 @@ class LlegadasTarde extends Service
             ? "\n\nEste estudiante ya acumula {$totalEnPeriodo} llegadas tarde en el período académico actual."
             : '';
 
-        if ($estudiante->correo) {
+        if ($estudiante->correo && $estudiante->estado === 'activo') {
             $this->mailService->sendGeneric(
                 $estudiante->correo,
                 'Llegada tarde registrada',
@@ -257,6 +368,7 @@ class LlegadasTarde extends Service
             'id_user',
             EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)->where('activo', 1)->pluck('id_acudiente')
         )
+            ->where('estado', 'activo')
             ->whereNotNull('correo')
             ->pluck('correo')
             ->filter()
@@ -271,8 +383,15 @@ class LlegadasTarde extends Service
         }
 
         if ($limiteAlcanzado) {
+            $correosDirectivoDocente = Usuario::where('perfil', self::PERFIL_DIRECTIVO_DOCENTE)
+                ->where('estado', 'activo')
+                ->whereNotNull('correo')
+                ->pluck('correo')
+                ->filter()
+                ->all();
+
             $this->mailService->sendGeneric(
-                $this->mailToVicerrectoria,
+                array_values(array_unique(array_merge($this->mailToVicerrectoria, $correosDirectivoDocente))),
                 'Falta por llegadas tarde acumuladas',
                 "El estudiante {$nombreCompleto} (documento {$estudiante->documento}) acumula {$totalEnPeriodo} llegadas tarde en el período académico actual. Última llegada tarde: {$fecha} a las {$horaCorta}."
             );

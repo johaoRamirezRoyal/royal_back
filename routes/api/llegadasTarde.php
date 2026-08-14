@@ -27,6 +27,15 @@ Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
 Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
 
 /**
+ * GET /api/llegadas-tarde/dashboard
+ * Query params:
+ *   id_periodo_academico (int, opcional) — default: período académico activo
+ * Resumen del período: totales, configuración vigente, top 10 estudiantes con más
+ * llegadas tarde, desglose por curso y por día (para gráficas).
+ */
+Route::get('/dashboard', [LlegadasTardeController::class, 'dashboardLlegadasTarde']);
+
+/**
  * DELETE /api/llegadas-tarde
  * Body (JSON):
  *   {
