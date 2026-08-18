@@ -104,7 +104,7 @@ class LlegadasTarde extends Service
         }
     }
 
-    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null): array
+    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null): array
     {
         try {
             if ($id_periodo_academico === null) {
@@ -130,6 +130,9 @@ class LlegadasTarde extends Service
                 ])
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
+                })
+                ->when($fecha !== null, function ($query) use ($fecha) {
+                    $query->where('fecha', $fecha);
                 })
                 ->get();
 

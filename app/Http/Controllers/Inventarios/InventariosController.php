@@ -12,20 +12,53 @@ use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
 use App\Services\inventario\InventarioServices as InventarioServices;
+use App\Services\Usuarios\UsuariosServices;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class InventariosController extends Controller
 {
+    // Opciones del frontend: 12 = /inventario/listado (+ reportado/liberado/reportes/
+    // mantenimiento/areas), 16 = /inventario/mis-inventarios (autoservicio: solo lo
+    // propio), 17 = /inventario/prestamos. `obtenerListadoInventario`/`reportarInventario`
+    // se comparten con Mis Inventarios (un usuario reporta o consulta SU inventario
+    // asignado sin necesitar el permiso administrativo completo); `listadoConsolidado` se
+    // comparte con Préstamos (para elegir qué ítem prestar). El resto es exclusivo de 12.
+    private const OPCION_INVENTARIO = 12;
+    private const OPCION_MIS_INVENTARIOS = 16;
+    private const OPCION_PRESTAMOS = 17;
+
     protected $inventario_services;
 
-    public function __construct(InventarioServices $inventarioServices)
-    {
+    public function __construct(
+        InventarioServices $inventarioServices,
+        private UsuariosServices $usuariosService,
+    ) {
         $this->inventario_services = $inventarioServices;
     }
 
+    /**
+     * Chequeo server-side del permiso, no solo ocultar la ruta en el frontend.
+     */
+    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
+    {
+        $perfil = $request->user()->perfil;
+
+        foreach ($opciones as $opcion) {
+            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
+                return null;
+            }
+        }
+
+        return $this->error('No tienes permiso para esta acción', 403);
+    }
+
     public function agregarInventario(RegistrarInventarioRequest $request){
-        
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $inventario_data = $request->toInventarioCreate();
 
         $agregar = $this->inventario_services->agregarInventario($inventario_data);
@@ -46,6 +79,10 @@ class InventariosController extends Controller
     }
 
     public function obtenerListadoInventario(Request $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS)) {
+            return $rechazo;
+        }
+
         $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
         $search = $request->input('s', null);
         $datos = $request->only(['id_area', 'id_categoria', 'estado', 'estado_not_in', 'id_usuario']);
@@ -69,6 +106,10 @@ class InventariosController extends Controller
     }
 
     public function listadoConsolidado(ListadoInventarioRequest $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS)) {
+            return $rechazo;
+        }
+
         $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion']);
         $per_page = $request->input('per_page', 15);
 
@@ -90,6 +131,10 @@ class InventariosController extends Controller
     }
 
     public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->editarDescripcionGrupo(
             $request->input('descripcion'),
             $request->input('nueva_descripcion'),
@@ -101,6 +146,10 @@ class InventariosController extends Controller
     }
 
     public function incrementarCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->incrementarCantidadGrupo(
             $request->input('descripcion'),
             $request->input('id_area'),
@@ -112,6 +161,10 @@ class InventariosController extends Controller
     }
 
     public function disminuirCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->disminuirCantidadGrupo(
             $request->input('descripcion'),
             $request->input('id_area'),
@@ -124,18 +177,30 @@ class InventariosController extends Controller
     }
 
     public function actualizarInventario(ActualizarInventarioRequest $request, int $id){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->actualizarInventario($id, $request->toInventarioUpdate());
 
         return $this->apiResponse($resultado);
     }
 
-    public function historialInventario(int $id){
+    public function historialInventario(Request $request, int $id){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->historialInventario($id);
 
         return $this->apiResponse($resultado);
     }
 
     public function descontinuarInventario(Request $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $data = $request->all();
 
         $validator = Validator::make($data, [
@@ -162,6 +227,10 @@ class InventariosController extends Controller
     }
 
     public function liberarInventario(Request $request) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $data = $request->only('ids', 'id_log');
 
         $validator = Validator::make($data, [
@@ -183,6 +252,10 @@ class InventariosController extends Controller
     }
 
     public function asignarInventario(Request $request){
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $data = $request->only('ids', 'id_area', 'id_user');
 
         $validator = Validator::make($data, [
@@ -206,6 +279,10 @@ class InventariosController extends Controller
 
     public function reportarInventario(ReportarInventarioRequest $request)
     {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS)) {
+            return $rechazo;
+        }
+
         $data = $request->toReportarInventario();
 
         $resultado = $this->inventario_services->reportarInventario(
@@ -221,6 +298,10 @@ class InventariosController extends Controller
 
     public function mostrarReportesDeInventario(MostrarReportesInventarioRequest $request)
     {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $resultado = $this->inventario_services->mostrarReportesDeInventario(
             $request->input('id_inventario'),
             $request->input('id_user'),
@@ -241,6 +322,10 @@ class InventariosController extends Controller
 
     public function solucionarReporteInventario(SolucionarReporteInventarioRequest $request)
     {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $data = $request->toSolucionarReporte();
 
         $resultado = $this->inventario_services->solucionarReporteInventario(
@@ -255,6 +340,10 @@ class InventariosController extends Controller
 
     public function programarMantenimientoPreventivo(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
         $data = $request->all();
 
         $validator = Validator::make($data, [

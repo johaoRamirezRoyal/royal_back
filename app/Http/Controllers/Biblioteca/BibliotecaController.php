@@ -13,6 +13,7 @@ use App\Http\Requests\Biblioteca\SubcategoriaRequest;
 use App\Models\Biblioteca\Libro;
 use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
+use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -21,14 +22,32 @@ use Illuminate\Support\Facades\Validator;
 class BibliotecaController extends Controller
 
 {
+    // Opción "Biblioteca" (20) en el frontend. Se chequea una sola vez en el
+    // constructor —igual que GestionAcademicaController— salvo que acá SÍ hay una ruta
+    // de este mismo controller sin auth:api: `verImagenBiblioteca` (imágenes públicas
+    // para <img src>, ver routes/api.php). Por eso el chequeo solo corre si hay un
+    // usuario autenticado: cuando no lo hay, necesariamente es esa ruta pública — nunca
+    // una de las protegidas, porque auth:api ya habría cortado la petición con 401 antes
+    // de que Laravel llegue a instanciar este controller.
+    private const OPCION_BIBLIOTECA = 20;
+
     protected BibliotecaServices $biblioteca_services;
     protected FileStorageService $file_storage_service;
 
-    public function __construct(BibliotecaServices $bibliotecaServices, FileStorageService $fileStorage)
-    {
+    public function __construct(
+        BibliotecaServices $bibliotecaServices,
+        FileStorageService $fileStorage,
+        UsuariosServices $usuariosService,
+        Request $request,
+    ) {
         $this->biblioteca_services = $bibliotecaServices;
-
         $this->file_storage_service = $fileStorage;
+
+        $usuario = $request->user();
+
+        if ($usuario && !($usuariosService->tienePermiso(self::OPCION_BIBLIOTECA, $usuario->perfil)['permiso'] ?? false)) {
+            abort($this->error('No tienes permiso para acceder a Biblioteca', 403));
+        }
     }
 
     // CATEGORIAS
