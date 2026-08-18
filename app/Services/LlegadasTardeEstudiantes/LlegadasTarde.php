@@ -2,6 +2,8 @@
 
 namespace App\Services\LlegadasTardeEstudiantes;
 
+use App\Mail\LlegadaTardeAvisoInternoMail;
+use App\Mail\LlegadaTardeMail;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
@@ -9,6 +11,7 @@ use App\Models\LlegadasTarde\LlegadasTarde as ModelsLlegadasTarde;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\Service;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -16,7 +19,19 @@ class LlegadasTarde extends Service
 {
     private const PERFIL_DIRECTIVO_DOCENTE = 20;
 
-    private array $mailToVicerrectoria = ['hernando.ramirez@royalschool.edu.co'];
+    // `periodo_academico.nombre` se guarda como texto ("Primer periodo", "Segundo
+    // periodo"...) pero en los correos se muestra como número ("Periodo 1") — ver
+    // numeroPeriodo().
+    private const ORDINALES_PERIODO = [
+        'primer' => 1,
+        'segundo' => 2,
+        'tercer' => 3,
+        'cuarto' => 4,
+        'quinto' => 5,
+        'sexto' => 6,
+    ];
+
+    private array $mailToVicerrectoria = ['alfredo.canas@royalschool.edu.co'];
 
     public function __construct(private MailService $mailService) {}
 
@@ -87,7 +102,8 @@ class LlegadasTarde extends Service
             $limiteAlcanzado = $umbralLimite > 0 && $totalEnPeriodo >= $umbralLimite;
             $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
 
-            $this->notificarLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
+            $enviado = $this->enviarNotificacionLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
+            $llegadaTarde->update(['enviado' => $enviado]);
 
             return [
                 'error' => false,
@@ -317,6 +333,57 @@ class LlegadasTarde extends Service
     }
 
     /**
+     * Reenvía manualmente la notificación de una llegada tarde ya registrada (al
+     * estudiante y a sus acudientes) y actualiza `enviado` según el resultado. No repite
+     * el aviso a Vicerrectoría aunque `limite_alcanzado` esté en true — ese aviso es una
+     * escalación puntual del momento del registro, no algo que deba reenviarse cada vez
+     * que alguien reintenta el correo principal.
+     */
+    public function reenviarCorreo(int $id): array
+    {
+        try {
+            $llegadaTarde = ModelsLlegadasTarde::find($id);
+
+            if (!$llegadaTarde) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró la llegada tarde con ID: ' . $id,
+                    'data' => []
+                ];
+            }
+
+            $totalEnPeriodo = ModelsLlegadasTarde::where('id_alumno', $llegadaTarde->id_alumno)
+                ->where('id_periodo_academico', $llegadaTarde->id_periodo_academico)
+                ->count();
+
+            $enviado = $this->enviarNotificacionLlegadaTarde(
+                $llegadaTarde,
+                $totalEnPeriodo,
+                (bool) $llegadaTarde->limite_alcanzado,
+                avisarVicerrectoria: false
+            );
+
+            $llegadaTarde->update(['enviado' => $enviado]);
+
+            return [
+                'error' => false,
+                'message' => $enviado
+                    ? 'Correo enviado correctamente'
+                    : 'No se pudo enviar el correo. Verifique que el estudiante o sus acudientes tengan correo registrado.',
+                'data' => ['enviado' => $enviado]
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al reenviar el correo de la llegada tarde");
+
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al reenviar el correo",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
      * Período académico vigente: de los marcados activo=true, el que aún no ha
      * terminado (fecha_fin >= hoy) con la fecha_inicio más temprana. No basta con
      * "activo=true" solo — nada impide que queden varios períodos marcados activos
@@ -335,37 +402,53 @@ class LlegadasTarde extends Service
     }
 
     /**
-     * Notifica por correo al estudiante y a sus acudientes activos cada vez que se
-     * registra una llegada tarde (siempre). Si con esta llegada el alumno alcanza la
-     * cantidad_limite configurada para el período, además notifica a Vicerrectoría
-     * (a partir de ahí ya no se registran más llegadas tarde en el período, así que
-     * este aviso solo puede dispararse una vez por alumno por período).
-     * sendGeneric() atrapa sus propios errores, así que un fallo de envío no afecta
-     * el registro de la llegada tarde (ya se guardó antes de llamar este método).
+     * "Primer periodo" → "1", "Segundo periodo" → "2", etc. (ver ORDINALES_PERIODO) —
+     * en los correos el periodo se muestra como número ("Periodo 1"), no con el nombre
+     * completo tal cual está en `periodo_academico.nombre`. Si el nombre no matchea
+     * ningún ordinal conocido, se muestra tal cual en vez de fallar silenciosamente.
      */
-    private function notificarLlegadaTarde(ModelsLlegadasTarde $llegadaTarde, int $totalEnPeriodo, bool $limiteAlcanzado): void
+    private function numeroPeriodo(?PeriodoAcademico $periodo, int $idPeriodoFallback): string
     {
-        $estudiante = Usuario::find($llegadaTarde->id_alumno);
+        if (!$periodo) {
+            return "#{$idPeriodoFallback}";
+        }
+
+        $primeraPalabra = strtolower(strtok(trim((string) $periodo->nombre), ' '));
+
+        return isset(self::ORDINALES_PERIODO[$primeraPalabra])
+            ? (string) self::ORDINALES_PERIODO[$primeraPalabra]
+            : ($periodo->nombre ?: "#{$idPeriodoFallback}");
+    }
+
+    /**
+     * Notifica por correo, con una sola carta (formato oficial firmado por
+     * Vicerrectoría) dirigida a "padre de familia y estudiante", enviada tanto al
+     * correo del alumno como al de sus acudientes activos — ya no son dos correos con
+     * texto distinto, es la misma carta a todos los destinatarios. Devuelve si ese envío
+     * tuvo éxito (lo que persiste en `enviado` el caller — este método no toca la fila,
+     * solo envía). Si con esta llegada el alumno alcanza la cantidad_limite configurada
+     * para el período y `$avisarVicerrectoria` es true, además notifica a Vicerrectoría
+     * por separado con `LlegadaTardeAvisoInternoMail` (mismo estilo visual, pero ese
+     * envío no cuenta para el resultado devuelto: es una escalación interna, no la carta
+     * al acudiente). `MailService::send()` atrapa sus propios errores, así que un fallo
+     * de envío no afecta el registro de la llegada tarde (ya se guardó antes de llamar
+     * este método).
+     */
+    private function enviarNotificacionLlegadaTarde(
+        ModelsLlegadasTarde $llegadaTarde,
+        int $totalEnPeriodo,
+        bool $limiteAlcanzado,
+        bool $avisarVicerrectoria = true
+    ): bool {
+        $estudiante = Usuario::with('cursoRelacion')->find($llegadaTarde->id_alumno);
 
         if (!$estudiante) {
-            return;
+            return false;
         }
 
-        $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido}");
-        $horaCorta = substr($llegadaTarde->hora, 0, 5);
-        $fecha = $llegadaTarde->fecha;
-
-        $avisoLimite = $limiteAlcanzado
-            ? "\n\nEste estudiante ya acumula {$totalEnPeriodo} llegadas tarde en el período académico actual."
-            : '';
-
-        if ($estudiante->correo && $estudiante->estado === 'activo') {
-            $this->mailService->sendGeneric(
-                $estudiante->correo,
-                'Llegada tarde registrada',
-                "Hola {$nombreCompleto},\n\nSe registró tu llegada tarde el {$fecha} a las {$horaCorta}." . $avisoLimite
-            );
-        }
+        $correoEstudiante = ($estudiante->correo && $estudiante->estado === 'activo')
+            ? [$estudiante->correo]
+            : [];
 
         $correosAcudientes = Usuario::whereIn(
             'id_user',
@@ -377,15 +460,18 @@ class LlegadasTarde extends Service
             ->filter()
             ->all();
 
-        if (!empty($correosAcudientes)) {
-            $this->mailService->sendGeneric(
-                $correosAcudientes,
-                'Llegada tarde registrada',
-                "Se registró una llegada tarde del estudiante {$nombreCompleto} el {$fecha} a las {$horaCorta}." . $avisoLimite
+        $destinatarios = array_values(array_unique(array_merge($correoEstudiante, $correosAcudientes)));
+
+        $enviado = false;
+
+        if (!empty($destinatarios)) {
+            $enviado = $this->mailService->send(
+                $destinatarios,
+                $this->cartaLlegadaTarde($estudiante, $llegadaTarde, $totalEnPeriodo, $limiteAlcanzado)
             );
         }
 
-        if ($limiteAlcanzado) {
+        if ($limiteAlcanzado && $avisarVicerrectoria) {
             $correosDirectivoDocente = Usuario::where('perfil', self::PERFIL_DIRECTIVO_DOCENTE)
                 ->where('estado', 'activo')
                 ->whereNotNull('correo')
@@ -393,11 +479,49 @@ class LlegadasTarde extends Service
                 ->filter()
                 ->all();
 
-            $this->mailService->sendGeneric(
+            $this->mailService->send(
                 array_values(array_unique(array_merge($this->mailToVicerrectoria, $correosDirectivoDocente))),
-                'Falta por llegadas tarde acumuladas',
-                "El estudiante {$nombreCompleto} (documento {$estudiante->documento}) acumula {$totalEnPeriodo} llegadas tarde en el período académico actual. Última llegada tarde: {$fecha} a las {$horaCorta}."
+                new LlegadaTardeAvisoInternoMail(
+                    nombreEstudiante: trim("{$estudiante->nombre} {$estudiante->apellido}"),
+                    documento: (string) $estudiante->documento,
+                    grado: $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado',
+                    totalEnPeriodo: $totalEnPeriodo,
+                    periodo: $this->numeroPeriodo($llegadaTarde->periodoAcademico, $llegadaTarde->id_periodo_academico),
+                    fecha: Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y'),
+                    hora: substr($llegadaTarde->hora, 0, 5),
+                )
             );
         }
+
+        return $enviado;
+    }
+
+    /**
+     * Carta oficial (mismo estilo visual que el correo de verificación de admisiones —
+     * ver resources/views/emails/llegadaTarde.blade.php — firmada por Vicerrectoría) que
+     * se envía al alumno y a sus acudientes por cada llegada tarde. Dos variantes según
+     * `$limiteAlcanzado`: la normal (llegadas 1 a `cantidad_limite`) solo informa, la de
+     * advertencia (al llegar al umbral configurado) además cita el Reglamento Escolar.
+     */
+    private function cartaLlegadaTarde(
+        Usuario $estudiante,
+        ModelsLlegadasTarde $llegadaTarde,
+        int $totalEnPeriodo,
+        bool $limiteAlcanzado
+    ): LlegadaTardeMail {
+        $nombreCompleto = trim("{$estudiante->nombre} {$estudiante->apellido}");
+        $grado = $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado';
+        $fecha = Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y');
+        $periodo = $this->numeroPeriodo($llegadaTarde->periodoAcademico, $llegadaTarde->id_periodo_academico);
+
+        return new LlegadaTardeMail(
+            asunto: $limiteAlcanzado ? 'Registro de quinta llegada tarde' : 'Registro de llegada tarde',
+            nombreEstudiante: $nombreCompleto,
+            grado: $grado,
+            fecha: $fecha,
+            totalEnPeriodo: $totalEnPeriodo,
+            periodo: $periodo,
+            limiteAlcanzado: $limiteAlcanzado,
+        );
     }
 }
