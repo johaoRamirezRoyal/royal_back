@@ -3,21 +3,46 @@
 namespace App\Http\Controllers\Permisos;
 
 use App\Services\Permisos\PermisosService;
+use App\Services\Usuarios\UsuariosServices;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PermisosController extends Controller
 
 {
+    // Opción "/permisos" (28) en el frontend. Este controller es el que decide qué puede
+    // hacer cada perfil en todo el sistema — sin este chequeo, cualquier usuario
+    // autenticado (con cualquier perfil) podía otorgarse a sí mismo cualquier opción,
+    // incluida esta misma, con un solo POST directo a /api/permisos/activar-permiso.
+    private const OPCION_PERMISOS = 28;
+
     protected $services_permisos;
 
-    public function __construct(PermisosService $services_permisos)
-    {
+    public function __construct(
+        PermisosService $services_permisos,
+        private UsuariosServices $usuariosService,
+    ) {
         $this->services_permisos = $services_permisos;
+    }
+
+    /**
+     * Chequeo server-side del permiso, no solo ocultar el módulo en el sidebar —
+     * cualquier intento directo a estos endpoints sin el permiso se rechaza acá.
+     */
+    private function sinAcceso(Request $request): ?JsonResponse
+    {
+        $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_PERMISOS, $request->user()->perfil)['permiso'] ?? false;
+
+        return $tienePermiso ? null : $this->error('No tienes permiso para gestionar los permisos del sistema', 403);
     }
 
     public function verPermisosPorPerfil(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $id_perfil = $request->input("perfil");
 
         if (!$id_perfil) {
@@ -34,16 +59,21 @@ class PermisosController extends Controller
 
     public function crearPermiso(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $validated = $request->validate([
             'id_opcion' => 'required|integer|exists:cron_opciones,id',
             'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
-            'user_log' => 'required|integer|exists:usuarios,id_user'
         ]);
 
         $datos = [
             'id_opcion' => $validated['id_opcion'],
             'id_perfil' => $validated['id_perfil'],
-            'user_log' => $validated['user_log'],
+            // Quien queda registrado como autor del cambio es el usuario autenticado, no
+            // un campo que mandaba el cliente en el body (antes se podía falsificar).
+            'user_log' => $request->user()->id_user,
             'activo' => 1
         ];
 
@@ -54,6 +84,10 @@ class PermisosController extends Controller
 
     public function eliminarPermiso(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $validated = $request->validate([
             'id_opcion' => 'required|integer|exists:cron_opciones,id',
             'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
@@ -71,6 +105,10 @@ class PermisosController extends Controller
 
     public function verOpcionesPorPerfil(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $validated = $request->validate([
             'perfiles' => 'nullable|array',
             'perfiles.*' => 'integer|exists:perfiles,id_perfil'
@@ -83,8 +121,12 @@ class PermisosController extends Controller
         return $this->apiResponse($response);
     }
 
-    public function verTodosLosPermisosOpciones()
+    public function verTodosLosPermisosOpciones(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $datos = $this->services_permisos->verPermisosOpciones();
 
         if ($datos['error']) {

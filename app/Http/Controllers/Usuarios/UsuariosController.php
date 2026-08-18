@@ -14,6 +14,12 @@ use Illuminate\Support\Facades\Log;
 
 class UsuariosController extends Controller
 {
+    // Opción "/users" (2) en el frontend: gatea crear/editar usuarios y cambiar su
+    // estado. Sin este chequeo, cualquier autenticado podía crear un usuario con
+    // cualquier perfil (incluido Super Admin) o desactivar cuentas ajenas con un POST/PUT
+    // directo, sin tener la opción otorgada.
+    private const OPCION_USUARIOS = 2;
+
     protected $service_usuarios;
 
     protected $service_perfiles;
@@ -25,6 +31,17 @@ class UsuariosController extends Controller
         $this->service_usuarios = $usuariosServices;
         $this->service_perfiles = $perfilesServices;
         $this->service_niveles = $nivelesServices;
+    }
+
+    /**
+     * Chequeo server-side del permiso, no solo ocultar el botón en el frontend —
+     * cualquier intento directo a estos endpoints sin el permiso se rechaza acá.
+     */
+    private function sinAcceso(Request $request)
+    {
+        $tienePermiso = $this->service_usuarios->tienePermiso(self::OPCION_USUARIOS, $request->user()->perfil)['permiso'] ?? false;
+
+        return $tienePermiso ? null : $this->error('No tienes permiso para gestionar usuarios', 403);
     }
 
     // GET /usuarios
@@ -170,6 +187,10 @@ class UsuariosController extends Controller
 
     public function agregarUsuario(RegistrarUsuarioRequest $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $data = $request->toUsuarioFormatCreate();
 
         // La tabla legacy requiere estos campos en algunos entornos; si el
@@ -197,6 +218,10 @@ class UsuariosController extends Controller
 
     public function actualizarUsuarios(ActualizarUsuarioRequest $request, $id)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $usuario_id = $id;
         $data = $request->toUsuarioFormatCreate();
 
@@ -225,6 +250,10 @@ class UsuariosController extends Controller
 
     public function actualizarEstadoUsuarios(Request $request)
     {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
         $ids = $request->input('ids', []);
         $estado = $request->input('estado', 'activo');
 

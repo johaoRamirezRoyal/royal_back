@@ -6,7 +6,6 @@ use App\Events\RequestEmailAdmission;
 use App\Mail\RequestEmail;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
-use App\Services\MailService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 

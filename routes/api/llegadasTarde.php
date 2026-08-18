@@ -19,12 +19,23 @@ Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
 /**
  * GET /api/llegadas-tarde
  * Query params:
- *   id_periodo_academico (int, opcional) — default: período académico activo
- *   id_alumno            (int, opcional) — filtrar por alumno
+ *   id_periodo_academico (int, opcional)    — default: período académico activo
+ *   id_alumno            (int, opcional)    — filtrar por alumno
+ *   fecha                (Y-m-d, opcional)  — filtrar por día exacto. Perfil Recepción
+ *                                              (33) lo ignora: siempre se fuerza hoy.
  * Cada registro trae total_llegadas_tarde_periodo: cuántas lleva ESE alumno en el
  * período consultado (no el total de todos los alumnos del período).
  */
 Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
+
+/**
+ * GET /api/llegadas-tarde/dashboard
+ * Query params:
+ *   id_periodo_academico (int, opcional) — default: período académico activo
+ * Resumen del período: totales, configuración vigente, top 10 estudiantes con más
+ * llegadas tarde, desglose por curso y por día (para gráficas).
+ */
+Route::get('/dashboard', [LlegadasTardeController::class, 'dashboardLlegadasTarde']);
 
 /**
  * DELETE /api/llegadas-tarde

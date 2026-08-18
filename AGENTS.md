@@ -96,6 +96,85 @@ use App\Http\Traits\HasAuthCookie;
 ```
 Usado en: `AuthController`, `AdmissionsController`.
 
+## Sistema de permisos (`cron_opciones` / `cron_permisos`)
+
+Tablas legacy manejadas directo por SQL (`DB::table(...)`, no Eloquent/seeders):
+- `cron_opciones` (`id`, `nombre`, `id_modulo`, `user_log`, `activo`, `fechareg`) — catálogo
+  de opciones/permisos (cada fila = acceso a un módulo, submódulo o acción).
+- `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, ...) — la matriz real: qué
+  `id_perfil` tiene otorgada cuál `id_opcion`.
+
+El chequeo real vive en `UsuariosServices::tienePermiso($opcion, $perfil): array{permiso: bool, error: bool}`
+(`SELECT ... FROM cron_permisos WHERE id_opcion=? AND id_perfil=? AND activo=1`). Lo
+expone `GET /api/usuarios/permiso?opt=&per=` (`UsuariosController::tienePermiso`) para
+que el frontend decida qué renderizar (`PermissionGate` / fail-closed — ver
+`docs/sistema-permisos.md` en el repo del frontend para el detalle de ese lado).
+
+**Ese chequeo NO se aplica solo — cada controller tiene que llamarlo.** No existe
+middleware global de permisos (revisar `bootstrap/app.php`: `JwtFromCookie`, `auth`,
+`system` son los únicos alias). Una auditoría (2026-08-18) encontró que de 32
+controllers, solo 2 verificaban permisos antes de ejecutar una acción — el resto,
+incluido `PermisosController` (el que administra los permisos mismos), dejaba que
+cualquier usuario autenticado hiciera lo que quisiera con un request directo,
+saltándose por completo lo que el frontend mostraba u ocultaba. Se corrigió ese día en
+`PermisosController`, `UsuariosController`, `LlegadasTardeController`/`ConfigController`,
+`GestionAcademicaController`, `EnfermeriaController`, `InventariosController`,
+`SalonesController`, `BibliotecaController`, `CategoriasController` — usarlos como
+referencia al crear un controller nuevo con acciones sensibles.
+
+Dos patrones según el caso (ver los controllers de arriba para ejemplos reales):
+
+**(a) Todo el controller detrás de una sola opción, sin rutas públicas mezcladas** — un
+chequeo único en el constructor:
+```php
+public function __construct(
+    private MiService $service,
+    UsuariosServices $usuariosService,
+    Request $request,
+) {
+    $tienePermiso = $usuariosService->tienePermiso(self::OPCION, $request->user()->perfil)['permiso'] ?? false;
+    if (!$tienePermiso) {
+        abort($this->error('No tienes permiso para esta acción', 403));
+    }
+}
+```
+Si el controller tiene alguna ruta pública mezclada (ej. `BibliotecaController::verImagenBiblioteca`,
+servida fuera de `auth:api`), el chequeo debe ser condicional a que exista usuario
+autenticado (`if ($usuario = $request->user()) { ... }`) — nunca asumas que
+`$request->user()` no es null.
+
+**(b) Métodos que necesitan opciones distintas** — helper `sinAcceso()` al inicio de
+cada método:
+```php
+private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
+{
+    $perfil = $request->user()->perfil;
+    foreach ($opciones as $opcion) {
+        if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
+            return null;
+        }
+    }
+    return $this->error('No tienes permiso para esta acción', 403);
+}
+```
+
+Reglas:
+- Antes de gatear un endpoint, revisa (grep en el frontend, `src/pages/`) qué otros
+  módulos lo consumen — un endpoint de lectura compartido (dropdowns, catálogos) debe
+  aceptar cualquiera de las opciones válidas (OR), no solo la del módulo "dueño".
+- Nunca confíes en un campo del body para "quién hizo esto" (`user_log`, `id_log`) si es
+  para auditoría/seguridad — usa `$request->user()->id_user`, no lo que mande el cliente.
+- Antes de dar por cerrado el cambio, confirma en BD quién tiene la opción hoy para no
+  bloquear a un perfil que ya debería tener acceso:
+  ```
+  php artisan tinker --execute="foreach (DB::table('cron_permisos as p')->join('perfiles as pf','pf.id_perfil','=','p.id_perfil')->where('p.id_opcion',N)->where('p.activo',1)->pluck('pf.nombre') as \$n) echo \$n . PHP_EOL;"
+  ```
+- Para crear una opción nueva sigue el patrón de
+  `database/migrations/2026_08_18_100000_seed_opcion_llegadas_tarde_recepcion.php`: un
+  `up()` con `insertGetId` en `cron_opciones` + inserts iniciales en `cron_permisos`, y un
+  `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
+  de hardcodear el número en el frontend.
+
 ## Convenciones de código
 
 ### Naming de directorios

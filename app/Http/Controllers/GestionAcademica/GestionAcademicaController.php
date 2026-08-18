@@ -11,13 +11,31 @@ use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\GestionAcademica\GestionAcademicaService;
+use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 
 class GestionAcademicaController extends Controller
 {
+    // Opción "Gestión Académica" (99) en el frontend. Se chequea una sola vez acá en el
+    // constructor (en vez de repetirlo en cada uno de los ~20 métodos del controller)
+    // porque ningún endpoint de este controller —ni siquiera los de solo lectura— se
+    // consume fuera de las páginas que ya gatea esta misma opción (asistencias-clases,
+    // configuración académica). Antes de este chequeo, cualquier autenticado podía borrar
+    // horarios de clase, reasignar carga docente o falsificar asistencia de estudiantes
+    // sin tener acceso al módulo.
+    private const OPCION_GESTION_ACADEMICA = 99;
+
     public function __construct(
-        private GestionAcademicaService $service
-    ) {}
+        private GestionAcademicaService $service,
+        UsuariosServices $usuariosService,
+        Request $request,
+    ) {
+        $tienePermiso = $usuariosService->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
+
+        if (!$tienePermiso) {
+            abort($this->error('No tienes permiso para acceder a Gestión Académica', 403));
+        }
+    }
 
     public function listarAsignaturas(Request $request)
     {
