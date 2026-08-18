@@ -18,10 +18,12 @@ class LlegadasTarde extends Model
         'fecha',
         'hora',
         'limite_alcanzado',
+        'enviado',
     ];
 
     protected $casts = [
         'limite_alcanzado' => 'boolean',
+        'enviado' => 'boolean',
     ];
 
     public function alumno(){

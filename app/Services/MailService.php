@@ -13,12 +13,14 @@ class MailService
      * Descarta direcciones que no cumplen RFC 2822 antes de enviar.
      * Un solo correo inválido en el lote hace que Mail::to()->send() lance
      * excepción para TODO el envío, bloqueando también a los destinatarios válidos.
+     * FILTER_FLAG_EMAIL_UNICODE (RFC 6531/SMTPUTF8) permite tildes/ñ en la parte local
+     * (ej. "alfredo.cañas@..."), que el validador ASCII-only por defecto rechaza.
      */
     private function filtrarCorreosValidos(array $recipients): array
     {
         $validos = array_values(array_filter(
             $recipients,
-            fn ($email) => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+            fn ($email) => is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL, FILTER_FLAG_EMAIL_UNICODE) !== false
         ));
 
         $invalidos = array_diff($recipients, $validos);

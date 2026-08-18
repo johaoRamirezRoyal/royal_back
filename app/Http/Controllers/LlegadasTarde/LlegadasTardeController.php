@@ -78,4 +78,13 @@ class LlegadasTardeController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    // Reenviar correo es una acción operativa (como registrar la llegada tarde), no
+    // administrativa: no requiere acceso completo, cualquiera con acceso al módulo
+    // (99 o 101) puede reintentar la notificación.
+    public function reenviarCorreo(int $id){
+        $response = $this->llegadas_tarde->reenviarCorreo($id);
+
+        return $this->apiResponse($response);
+    }
 }

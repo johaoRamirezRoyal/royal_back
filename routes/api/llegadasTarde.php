@@ -21,8 +21,9 @@ Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
  * Query params:
  *   id_periodo_academico (int, opcional)    — default: período académico activo
  *   id_alumno            (int, opcional)    — filtrar por alumno
- *   fecha                (Y-m-d, opcional)  — filtrar por día exacto. Perfil Recepción
- *                                              (33) lo ignora: siempre se fuerza hoy.
+ *   fecha                (Y-m-d, opcional)  — filtrar por día exacto. Sin la opción 99
+ *                                              (acceso completo) se ignora: siempre se
+ *                                              fuerza hoy.
  * Cada registro trae total_llegadas_tarde_periodo: cuántas lleva ESE alumno en el
  * período consultado (no el total de todos los alumnos del período).
  */
@@ -46,6 +47,14 @@ Route::get('/dashboard', [LlegadasTardeController::class, 'dashboardLlegadasTard
  */
 Route::delete('/', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
 Route::delete('/{id}', [LlegadasTardeController::class, 'eliminarLlegadaTarde']);
+
+/**
+ * POST /api/llegadas-tarde/{id}/reenviar-correo
+ * Reintenta la notificación (al estudiante y a sus acudientes) de una llegada tarde ya
+ * registrada y actualiza `enviado` según el resultado. No repite el aviso a
+ * Vicerrectoría aunque el registro tenga `limite_alcanzado`.
+ */
+Route::post('/{id}/reenviar-correo', [LlegadasTardeController::class, 'reenviarCorreo']);
 
 /**
  * Configuración estándar (hora límite y cantidad límite de llegadas tarde).
