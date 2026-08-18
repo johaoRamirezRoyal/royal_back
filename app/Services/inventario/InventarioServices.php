@@ -145,8 +145,14 @@ class InventarioServices
                     'categoria:id,nombre'
                 ])
                 ->when($search, function ($query, $search) {
+                    // El frontend usa este mismo filtro `s` tanto para la búsqueda libre por
+                    // descripción como para "buscar por código" (findItemByCodigo, escaneo/
+                    // ingreso manual del código físico del ítem) — sin el OR sobre
+                    // `inventario.codigo`, un código válido nunca hace match (la descripción
+                    // no lo contiene) y siempre responde "no se encontró", aunque el ítem exista.
                     $query->where(function ($q) use ($search) {
-                        $q->where('inventario.descripcion', 'like', "%{$search}%");
+                        $q->where('inventario.descripcion', 'like', "%{$search}%")
+                            ->orWhere('inventario.codigo', 'like', "%{$search}%");
                     });
                 })->when($datos['id_area'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.id_area', $datos['id_area']);
