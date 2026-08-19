@@ -42,7 +42,7 @@ class TipoDocumentoService extends Service
     }
 
     /**
-     * Obtener un tipo d edocumento en base al ID
+     * Obtener un tipo de documento en base al ID
      * @param int $id
      * @return array{data: array, error: bool, message: string}
      */
