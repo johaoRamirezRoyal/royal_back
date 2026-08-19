@@ -24,15 +24,26 @@ class GestionAcademicaController extends Controller
     // horarios de clase, reasignar carga docente o falsificar asistencia de estudiantes
     // sin tener acceso al módulo.
     private const OPCION_GESTION_ACADEMICA = 99;
+    // Vicerrector/Directivo Docente: solo lectura del dashboard de métricas, no del
+    // resto del controller (ver migración 2026_08_19_100000_seed_opcion_metricas_asistencia_academica).
+    private const OPCION_METRICAS_ASISTENCIA = 102;
 
     public function __construct(
         private GestionAcademicaService $service,
         UsuariosServices $usuariosService,
         Request $request,
     ) {
-        $tienePermiso = $usuariosService->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
+        $tieneAccesoCompleto = $usuariosService->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
 
-        if (!$tienePermiso) {
+        if ($tieneAccesoCompleto) {
+            return;
+        }
+
+        $esAccionMetricas = $request->route()?->getActionMethod() === 'verMetricasAsistencia';
+        $tieneAccesoMetricas = $esAccionMetricas
+            && ($usuariosService->tienePermiso(self::OPCION_METRICAS_ASISTENCIA, $request->user()->perfil)['permiso'] ?? false);
+
+        if (!$tieneAccesoMetricas) {
             abort($this->error('No tienes permiso para acceder a Gestión Académica', 403));
         }
     }
@@ -239,6 +250,15 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->asistenciaEstudiante()->agregarAsistenciaEstudiantes(
             $validated['estudiantes'],
             $validated['id_asistencia_clase'],
+        ));
+    }
+
+    public function verMetricasAsistencia(Request $request)
+    {
+        return $this->apiResponse($this->service->asistenciaEstudiante()->metricasPorCurso(
+            fecha_inicio: $request->input('fecha_inicio'),
+            fecha_fin:    $request->input('fecha_fin'),
+            id_curso:     $request->input('id_curso'),
         ));
     }
 
