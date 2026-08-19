@@ -1,0 +1,270 @@
+### ============================================
+### PROVEEDORES — REST Client
+### ============================================
+### Todos los endpoints requieren token JWT (cookie `token`) con system:general.
+### Primero haz login para obtener el token.
+###
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### { "user": "1193377218", "pass": "1193377218" }
+###
+### Base: http://localhost:8000/api/proveedores
+### ============================================
+
+### ============================================
+### LISTADO
+### ============================================
+
+### 1. LISTAR proveedores (lectura compartida, sin gate)
+GET http://localhost:8000/api/proveedores
+
+### 2. LISTAR con filtro por nombre (si se agrega después)
+GET http://localhost:8000/api/proveedores?search=comercial
+
+### ============================================
+### DETALLE
+### ============================================
+
+### 3. VER proveedor por id (documentos + contactos + bancos) — requiere opción 61
+GET http://localhost:8000/api/proveedores/2
+
+### 4. VER proveedor inexistente (debe fallar 404)
+GET http://localhost:8000/api/proveedores/999999
+
+### ============================================
+### CREAR
+### ============================================
+
+### 5. CREAR proveedor — exitoso (usuario perfil 17 + detalle)
+POST http://localhost:8000/api/proveedores
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "TECNOLOGIA ANDINA S.A.S.",
+    "identificacion": "NIT",
+    "num_identificacion": "901234567-1",
+    "direccion": "Cra 15 # 90-20",
+    "ciudad": "BOGOTA",
+    "departamento": "CUNDINAMARCA",
+    "pais": "COLOMBIA",
+    "telefono": "6015558899",
+    "correo": "ventas@tecnologiaandina.com",
+    "fecha_ingreso": "2026-08-19",
+    "tipo": "Bien y Servicio",
+    "tiempo_entrega": "15",
+    "garantia": "12",
+    "plazo_pago": "30",
+    "detalle_producto": "Computadores, impresoras, suministros",
+    "nom_representante": "Ana Torres",
+    "identificacion_representante": "1012345678",
+    "correo_representante": "atorres@tecnologiaandina.com",
+    "telefono_representante": "3101234567",
+    "regimen_proveedor": "Comun",
+    "contribuyente_proveedor": "Si",
+    "autoretenedor_proveedor": "No",
+    "comercio_proveedor": "Si",
+    "actividad_proveedor": "4659",
+    "tarifa_proveedor": "19",
+    "comercial_nombre": "Carlos Ruiz",
+    "identificacion_comercial": "1022334455",
+    "correo_comercial": "cruiz@tecnologiaandina.com",
+    "telefono_comercial": "3119876543",
+    "direccion_comercial": "Cra 15 # 90-20 OF 301",
+    "ciudad_comercial": "BOGOTA",
+    "departamento_comercial": "CUNDINAMARCA",
+    "user": "901234567-1",
+    "pass": "secret123"
+}
+
+### 6. CREAR proveedor — sin nombre ni pass (debe fallar 422)
+POST http://localhost:8000/api/proveedores
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ciudad": "MEDELLIN"
+}
+
+### ============================================
+### ACTUALIZAR
+### ============================================
+
+### 7. ACTUALIZAR proveedor — cambia datos generales y de representante
+PUT http://localhost:8000/api/proveedores/2
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "COMERCIALIZADORA R & M LIMITADA",
+    "identificacion": "Nit",
+    "num_identificacion": "802019082-7",
+    "direccion": "CARRERA 43 N. 50-12 LOCAL 125",
+    "ciudad": "BARRANQUILLA",
+    "departamento": "ATLANTICO",
+    "pais": "COLOMBIA",
+    "telefono": "3796380",
+    "correo": "compucomercial@metrotel.net.co",
+    "tipo": "Bien y Servicio",
+    "tiempo_entrega": "20",
+    "garantia": "6",
+    "plazo_pago": "1",
+    "detalle_producto": "Equipos tecnologicos, computadores, impresoras",
+    "nom_representante": "Mercedes Arrazola",
+    "identificacion_representante": "36561831",
+    "correo_representante": "mmercedes@metrotel.net.co",
+    "telefono_representante": "3126879186",
+    "regimen_proveedor": "Simplificado",
+    "contribuyente_proveedor": "Si",
+    "autoretenedor_proveedor": "Si",
+    "comercio_proveedor": "Si",
+    "actividad_proveedor": "4741",
+    "tarifa_proveedor": "9,60",
+    "comercial_nombre": "Yildre Nieto",
+    "identificacion_comercial": "",
+    "correo_comercial": "",
+    "telefono_comercial": "3003006715",
+    "direccion_comercial": "",
+    "ciudad_comercial": "",
+    "departamento_comercial": "",
+    "user": "802019082-7",
+    "pass": "nuevaclave123"
+}
+
+### 8. ACTUALIZAR proveedor inexistente (debe fallar 404)
+PUT http://localhost:8000/api/proveedores/999999
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "EMPRESA INEXISTENTE"
+}
+
+### ============================================
+### ESTADO
+### ============================================
+
+### 9. CAMBIAR estado a inactivo
+PUT http://localhost:8000/api/proveedores/2/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "estado": "inactivo"
+}
+
+### 10. CAMBIAR estado a activo
+PUT http://localhost:8000/api/proveedores/2/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "estado": "activo"
+}
+
+### 11. CAMBIAR estado inválido (debe fallar 422)
+PUT http://localhost:8000/api/proveedores/2/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "estado": "pendiente"
+}
+
+### ============================================
+### TIPOS DE DOCUMENTO
+### ============================================
+
+### 12. LISTAR tipos de documento del proveedor
+GET http://localhost:8000/api/proveedores/tipos-documento
+
+### ============================================
+### DOCUMENTOS DEL PROVEEDOR
+### ============================================
+
+### 13. LISTAR documentos del proveedor (con URL del archivo)
+GET http://localhost:8000/api/proveedores/2/documentos
+
+### 14. SUBIR documento (multipart) — RUT, activo
+POST http://localhost:8000/api/proveedores/2/documentos
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="tipo_documento"
+
+4
+--boundary123
+Content-Disposition: form-data; name="activo"
+
+1
+--boundary123
+Content-Disposition: form-data; name="archivo"; filename="rut.pdf"
+Content-Type: application/pdf
+
+< ./docs/rut.pdf
+--boundary123--
+
+### 15. SUBIR documento — sin archivo (debe fallar 422)
+POST http://localhost:8000/api/proveedores/2/documentos
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="tipo_documento"
+
+4
+--boundary123--
+
+### 16. ACTUALIZAR documento — cambia tipo a Camara de comercio (5) y sube otro archivo
+### (multipart con POST: PHP no parsea campos multipart en PUT)
+POST http://localhost:8000/api/proveedores/documentos/3
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="tipo_documento"
+
+5
+--boundary123
+Content-Disposition: form-data; name="activo"
+
+1
+--boundary123
+Content-Disposition: form-data; name="archivo"; filename="camara.pdf"
+Content-Type: application/pdf
+
+< ./docs/camara.pdf
+--boundary123--
+
+### 17. ACTUALIZAR documento — solo estado inactivo (sin archivo)
+PUT http://localhost:8000/api/proveedores/documentos/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "tipo_documento": 4,
+    "activo": 0
+}
+
+### 18. CAMBIAR estado del documento a inactivo
+PUT http://localhost:8000/api/proveedores/documentos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 0
+}
+
+### 19. CAMBIAR estado del documento a activo
+PUT http://localhost:8000/api/proveedores/documentos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 1
+}
+
+### 20. ELIMINAR documento (borra archivo en storage y fila)
+DELETE http://localhost:8000/api/proveedores/documentos/1
