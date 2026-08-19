@@ -21,6 +21,25 @@ class ReservaController extends Controller
         );
     }
 
+    // Igual que crearReserva/listarReservas: acceso general, sin opción de permisos —
+    // reservar (y consultar disponibilidad antes de reservar) es para cualquier
+    // autenticado, no solo quien administra el catálogo de salones (opción 40).
+    public function disponibilidadPortatil(Request $request)
+    {
+        $fecha = $request->input('fecha');
+        $hora = $request->input('hora');
+
+        if (!$fecha || !strtotime($fecha) || !$hora) {
+            return $this->error('Debe indicar fecha (Y-m-d) y hora.', 422);
+        }
+
+        return $this->apiResponse([
+            'error' => false,
+            'message' => 'Disponibilidad obtenida correctamente.',
+            'data' => $this->reservasServices->validarDisponibilidadPortatil($fecha, (int) $hora),
+        ]);
+    }
+
     public function listarReservas(Request $request)
     {
         $response = $this->reservasServices->mostrarReservas(
