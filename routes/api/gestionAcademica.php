@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Route;
     "nombre": "Matemáticas",
     "codigo": "MAT001",
     "abreviatura": "MAT",
-    "estado": 1 //Por defecto trae todos
+    "estado": 1, //Por defecto trae todos
+    "id_area": 1 //Filtra las asignaturas de esa área académica
 }
  */
 Route::get('/asignaturas', [GestionAcademicaController::class, 'listarAsignaturas']);
@@ -24,12 +25,29 @@ Route::get('/asignaturas/{id}', [GestionAcademicaController::class, 'obtenerAsig
     "codigo": "EDF001",
     "abreviatura": "EDF",
     "color": "#8B5CF6",
+    "id_area": 1, //Opcional — ver /areas-academicas
     "activo": true
 }
  */
 Route::post('/asignaturas', [GestionAcademicaController::class, 'crearAsignatura']);
 Route::put('/asignaturas', [GestionAcademicaController::class, 'actualizarAsignatura']);
 Route::delete('/asignaturas', [GestionAcademicaController::class, 'eliminarAsignatura']);
+
+/**
+ * Áreas académicas (agrupan asignaturas — ver id_area arriba).
+ * JSON para filtrar (opcionales): { "nombre": "Ciencias", "estado": 1 }
+ */
+Route::get('/areas-academicas', [GestionAcademicaController::class, 'listarAreasAcademicas']);
+
+Route::get('/areas-academicas/{id}', [GestionAcademicaController::class, 'obtenerAreaAcademica']);
+
+/**
+ * JSON para crear/actualizar área académica: { "nombre": "Ciencias Naturales", "activo": true }
+ * (actualizar además requiere "id" en el body, igual que /asignaturas)
+ */
+Route::post('/areas-academicas', [GestionAcademicaController::class, 'crearAreaAcademica']);
+Route::put('/areas-academicas', [GestionAcademicaController::class, 'actualizarAreaAcademica']);
+Route::delete('/areas-academicas', [GestionAcademicaController::class, 'eliminarAreaAcademica']);
 
 /**
  * JSON para listar las asignaturas de un docente o de todos los docentes, se puede filtrar

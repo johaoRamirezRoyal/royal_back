@@ -9,10 +9,11 @@ use Exception;
 class Asignatura extends Service
 {
 
-    public function mostrarAsignaturasFiltradas(?string $nombre, ?string $codigo, ?string $abreviatura, ?int $estado)
+    public function mostrarAsignaturasFiltradas(?string $nombre, ?string $codigo, ?string $abreviatura, ?int $estado, ?int $idArea = null)
     {
         try {
             $asignaturas = AsignaturaModel::query()
+                ->with('area:id,nombre')
                 ->when($nombre, function ($query) use ($nombre) {
                     $query->where('nombre', 'LIKE', "%$nombre%");
                 })
@@ -24,6 +25,9 @@ class Asignatura extends Service
                 })
                 ->when($estado !== null, function ($query) use ($estado) {
                     $query->where('activo', $estado);
+                })
+                ->when($idArea, function ($query) use ($idArea) {
+                    $query->where('id_area', $idArea);
                 })->get();
 
             if ($asignaturas->isEmpty()) {
@@ -80,7 +84,7 @@ class Asignatura extends Service
     public function obtenerPorId(int $id): array
     {
         try {
-            $item = AsignaturaModel::find($id);
+            $item = AsignaturaModel::with('area:id,nombre')->find($id);
 
             if (!$item) {
                 return ['error' => true, 'message' => "Asignatura con ID $id no encontrada.", 'data' => []];
@@ -101,7 +105,7 @@ class Asignatura extends Service
             return [
                 'error' => false,
                 'message' => 'Asignatura creada.',
-                'data' => $item->toArray()
+                'data' => $item->load('area:id,nombre')->toArray()
             ];
         } catch (Exception $e) {
 
@@ -133,7 +137,7 @@ class Asignatura extends Service
             return [
                 'error' => false,
                 'message' => 'Asignatura actualizada.',
-                'data' => $item->fresh()->toArray()
+                'data' => $item->fresh('area')->toArray()
             ];
         } catch (Exception $e) {
 
