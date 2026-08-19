@@ -255,3 +255,201 @@ Content-Type: application/pdf
 
 < ../storage/app/private/cotizacion.pdf
 --boundary123--
+
+### ============================================
+### APLAZAR / RECHAZAR COMPRA (requiere opcion 60)
+### Afectan la tabla `solicitudes` (final). Estado se mantiene en 1:
+###   aplazada  -> fecha_aplazado + activo=10
+###   rechazada -> motivo + observacion + activo=0 (limpia fecha_aplazado)
+### ============================================
+
+### 22. APLAZAR compra — exitoso
+PUT http://localhost:8000/api/solicitudes/418/aplazar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "fecha_aplazado": "2026-09-15"
+}
+
+### 23. APLAZAR sin fecha (debe fallar 422)
+PUT http://localhost:8000/api/solicitudes/1/aplazar
+Content-Type: application/json
+Accept: application/json
+
+{}
+
+### 24. RECHAZAR compra — con motivo y observacion
+PUT http://localhost:8000/api/solicitudes/418/rechazar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "motivo": "Proveedor no cumple las condiciones solicitadas",
+    "observacion": "Se cancela por cambio en junta administrativa"
+}
+
+### 25. RECHAZAR sin motivo (debe fallar 422)
+PUT http://localhost:8000/api/solicitudes/1/rechazar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "observacion": "Sin motivo"
+}
+
+### 26. APLAZAR solicitud inexistente (debe fallar 404)
+PUT http://localhost:8000/api/solicitudes/999999/aplazar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "fecha_aplazado": "2026-09-15"
+}
+
+### ============================================
+### VERIFICAR ENTREGA RECIBIDA (requiere opcion 60)
+### Valida en solicitud_verificacion lo recibido y adjunta la factura.
+### Decisiones: cerrar -> estado 2 (cerrada), devolucion -> estado 3 (devolución).
+### Multipart: rubros Si/No + observaciones + factura_doc + decision
+### ============================================
+
+### 27. VERIFICAR entrega — cerrar compra (exitoso)
+POST http://localhost:8000/api/solicitudes/1/verificar-entrega
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="cantidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="observacion_cant"
+
+Cantidad conforme a lo solicitado
+--boundary123
+Content-Disposition: form-data; name="calidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="observacion_calidad"
+
+--boundary123
+Content-Disposition: form-data; name="precios"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="observacion_precios"
+
+--boundary123
+Content-Disposition: form-data; name="plazos"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="observacion_plazo"
+
+--boundary123
+Content-Disposition: form-data; name="decision"
+
+cerrar
+--boundary123
+Content-Disposition: form-data; name="factura_doc"; filename="factura.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/factura.pdf
+--boundary123--
+
+### 28. VERIFICAR entrega — activar devolucion (exitoso)
+POST http://localhost:8000/api/solicitudes/1/verificar-entrega
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="cantidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="calidad"
+
+No
+--boundary123
+Content-Disposition: form-data; name="observacion_calidad"
+
+Dos unidades llegan defectuosas
+--boundary123
+Content-Disposition: form-data; name="precios"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="plazos"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="decision"
+
+devolucion
+--boundary123
+Content-Disposition: form-data; name="factura_doc"; filename="factura.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/factura.pdf
+--boundary123--
+
+### 29. VERIFICAR sin factura (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/1/verificar-entrega
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="cantidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="calidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="precios"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="plazos"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="decision"
+
+cerrar
+--boundary123--
+
+### 30. VERIFICAR con decision invalida (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/1/verificar-entrega
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="cantidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="calidad"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="precios"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="plazos"
+
+Si
+--boundary123
+Content-Disposition: form-data; name="decision"
+
+ignorar
+--boundary123
+Content-Disposition: form-data; name="factura_doc"; filename="factura.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/factura.pdf
+--boundary123--
