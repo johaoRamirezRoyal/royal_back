@@ -15,7 +15,11 @@ class AsignaturaRequest extends FormRequest
     public function rules(): array
     {
         $isRequired = $this->isMethod("POST") ? "required" : "sometimes";
-        $id = $this->route('id');
+        // El id viaja en el body, no en la ruta (PUT /asignaturas no tiene {id} — ver
+        // GestionAcademicaController::actualizarAsignatura). $this->route('id') siempre
+        // daba null acá, así que ->ignore() nunca excluía la propia fila y editar una
+        // asignatura sin cambiar su código fallaba con "código ya está en uso".
+        $id = $this->input('id');
 
         return [
             'nombre' => [$isRequired, 'string', 'max:255'],
