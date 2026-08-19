@@ -4,18 +4,14 @@ namespace App\Models\GestionAcademica;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Asignatura extends Model
+class AreaAcademica extends Model
 {
-    protected $table = 'academico_asignatura';
+    protected $table = 'academico_area';
 
     protected $primaryKey = 'id';
 
     protected $fillable = [
         'nombre',
-        'codigo',
-        'abreviatura',
-        'color',
-        'id_area',
         'activo',
     ];
 
@@ -23,8 +19,8 @@ class Asignatura extends Model
         'activo' => 1,
     ];
 
-    public function area()
+    public function asignaturas()
     {
-        return $this->belongsTo(AreaAcademica::class, 'id_area');
+        return $this->hasMany(Asignatura::class, 'id_area');
     }
 }

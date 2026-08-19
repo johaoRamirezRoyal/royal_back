@@ -4,6 +4,7 @@ namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GestionAcademica\AsignaturaRequest;
+use App\Http\Requests\GestionAcademica\AreaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
@@ -54,10 +55,52 @@ class GestionAcademicaController extends Controller
         $codigo = $request->input('codigo', null);
         $abreviatura = $request->input('abreviatura', null);
         $estado = $request->input('estado', null);
+        $idArea = $request->input('id_area', null);
 
-        $response = $this->service->asignatura()->mostrarAsignaturasFiltradas($nombre, $codigo, $abreviatura, $estado);
+        $response = $this->service->asignatura()->mostrarAsignaturasFiltradas($nombre, $codigo, $abreviatura, $estado, $idArea);
 
         return $this->apiResponse($response);
+    }
+
+    public function listarAreasAcademicas(Request $request)
+    {
+        $nombre = $request->input('nombre', null);
+        $estado = $request->input('estado', null);
+
+        $response = $this->service->areaAcademica()->mostrarAreasFiltradas($nombre, $estado);
+
+        return $this->apiResponse($response);
+    }
+
+    public function obtenerAreaAcademica(int $id)
+    {
+        return $this->apiResponse($this->service->areaAcademica()->obtenerPorId($id));
+    }
+
+    public function crearAreaAcademica(AreaAcademicaRequest $request)
+    {
+        $body = $request->validated();
+
+        $response = $this->service->areaAcademica()->crear($body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function actualizarAreaAcademica(AreaAcademicaRequest $request)
+    {
+        $body = $request->validated();
+        $id = $request->input('id');
+
+        $response = $this->service->areaAcademica()->actualizar($id, $body);
+
+        return $this->apiResponse($response);
+    }
+
+    public function eliminarAreaAcademica(Request $request)
+    {
+        $ids = $request->input('ids', []);
+
+        return $this->apiResponse($this->service->areaAcademica()->eliminar($ids));
     }
 
     public function obtenerAsignatura(int $id)

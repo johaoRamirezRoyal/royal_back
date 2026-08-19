@@ -25,6 +25,7 @@ class AsignaturaRequest extends FormRequest
             ],
             'abreviatura' => [$isRequired, 'string', 'max:20'],
             'color' => [$isRequired, 'string', 'max:20'],
+            'id_area' => ['nullable', 'integer', Rule::exists('academico_area', 'id')],
             'activo' => ['nullable', 'boolean'],
         ];
     }
