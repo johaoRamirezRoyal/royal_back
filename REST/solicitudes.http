@@ -1,0 +1,257 @@
+### ============================================
+### SOLICITUDES (compra) — REST Client
+### ============================================
+### Todos los endpoints requieren token JWT (cookie `token`) con system:general.
+### Primero haz login para obtener el token.
+###
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### { "user": "1193377218", "pass": "1193377218" }
+###
+### Base: http://localhost:8000/api/solicitudes
+### ============================================
+
+### ============================================
+### CREAR
+### ============================================
+
+### 1. CREAR solicitud — exitoso (cualquier empleado autenticado)
+POST http://localhost:8000/api/solicitudes
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_area": 1,
+    "justificacion": "Se requiere papeleria para el area de administracion",
+    "fecha_solicitud": "2026-08-19",
+    "iva": "19",
+    "productos": [
+        {
+            "producto": "Resma de papel carta",
+            "cantidad": "10",
+            "precio": "12000",
+            "iva": "19"
+        },
+        {
+            "producto": "Lapiceros azules",
+            "cantidad": "50",
+            "precio": "1500",
+            "iva": null
+        }
+    ]
+}
+
+### 2. CREAR solicitud — sin justificacion ni productos (debe fallar 422)
+POST http://localhost:8000/api/solicitudes
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_area": 1
+}
+
+### 3. CREAR solicitud — con area inexistente (debe fallar 422)
+POST http://localhost:8000/api/solicitudes
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_area": 999999,
+    "justificacion": "Prueba",
+    "productos": [
+        {
+            "producto": "Resma",
+            "cantidad": "1"
+        }
+    ]
+}
+
+### ============================================
+### LISTADO (requiere opcion 60, paginado)
+### ============================================
+
+### 4. LISTAR solicitudes paginadas
+GET http://localhost:8000/api/solicitudes?per-page=10
+
+### 5. FILTRAR por usuario
+GET http://localhost:8000/api/solicitudes?id_user=11&per-page=10
+
+### 6. FILTRAR por area
+GET http://localhost:8000/api/solicitudes?id_area=85&per-page=10
+
+### 7. FILTRAR por rango de fechas
+GET http://localhost:8000/api/solicitudes?fecha_desde=2026-01-01&fecha_hasta=2026-12-31&per-page=10
+
+### 8. FILTRAR por estado (0 = pendiente)
+GET http://localhost:8000/api/solicitudes?estado=0&per-page=10
+
+### 9. BUSCAR (nombre/apellido de usuario, documento, id de usuario, id de solicitud o nombre del producto)
+GET http://localhost:8000/api/solicitudes?s=Resma&per-page=10
+
+### 10. BUSCAR por id de solicitud
+GET http://localhost:8000/api/solicitudes?s=100&per-page=10
+
+### 11. VER detalle de una solicitud (con productos y usuario)
+GET http://localhost:8000/api/solicitudes/1
+
+### 12. VER solicitud inexistente (debe fallar 404)
+GET http://localhost:8000/api/solicitudes/999999
+
+### ============================================
+### VERIFICAR (requiere opcion 60)
+### Estados: 0 pendiente, 1 aprobada, 2 devuelta, 3 rechazada
+### ============================================
+
+### 13. APROBAR solicitud — exitoso (crea/actualiza solicitud_verificacion_inicial) > devolver, rechazar, aprobar
+POST http://localhost:8000/api/solicitudes/1/verificar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cantidad": "Si",
+    "observacion_cant": "",
+    "calidad": "Si",
+    "observacion_calidad": "",
+    "precios": "Si",
+    "observacion_precios": "",
+    "plazos": "Si",
+    "observacion_plazo": "",
+    "decision": "aprobar", 
+    "observacion": ""
+}
+
+### 14. DEVOLVER solicitud — con observaciones por rubro
+POST http://localhost:8000/api/solicitudes/1/verificar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cantidad": "Si",
+    "observacion_cant": "Cantidad acorde",
+    "calidad": "No",
+    "observacion_calidad": "Algunos articulos con defectos de fabrica",
+    "precios": "Si",
+    "observacion_precios": "",
+    "plazos": "No",
+    "observacion_plazo": "Plazos muy extensos",
+    "decision": "devolver",
+    "observacion": "Devolver para ajustar calidad y plazos"
+}
+
+### 15. RECHAZAR solicitud
+POST http://localhost:8000/api/solicitudes/1/verificar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cantidad": "No",
+    "observacion_cant": "No cubre la cantidad solicitada",
+    "calidad": "No",
+    "observacion_calidad": "",
+    "precios": "No",
+    "observacion_precios": "Precios fuera del presupuesto",
+    "plazos": "No",
+    "observacion_plazo": "",
+    "decision": "rechazar",
+    "observacion": "Rechazada por incumplimiento de requisitos"
+}
+
+### 16. VERIFICAR con decision invalida (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/1/verificar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cantidad": "Si",
+    "calidad": "Si",
+    "precios": "Si",
+    "plazos": "Si",
+    "decision": "ignorar"
+}
+
+### 17. VERIFICAR solicitud inexistente (debe fallar 404)
+POST http://localhost:8000/api/solicitudes/999999/verificar
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cantidad": "Si",
+    "calidad": "Si",
+    "precios": "Si",
+    "plazos": "Si",
+    "decision": "aprobar"
+}
+
+### ============================================
+### ASIGNAR PROVEEDOR (requiere opcion 60)
+### Convierte una solicitud inicial APROBADA (estado 1) a la tabla solicitudes,
+### copia sus productos, asigna proveedor/iva y adjunta la cotizacion.
+### La inicial pasa a estado 4 (convertida).
+### Multipart: id_proveedor, iva (opcional), cotizacion_doc (archivo)
+### ============================================
+
+### 18. ASIGNAR proveedor — exitoso (multipart)
+# Antes: la solicitud debe estar aprobada (usa el caso 13 para aprobar la #1)
+POST http://localhost:8000/api/solicitudes/1/asignar-proveedor
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="id_proveedor"
+
+292
+--boundary123
+Content-Disposition: form-data; name="iva"
+
+19
+--boundary123
+Content-Disposition: form-data; name="cotizacion_doc"; filename="cotizacion.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/cotizacion.pdf
+--boundary123--
+
+### 19. ASIGNAR sin archivo de cotizacion (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/1/asignar-proveedor
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="id_proveedor"
+
+292
+--boundary123--
+
+### 20. ASIGNAR con proveedor inexistente (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/1/asignar-proveedor
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="id_proveedor"
+
+999999
+--boundary123
+Content-Disposition: form-data; name="cotizacion_doc"; filename="cotizacion.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/cotizacion.pdf
+--boundary123--
+
+### 21. ASIGNAR a una solicitud no aprobada (debe fallar 422)
+# Requiere una solicitud que no esté en estado 1
+POST http://localhost:8000/api/solicitudes/2/asignar-proveedor
+Content-Type: multipart/form-data; boundary=boundary123
+Accept: application/json
+
+--boundary123
+Content-Disposition: form-data; name="id_proveedor"
+
+292
+--boundary123
+Content-Disposition: form-data; name="cotizacion_doc"; filename="cotizacion.pdf"
+Content-Type: application/pdf
+
+< ../storage/app/private/cotizacion.pdf
+--boundary123--
