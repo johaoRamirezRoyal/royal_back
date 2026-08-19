@@ -616,8 +616,16 @@ class BibliotecaServices extends Service
     public function verificarEjemplarBiblioteca(string $codigo): array
     {
         try {
+            // 'prestamos' (con el usuario que lo tiene) se carga siempre, no solo para el
+            // flujo de préstamo — DevolverLibroModal (frontend) reusa este mismo endpoint
+            // de solo lectura para mostrar a quién se le devuelve antes de confirmar, en
+            // vez de duplicar la consulta en un endpoint aparte.
             $ejemplar = Ejemplares::where('codigo', $codigo)
-                ->with('libro:id,titulo,autor,editorial,foto')
+                ->with([
+                    'libro:id,titulo,autor,editorial,foto',
+                    'prestamos' => fn($q) => $q->whereNull('fecha_devuelto')
+                        ->with('usuario:id_user,nombre,apellido,documento,correo'),
+                ])
                 ->first();
 
             if (!$ejemplar) {
@@ -627,6 +635,8 @@ class BibliotecaServices extends Service
                     'data' => ['existe' => false],
                 ];
             }
+
+            $ejemplar->setAttribute('prestamo_activo', $ejemplar->prestamos->first());
 
             return [
                 'error' => false,

@@ -21,7 +21,15 @@ class ReservasServices extends Service
         protected PrestamosService $prestamosService
     ) {}
 
-    private function validarDisponibilidadPortatil(string $fecha, int $hora): array
+    /**
+     * Los portátiles no son un recurso del salón (no hay columna "cantidad de portátiles"
+     * en `salones`): son un pool de inventario compartido por todo el colegio
+     * (Inventario con descripcion LIKE '%PORTATIL%'), reservable para cualquier salón.
+     * La disponibilidad se calcula por franja fecha+hora, no por salón. Público (antes
+     * privado) para que el frontend pueda consultarla antes de enviar la reserva, en vez
+     * de enterarse del choque recién al hacer submit.
+     */
+    public function validarDisponibilidadPortatil(string $fecha, int $hora): array
     {
         $total = Inventario::where('descripcion', 'like', '%PORTATIL%')
             ->where('activo', 1)
