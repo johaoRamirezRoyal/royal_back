@@ -6,6 +6,7 @@ use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProductoInicial;
+use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacion;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacionInicial;
 use App\Services\FileStorageService;
 use Exception;
@@ -21,6 +22,11 @@ class SolicitudesServices
     public const ESTADO_RECHAZADA = 3;
     public const ESTADO_CONVERTIDA = 4;
 
+    // Estados de la solicitud final (tabla `solicitudes`):
+    public const ESTADO_FORMALIZADA = 1;
+    public const ESTADO_CERRADA = 2;
+    public const ESTADO_DEVOLUCION = 3;
+
     private const DECISIONES = [
         'aprobar' => self::ESTADO_APROBADA,
         'devolver' => self::ESTADO_DEVUELTA,
@@ -28,6 +34,7 @@ class SolicitudesServices
     ];
 
     private const CARPETA_COTIZACION = 'solicitudes/cotizaciones';
+    private const CARPETA_FACTURA = 'solicitudes/facturas';
 
     public function __construct(private FileStorageService $fileStorage) {}
     public function crear(array $datos, array $productos, int $idUser, int $idLog): array
@@ -240,5 +247,108 @@ class SolicitudesServices
         }
 
         return Storage::disk(config('filesystems.uploads_disk', 'public'))->url(self::CARPETA_COTIZACION.'/'.$nombre);
+    }
+
+    // Convención heredada: activo=10 -> aplazada, activo=0 -> rechazada (estado se mantiene en 1).
+    private const ACTIVO_APLAZADA = 10;
+    private const ACTIVO_RECHAZADA = 0;
+
+    public function aplazar(int $id, string $fechaAplazado, int $idLog): array
+    {
+        try {
+            $solicitud = Solicitud::find($id);
+
+            if (!$solicitud) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+            }
+
+            $solicitud->update([
+                'fecha_aplazado' => $fechaAplazado,
+                'activo' => self::ACTIVO_APLAZADA,
+                'id_log' => $idLog,
+            ]);
+
+            return ['error' => false, 'message' => 'Compra aplazada correctamente', 'data' => $solicitud->fresh()->load(['usuario', 'proveedor', 'productos'])];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function rechazar(int $id, array $datos, int $idLog): array
+    {
+        try {
+            $solicitud = Solicitud::find($id);
+
+            if (!$solicitud) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+            }
+
+            $solicitud->update([
+                'motivo' => $datos['motivo'],
+                'observacion' => $datos['observacion'] ?? null,
+                'fecha_aplazado' => null,
+                'activo' => self::ACTIVO_RECHAZADA,
+                'id_log' => $idLog,
+            ]);
+
+            return ['error' => false, 'message' => 'Compra rechazada correctamente', 'data' => $solicitud->fresh()->load(['usuario', 'proveedor', 'productos'])];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    // HU-09: el receptor valida lo recibido en solicitud_verificacion y adjunta la factura.
+    // Decisiones: cerrar -> estado 2 (cerrada), devolucion -> estado 3 (devolución).
+    public function verificarEntrega(int $idSolicitud, array $datos, UploadedFile $factura, int $idLog): array
+    {
+        try {
+            $solicitud = Solicitud::find($idSolicitud);
+
+            if (!$solicitud) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+            }
+
+            $subida = $this->fileStorage->uploadFile($factura, self::CARPETA_FACTURA);
+            if ($subida['error'] ?? false) {
+                return ['error' => true, 'message' => $subida['message'] ?? 'No se pudo guardar la factura'];
+            }
+
+            try {
+                return DB::transaction(function () use ($solicitud, $datos, $subida, $idLog) {
+                    $verificacion = SolicitudVerificacion::firstOrNew(['id_solicitud' => $solicitud->id]);
+                    $verificacion->fill([
+                        'cantidad' => $datos['cantidad'],
+                        'observacion_cant' => $datos['observacion_cant'] ?? null,
+                        'calidad' => $datos['calidad'],
+                        'observacion_calidad' => $datos['observacion_calidad'] ?? null,
+                        'precios' => $datos['precios'],
+                        'observacion_precios' => $datos['observacion_precios'] ?? null,
+                        'plazos' => $datos['plazos'],
+                        'observacion_plazo' => $datos['observacion_plazo'] ?? null,
+                        'id_log' => $idLog,
+                        'factura_doc' => $subida['nombre_guardado'],
+                        'fecha_verificacion' => now()->toDateString(),
+                    ]);
+                    $verificacion->save();
+
+                    $solicitud->update([
+                        'estado' => $datos['decision'] === 'cerrar' ? self::ESTADO_CERRADA : self::ESTADO_DEVOLUCION,
+                        'id_log' => $idLog,
+                    ]);
+
+                    return [
+                        'error' => false,
+                        'message' => 'Entrega verificada y compra '.($datos['decision'] === 'cerrar' ? 'cerrada' : 'en devolución').' correctamente',
+                        'data' => $solicitud->fresh()->load(['usuario', 'proveedor', 'productos', 'verificacion']),
+                    ];
+                });
+            } catch (Exception $e) {
+                $this->fileStorage->eliminar($subida['ruta']);
+
+                return ['error' => true, 'message' => $e->getMessage()];
+            }
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
     }
 }

@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\ProcesoCompra;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProcesoCompra\AplazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AsignarProveedorRequest;
+use App\Http\Requests\ProcesoCompra\RechazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\SolicitudInicialRequest;
+use App\Http\Requests\ProcesoCompra\VerificarEntregaRequest;
 use App\Http\Requests\ProcesoCompra\VerificarSolicitudRequest;
 use App\Services\ProcesoCompra\SolicitudesServices;
 use App\Services\Usuarios\UsuariosServices;
@@ -102,6 +105,49 @@ class SolicitudesController extends Controller
             $id,
             $request->validated(),
             $request->file('cotizacion_doc'),
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /solicitudes/{id}/aplazar — opción 60
+    public function aplazar(AplazarSolicitudRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->aplazar(
+            $id,
+            $request->fecha_aplazado,
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /solicitudes/{id}/rechazar — opción 60
+    public function rechazar(RechazarSolicitudRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->rechazar(
+            $id,
+            $request->validated(),
+            $request->user()->id_user,
+        ));
+    }
+
+    // POST /solicitudes/{id}/verificar-entrega — opción 60 (multipart: rubros + factura_doc + decision)
+    public function verificarEntrega(VerificarEntregaRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->verificarEntrega(
+            $id,
+            $request->validated(),
+            $request->file('factura_doc'),
             $request->user()->id_user,
         ));
     }
