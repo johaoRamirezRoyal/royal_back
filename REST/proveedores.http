@@ -19,6 +19,10 @@
 ### 1. LISTAR proveedores (lectura compartida, sin gate)
 GET http://localhost:8000/api/proveedores
 
+
+GET http://localhost:8000/api/proveedores/select
+
+
 ### 2. LISTAR con filtro por nombre (si se agrega después)
 GET http://localhost:8000/api/proveedores?search=comercial
 
@@ -268,3 +272,127 @@ Accept: application/json
 
 ### 20. ELIMINAR documento (borra archivo en storage y fila)
 DELETE http://localhost:8000/api/proveedores/documentos/1
+
+### ============================================
+### CONTACTOS DEL PROVEEDOR
+### ============================================
+
+### 21. LISTAR contactos del proveedor
+GET http://localhost:8000/api/proveedores/2/contactos
+
+### 22. CREAR contacto — exitoso
+POST http://localhost:8000/api/proveedores/2/contactos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre_contacto": "Ana Torres",
+    "telefono_contacto": "3101234567",
+    "correo_contacto": "atorres@tecnologiaandina.com",
+    "cargo_contacto": "Ventas",
+    "activo": 1
+}
+
+### 23. CREAR contacto — sin nombre (debe fallar 422)
+POST http://localhost:8000/api/proveedores/2/contactos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "cargo_contacto": "Compras"
+}
+
+### 24. ACTUALIZAR contacto
+PUT http://localhost:8000/api/proveedores/contactos/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre_contacto": "Ana Torres R.",
+    "telefono_contacto": "3112223333",
+    "correo_contacto": "ana.torres@tecnologiaandina.com",
+    "cargo_contacto": "Directora Ventas",
+    "activo": 1
+}
+
+### 25. CAMBIAR estado del contacto a inactivo
+PUT http://localhost:8000/api/proveedores/contactos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 0
+}
+
+### 26. CAMBIAR estado del contacto a activo
+PUT http://localhost:8000/api/proveedores/contactos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 1
+}
+
+### 27. ELIMINAR contacto
+DELETE http://localhost:8000/api/proveedores/contactos/1
+
+### ============================================
+### CUENTAS BANCARIAS DEL PROVEEDOR
+### ============================================
+
+### 28. LISTAR cuentas bancarias del proveedor
+GET http://localhost:8000/api/proveedores/2/bancos
+
+### 29. CREAR cuenta bancaria — exitoso
+POST http://localhost:8000/api/proveedores/2/bancos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nom_banco": "Bancolombia",
+    "num_banco": "123456789",
+    "tipo_cuenta": "Ahorros",
+    "activo": 1
+}
+
+### 30. CREAR cuenta bancaria — sin numero de cuenta (debe fallar 422)
+POST http://localhost:8000/api/proveedores/2/bancos
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nom_banco": "Bancolombia"
+}
+
+### 31. ACTUALIZAR cuenta bancaria
+PUT http://localhost:8000/api/proveedores/bancos/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nom_banco": "Bancolombia",
+    "num_banco": "987654321",
+    "tipo_cuenta": "Corriente",
+    "activo": 1
+}
+
+### 32. CAMBIAR estado de la cuenta a inactivo
+PUT http://localhost:8000/api/proveedores/bancos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 0
+}
+
+### 33. CAMBIAR estado de la cuenta a activo
+PUT http://localhost:8000/api/proveedores/bancos/1/estado
+Content-Type: application/json
+Accept: application/json
+
+{
+    "activo": 1
+}
+
+### 34. ELIMINAR cuenta bancaria
+DELETE http://localhost:8000/api/proveedores/bancos/9

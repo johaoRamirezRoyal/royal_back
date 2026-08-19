@@ -2,6 +2,8 @@
 
 namespace App\Services\ProcesoCompra;
 
+use App\Models\ProcesoCompra\Proveedores\ProveedorBanco;
+use App\Models\ProcesoCompra\Proveedores\ProveedorContacto;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDetalle;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDocumento;
 use App\Models\ProcesoCompra\Proveedores\TipoDocumentoProveedor;
@@ -25,6 +27,19 @@ class ProveedoresServices
             $proveedores = ProveedorDetalle::with('usuario:id_user,nombre,correo,user,estado')
                 ->orderByDesc('id')
                 ->get();
+
+            return ['error' => false, 'message' => 'Proveedores obtenidos correctamente', 'data' => $proveedores];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function listarParaSelect(): array
+    {
+        try {
+            $proveedores = ProveedorDetalle::whereHas('usuario', fn ($q) => $q->where('estado', 'activo'))
+                ->orderBy('nombre')
+                ->get(['id', 'nombre']);
 
             return ['error' => false, 'message' => 'Proveedores obtenidos correctamente', 'data' => $proveedores];
         } catch (Exception $e) {
@@ -276,6 +291,196 @@ class ProveedoresServices
             $documento->delete();
 
             return ['error' => false, 'message' => 'Documento eliminado correctamente', 'data' => ['id' => $idDocumento]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function listarContactos(int $idProveedor): array
+    {
+        try {
+            $proveedor = ProveedorDetalle::find($idProveedor);
+
+            if (!$proveedor) {
+                return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
+            }
+
+            $contactos = ProveedorContacto::where('id_proveedor', $proveedor->id_proveedor)
+                ->orderByDesc('id')
+                ->get();
+
+            return ['error' => false, 'message' => 'Contactos obtenidos correctamente', 'data' => $contactos];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function crearContacto(int $idProveedor, array $data, int $idLog): array
+    {
+        try {
+            $proveedor = ProveedorDetalle::find($idProveedor);
+
+            if (!$proveedor) {
+                return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
+            }
+
+            $contacto = ProveedorContacto::create([
+                ...$data,
+                'id_proveedor' => $proveedor->id_proveedor,
+                'id_log' => $idLog,
+            ]);
+
+            return ['error' => false, 'message' => 'Contacto creado correctamente', 'data' => $contacto->fresh()];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarContacto(int $idContacto, array $data, int $idLog): array
+    {
+        try {
+            $contacto = ProveedorContacto::find($idContacto);
+
+            if (!$contacto) {
+                return ['error' => true, 'message' => 'Contacto no encontrado', 'status' => 404];
+            }
+
+            $contacto->update([...$data, 'id_log' => $idLog]);
+
+            return ['error' => false, 'message' => 'Contacto actualizado correctamente', 'data' => $contacto->fresh()];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function cambiarEstadoContacto(int $idContacto, int $activo, int $idLog): array
+    {
+        try {
+            $contacto = ProveedorContacto::find($idContacto);
+
+            if (!$contacto) {
+                return ['error' => true, 'message' => 'Contacto no encontrado', 'status' => 404];
+            }
+
+            $contacto->update(['activo' => $activo, 'id_log' => $idLog]);
+
+            return [
+                'error' => false,
+                'message' => 'Estado del contacto actualizado correctamente',
+                'data' => ['id' => $idContacto, 'activo' => $activo],
+            ];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function eliminarContacto(int $idContacto): array
+    {
+        try {
+            $contacto = ProveedorContacto::find($idContacto);
+
+            if (!$contacto) {
+                return ['error' => true, 'message' => 'Contacto no encontrado', 'status' => 404];
+            }
+
+            $contacto->delete();
+
+            return ['error' => false, 'message' => 'Contacto eliminado correctamente', 'data' => ['id' => $idContacto]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function listarBancos(int $idProveedor): array
+    {
+        try {
+            $proveedor = ProveedorDetalle::find($idProveedor);
+
+            if (!$proveedor) {
+                return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
+            }
+
+            $bancos = ProveedorBanco::where('id_proveedor', $proveedor->id_proveedor)
+                ->orderByDesc('id')
+                ->get();
+
+            return ['error' => false, 'message' => 'Cuentas bancarias obtenidas correctamente', 'data' => $bancos];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function crearBanco(int $idProveedor, array $data, int $idLog): array
+    {
+        try {
+            $proveedor = ProveedorDetalle::find($idProveedor);
+
+            if (!$proveedor) {
+                return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
+            }
+
+            $banco = ProveedorBanco::create([
+                ...$data,
+                'id_proveedor' => $proveedor->id_proveedor,
+                'id_log' => $idLog,
+            ]);
+
+            return ['error' => false, 'message' => 'Cuenta bancaria creada correctamente', 'data' => $banco->fresh()];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarBanco(int $idBanco, array $data, int $idLog): array
+    {
+        try {
+            $banco = ProveedorBanco::find($idBanco);
+
+            if (!$banco) {
+                return ['error' => true, 'message' => 'Cuenta bancaria no encontrada', 'status' => 404];
+            }
+
+            $banco->update([...$data, 'id_log' => $idLog]);
+
+            return ['error' => false, 'message' => 'Cuenta bancaria actualizada correctamente', 'data' => $banco->fresh()];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function cambiarEstadoBanco(int $idBanco, int $activo, int $idLog): array
+    {
+        try {
+            $banco = ProveedorBanco::find($idBanco);
+
+            if (!$banco) {
+                return ['error' => true, 'message' => 'Cuenta bancaria no encontrada', 'status' => 404];
+            }
+
+            $banco->update(['activo' => $activo, 'id_log' => $idLog]);
+
+            return [
+                'error' => false,
+                'message' => 'Estado de la cuenta bancaria actualizado correctamente',
+                'data' => ['id' => $idBanco, 'activo' => $activo],
+            ];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function eliminarBanco(int $idBanco): array
+    {
+        try {
+            $banco = ProveedorBanco::find($idBanco);
+
+            if (!$banco) {
+                return ['error' => true, 'message' => 'Cuenta bancaria no encontrada', 'status' => 404];
+            }
+
+            $banco->delete();
+
+            return ['error' => false, 'message' => 'Cuenta bancaria eliminada correctamente', 'data' => ['id' => $idBanco]];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }

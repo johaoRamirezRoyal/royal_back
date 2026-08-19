@@ -60,7 +60,7 @@ class Solicitud extends Model
 
     public function productos()
     {
-        return $this->hasMany(SolicitudProductoInicial::class, 'id_solicitud');
+        return $this->hasMany(SolicitudProducto::class, 'id_solicitud');
     }
 
     public function verificacion()

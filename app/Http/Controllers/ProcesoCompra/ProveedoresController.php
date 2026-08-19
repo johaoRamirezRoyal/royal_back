@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\ProcesoCompra;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProcesoCompra\ProveedorBancoRequest;
+use App\Http\Requests\ProcesoCompra\ProveedorContactoRequest;
 use App\Http\Requests\ProcesoCompra\ProveedorRequest;
 use App\Services\ProcesoCompra\ProveedoresServices;
 use App\Services\Usuarios\UsuariosServices;
@@ -91,6 +93,12 @@ class ProveedoresController extends Controller
         }
 
         return $this->apiResponse($this->proveedoresServices->cambiarEstado($id, $estado, $request->user()->id_user));
+    }
+
+    // GET /proveedores/select — solo id y nombre para dropdown
+    public function listarParaSelect(Request $request)
+    {
+        return $this->apiResponse($this->proveedoresServices->listarParaSelect());
     }
 
     // GET /proveedores/tipos-documento
@@ -221,5 +229,133 @@ class ProveedoresController extends Controller
         }
 
         return $this->apiResponse($this->proveedoresServices->eliminarDocumento($docId));
+    }
+
+    // GET /proveedores/{id}/contactos
+    public function listarContactos(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->listarContactos($id));
+    }
+
+    // POST /proveedores/{id}/contactos
+    public function crearContacto(ProveedorContactoRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->crearContacto(
+            $id,
+            $request->toContactoData(),
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /proveedores/contactos/{contactoId}
+    public function actualizarContacto(ProveedorContactoRequest $request, int $contactoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->actualizarContacto(
+            $contactoId,
+            $request->toContactoData(),
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /proveedores/contactos/{contactoId}/estado {"activo":0|1}
+    public function cambiarEstadoContacto(Request $request, int $contactoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        $activo = $request->input('activo');
+
+        if (!in_array($activo, [0, 1], true)) {
+            return $this->error('El estado debe ser 0 o 1', 422);
+        }
+
+        return $this->apiResponse($this->proveedoresServices->cambiarEstadoContacto($contactoId, $activo, $request->user()->id_user));
+    }
+
+    // DELETE /proveedores/contactos/{contactoId}
+    public function eliminarContacto(Request $request, int $contactoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->eliminarContacto($contactoId));
+    }
+
+    // GET /proveedores/{id}/bancos
+    public function listarBancos(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->listarBancos($id));
+    }
+
+    // POST /proveedores/{id}/bancos
+    public function crearBanco(ProveedorBancoRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->crearBanco(
+            $id,
+            $request->toBancoData(),
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /proveedores/bancos/{bancoId}
+    public function actualizarBanco(ProveedorBancoRequest $request, int $bancoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->actualizarBanco(
+            $bancoId,
+            $request->toBancoData(),
+            $request->user()->id_user,
+        ));
+    }
+
+    // PUT /proveedores/bancos/{bancoId}/estado {"activo":0|1}
+    public function cambiarEstadoBanco(Request $request, int $bancoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        $activo = $request->input('activo');
+
+        if (!in_array($activo, [0, 1], true)) {
+            return $this->error('El estado debe ser 0 o 1', 422);
+        }
+
+        return $this->apiResponse($this->proveedoresServices->cambiarEstadoBanco($bancoId, $activo, $request->user()->id_user));
+    }
+
+    // DELETE /proveedores/bancos/{bancoId}
+    public function eliminarBanco(Request $request, int $bancoId)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->proveedoresServices->eliminarBanco($bancoId));
     }
 }

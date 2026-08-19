@@ -177,6 +177,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/proveedores.php';
     });
 
+    // SOLICITUDES (Proceso de compra)
+    Route::prefix('solicitudes')->group(function () {
+        require __DIR__.'/api/solicitudes.php';
+    });
+
     // HIKVISION
     Route::prefix('/hikvision')->group(function () {
         require __DIR__.'/api/hikvision.php';
