@@ -229,3 +229,11 @@ Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crea
 }
  */
 Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'eliminarAsistenciaEstudiante']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/asistencias-metricas?fecha_inicio=2026-08-01&fecha_fin=2026-08-31&id_curso=1
+ * Dashboard de solo lectura (opción 102, además de la 99): asistencia agregada por
+ * curso (clases dictadas, ausencias/tardanzas/permisos, % de asistencia) y el top 10
+ * de estudiantes con más ausencias en el rango. Todos los parámetros son opcionales.
+ */
+Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia']);

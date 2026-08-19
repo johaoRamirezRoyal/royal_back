@@ -6,6 +6,7 @@ use App\Models\GestionAcademica\AsistenciaEstudiante;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 
 /**
@@ -116,6 +117,117 @@ class AsistenciaEstudianteService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al registrar las asistencias',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Métricas de asistencia por curso, para el dashboard de solo lectura de
+     * Vicerrectoría/Directivo Docente (opción 102). Solo cuenta clases ya DICTADAs —
+     * la asistencia de estudiantes solo registra excepciones (AUSENTE/TARDE/PERMISO,
+     * ver agregarAsistenciaEstudiantes), no hay fila por cada presente.
+     */
+    public function metricasPorCurso(?string $fecha_inicio = null, ?string $fecha_fin = null, ?int $id_curso = null): array
+    {
+        try {
+            $totalEstudiantes = DB::table('usuarios')
+                ->where('perfil', 16) // Estudiante
+                ->where('estado', 'activo')
+                ->when(filled($id_curso), fn($q) => $q->where('id_curso', $id_curso))
+                ->groupBy('id_curso')
+                ->select('id_curso', DB::raw('count(*) as total'))
+                ->pluck('total', 'id_curso');
+
+            $totalClases = DB::table('academico_asistencia_clase as ac')
+                ->join('academico_horario_clase as hc', 'hc.id', '=', 'ac.id_horario_clase')
+                ->join('academico_carga_academica as ca', 'ca.id', '=', 'hc.id_carga_academica')
+                ->where('ac.estado', 'DICTADA')
+                ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
+                ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
+                ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->groupBy('ca.id_curso')
+                ->select('ca.id_curso', DB::raw('count(*) as total'))
+                ->pluck('total', 'id_curso');
+
+            $estadosPorCurso = DB::table('academico_asistencia_estudiante as ae')
+                ->join('academico_asistencia_clase as ac', 'ac.id', '=', 'ae.id_asistencia_clase')
+                ->join('academico_horario_clase as hc', 'hc.id', '=', 'ac.id_horario_clase')
+                ->join('academico_carga_academica as ca', 'ca.id', '=', 'hc.id_carga_academica')
+                ->where('ac.estado', 'DICTADA')
+                ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
+                ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
+                ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->groupBy('ca.id_curso', 'ae.estado')
+                ->select('ca.id_curso', 'ae.estado', DB::raw('count(*) as total'))
+                ->get()
+                ->groupBy('id_curso');
+
+            $cursos = DB::table('curso')
+                ->when(filled($id_curso), fn($q) => $q->where('id', $id_curso))
+                ->pluck('nombre', 'id');
+
+            $porCurso = [];
+            foreach ($cursos as $idCurso => $nombreCurso) {
+                $estudiantes = (int) ($totalEstudiantes[$idCurso] ?? 0);
+                $clases = (int) ($totalClases[$idCurso] ?? 0);
+                $estados = collect($estadosPorCurso[$idCurso] ?? [])->pluck('total', 'estado');
+                $ausencias = (int) ($estados['AUSENTE'] ?? 0);
+                $tardanzas = (int) ($estados['TARDE'] ?? 0);
+                $permisos = (int) ($estados['PERMISO'] ?? 0);
+                $totalPosible = $estudiantes * $clases;
+
+                $porCurso[] = [
+                    'id_curso' => $idCurso,
+                    'curso' => $nombreCurso,
+                    'total_estudiantes' => $estudiantes,
+                    'total_clases_dictadas' => $clases,
+                    'ausencias' => $ausencias,
+                    'tardanzas' => $tardanzas,
+                    'permisos' => $permisos,
+                    'porcentaje_asistencia' => $totalPosible > 0
+                        ? round((1 - $ausencias / $totalPosible) * 100, 1)
+                        : null,
+                ];
+            }
+
+            $topAusentismo = DB::table('academico_asistencia_estudiante as ae')
+                ->join('academico_asistencia_clase as ac', 'ac.id', '=', 'ae.id_asistencia_clase')
+                ->join('academico_horario_clase as hc', 'hc.id', '=', 'ac.id_horario_clase')
+                ->join('academico_carga_academica as ca', 'ca.id', '=', 'hc.id_carga_academica')
+                ->join('usuarios as u', 'u.id_user', '=', 'ae.id_alumno')
+                ->join('curso as c', 'c.id', '=', 'ca.id_curso')
+                ->where('ac.estado', 'DICTADA')
+                ->where('ae.estado', 'AUSENTE')
+                ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
+                ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
+                ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->groupBy('ae.id_alumno', 'u.nombre', 'u.apellido', 'c.nombre')
+                ->select(
+                    'ae.id_alumno',
+                    'u.nombre',
+                    'u.apellido',
+                    'c.nombre as curso',
+                    DB::raw('count(*) as total_ausencias')
+                )
+                ->orderByDesc('total_ausencias')
+                ->limit(10)
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Métricas obtenidas.',
+                'data' => [
+                    'por_curso' => $porCurso,
+                    'top_ausentismo' => $topAusentismo,
+                ],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al calcular métricas de asistencia');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al calcular métricas de asistencia.',
                 'data' => []
             ];
         }
