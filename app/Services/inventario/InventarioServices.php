@@ -8,6 +8,8 @@ use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
 use App\Models\Inventario\InventarioLog;
 use App\Models\Inventario\Reportes;
+use App\Models\ProcesoCompra\Solicitudes\Solicitud;
+use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use Carbon\Carbon;
@@ -517,6 +519,115 @@ class InventarioServices
                     'mantenimientos' => $query(2),
                 ],
                 'message' => 'Historial obtenido correctamente.',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'data' => null,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Agrega al inventario los artículos de una solicitud de compra (tabla `solicitudes`).
+     * Cada unidad = una fila en `inventario` (el inventario cuenta por filas). Valida que
+     * la cantidad a ingresar no supere lo solicitado, descontando lo ya ingresado para esa
+     * compra (se rastrea con `id_compra` = id de la solicitud y `detalles` = id del
+     * `solicitud_productos`). Todo en una transacción.
+     *
+     * @param int $idSolicitud id de la solicitud final
+     * @param array $articulos [{id_producto, cantidad, id_area, id_usuario, id_categoria, estado?, precio?, fecha_compra?}]
+     * @param int $idLog usuario que ejecuta la acción
+     * @return array{data: array|null, error: bool, message: string}
+     */
+    public function agregarArticulosAInventario(int $idSolicitud, array $articulos, int $idLog): array
+    {
+        try {
+            $solicitud = Solicitud::find($idSolicitud);
+
+            if (!$solicitud) {
+                return [
+                    'error' => true,
+                    'data' => null,
+                    'message' => 'Solicitud no encontrada',
+                ];
+            }
+
+            $resumen = [];
+            $ingresadoEnRequest = [];
+            $creados = [];
+
+            DB::transaction(function () use ($articulos, $idSolicitud, $idLog, &$resumen, &$ingresadoEnRequest, &$creados) {
+                foreach ($articulos as $articulo) {
+                    $producto = SolicitudProducto::where('id', $articulo['id_producto'])
+                        ->where('id_solicitud', $idSolicitud)
+                        ->first();
+
+                    if (!$producto) {
+                        throw new \Exception("El artículo #{$articulo['id_producto']} no pertenece a esta solicitud");
+                    }
+
+                    $disponible = (int) $producto->cantidad;
+                    $yaIngresado = Inventario::where('id_compra', $idSolicitud)
+                        ->where('detalles', (string) $producto->id)
+                        ->count() + ($ingresadoEnRequest[$producto->id] ?? 0);
+
+                    $cantidad = (int) $articulo['cantidad'];
+                    $restante = $disponible - $yaIngresado;
+
+                    if ($cantidad > $restante) {
+                        throw new \Exception(
+                            "El artículo \"{$producto->producto}\" ya tiene {$yaIngresado} de {$disponible} ingresado(s) al inventario; solo puede ingresar {$restante} más."
+                        );
+                    }
+
+                    $estado = $articulo['estado'] ?? 1;
+                    $precio = $articulo['precio'] ?? $producto->precio;
+                    $fechaCompra = $articulo['fecha_compra'] ?? now()->toDateString();
+                    $itemsArticulo = [];
+
+                    for ($i = 0; $i < $cantidad; $i++) {
+                        $itemsArticulo[] = Inventario::create([
+                            'descripcion' => substr($producto->producto, 0, 200),
+                            'marca' => $articulo['marca'] ?? null,
+                            'modelo' => $articulo['modelo'] ?? null,
+                            'precio' => $precio,
+                            'estado' => $estado,
+                            'activo' => 1,
+                            'fecha_compra' => $fechaCompra,
+                            'id_user' => $articulo['id_usuario'],
+                            'id_area' => $articulo['id_area'],
+                            'id_categoria' => $articulo['id_categoria'] ?? null,
+                            'user_log' => $idLog,
+                            'confirmado' => 1,
+                            'id_compra' => $idSolicitud,
+                            'detalles' => (string) $producto->id,
+                        ]);
+                    }
+
+                    $this->registrarLog($itemsArticulo, $estado, $idLog, $articulo['id_area']);
+                    $creados = array_merge($creados, $itemsArticulo);
+
+                    $ingresadoEnRequest[$producto->id] = ($ingresadoEnRequest[$producto->id] ?? 0) + $cantidad;
+
+                    $resumen[] = [
+                        'id_producto' => $producto->id,
+                        'producto' => $producto->producto,
+                        'solicitado' => $disponible,
+                        'ingresado' => $yaIngresado + $cantidad,
+                        'restante' => $disponible - ($yaIngresado + $cantidad),
+                    ];
+                }
+            });
+
+            return [
+                'error' => false,
+                'data' => [
+                    'articulos_creados' => count($creados),
+                    'resumen' => $resumen,
+                ],
+                'message' => 'Artículos agregados al inventario correctamente',
             ];
         } catch (\Exception $e) {
             return [

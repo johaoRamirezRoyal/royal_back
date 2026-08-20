@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\ProcesoCompra;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ProcesoCompra\AgregarInventarioSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AplazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AsignarProveedorRequest;
 use App\Http\Requests\ProcesoCompra\RechazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\SolicitudInicialRequest;
 use App\Http\Requests\ProcesoCompra\VerificarEntregaRequest;
 use App\Http\Requests\ProcesoCompra\VerificarSolicitudRequest;
+use App\Services\inventario\InventarioServices;
 use App\Services\ProcesoCompra\SolicitudesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +24,7 @@ class SolicitudesController extends Controller
 
     public function __construct(
         private SolicitudesServices $solicitudesServices,
+        private InventarioServices $inventarioServices,
         private UsuariosServices $usuariosService,
     ) {}
 
@@ -45,6 +48,27 @@ class SolicitudesController extends Controller
         return $this->apiResponse($response);
     }
 
+    // GET /solicitudes/seguimiento — opción 60 (todas las formalizadas, fecha reciente primero)
+    public function seguimiento(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->listarSeguimiento());
+    }
+
+    // POST /solicitudes/{id}/anular — opción 60
+    // Anula la solicitud para ocultarla del seguimiento.
+    public function anular(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->anular($id, $request->user()->id_user));
+    }
+
     // GET /solicitudes?per-page=&id_user=&id_area=&estado=&fecha_desde=&fecha_hasta=&s= — opción 60
     public function listar(Request $request)
     {
@@ -55,6 +79,7 @@ class SolicitudesController extends Controller
         $filtros = [
             'id_user' => $request->integer('id_user') ?: null,
             'id_area' => $request->integer('id_area') ?: null,
+            'tipo' => $request->input('tipo'),
             'estado' => $request->input('estado'),
             'fecha_desde' => $request->input('fecha_desde'),
             'fecha_hasta' => $request->input('fecha_hasta'),
@@ -148,6 +173,21 @@ class SolicitudesController extends Controller
             $id,
             $request->validated(),
             $request->file('factura_doc'),
+            $request->user()->id_user,
+        ));
+    }
+
+    // POST /solicitudes/{id}/agregar-inventario — opción 60
+    // Agrega al inventario los artículos de la solicitud (JSON: articulos[]).
+    public function agregarInventario(AgregarInventarioSolicitudRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->inventarioServices->agregarArticulosAInventario(
+            $id,
+            $request->input('articulos'),
             $request->user()->id_user,
         ));
     }

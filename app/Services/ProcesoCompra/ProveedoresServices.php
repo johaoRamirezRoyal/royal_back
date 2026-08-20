@@ -7,6 +7,7 @@ use App\Models\ProcesoCompra\Proveedores\ProveedorContacto;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDetalle;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDocumento;
 use App\Models\ProcesoCompra\Proveedores\TipoDocumentoProveedor;
+use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use Exception;
@@ -39,7 +40,7 @@ class ProveedoresServices
         try {
             $proveedores = ProveedorDetalle::whereHas('usuario', fn ($q) => $q->where('estado', 'activo'))
                 ->orderBy('nombre')
-                ->get(['id', 'nombre']);
+                ->get(['id_proveedor', 'nombre']);
 
             return ['error' => false, 'message' => 'Proveedores obtenidos correctamente', 'data' => $proveedores];
         } catch (Exception $e) {
@@ -156,6 +157,32 @@ class ProveedoresServices
             $tipos = TipoDocumentoProveedor::where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']);
 
             return ['error' => false, 'message' => 'Tipos de documento obtenidos correctamente', 'data' => $tipos];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    // Compras (solicitudes formalizadas) asignadas a un proveedor.
+    public function listarCompras(int $id): array
+    {
+        try {
+            $proveedor = ProveedorDetalle::find($id);
+
+            if (!$proveedor) {
+                return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
+            }
+
+            $compras = Solicitud::with(['usuario:id_user,nombre,apellido', 'proveedor', 'area:id,nombre', 'verificacion'])
+                ->where('id_proveedor', $proveedor->id_proveedor)
+                ->orderByDesc('id')
+                ->get();
+
+            $compras->each(function ($compra) {
+                $compra->url_cotizacion = $this->urlArchivo($compra->cotizacion_doc);
+                $compra->url_factura = $this->urlArchivo($compra->verificacion?->factura_doc);
+            });
+
+            return ['error' => false, 'message' => 'Compras obtenidas correctamente', 'data' => $compras];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -487,6 +514,15 @@ class ProveedoresServices
     }
 
     private function urlDocumento(?string $nombre): ?string
+    {
+        if (!$nombre) {
+            return null;
+        }
+
+        return Storage::disk(config('filesystems.uploads_disk', 'public'))->url($nombre);
+    }
+
+    private function urlArchivo(?string $nombre): ?string
     {
         if (!$nombre) {
             return null;

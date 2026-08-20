@@ -111,6 +111,21 @@ class ProveedoresController extends Controller
         return $this->apiResponse($this->proveedoresServices->listarTiposDocumento());
     }
 
+    // GET /proveedores/{id}/compras — compras (solicitudes formalizadas) de un proveedor.
+    // Lectura compartida: opción 61 (Proveedores) u 60 (Listado de solicitudes).
+    public function listarCompras(Request $request, int $id)
+    {
+        $perfil = $request->user()->perfil;
+        $tieneProveedores = $this->usuariosService->tienePermiso(self::OPCION_PROVEEDORES, $perfil)['permiso'] ?? false;
+        $tieneSolicitudes = $this->usuariosService->tienePermiso(60, $perfil)['permiso'] ?? false;
+
+        if (!$tieneProveedores && !$tieneSolicitudes) {
+            return $this->error('No tienes permiso para ver las compras del proveedor', 403);
+        }
+
+        return $this->apiResponse($this->proveedoresServices->listarCompras($id));
+    }
+
     // GET /proveedores/{id}/documentos
     public function listarDocumentos(Request $request, int $id)
     {

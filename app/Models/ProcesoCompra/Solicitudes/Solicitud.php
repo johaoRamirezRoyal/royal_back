@@ -2,6 +2,7 @@
 
 namespace App\Models\ProcesoCompra\Solicitudes;
 
+use App\Models\Areas\Areas;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDetalle;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,7 @@ class Solicitud extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'id_solicitud_inicial',
         'id_user',
         'id_area',
         'fecha_solicitud',
@@ -28,6 +30,7 @@ class Solicitud extends Model
         'activo',
         'motivo',
         'cotizacion_doc',
+        'anulada',
     ];
 
     protected $casts = [
@@ -56,6 +59,11 @@ class Solicitud extends Model
     public function proveedor()
     {
         return $this->belongsTo(ProveedorDetalle::class, 'id_proveedor', 'id_proveedor');
+    }
+
+    public function area()
+    {
+        return $this->belongsTo(Areas::class, 'id_area', 'id');
     }
 
     public function productos()
