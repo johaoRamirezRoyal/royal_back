@@ -64,6 +64,8 @@ php artisan serve         # dev server on localhost:8000
 | `/documentos-varios` | `api/documentosVarios.php` |
 | `/asistencia-gestion` | `api/asistenciaGestion.php` |
 | `/enfermeria` | `api/enfermeria.php` |
+| `/proveedores` | `api/proveedores.php` |
+| `/solicitudes` | `api/solicitudes.php` |
 
 ## Autenticación JWT
 
@@ -174,6 +176,84 @@ Reglas:
   `up()` con `insertGetId` en `cron_opciones` + inserts iniciales en `cron_permisos`, y un
   `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
   de hardcodear el número en el frontend.
+
+## Proceso de compra (`/proveedores` + `/solicitudes`)
+
+Módulo de compras en dos tablas paralelas: la solicitud inicial (`solicitudes_inicial`)
+y la formalizada (`solicitudes`). Opciones del módulo 9 "Proceso de compra" en
+`cron_opciones`: **59 Cotizaciones, 60 Listado de solicitudes, 61 Proveedores**.
+La 61 y la 60 la tienen: Super Admin, Administrador, Tesorera, Asistente Contable.
+
+### Proveedores
+
+Un proveedor es un `Usuario` con `perfil=17`; `proveedor_detalle.id_proveedor` =
+`usuarios.id_user`, y las tablas hijo (`proveedor_documento`, `proveedor_contactos`,
+`proveedor_banco`) usan `id_proveedor` = `id_user`.
+
+| Endpoint | Gate | Uso |
+|----------|------|-----|
+| `GET /proveedores`, `GET /proveedores/select`, `GET /proveedores/tipos-documento` | No | Listado / dropdown (solo activos) / catálogo |
+| `GET /proveedores/{id}` | 61 | Detalle con documentos/contactos/bancos |
+| `POST /proveedores`, `PUT /proveedores/{id}`, `PUT /proveedores/{id}/estado` | 61 | CRUD proveedor (crea usuario perfil 17 + detalle) |
+| `GET/POST /proveedores/{id}/documentos` | 61 | Subida de documentos (FileStorage, no Cloudinary) |
+| `PUT\|POST /proveedores/documentos/{docId}`, `PUT .../estado`, `DELETE ...` | 61 | Update/estado/elimina (borra archivo) |
+| `GET/POST /proveedores/{id}/contactos`, `PUT/DELETE /proveedores/contactos/{cId}` | 61 | Contactos |
+| `GET/POST /proveedores/{id}/bancos`, `PUT/DELETE /proveedores/bancos/{bId}` | 61 | Cuentas bancarias |
+
+### Solicitudes — flujo y estados
+
+| Estado | `solicitudes_inicial` | `solicitudes` (final) |
+|--------|------------------------|------------------------|
+| pendiente / formalizada | 0 | 1 (`estado`) |
+| aprobada / cerrada | 1 | 2 (`estado`) |
+| devuelta / devolución | 2 | 3 (`estado`) |
+| rechazada | 3 | — |
+| convertida | 4 | — |
+| aplazada / rechazada (final) | — | `activo` 10 / 0 |
+
+Flujo: `crear` (0) → `verificar` (aprobar 1 / devolver 2 / rechazar 3) →
+`asignar-proveedor` (marca la inicial 4 y crea la `solicitudes` final estado 1) →
+`aplazar`/`rechazar` (activo 10/0) → `verificar-entrega` (cerrada 2 / devolución 3).
+
+| Endpoint | Gate | Uso |
+|----------|------|-----|
+| `POST /solicitudes` | No | Crea la inicial + productos (cualquier empleado) |
+| `GET /solicitudes` | 60 | Paginado; filtros `per-page`, `id_user`, `id_area`, `estado`, `fecha_desde`/`fecha_hasta`, `s` (nombre/documento de usuario, ids, nombre de producto) |
+| `GET /solicitudes/{id}` | 60 | Detalle con `verificacionInicial` |
+| `POST /solicitudes/{id}/verificar` | 60 | Rubros Si/No + observaciones; decision `aprobar\|devolver\|rechazar` |
+| `POST /solicitudes/{id}/asignar-proveedor` | 60 | Multipart: `id_proveedor` (perfil 17 activo), `iva`, `cotizacion_doc`; convierte inicial→final y copia productos |
+| `PUT /solicitudes/{id}/aplazar` | 60 | `fecha_aplazado` + `activo=10` |
+| `PUT /solicitudes/{id}/rechazar` | 60 | `motivo`/`observacion` + `activo=0`, limpia `fecha_aplazado` |
+| `POST /solicitudes/{id}/verificar-entrega` | 60 | Multipart: rubros + `factura_doc`; decision `cerrar\|devolucion` |
+| `POST /solicitudes/{id}/agregar-inventario` | 60 | Agrega los artículos de la compra al inventario |
+
+Quirks del módulo:
+- Archivos: cotización → `solicitudes/cotizaciones`, factura → `solicitudes/facturas`.
+  Se guarda el `nombre_guardado` en `cotizacion_doc`/`factura_doc`; la URL de la
+  cotización se expone en la respuesta como `url_cotizacion`.
+- Los multipart de update usan `POST` (PHP no parsea campos en `PUT` multipart).
+- Los FormRequest de subida necesitan `Accept: application/json` (si no, 302 a `/`).
+- `fecha_ingreso` de proveedor no admite `'0000-00-00'` (MySQL strict) — forzar null.
+
+### Agregar artículos al inventario (`POST /solicitudes/{id}/agregar-inventario`)
+
+El inventario cuenta **por filas** (una unidad = una fila en `inventario`; no hay
+columna `cantidad`). El endpoint (`SolicitudesController::agregarInventario` →
+`InventarioServices::agregarArticulosAInventario`) crea N filas por artículo validando
+que la cantidad a ingresar no supere lo solicitado:
+
+- El rastreo de "ya ingresado" usa `inventario.id_compra` = id de la solicitud final y
+  `inventario.detalles` = id del `solicitud_productos`.
+- Por artículo: `disponible = solicitud_productos.cantidad`; si `yaIngresado + cantidad
+  > disponible` → error 422 con el detalle. Acumula dentro del mismo request.
+- Cada fila: `descripcion` = nombre del producto (máx 200), `precio` = el del artículo
+  (o el enviado), `estado` = 1 por defecto, `activo`=1, `confirmado`=1, `id_compra`,
+  `detalles`, y `id_area`/`id_usuario`/`id_categoria`/`fecha_compra` del request.
+  Registra `inventario_log` vía `registrarLog`. Todo en una transacción.
+- Request: `articulos[]` con `id_producto` (debe pertenecer a la solicitud), `cantidad`
+  ≥ 1, `id_area` activa, `id_usuario` activo, `id_categoria`; opcionales `estado`,
+  `precio`, `fecha_compra`.
+- Respuesta: `articulos_creados` + `resumen[]` con `solicitado`/`ingresado`/`restante`.
 
 ## Convenciones de código
 

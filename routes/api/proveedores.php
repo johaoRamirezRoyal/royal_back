@@ -7,6 +7,7 @@ Route::get('/', [ProveedoresController::class, 'listar']);
 Route::get('/select', [ProveedoresController::class, 'listarParaSelect']);
 Route::get('/tipos-documento', [ProveedoresController::class, 'listarTiposDocumento']);
 Route::get('/{id}', [ProveedoresController::class, 'ver'])->where('id', '[0-9]+');
+Route::get('/{id}/compras', [ProveedoresController::class, 'listarCompras'])->where('id', '[0-9]+');
 Route::post('/', [ProveedoresController::class, 'crear']);
 Route::put('/{id}', [ProveedoresController::class, 'actualizar'])->where('id', '[0-9]+');
 Route::put('/{id}/estado', [ProveedoresController::class, 'cambiarEstado'])->where('id', '[0-9]+');

@@ -33,8 +33,9 @@ class VerificarEntregaRequest extends FormRequest
             'observacion_precios' => ['nullable', 'string', 'max:1300'],
             'plazos' => ['required', Rule::in(['Si', 'No'])],
             'observacion_plazo' => ['nullable', 'string', 'max:1300'],
-            'factura_doc' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'factura_doc' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'decision' => ['required', Rule::in(['cerrar', 'devolucion'])],
+            'fecha_verificacion' => ['nullable', 'date'],
         ];
     }
 
@@ -54,6 +55,7 @@ class VerificarEntregaRequest extends FormRequest
             'factura_doc.max' => 'La factura no puede superar los 10MB',
             'decision.required' => 'Debe indicar si cierra la compra o activa devolución',
             'decision.in' => 'La decisión debe ser cerrar o devolucion',
+            'fecha_verificacion.date' => 'La fecha de verificación no es válida',
         ];
     }
 }

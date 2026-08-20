@@ -16,6 +16,7 @@ class AsignarProveedorRequest extends FormRequest
     {
         $this->merge([
             'iva' => $this->iva ? trim($this->iva) : null,
+            'estado' => $this->estado ? trim($this->estado) : null,
         ]);
     }
 
@@ -28,7 +29,17 @@ class AsignarProveedorRequest extends FormRequest
                 Rule::exists('usuarios', 'id_user')->where('perfil', 17)->where('estado', 'activo'),
             ],
             'iva' => ['nullable', 'string', 'max:200'],
-            'cotizacion_doc' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'cotizacion_doc' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            // Confirmación / estudio de la solicitud
+            'estado' => ['nullable', 'string', 'max:50', Rule::in(['aprobada', 'rechazada', 'aplazada', 'pendiente'])],
+            'fecha_solicitado' => ['nullable', 'date'],
+            'fecha_aplazado' => ['nullable', 'date'],
+            'observaciones' => ['nullable', 'string', 'max:1300'],
+            // Precios e IVA por producto
+            'productos' => ['nullable', 'array'],
+            'productos.*.id' => ['required', 'integer', Rule::exists('solicitud_productos', 'id')],
+            'productos.*.precio' => ['nullable', 'string', 'max:200'],
+            'productos.*.iva' => ['nullable', 'string', 'max:100'],
         ];
     }
 

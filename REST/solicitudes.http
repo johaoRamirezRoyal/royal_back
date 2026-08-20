@@ -71,14 +71,19 @@ Accept: application/json
 ### LISTADO (requiere opcion 60, paginado)
 ### ============================================
 
+
+##FIltrar por tipo
+GET http://localhost:8000/api/solicitudes?tipo=operativos&per-page=10
+
 ### 4. LISTAR solicitudes paginadas
 GET http://localhost:8000/api/solicitudes?per-page=10
 
 ### 5. FILTRAR por usuario
-GET http://localhost:8000/api/solicitudes?id_user=11&per-page=10
+GET http://localhost:8000/api/solicitudes?id_nivel=1&per-page=10
 
 ### 6. FILTRAR por area
 GET http://localhost:8000/api/solicitudes?id_area=85&per-page=10
+
 
 ### 7. FILTRAR por rango de fechas
 GET http://localhost:8000/api/solicitudes?fecha_desde=2026-01-01&fecha_hasta=2026-12-31&per-page=10
@@ -453,3 +458,82 @@ Content-Type: application/pdf
 
 < ../storage/app/private/factura.pdf
 --boundary123--
+
+### ============================================
+### AGREGAR ARTICULOS AL INVENTARIO (requiere opcion 60)
+### Cada unidad = una fila en `inventario`. Valida que la cantidad a ingresar
+### no supere lo solicitado en `solicitud_productos`, descontando lo ya
+### ingresado (se rastrea con id_compra=id de la solicitud y detalles=id_producto).
+### JSON: articulos[] con id_producto, cantidad, id_area, id_usuario, id_categoria,
+###       estado? (default 1), precio? (default el del articulo), fecha_compra?
+### ============================================
+
+### 31. AGREGAR 2 unidades de un articulo al inventario — exitoso
+POST http://localhost:8000/api/solicitudes/4/agregar-inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "articulos": [
+        {
+            "id_producto": 9,
+            "cantidad": 2,
+            "id_area": 1,
+            "id_usuario": 11,
+            "id_categoria": 1,
+            "estado": 1
+        }
+    ]
+}
+
+### 32. AGREGAR mas de lo solicitado (debe fallar 422/409)
+# producto 9 tiene cantidad 10; si ya se ingresaron 2, 9 mas superaria lo solicitado
+POST http://localhost:8000/api/solicitudes/4/agregar-inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "articulos": [
+        {
+            "id_producto": 9,
+            "cantidad": 9,
+            "id_area": 1,
+            "id_usuario": 11,
+            "id_categoria": 1
+        }
+    ]
+}
+
+### 33. AGREGAR con id_producto de otra solicitud (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/4/agregar-inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "articulos": [
+        {
+            "id_producto": 7,
+            "cantidad": 1,
+            "id_area": 1,
+            "id_usuario": 11,
+            "id_categoria": 1
+        }
+    ]
+}
+
+### 34. AGREGAR con area inexistente (debe fallar 422)
+POST http://localhost:8000/api/solicitudes/4/agregar-inventario
+Content-Type: application/json
+Accept: application/json
+
+{
+    "articulos": [
+        {
+            "id_producto": 9,
+            "cantidad": 1,
+            "id_area": 999999,
+            "id_usuario": 11,
+            "id_categoria": 1
+        }
+    ]
+}
