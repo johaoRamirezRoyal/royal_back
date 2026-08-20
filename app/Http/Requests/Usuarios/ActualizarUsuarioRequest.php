@@ -70,7 +70,7 @@ class ActualizarUsuarioRequest extends FormRequest
             'id_curso' => [
                 'nullable',
                 'integer',
-                Rule::exists('cursos', 'id'),
+                Rule::exists('curso', 'id'),
             ],
         ];
     }
