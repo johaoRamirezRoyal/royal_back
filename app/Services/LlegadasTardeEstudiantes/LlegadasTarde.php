@@ -11,6 +11,7 @@ use App\Models\LlegadasTarde\LlegadasTarde as ModelsLlegadasTarde;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\Service;
+use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,10 @@ class LlegadasTarde extends Service
 
     private array $mailToVicerrectoria = ['alfredo.canas@royalschool.edu.co'];
 
-    public function __construct(private MailService $mailService) {}
+    public function __construct(
+        private MailService $mailService,
+        private WhatsAppService $whatsAppService
+    ) {}
 
     public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora): array
     {
@@ -67,19 +71,10 @@ class LlegadasTarde extends Service
             $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
 
             // El límite configurado se cuenta como "hasta acá se permite": con cantidad_limite=5
-            // la 6ª llegada tarde es la que se registra marcada como límite alcanzado (y la que
-            // dispara el aviso a vicerrectoría); la 7ª ya no se registra.
+            // la 6ª llegada tarde en adelante se sigue registrando (las llegadas tarde no dejan
+            // de contarse), pero cada una de ellas se marca como límite alcanzado y dispara la
+            // carta formal de incumplimiento al acudiente en cada ocasión.
             $umbralLimite = $cantidadLimite > 0 ? $cantidadLimite + 1 : 0;
-
-            // Una vez el alumno supera el límite del período, no se siguen sumando llegadas
-            // tarde adicionales (aunque el dispositivo o un registro manual lo intenten).
-            if ($umbralLimite > 0 && $totalActual >= $umbralLimite) {
-                return [
-                    'error' => false,
-                    'message' => 'El alumno ya alcanzó el límite de llegadas tarde del período académico; no se registran más',
-                    'data' => ['total_llegadas_tarde_periodo' => $totalActual]
-                ];
-            }
 
             // firstOrCreate() intenta el create() y, si choca con el índice único
             // (llegadas_tardes_alumno_fecha_unique), reconsulta en vez de fallar:
@@ -100,9 +95,13 @@ class LlegadasTarde extends Service
 
             $totalEnPeriodo = $totalActual + 1;
             $limiteAlcanzado = $umbralLimite > 0 && $totalEnPeriodo >= $umbralLimite;
+            // Solo la llegada que cruza el umbral por primera vez escala a Vicerrectoría; las
+            // siguientes (7ª, 8ª...) siguen mandando la carta al acudiente pero no vuelven a
+            // notificar internamente, para no repetir la escalación en cada reincidencia.
+            $primeraVezLimiteAlcanzado = $umbralLimite > 0 && $totalEnPeriodo === $umbralLimite;
             $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
 
-            $enviado = $this->enviarNotificacionLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
+            $enviado = $this->enviarNotificacionLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado, avisarVicerrectoria: $primeraVezLimiteAlcanzado);
             $llegadaTarde->update(['enviado' => $enviado]);
 
             return [
@@ -223,7 +222,8 @@ class LlegadasTarde extends Service
 
             $totalEstudiantesLimiteAlcanzado = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
                 ->where('limite_alcanzado', true)
-                ->count();
+                ->distinct()
+                ->count('id_alumno');
 
             $topEstudiantes = DB::table('llegadas_tardes as lt')
                 ->join('usuarios as u', 'u.id_user', '=', 'lt.id_alumno')
@@ -421,18 +421,24 @@ class LlegadasTarde extends Service
     }
 
     /**
-     * Notifica por correo, con una sola carta (formato oficial firmado por
-     * Vicerrectoría) dirigida a "padre de familia y estudiante", enviada tanto al
-     * correo del alumno como al de sus acudientes activos — ya no son dos correos con
-     * texto distinto, es la misma carta a todos los destinatarios. Devuelve si ese envío
-     * tuvo éxito (lo que persiste en `enviado` el caller — este método no toca la fila,
-     * solo envía). Si con esta llegada el alumno alcanza la cantidad_limite configurada
-     * para el período y `$avisarVicerrectoria` es true, además notifica a Vicerrectoría
-     * por separado con `LlegadaTardeAvisoInternoMail` (mismo estilo visual, pero ese
-     * envío no cuenta para el resultado devuelto: es una escalación interna, no la carta
-     * al acudiente). `MailService::send()` atrapa sus propios errores, así que un fallo
-     * de envío no afecta el registro de la llegada tarde (ya se guardó antes de llamar
-     * este método).
+     * Notifica por correo y WhatsApp, con el mismo contenido (formato oficial firmado
+     * por Vicerrectoría) dirigido a "padre de familia y estudiante", enviado tanto al
+     * correo/celular del alumno... el correo va también al alumno, el WhatsApp solo a
+     * los acudientes activos (`estudiantes_padres.celular`) — un menor normalmente no
+     * tiene número propio de WhatsApp registrado para esto. El texto varía según
+     * `cartaLlegadaTarde()`. Se llama en cada llegada tarde que se registra, incluidas
+     * las que ocurren después de superado el límite (esas repiten la notificación de
+     * incumplimiento cada vez). Devuelve si el envío de correo tuvo éxito (lo que
+     * persiste en `enviado` el caller — este método no toca la fila, solo envía); el
+     * resultado del WhatsApp no se propaga porque `enviado` en la fila históricamente
+     * solo trackea el correo. Si `$avisarVicerrectoria` es true, además notifica a
+     * Vicerrectoría por separado con `LlegadaTardeAvisoInternoMail` (mismo estilo
+     * visual, pero ese envío no cuenta para el resultado devuelto: es una escalación
+     * interna, no la carta al acudiente) — el caller solo pasa true la primera vez que
+     * se cruza el límite, para no repetir la escalación en cada reincidencia.
+     * `MailService::send()`/`WhatsAppService::sendTemplate()` atrapan sus propios
+     * errores, así que un fallo de envío no afecta el registro de la llegada tarde (ya
+     * se guardó antes de llamar este método).
      */
     private function enviarNotificacionLlegadaTarde(
         ModelsLlegadasTarde $llegadaTarde,
@@ -460,14 +466,28 @@ class LlegadasTarde extends Service
             ->filter()
             ->all();
 
+        $telefonosAcudientes = EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)
+            ->where('activo', 1)
+            ->whereNotNull('celular')
+            ->pluck('celular')
+            ->filter()
+            ->all();
+
         $destinatarios = array_values(array_unique(array_merge($correoEstudiante, $correosAcudientes)));
+
+        $carta = $this->cartaLlegadaTarde($estudiante, $llegadaTarde, $totalEnPeriodo, $limiteAlcanzado);
 
         $enviado = false;
 
         if (!empty($destinatarios)) {
-            $enviado = $this->mailService->send(
-                $destinatarios,
-                $this->cartaLlegadaTarde($estudiante, $llegadaTarde, $totalEnPeriodo, $limiteAlcanzado)
+            $enviado = $this->mailService->send($destinatarios, $carta);
+        }
+
+        if (!empty($telefonosAcudientes)) {
+            $this->whatsAppService->sendTemplateToMany(
+                $telefonosAcudientes,
+                $this->plantillaWhatsApp($carta),
+                $this->parametrosWhatsApp($carta)
             );
         }
 
@@ -499,9 +519,12 @@ class LlegadasTarde extends Service
     /**
      * Carta oficial (mismo estilo visual que el correo de verificación de admisiones —
      * ver resources/views/emails/llegadaTarde.blade.php — firmada por Vicerrectoría) que
-     * se envía al alumno y a sus acudientes por cada llegada tarde. Dos variantes según
-     * `$limiteAlcanzado`: la normal (llegadas 1 a `cantidad_limite`) solo informa, la de
-     * advertencia (al llegar al umbral configurado) además cita el Reglamento Escolar.
+     * se envía al alumno y a sus acudientes por cada llegada tarde. Tres variantes: la
+     * normal (llegadas 1 a `cantidad_limite - 1`) solo informa; la de advertencia (llegada
+     * número `cantidad_limite`, ej. la 5ª con la config por defecto) avisa que una llegada
+     * tarde más implicará no poder ingresar; la de `$limiteAlcanzado` (llegada
+     * `cantidad_limite + 1` en adelante — 6ª, 7ª...) es la carta formal de incumplimiento,
+     * que se repite en cada llegada tarde posterior al límite.
      */
     private function cartaLlegadaTarde(
         Usuario $estudiante,
@@ -513,15 +536,55 @@ class LlegadasTarde extends Service
         $grado = $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado';
         $fecha = Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y');
         $periodo = $this->numeroPeriodo($llegadaTarde->periodoAcademico, $llegadaTarde->id_periodo_academico);
+        $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
+        $advertencia = !$limiteAlcanzado && $cantidadLimite > 0 && $totalEnPeriodo >= $cantidadLimite;
+
+        $asunto = match (true) {
+            $limiteAlcanzado => 'Notificación de incumplimiento del límite de llegadas tarde',
+            $advertencia => 'Advertencia por acumulación de llegadas tarde',
+            default => 'Registro de llegada tarde',
+        };
 
         return new LlegadaTardeMail(
-            asunto: $limiteAlcanzado ? 'Registro de quinta llegada tarde' : 'Registro de llegada tarde',
+            asunto: $asunto,
             nombreEstudiante: $nombreCompleto,
             grado: $grado,
             fecha: $fecha,
             totalEnPeriodo: $totalEnPeriodo,
             periodo: $periodo,
             limiteAlcanzado: $limiteAlcanzado,
+            cantidadLimite: $cantidadLimite,
+            advertencia: $advertencia,
         );
+    }
+
+    /**
+     * Nombre de la plantilla de WhatsApp (Meta Cloud API) a usar según la misma
+     * clasificación de tres niveles que `cartaLlegadaTarde()`. Los nombres están
+     * configurados en services.whatsapp.template_* (.env) porque el nombre real en
+     * Meta Business Manager puede diferir del sugerido aquí durante la revisión.
+     */
+    private function plantillaWhatsApp(LlegadaTardeMail $carta): string
+    {
+        return match (true) {
+            $carta->limiteAlcanzado => config('services.whatsapp.template_limite', 'llegada_tarde_limite'),
+            $carta->advertencia => config('services.whatsapp.template_advertencia', 'llegada_tarde_advertencia'),
+            default => config('services.whatsapp.template_normal', 'llegada_tarde_normal'),
+        };
+    }
+
+    /**
+     * Parámetros posicionales {{1}}, {{2}}... para la plantilla de WhatsApp — deben
+     * coincidir en cantidad y orden con el cuerpo de cada plantilla tal como fue
+     * aprobada en Meta (ver docs/whatsapp-llegadas-tarde.md para el texto exacto
+     * sometido a revisión).
+     */
+    private function parametrosWhatsApp(LlegadaTardeMail $carta): array
+    {
+        return match (true) {
+            $carta->limiteAlcanzado => [$carta->nombreEstudiante, $carta->grado, $carta->cantidadLimite, $carta->fecha],
+            $carta->advertencia => [$carta->nombreEstudiante, $carta->grado, $carta->totalEnPeriodo],
+            default => [$carta->nombreEstudiante, $carta->grado, $carta->fecha, $carta->totalEnPeriodo],
+        };
     }
 }

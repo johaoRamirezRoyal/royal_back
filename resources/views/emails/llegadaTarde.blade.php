@@ -132,12 +132,34 @@
             <div class="body">
                 <p class="greeting">Estimado padre de familia y estudiante:</p>
 
-                <p class="intro">Se informa que <strong>{{ $nombreEstudiante }}</strong>, del grado {{ $grado }},
-                    registró una llegada tarde el día {{ $fecha }}.</p>
-
                 @if ($limiteAlcanzado)
+                    <p class="intro">Por medio de la presente se informa que el estudiante
+                        <strong>{{ $nombreEstudiante }}</strong>, del grado {{ $grado }}, ha registrado
+                        <strong>{{ $totalEnPeriodo }}</strong> llegadas tarde durante el presente trimestre.</p>
+
+                    <p class="intro">De acuerdo con lo establecido en el Manual de Convivencia y Reglamento
+                        Institucional, y conforme a las disposiciones socializadas previamente con los padres de
+                        familia y estudiantes, el límite establecido es de {{ $cantidadLimite }} llegadas tarde por
+                        trimestre.</p>
+
+                    <p class="alert">En consecuencia, al haberse superado este límite, el estudiante no podrá
+                        ingresar a la jornada escolar el día {{ $fecha }}, debiendo asumir las consecuencias
+                        académicas derivadas de su inasistencia, conforme a lo establecido en el reglamento
+                        institucional.</p>
+
+                    <p class="intro">Recordamos la importancia de cumplir con los horarios establecidos por la
+                        institución y reiteramos que esta medida corresponde a los compromisos y normas previamente
+                        socializados y aceptados por la comunidad educativa.</p>
+
+                    <p class="intro">Agradecemos su comprensión y compromiso con el cumplimiento de las normas
+                        institucionales.</p>
+                @elseif ($advertencia)
+                    <p class="intro">Se informa que <strong>{{ $nombreEstudiante }}</strong>, del grado {{ $grado }},
+                        registró una llegada tarde el día {{ $fecha }}.</p>
+
                     <p class="intro">Con este registro, el estudiante acumula <strong>{{ $totalEnPeriodo }}</strong>
-                        llegadas tarde durante el Periodo {{ $periodo }}.</p>
+                        llegadas tarde durante el Periodo {{ $periodo }}, alcanzando el límite establecido de
+                        {{ $cantidadLimite }} llegadas tarde.</p>
 
                     <p class="alert">De acuerdo con lo establecido en el Reglamento Escolar, se informa que, en caso
                         de registrarse una nueva llegada tarde durante este mismo periodo, el estudiante no podrá
@@ -147,6 +169,9 @@
                     <p class="intro">Agradecemos su atención y el compromiso con el cumplimiento del horario
                         establecido.</p>
                 @else
+                    <p class="intro">Se informa que <strong>{{ $nombreEstudiante }}</strong>, del grado {{ $grado }},
+                        registró una llegada tarde el día {{ $fecha }}.</p>
+
                     <p class="intro">Con este registro, acumula <strong>{{ $totalEnPeriodo }}</strong> llegada(s)
                         tarde(s) durante el Periodo {{ $periodo }}.</p>
 

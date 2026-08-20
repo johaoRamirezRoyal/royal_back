@@ -55,6 +55,22 @@ return [
         'extra_hosts' => env('HIKVISION_HOSTS'),
     ],
 
+    'whatsapp' => [
+        // Meta Cloud API (WhatsApp Business). Mientras no haya WABA + token, dejar
+        // WHATSAPP_ENABLED en false: WhatsAppService no intenta llamar a la API, solo
+        // deja constancia en el log (mismo espíritu que MAIL_MAILER=log para correo).
+        'enabled' => env('WHATSAPP_ENABLED', false),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'template_lang' => env('WHATSAPP_TEMPLATE_LANG', 'es'),
+        // Nombres de las plantillas ya aprobadas en Meta Business Manager para
+        // llegadas tarde (ver LlegadasTarde::plantillaWhatsApp()).
+        'template_normal' => env('WHATSAPP_TEMPLATE_NORMAL', 'llegada_tarde_normal'),
+        'template_advertencia' => env('WHATSAPP_TEMPLATE_ADVERTENCIA', 'llegada_tarde_advertencia'),
+        'template_limite' => env('WHATSAPP_TEMPLATE_LIMITE', 'llegada_tarde_limite'),
+    ],
+
     'sami' => [
         'base_url' => env('SAMI_BASE_URL', 'https://sami.royalschool.edu.co'),
         'login_path' => env('SAMI_LOGIN_PATH', '/login'),

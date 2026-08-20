@@ -20,6 +20,8 @@ class LlegadaTardeMail extends Mailable
         public readonly int $totalEnPeriodo,
         public readonly string $periodo,
         public readonly bool $limiteAlcanzado,
+        public readonly int $cantidadLimite = 5,
+        public readonly bool $advertencia = false,
     ) {}
 
     public function envelope(): Envelope
