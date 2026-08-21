@@ -66,6 +66,7 @@ class LlegadasTarde extends Service
 
             $totalActual = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
                 ->where('id_periodo_academico', $periodo_academico->id)
+                ->where('revocado', false)
                 ->count();
 
             $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
@@ -122,8 +123,12 @@ class LlegadasTarde extends Service
     public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null): array
     {
         try {
-            if ($id_periodo_academico === null) {
-
+            // El período vigente solo se fuerza en el listado general (sin alumno
+            // puntual): ahí sí hace falta acotar a un período porque se colapsa a una
+            // fila por alumno más abajo. Pidiendo un alumno puntual (historial/drill-down)
+            // y sin período explícito, se listan TODOS sus períodos — el filtro de
+            // período en ese caso lo aplica el cliente sobre la respuesta completa.
+            if ($id_periodo_academico === null && $id_alumno === null) {
                 $periodo = $this->periodoVigente();
 
                 if (!$periodo) {
@@ -137,18 +142,23 @@ class LlegadasTarde extends Service
                 $id_periodo_academico = $periodo->id;
             }
 
-            $llegadas_tarde = ModelsLlegadasTarde::where('id_periodo_academico', $id_periodo_academico)
+            $llegadas_tarde = ModelsLlegadasTarde::query()
                 ->with([
                     'alumno' => fn($q) => $q->select('id_user', 'nombre', 'apellido', 'correo', 'id_curso')
                                            ->with('cursoRelacion:id,nombre'),
-                    'periodoAcademico:id,fecha_inicio,fecha_fin,activo',
+                    'periodoAcademico:id,nombre,fecha_inicio,fecha_fin,activo',
                 ])
+                ->when($id_periodo_academico !== null, function ($query) use ($id_periodo_academico) {
+                    $query->where('id_periodo_academico', $id_periodo_academico);
+                })
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
                 })
                 ->when($fecha !== null, function ($query) use ($fecha) {
                     $query->where('fecha', $fecha);
                 })
+                ->orderByDesc('fecha')
+                ->orderByDesc('hora')
                 ->get();
 
             if ($llegadas_tarde->isEmpty()) {
@@ -159,17 +169,39 @@ class LlegadasTarde extends Service
                 ];
             }
 
-            // Conteo por alumno dentro de este período (no filtrado por id_alumno: si se
-            // pidió un alumno puntual solo hay una llave, pero si se listó el período
-            // completo cada fila trae cuántas lleva SU alumno, no el total de todos).
-            $conteoPorAlumno = ModelsLlegadasTarde::where('id_periodo_academico', $id_periodo_academico)
-                ->selectRaw('id_alumno, count(*) as total')
-                ->groupBy('id_alumno')
-                ->pluck('total', 'id_alumno');
+            // Conteo por alumno Y período (no solo por alumno: en el historial cruzado de
+            // períodos cada fila debe contarse contra SU propio período, no contra el
+            // total de todos). Las revocadas no cuentan: una llegada tarde revocada no
+            // debe empujar al alumno hacia el límite.
+            $conteoPorAlumnoPeriodo = ModelsLlegadasTarde::query()
+                ->when($id_periodo_academico !== null, function ($query) use ($id_periodo_academico) {
+                    $query->where('id_periodo_academico', $id_periodo_academico);
+                })
+                ->when($id_alumno !== null, function ($query) use ($id_alumno) {
+                    $query->where('id_alumno', $id_alumno);
+                })
+                ->where('revocado', false)
+                ->selectRaw('id_alumno, id_periodo_academico, count(*) as total')
+                ->groupBy('id_alumno', 'id_periodo_academico')
+                ->get()
+                ->keyBy(fn($fila) => "{$fila->id_alumno}:{$fila->id_periodo_academico}");
 
-            $llegadas_tarde->each(
-                fn($registro) => $registro->total_llegadas_tarde_periodo = $conteoPorAlumno[$registro->id_alumno] ?? 1
-            );
+            $llegadas_tarde->each(function ($registro) use ($conteoPorAlumnoPeriodo) {
+                $clave = "{$registro->id_alumno}:{$registro->id_periodo_academico}";
+                $registro->total_llegadas_tarde_periodo = $conteoPorAlumnoPeriodo[$clave]->total ?? 0;
+            });
+
+            // Listado del período completo (sin id_alumno puntual): una sola fila por
+            // alumno, la más reciente — el resto de sus llegadas tarde ya están contadas
+            // en total_llegadas_tarde_periodo, no hace falta listarlas todas para saber que
+            // el alumno reincide. Pidiendo id_alumno explícito sí se devuelve su historial
+            // completo (p. ej. para una futura vista de detalle por alumno).
+            // La consulta ya viene ordenada desc (fecha, hora), así que unique() -que
+            // conserva la primera ocurrencia- se queda justo con la más reciente de cada
+            // alumno, y el orden desc de la respuesta se conserva sin reordenar de nuevo.
+            if ($id_alumno === null) {
+                $llegadas_tarde = $llegadas_tarde->unique('id_alumno')->values();
+            }
 
             return [
                 'error' => false,
@@ -214,13 +246,25 @@ class LlegadasTarde extends Service
             $config = ConfiguracionLlegadasTarde::find(1);
             $cantidadLimite = $config?->cantidad_limite ?? 5;
 
-            $totalLlegadasTarde = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)->count();
+            // Las métricas del dashboard reflejan llegadas tarde vigentes (no revocadas) —
+            // una revocada no debe inflar el total, el top de reincidentes ni el desglose
+            // por curso/día, igual que ya no cuenta para total_llegadas_tarde_periodo en el
+            // listado. Se reporta aparte cuántas se revocaron, como dato informativo.
+            $totalLlegadasTarde = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('revocado', false)
+                ->count();
+
+            $totalLlegadasRevocadas = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('revocado', true)
+                ->count();
 
             $totalEstudiantesAfectados = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('revocado', false)
                 ->distinct()
                 ->count('id_alumno');
 
             $totalEstudiantesLimiteAlcanzado = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('revocado', false)
                 ->where('limite_alcanzado', true)
                 ->distinct()
                 ->count('id_alumno');
@@ -229,6 +273,7 @@ class LlegadasTarde extends Service
                 ->join('usuarios as u', 'u.id_user', '=', 'lt.id_alumno')
                 ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
                 ->where('lt.id_periodo_academico', $periodo->id)
+                ->where('lt.revocado', false)
                 ->select(
                     'lt.id_alumno',
                     'u.nombre',
@@ -247,12 +292,14 @@ class LlegadasTarde extends Service
                 ->join('usuarios as u', 'u.id_user', '=', 'lt.id_alumno')
                 ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
                 ->where('lt.id_periodo_academico', $periodo->id)
+                ->where('lt.revocado', false)
                 ->select('c.id as id_curso', 'c.nombre as curso', DB::raw('count(*) as total'))
                 ->groupBy('c.id', 'c.nombre')
                 ->orderByDesc('total')
                 ->get();
 
             $porDia = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
+                ->where('revocado', false)
                 ->select('fecha', DB::raw('count(*) as total'))
                 ->groupBy('fecha')
                 ->orderBy('fecha')
@@ -275,6 +322,7 @@ class LlegadasTarde extends Service
                     ],
                     'resumen' => [
                         'total_llegadas_tarde' => $totalLlegadasTarde,
+                        'total_llegadas_revocadas' => $totalLlegadasRevocadas,
                         'total_estudiantes_afectados' => $totalEstudiantesAfectados,
                         'total_estudiantes_limite_alcanzado' => $totalEstudiantesLimiteAlcanzado,
                     ],
@@ -288,6 +336,92 @@ class LlegadasTarde extends Service
             return [
                 'error' => true,
                 'message' => "Error en el servidor al obtener el dashboard de llegadas tarde",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Actualiza la observación (nota libre) de una llegada tarde ya registrada. No
+     * afecta conteos, notificaciones ni `limite_alcanzado` — es solo contexto para quien
+     * revisa el listado.
+     */
+    public function actualizarObservacion(int $id, ?string $observacion): array
+    {
+        try {
+            $llegadaTarde = ModelsLlegadasTarde::find($id);
+
+            if (!$llegadaTarde) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró la llegada tarde con ID: ' . $id,
+                    'data' => []
+                ];
+            }
+
+            $llegadaTarde->update(['observacion' => $observacion]);
+
+            return [
+                'error' => false,
+                'message' => 'Observación actualizada correctamente',
+                'data' => $llegadaTarde
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al actualizar la observación de la llegada tarde");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al actualizar la observación",
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Revoca una llegada tarde: a diferencia de eliminarLlegadaTarde, el registro se
+     * conserva (queda visible con `revocado = true`) pero deja de contar para
+     * total_llegadas_tarde_periodo y para el umbral de límite de futuras llegadas — para
+     * casos como una marcación por error o una justificación aceptada después del hecho,
+     * donde interesa conservar el rastro en vez de borrarlo. La observación es opcional
+     * y, si se manda, reemplaza la observación existente del registro (para dejar el
+     * motivo de la revocación) — si no se manda (null), la observación previa se conserva
+     * tal cual.
+     */
+    public function revocarLlegadaTarde(int $id, ?string $observacion = null): array
+    {
+        try {
+            $llegadaTarde = ModelsLlegadasTarde::find($id);
+
+            if (!$llegadaTarde) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró la llegada tarde con ID: ' . $id,
+                    'data' => []
+                ];
+            }
+
+            if ($llegadaTarde->revocado) {
+                return [
+                    'error' => false,
+                    'message' => 'La llegada tarde ya estaba revocada',
+                    'data' => $llegadaTarde
+                ];
+            }
+
+            $llegadaTarde->update(array_merge(
+                ['revocado' => true],
+                $observacion !== null ? ['observacion' => $observacion] : []
+            ));
+
+            return [
+                'error' => false,
+                'message' => 'Llegada tarde revocada correctamente',
+                'data' => $llegadaTarde
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, "Error al revocar la llegada tarde");
+            return [
+                'error' => true,
+                'message' => "Error en el servidor al revocar la llegada tarde",
                 'data' => []
             ];
         }

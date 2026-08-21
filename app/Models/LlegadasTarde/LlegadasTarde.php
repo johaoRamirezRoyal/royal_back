@@ -17,12 +17,15 @@ class LlegadasTarde extends Model
         'id_periodo_academico',
         'fecha',
         'hora',
+        'observacion',
         'limite_alcanzado',
+        'revocado',
         'enviado',
     ];
 
     protected $casts = [
         'limite_alcanzado' => 'boolean',
+        'revocado' => 'boolean',
         'enviado' => 'boolean',
     ];
 

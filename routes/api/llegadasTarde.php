@@ -19,13 +19,19 @@ Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
 /**
  * GET /api/llegadas-tarde
  * Query params:
- *   id_periodo_academico (int, opcional)    — default: período académico activo
- *   id_alumno            (int, opcional)    — filtrar por alumno
+ *   id_periodo_academico (int, opcional)    — sin id_alumno: default período activo.
+ *                                              Con id_alumno y sin este parámetro: no se
+ *                                              filtra, se listan TODOS sus períodos.
+ *   id_alumno            (int, opcional)    — filtrar por alumno (historial completo)
  *   fecha                (Y-m-d, opcional)  — filtrar por día exacto. Sin la opción 99
  *                                              (acceso completo) se ignora: siempre se
  *                                              fuerza hoy.
- * Cada registro trae total_llegadas_tarde_periodo: cuántas lleva ESE alumno en el
- * período consultado (no el total de todos los alumnos del período).
+ * Cada registro trae total_llegadas_tarde_periodo: cuántas (no revocadas) lleva ESE
+ * alumno en SU período (id_periodo_academico de la fila), y periodo_academico con
+ * id/nombre/fecha_inicio/fecha_fin/activo del período en que se registró.
+ * Orden: desc por fecha/hora (más recientes primero). Sin id_alumno puntual, se
+ * colapsa a una fila por alumno (la más reciente) — pasar id_alumno para su historial
+ * completo (todos los períodos, salvo que también se pase id_periodo_academico).
  */
 Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
 
@@ -34,7 +40,9 @@ Route::get('/', [LlegadasTardeController::class, 'obtenerLlegadasTarde']);
  * Query params:
  *   id_periodo_academico (int, opcional) — default: período académico activo
  * Resumen del período: totales, configuración vigente, top 10 estudiantes con más
- * llegadas tarde, desglose por curso y por día (para gráficas).
+ * llegadas tarde, desglose por curso y por día (para gráficas). Todas las métricas
+ * excluyen llegadas tarde revocadas, salvo resumen.total_llegadas_revocadas (cuántas
+ * se revocaron en el período, informativo).
  */
 Route::get('/dashboard', [LlegadasTardeController::class, 'dashboardLlegadasTarde']);
 
@@ -55,6 +63,21 @@ Route::delete('/{id}', [LlegadasTardeController::class, 'eliminarLlegadaTarde'])
  * Vicerrectoría aunque el registro tenga `limite_alcanzado`.
  */
 Route::post('/{id}/reenviar-correo', [LlegadasTardeController::class, 'reenviarCorreo']);
+
+/**
+ * PUT /api/llegadas-tarde/{id}/observacion
+ * Body (JSON): { "observacion": "texto libre" | null }
+ */
+Route::put('/{id}/observacion', [LlegadasTardeController::class, 'actualizarObservacion']);
+
+/**
+ * PUT /api/llegadas-tarde/{id}/revocar
+ * Body (JSON, opcional): { "observacion": "motivo de la revocación" }
+ * Marca la llegada tarde como revocada: se conserva el registro pero deja de contar
+ * para total_llegadas_tarde_periodo y para el límite. Requiere acceso completo (99).
+ * Si se manda observacion, reemplaza la observación existente del registro.
+ */
+Route::put('/{id}/revocar', [LlegadasTardeController::class, 'revocarLlegadaTarde']);
 
 /**
  * Configuración estándar (hora límite y cantidad límite de llegadas tarde).
