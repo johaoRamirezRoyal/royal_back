@@ -20,12 +20,14 @@ class LlegadasTarde extends Model
         'observacion',
         'limite_alcanzado',
         'revocado',
+        'justificada',
         'enviado',
     ];
 
     protected $casts = [
         'limite_alcanzado' => 'boolean',
         'revocado' => 'boolean',
+        'justificada' => 'boolean',
         'enviado' => 'boolean',
     ];
 

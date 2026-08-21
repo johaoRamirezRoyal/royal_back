@@ -34,6 +34,17 @@ class LlegadaTardeRequest extends FormRequest
             'hora' => [
                 'required',
                 'date_format:H:i'
+            ],
+
+            'justificada' => [
+                'nullable',
+                'boolean'
+            ],
+
+            'observacion' => [
+                'nullable',
+                'string',
+                'max:1000'
             ]
         ];
     }
@@ -53,7 +64,12 @@ class LlegadaTardeRequest extends FormRequest
             'fecha.date' => 'La fecha no tiene un formato válido.',
 
             'hora.required' => 'La hora es obligatoria.',
-            'hora.date_format' => 'La hora debe tener el formato HH:MM.'
+            'hora.date_format' => 'La hora debe tener el formato HH:MM.',
+
+            'justificada.boolean' => 'El campo justificada debe ser verdadero o falso.',
+
+            'observacion.string' => 'La observación debe ser un texto.',
+            'observacion.max' => 'La observación no puede superar los 1000 caracteres.'
         ];
     }
 }
