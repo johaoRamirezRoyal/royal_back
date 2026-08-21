@@ -87,4 +87,32 @@ class LlegadasTardeController extends Controller
 
         return $this->apiResponse($response);
     }
+
+    // Anotar una observación es operativa, igual que reenviar correo: no requiere
+    // acceso completo.
+    public function actualizarObservacion(Request $request, int $id){
+        $observacion = $request->validate([
+            'observacion' => 'nullable|string|max:1000',
+        ])['observacion'] ?? null;
+
+        $response = $this->llegadas_tarde->actualizarObservacion($id, $observacion);
+
+        return $this->apiResponse($response);
+    }
+
+    // Revocar, como eliminar, cambia el conteo del alumno frente al límite: requiere
+    // acceso completo.
+    public function revocarLlegadaTarde(Request $request, int $id){
+        if (!$this->tieneAccesoCompleto($request)) {
+            return $this->error('No tienes permiso para revocar llegadas tarde', 403);
+        }
+
+        $observacion = $request->validate([
+            'observacion' => 'nullable|string|max:1000',
+        ])['observacion'] ?? null;
+
+        $response = $this->llegadas_tarde->revocarLlegadaTarde($id, $observacion);
+
+        return $this->apiResponse($response);
+    }
 }
