@@ -39,7 +39,7 @@ class LlegadasTarde extends Service
         private WhatsAppService $whatsAppService
     ) {}
 
-    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora): array
+    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null): array
     {
         try {
             $yaRegistrada = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
@@ -64,9 +64,11 @@ class LlegadasTarde extends Service
                 ];
             }
 
+            // Las justificadas no cuentan para el conteo del período, igual que las revocadas.
             $totalActual = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
                 ->where('id_periodo_academico', $periodo_academico->id)
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->count();
 
             $cantidadLimite = ConfiguracionLlegadasTarde::find(1)?->cantidad_limite ?? 5;
@@ -83,7 +85,12 @@ class LlegadasTarde extends Service
             // reintento del dispositivo) no pueden duplicar la fila.
             $llegadaTarde = ModelsLlegadasTarde::firstOrCreate(
                 ['id_alumno' => $id_alumno, 'fecha' => $fecha],
-                ['hora' => $hora, 'id_periodo_academico' => $periodo_academico->id]
+                [
+                    'hora' => $hora,
+                    'id_periodo_academico' => $periodo_academico->id,
+                    'justificada' => $justificada,
+                    'observacion' => $observacion,
+                ]
             );
 
             if (!$llegadaTarde->wasRecentlyCreated) {
@@ -91,6 +98,17 @@ class LlegadasTarde extends Service
                     'error' => false,
                     'message' => 'El alumno ya tiene una llegada tarde registrada hoy',
                     'data' => []
+                ];
+            }
+
+            // Justificada: queda registrada para el historial, pero no cuenta para el límite
+            // del alumno ni dispara las notificaciones automáticas (no hace falta avisar de
+            // una tardanza ya excusada).
+            if ($justificada) {
+                return [
+                    'error' => false,
+                    'message' => "Llegada tarde justificada registrada correctamente",
+                    'data' => array_merge($llegadaTarde->toArray(), ['total_llegadas_tarde_periodo' => $totalActual])
                 ];
             }
 
@@ -181,6 +199,7 @@ class LlegadasTarde extends Service
                     $query->where('id_alumno', $id_alumno);
                 })
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->selectRaw('id_alumno, id_periodo_academico, count(*) as total')
                 ->groupBy('id_alumno', 'id_periodo_academico')
                 ->get()
@@ -252,6 +271,7 @@ class LlegadasTarde extends Service
             // listado. Se reporta aparte cuántas se revocaron, como dato informativo.
             $totalLlegadasTarde = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->count();
 
             $totalLlegadasRevocadas = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
@@ -260,11 +280,13 @@ class LlegadasTarde extends Service
 
             $totalEstudiantesAfectados = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->distinct()
                 ->count('id_alumno');
 
             $totalEstudiantesLimiteAlcanzado = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->where('limite_alcanzado', true)
                 ->distinct()
                 ->count('id_alumno');
@@ -274,6 +296,7 @@ class LlegadasTarde extends Service
                 ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
                 ->where('lt.id_periodo_academico', $periodo->id)
                 ->where('lt.revocado', false)
+                ->where('lt.justificada', false)
                 ->select(
                     'lt.id_alumno',
                     'u.nombre',
@@ -293,6 +316,7 @@ class LlegadasTarde extends Service
                 ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
                 ->where('lt.id_periodo_academico', $periodo->id)
                 ->where('lt.revocado', false)
+                ->where('lt.justificada', false)
                 ->select('c.id as id_curso', 'c.nombre as curso', DB::raw('count(*) as total'))
                 ->groupBy('c.id', 'c.nombre')
                 ->orderByDesc('total')
@@ -300,6 +324,7 @@ class LlegadasTarde extends Service
 
             $porDia = ModelsLlegadasTarde::where('id_periodo_academico', $periodo->id)
                 ->where('revocado', false)
+                ->where('justificada', false)
                 ->select('fecha', DB::raw('count(*) as total'))
                 ->groupBy('fecha')
                 ->orderBy('fecha')
