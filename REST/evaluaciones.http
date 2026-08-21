@@ -1,0 +1,387 @@
+### ============================================
+### EVALUACIONES DE CALIDAD DE SERVICIOS — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+### POST http://localhost:8000/api/auth/login
+### Content-Type: application/json
+###
+### {"user": "1193377218", "pass": "1193377218"}
+### ============================================
+
+### ============================================
+### CATÁLOGO DE SERVICIOS
+### ============================================
+
+### 1. LISTAR servicios activos
+GET http://localhost:8000/api/evaluaciones/servicios
+
+### 2. CREAR servicio
+POST http://localhost:8000/api/evaluaciones/servicios
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Cafetería",
+    "descripcion": "Servicio de alimentación para estudiantes y personal"
+}
+
+### 3. ACTUALIZAR servicio
+PUT http://localhost:8000/api/evaluaciones/servicios/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "nombre": "Cafetería Escolar",
+    "descripcion": "Servicio de alimentación renovado"
+}
+
+### 4. DESACTIVAR servicio
+DELETE http://localhost:8000/api/evaluaciones/servicios/1
+
+### ============================================
+### TIPOS DE PREGUNTA
+### ============================================
+
+### 5. LISTAR tipos de pregunta
+GET http://localhost:8000/api/evaluaciones/tipos-pregunta
+
+### ============================================
+### EVALUACIONES — CRUD
+### ============================================
+
+### 6. LISTAR evaluaciones (paginado)
+GET http://localhost:8000/api/evaluaciones?per-page=10
+
+### 7. LISTAR evaluaciones — filtrar por servicio
+GET http://localhost:8000/api/evaluaciones?id_servicio=1
+
+### 8. LISTAR evaluaciones — filtrar por estado
+GET http://localhost:8000/api/evaluaciones?activo=1
+
+### 9. LISTAR evaluaciones — búsqueda por título
+GET http://localhost:8000/api/evaluaciones?s=calidad
+
+### 10. LISTAR evaluaciones — filtros combinados
+GET http://localhost:8000/api/evaluaciones?id_servicio=1&activo=1&per-page=5
+
+### 11. CREAR evaluación — estructura completa (servicio + secciones + preguntas + opciones)
+POST http://localhost:8000/api/evaluaciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Encuesta de Calidad - Cafetería 2026",
+    "descripcion": "Evaluación trimestral del servicio de alimentación",
+    "id_servicio": 1,
+    "activo": 1,
+    "fecha_inicio": "2026-09-01",
+    "fecha_fin": "2026-09-30",
+    "niveles": [1, 2],
+    "secciones": [
+        {
+            "titulo": "Calidad del Alimento",
+            "porcentaje": 50.00,
+            "orden": 0,
+            "preguntas": [
+                {
+                    "id_tipo_pregunta": 1,
+                    "texto": "¿Cómo calificaría la calidad del alimento?",
+                    "obligatoria": 1,
+                    "permite_comentario": 1,
+                    "opciones": [
+                        { "texto": "Excelente", "valor": 4.00, "orden": 0 },
+                        { "texto": "Bueno", "valor": 3.00, "orden": 1 },
+                        { "texto": "Regular", "valor": 2.00, "orden": 2 },
+                        { "texto": "Malo", "valor": 1.00, "orden": 3 }
+                    ]
+                },
+                {
+                    "id_tipo_pregunta": 2,
+                    "texto": "¿El menú variedad es suficiente?",
+                    "obligatoria": 1,
+                    "opciones": [
+                        { "texto": "Sí", "valor": 1.00, "orden": 0 },
+                        { "texto": "No", "valor": 0.00, "orden": 1 }
+                    ]
+                }
+            ]
+        },
+        {
+            "titulo": "Atención y Servicio",
+            "porcentaje": 30.00,
+            "orden": 1,
+            "preguntas": [
+                {
+                    "id_tipo_pregunta": 1,
+                    "texto": "¿Cómo calificaría la atención del personal?",
+                    "obligatoria": 1,
+                    "opciones": [
+                        { "texto": "Excelente", "valor": 4.00, "orden": 0 },
+                        { "texto": "Bueno", "valor": 3.00, "orden": 1 },
+                        { "texto": "Regular", "valor": 2.00, "orden": 2 },
+                        { "texto": "Malo", "valor": 1.00, "orden": 3 }
+                    ]
+                }
+            ]
+        },
+        {
+            "titulo": "Instalaciones",
+            "porcentaje": 20.00,
+            "orden": 2,
+            "preguntas": [
+                {
+                    "id_tipo_pregunta": 4,
+                    "texto": "¿Qué mejoraría de las instalaciones?",
+                    "obligatoria": 0,
+                    "permite_comentario": 1
+                }
+            ]
+        }
+    ]
+}
+
+### 12. CREAR evaluación — mínima (sin estructura, solo encabezado)
+POST http://localhost:8000/api/evaluaciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Evaluación Rápida Transporte",
+    "id_servicio": 2,
+    "niveles": [3]
+}
+
+### 13. CREAR evaluación — campos obligatorios faltantes (debe fallar 422)
+POST http://localhost:8000/api/evaluaciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "descripcion": "Sin título"
+}
+
+### 14. OBTENER evaluación — detalle completo con secciones, preguntas y opciones
+GET http://localhost:8000/api/evaluaciones/1
+
+### 15. OBTENER evaluación — inexistente (debe fallar 404)
+GET http://localhost:8000/api/evaluaciones/99999
+
+### 16. ACTUALIZAR evaluación — info básica
+PUT http://localhost:8000/api/evaluaciones/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Encuesta de Calidad - Cafetería 2026 (Actualizada)",
+    "descripcion": "Evaluación trimestral actualizada"
+}
+
+### 17. ACTUALIZAR evaluación — cambiar niveles
+PUT http://localhost:8000/api/evaluaciones/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "niveles": [1, 2, 3]
+}
+
+### 18. ACTUALIZAR evaluación — cambiar fechas
+PUT http://localhost:8000/api/evaluaciones/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "fecha_inicio": "2026-10-01",
+    "fecha_fin": "2026-10-31"
+}
+
+### 19. TOGGLE ACTIVAR/DESACTIVAR evaluación
+PUT http://localhost:8000/api/evaluaciones/1/toggle-activo
+
+### 20. ELIMINAR evaluación (soft delete)
+DELETE http://localhost:8000/api/evaluaciones/1
+
+### ============================================
+### SECCIONES
+### ============================================
+
+### 21. AGREGAR sección a una evaluación
+POST http://localhost:8000/api/evaluaciones/1/secciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Nueva Sección",
+    "descripcion": "Sección agregada después de la creación",
+    "porcentaje": 25.00,
+    "orden": 3
+}
+
+### 22. ACTUALIZAR sección
+PUT http://localhost:8000/api/evaluaciones/secciones/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "titulo": "Calidad del Alimento (Editada)",
+    "porcentaje": 45.00
+}
+
+### 23. ELIMINAR sección
+DELETE http://localhost:8000/api/evaluaciones/secciones/1
+
+### ============================================
+### PREGUNTAS
+### ============================================
+
+### 24. AGREGAR pregunta a una sección
+POST http://localhost:8000/api/evaluaciones/secciones/1/preguntas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_tipo_pregunta": 1,
+    "texto": "¿Recomendaría este servicio?",
+    "obligatoria": 1,
+    "permite_comentario": 0,
+    "opciones": [
+        { "texto": "Sí, definitivamente", "valor": 4.00, "orden": 0 },
+        { "texto": "Probablemente sí", "valor": 3.00, "orden": 1 },
+        { "texto": "Probablemente no", "valor": 2.00, "orden": 2 },
+        { "texto": "No", "valor": 1.00, "orden": 3 }
+    ]
+}
+
+### 25. AGREGAR pregunta — texto libre sin opciones
+POST http://localhost:8000/api/evaluaciones/secciones/1/preguntas
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_tipo_pregunta": 4,
+    "texto": "Escriba sus observaciones generales",
+    "obligatoria": 0,
+    "permite_comentario": 1
+}
+
+### 26. ACTUALIZAR pregunta
+PUT http://localhost:8000/api/evaluaciones/preguntas/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "texto": "¿Cómo calificaría la calidad del alimento? (Editada)",
+    "obligatoria": 0
+}
+
+### 27. ELIMINAR pregunta
+DELETE http://localhost:8000/api/evaluaciones/preguntas/1
+
+### ============================================
+### OPCIONES DE PREGUNTA
+### ============================================
+
+### 28. AGREGAR opción a una pregunta
+POST http://localhost:8000/api/evaluaciones/preguntas/1/opciones
+Content-Type: application/json
+Accept: application/json
+
+{
+    "texto": "Insuficiente",
+    "valor": 0.00,
+    "orden": 4
+}
+
+### 29. ACTUALIZAR opción
+PUT http://localhost:8000/api/evaluaciones/opciones/1
+Content-Type: application/json
+Accept: application/json
+
+{
+    "texto": "Excelente (Editado)",
+    "valor": 5.00
+}
+
+### 30. ELIMINAR opción
+DELETE http://localhost:8000/api/evaluaciones/opciones/1
+
+### ============================================
+### RESPUESTAS — ENVÍO
+### ============================================
+
+### 31. ENVIAR respuesta — completa (con opciones predefinidas)
+POST http://localhost:8000/api/evaluaciones/1/responder
+Content-Type: application/json
+Accept: application/json
+
+{
+    "anonima": 0,
+    "id_nivel": 1,
+    "respuestas": [
+        {
+            "id_pregunta": 1,
+            "id_opcion": 1,
+            "comentario": "Muy buena calidad"
+        },
+        {
+            "id_pregunta": 2,
+            "id_opcion": 5
+        },
+        {
+            "id_pregunta": 3,
+            "id_opcion": 1
+        },
+        {
+            "id_pregunta": 4,
+            "valor_texto": "Las mesas necesitan mantenimiento"
+        }
+    ]
+}
+
+### 32. ENVIAR respuesta — anónima
+POST http://localhost:8000/api/evaluaciones/1/responder
+Content-Type: application/json
+Accept: application/json
+
+{
+    "anonima": 1,
+    "respuestas": [
+        {
+            "id_pregunta": 1,
+            "id_opcion": 2
+        },
+        {
+            "id_pregunta": 2,
+            "id_opcion": 5
+        }
+    ]
+}
+
+### 33. ENVIAR respuesta — sin respuestas (debe fallar 422)
+POST http://localhost:8000/api/evaluaciones/1/responder
+Content-Type: application/json
+Accept: application/json
+
+{
+    "anonima": 0
+}
+
+### ============================================
+### RESPUESTAS — CONSULTA
+### ============================================
+
+### 34. LISTAR respuestas de una evaluación (paginado)
+GET http://localhost:8000/api/evaluaciones/1/respuestas?per-page=10
+
+### 35. LISTAR respuestas — filtrar anónimas
+GET http://localhost:8000/api/evaluaciones/1/respuestas?anonima=1
+
+### 36. OBTENER detalle de una respuesta específica
+GET http://localhost:8000/api/evaluaciones/respuestas/1
+
+### ============================================
+### RESULTADOS / PUNTAJES
+### ============================================
+
+### 37. CALCULAR resultados de una evaluación (promedio por sección + general)
+GET http://localhost:8000/api/evaluaciones/1/resultados

@@ -231,4 +231,9 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/logs-actividad')->group(function () {
         require __DIR__ . '/api/logsActividad.php';
     });
+
+    // EVALUACIONES DE CALIDAD DE SERVICIOS
+    Route::prefix('/evaluaciones')->group(function () {
+        require __DIR__ . '/api/evaluaciones.php';
+    });
 });
