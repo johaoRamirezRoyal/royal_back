@@ -101,17 +101,22 @@ Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambi
 
 
 /**
-http://localhost:8000/api/gestion-academica/franjas-horarias?id_anio_escolar=2&id_dia_semana=2&disponible=1&id_carga_academica=5
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_esquema=3&id_dia_semana=2&disponible=1&id_carga_academica=5
 'disponible=1' filtra solo las franjas que aún no tienen un horario de clase asignado.
 Si además se envía 'id_carga_academica', solo se excluyen las franjas ya asignadas a ESA carga académica
 (las asignadas a otras cargas académicas se siguen mostrando como disponibles).
+
+En vez de 'id_esquema' también se puede enviar 'id_curso' + 'id_anio_escolar' — el backend
+resuelve el esquema a partir del nivel de ese curso (usado por la pestaña "Horario" y por
+el autoservicio de horario del docente, que solo conocen el curso, no el esquema):
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_curso=1&id_anio_escolar=2&disponible=1
  */
 Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias
 {
-  "id_anio_escolar": 7,
+  "id_esquema": 3,
   "id_dia_semana": 2,
   "hora_inicio": "07:55:00",
   "hora_fin": "08:50:00",
@@ -124,7 +129,7 @@ Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranj
 http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
 {
     "ids": [3, 4],
-    "id_anio_escolar": 2
+    "id_esquema": 2
 }
  */
 Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria']);
@@ -255,3 +260,111 @@ Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'el
  * de estudiantes con más ausencias en el rango. Todos los parámetros son opcionales.
  */
 Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/mis-cursos
+ * Autoservicio del docente: cursos donde tiene carga académica activa (self-scoped por
+ * $request->user()->id_user) — usado para poblar el filtro de curso del dashboard de
+ * métricas en vez de listar todos los cursos del colegio.
+ */
+Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos']);
+
+/**
+ * Esquemas de horario: plantilla de franjas horarias por (nivel × año escolar) —
+ * ej. "Primaria 2026", "Bachillerato 2026". Las franjas horarias (arriba) ahora
+ * pertenecen a un esquema en vez de directamente a un año escolar.
+ *
+ * http://localhost:8000/api/gestion-academica/esquemas-horario?id_anio_escolar=2&id_nivel=3
+ */
+Route::get('/esquemas-horario', [GestionAcademicaController::class, 'listarEsquemasHorario']);
+
+/**
+http://localhost:8000/api/gestion-academica/esquemas-horario
+{
+    "nombre": "Primaria 2026",
+    "id_nivel": 3,
+    "id_anio_escolar": 2
+}
+ */
+Route::post('/esquemas-horario', [GestionAcademicaController::class, 'crearEsquemaHorario']);
+
+/**
+http://localhost:8000/api/gestion-academica/esquemas-horario
+{
+    "id": 1,
+    "nombre": "Primaria 2026 (jornada única)",
+    "activo": true
+}
+ */
+Route::put('/esquemas-horario', [GestionAcademicaController::class, 'actualizarEsquemaHorario']);
+
+/**
+http://localhost:8000/api/gestion-academica/esquemas-horario
+{
+    "ids": [1, 2]
+}
+ */
+Route::delete('/esquemas-horario', [GestionAcademicaController::class, 'eliminarEsquemaHorario']);
+
+/**
+ * Autoservicio de horario del docente: el docente autenticado arma su propio horario.
+ * id_docente siempre se toma del usuario autenticado (request->user()), nunca de un
+ * parámetro — no hay selector de "otro docente" en estos endpoints.
+ *
+ * Menú lateral: todos los cursos, y dentro de cada uno las asignaturas que el docente
+ * autenticado ya tiene asignadas (academico_docente_asignatura), marcando cuáles ya
+ * tienen horario reservado en el año escolar dado.
+ * http://localhost:8000/api/gestion-academica/mi-horario/menu?id_anio_escolar=2
+ */
+Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHorario']);
+
+/**
+ * Horario propio ya reservado (mismo formato que GET /horario filtrado por el docente
+ * autenticado).
+ * http://localhost:8000/api/gestion-academica/mi-horario
+ */
+Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario']);
+
+/**
+ * Aparta una franja para una asignatura propia en un curso. Solo se pueden elegir
+ * franjas del esquema del nivel de ese curso en el año escolar indicado, y que estén
+ * disponibles (ver GET /franjas-horarias?id_curso=&disponible=1 arriba).
+http://localhost:8000/api/gestion-academica/mi-horario
+{
+    "id_curso": 1,
+    "id_asignatura": 5,
+    "id_franja_horaria": 12,
+    "id_anio_escolar": 2
+}
+ */
+Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario']);
+
+/**
+ * Elimina bloques del horario propio (falla si alguno de los ids no pertenece al
+ * docente autenticado).
+http://localhost:8000/api/gestion-academica/mi-horario
+{
+    "ids": [10, 11]
+}
+ */
+Route::delete('/mi-horario', [GestionAcademicaController::class, 'eliminarMiHorario']);
+
+/**
+ * Configuración del calendario académico (A o B — ver AnioEscolarServices) y gestión de
+ * años escolares (creación manual + habilitar/deshabilitar). El listado en sí sigue
+ * viviendo en GET /compartido/anio-academico/todos (compartido con Admisiones, sin gate).
+ */
+Route::get('/configuracion-calendario', [GestionAcademicaController::class, 'obtenerConfiguracionCalendario']);
+Route::put('/configuracion-calendario', [GestionAcademicaController::class, 'actualizarConfiguracionCalendario']);
+
+/**
+ * POST /gestion-academica/anios-escolares
+ * Body: { "anio_inicio": 2026 }
+ */
+Route::post('/anios-escolares', [GestionAcademicaController::class, 'crearAnioEscolarManual']);
+
+/**
+ * PUT /gestion-academica/anios-escolares/estado
+ * Body: { "id": 8, "activo": false }
+ */
+Route::put('/anios-escolares/estado', [GestionAcademicaController::class, 'actualizarEstadoAnioEscolar']);

@@ -7,10 +7,13 @@ use App\Http\Requests\GestionAcademica\AsignaturaRequest;
 use App\Http\Requests\GestionAcademica\AreaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\CargaAcademicaRequest;
 use App\Http\Requests\GestionAcademica\DocenteAsignaturaRequest;
+use App\Http\Requests\GestionAcademica\EsquemaHorarioRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
+use App\Http\Requests\GestionAcademica\MiHorarioRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
+use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
@@ -29,9 +32,33 @@ class GestionAcademicaController extends Controller
     // resto del controller (ver migración 2026_08_19_100000_seed_opcion_metricas_asistencia_academica).
     private const OPCION_METRICAS_ASISTENCIA = 102;
 
+    // Perfil "Docente" en la tabla perfiles.
+    private const PERFIL_DOCENTE = 3;
+
+    // Acceso propio del docente (autoservicio, sin pasar por /permisos): tomar asistencia
+    // de SUS clases, gestionar SU horario, y ver métricas (verMetricasAsistencia se
+    // restringe server-side a sus propios cursos — ver
+    // AsistenciaEstudianteService::metricasPorCurso). Explícitamente NO incluye nada de
+    // Configuración académica (asignaturas/áreas/carga académica/franjas/esquemas/años
+    // escolares/calendario) ni Llegadas tarde — esas siguen exigiendo la opción 99/101
+    // otorgada desde /permisos, igual que para cualquier otro perfil.
+    //
+    // verFranjasHorarias es compartido con Configuración académica (el admin también lo
+    // usa para armar la grilla de franjas), pero es de solo lectura de horarios/franjas —
+    // no expone datos sensibles distintos de lo que ya ve en Mi horario — y sin él, el
+    // sheet de "apartar horario" (useMiHorario.hook.ts::abrirSeleccion) no puede listar
+    // las franjas disponibles antes de reservar.
+    private const METODOS_DOCENTE = [
+        'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
+        'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
+        'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'eliminarMiHorario',
+        'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
+    ];
+
     public function __construct(
         private GestionAcademicaService $service,
-        UsuariosServices $usuariosService,
+        private AnioEscolarServices $anioEscolarService,
+        private UsuariosServices $usuariosService,
         Request $request,
     ) {
         $tieneAccesoCompleto = $usuariosService->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
@@ -40,7 +67,16 @@ class GestionAcademicaController extends Controller
             return;
         }
 
-        $esAccionMetricas = $request->route()?->getActionMethod() === 'verMetricasAsistencia';
+        $metodo = $request->route()?->getActionMethod();
+
+        $esDocenteEnMetodoPropio = $request->user()->perfil === self::PERFIL_DOCENTE
+            && in_array($metodo, self::METODOS_DOCENTE, true);
+
+        if ($esDocenteEnMetodoPropio) {
+            return;
+        }
+
+        $esAccionMetricas = $metodo === 'verMetricasAsistencia';
         $tieneAccesoMetricas = $esAccionMetricas
             && ($usuariosService->tienePermiso(self::OPCION_METRICAS_ASISTENCIA, $request->user()->perfil)['permiso'] ?? false);
 
@@ -195,12 +231,71 @@ class GestionAcademicaController extends Controller
 
     public function verFranjasHorarias(Request $request)
     {
+        $id_esquema = $request->input('id_esquema');
+        $id_curso = $request->input('id_curso');
         $id_anio_escolar = $request->input('id_anio_escolar');
         $id_dia_semana = $request->input('id_dia_semana');
         $disponible = $request->boolean('disponible');
         $id_carga_academica = $request->input('id_carga_academica');
 
-        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_anio_escolar, $id_dia_semana, $disponible, $id_carga_academica));
+        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_esquema, $id_curso, $id_anio_escolar, $id_dia_semana, $disponible, $id_carga_academica));
+    }
+
+    public function listarEsquemasHorario(Request $request)
+    {
+        $id_anio_escolar = $request->input('id_anio_escolar');
+        $id_nivel = $request->input('id_nivel');
+
+        return $this->apiResponse($this->service->esquemaHorario()->listarEsquemas($id_anio_escolar, $id_nivel));
+    }
+
+    public function crearEsquemaHorario(EsquemaHorarioRequest $request)
+    {
+        return $this->apiResponse($this->service->esquemaHorario()->crearEsquema($request->validated()));
+    }
+
+    public function actualizarEsquemaHorario(EsquemaHorarioRequest $request)
+    {
+        $body = $request->validated();
+        $id = $body['id'];
+        unset($body['id']);
+
+        return $this->apiResponse($this->service->esquemaHorario()->actualizarEsquema($id, $body));
+    }
+
+    public function eliminarEsquemaHorario(Request $request)
+    {
+        return $this->apiResponse($this->service->esquemaHorario()->eliminarEsquema($request->input('ids', [])));
+    }
+
+    public function verMiMenuHorario(Request $request)
+    {
+        $id_anio_escolar = $request->input('id_anio_escolar');
+
+        return $this->apiResponse($this->service->docenteHorario()->verMenu($request->user()->id_user, $id_anio_escolar));
+    }
+
+    public function verMiHorario(Request $request)
+    {
+        return $this->apiResponse($this->service->docenteHorario()->misHorarios($request->user()->id_user));
+    }
+
+    public function reservarMiHorario(MiHorarioRequest $request)
+    {
+        $body = $request->validated();
+
+        return $this->apiResponse($this->service->docenteHorario()->reservar(
+            $request->user()->id_user,
+            $body['id_curso'],
+            $body['id_asignatura'],
+            $body['id_franja_horaria'],
+            $body['id_anio_escolar'],
+        ));
+    }
+
+    public function eliminarMiHorario(MiHorarioRequest $request)
+    {
+        return $this->apiResponse($this->service->docenteHorario()->eliminar($request->user()->id_user, $request->input('ids', [])));
     }
 
     public function crearFranjaHoraria(FranjaHorariaRequest $request)
@@ -211,7 +306,7 @@ class GestionAcademicaController extends Controller
     public function actualizarTipoFranjaHoraria(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
-        return $this->apiResponse($this->service->franjaHoraria()->actualizarFranjaHoraria($body['ids'], $body['id_anio_escolar'] ?? null));
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarFranjaHoraria($body['ids'], $body['id_esquema'] ?? null));
     }
 
     public function actualizarOrdenFranjasHorarias(FranjaHorariaRequest $request)
@@ -296,12 +391,33 @@ class GestionAcademicaController extends Controller
         ));
     }
 
+    /**
+     * Cursos donde el docente autenticado tiene carga académica — para el filtro de curso
+     * del dashboard de Métricas de Asistencia (ver AttendanceMetrics en el frontend), que
+     * de otra forma lista TODOS los cursos vía /api/cursos/all.
+     */
+    public function obtenerMisCursos(Request $request)
+    {
+        return $this->apiResponse($this->service->cargaAcademica()->obtenerCursosDocente($request->user()->id_user));
+    }
+
     public function verMetricasAsistencia(Request $request)
     {
+        // Docente sin acceso completo (opción 99): restringido server-side a sus propios
+        // cursos (ver AsistenciaEstudianteService::metricasPorCurso) — no basta con
+        // ocultar el selector de curso en el frontend, cualquiera podría pedir otro
+        // id_curso directo contra la API.
+        $tieneAccesoCompleto = $this->usuariosService
+            ->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
+        $idDocenteScope = (!$tieneAccesoCompleto && $request->user()->perfil === self::PERFIL_DOCENTE)
+            ? $request->user()->id_user
+            : null;
+
         return $this->apiResponse($this->service->asistenciaEstudiante()->metricasPorCurso(
             fecha_inicio: $request->input('fecha_inicio'),
             fecha_fin:    $request->input('fecha_fin'),
             id_curso:     $request->input('id_curso'),
+            id_docente_scope: $idDocenteScope,
         ));
     }
 
@@ -309,6 +425,42 @@ class GestionAcademicaController extends Controller
     {
         return $this->apiResponse($this->service->asistenciaEstudiante()->eliminarAsistenciaEstudiante(
             $request->input('ids', []),
+        ));
+    }
+
+    public function obtenerConfiguracionCalendario()
+    {
+        return $this->apiResponse($this->anioEscolarService->obtenerConfiguracionCalendario());
+    }
+
+    public function actualizarConfiguracionCalendario(Request $request)
+    {
+        $request->validate([
+            'tipo_calendario' => 'required|in:A,B',
+        ]);
+
+        return $this->apiResponse($this->anioEscolarService->actualizarConfiguracionCalendario($request->input('tipo_calendario')));
+    }
+
+    public function crearAnioEscolarManual(Request $request)
+    {
+        $request->validate([
+            'anio_inicio' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        return $this->apiResponse($this->anioEscolarService->crearAnioEscolarManual((int) $request->input('anio_inicio')));
+    }
+
+    public function actualizarEstadoAnioEscolar(Request $request)
+    {
+        $request->validate([
+            'id' => 'required|integer|exists:anio_escolar,id',
+            'activo' => 'required|boolean',
+        ]);
+
+        return $this->apiResponse($this->anioEscolarService->actualizarEstadoAnioEscolar(
+            (int) $request->input('id'),
+            (bool) $request->input('activo'),
         ));
     }
 }

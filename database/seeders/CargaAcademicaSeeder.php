@@ -4,10 +4,12 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use App\Models\Usuarios\Usuario;
+use Database\Seeders\Concerns\ResolvesDocentePorNombre;
 
 class CargaAcademicaSeeder extends Seeder
 {
+    use ResolvesDocentePorNombre;
+
     /**
      * academico_carga_academica: cruza id_docente_asignatura con id_curso.
      * Formato de cada fila: [docente, materia, curso]
@@ -214,7 +216,7 @@ class CargaAcademicaSeeder extends Seeder
         ];
 
         foreach ($triples as [$nombreDocente, $nombreMateria, $nombreCurso]) {
-            $idDocente = Usuario::whereRaw("CONCAT(nombre, ' ', apellido) = ?", [$nombreDocente])->value('id_user');
+            $idDocente = $this->resolverDocenteId($nombreDocente);
             $idAsignatura = DB::table('academico_asignatura')->where('nombre', $nombreMateria)->value('id');
             $idCurso = DB::table('curso')->where('nombre', $nombreCurso)->value('id');
 

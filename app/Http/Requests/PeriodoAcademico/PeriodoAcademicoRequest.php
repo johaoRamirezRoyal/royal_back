@@ -3,6 +3,7 @@
 namespace App\Http\Requests\PeriodoAcademico;
 
 use App\Models\AnioEscolar\Anio;
+use App\Services\AnioEscolar\AnioEscolarServices;
 use Illuminate\Foundation\Http\FormRequest;
 
 class PeriodoAcademicoRequest extends FormRequest
@@ -59,9 +60,11 @@ class PeriodoAcademicoRequest extends FormRequest
                 return;
             }
 
-            // Calendario B: el año escolar corre del 1 de agosto al 30 de junio del año siguiente.
-            $fechaMinima = "{$anioEscolar->anio_inicio}-08-01";
-            $fechaMaxima = "{$anioEscolar->anio_fin}-06-30";
+            // Rango válido según el tipo de calendario (A o B) configurado en
+            // `configuracion_academica` — ver AnioEscolarServices::rangoDeAnioEscolar.
+            $rango = app(AnioEscolarServices::class)->rangoDeAnioEscolar($anioEscolar);
+            $fechaMinima = $rango['fecha_min'];
+            $fechaMaxima = $rango['fecha_max'];
 
             if (
                 $this->fecha_inicio &&

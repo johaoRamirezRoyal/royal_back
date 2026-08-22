@@ -177,6 +177,112 @@ Reglas:
   `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
   de hardcodear el número en el frontend.
 
+## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
+
+### Autoservicio del Docente (tercer patrón de permisos, además de (a)/(b) arriba)
+
+El perfil Docente (`id_perfil` `3`) normalmente NO tiene la opción `99` otorgada en
+`cron_permisos` — en vez de eso, el constructor de `GestionAcademicaController` combina
+el chequeo de opción con una whitelist fija de acciones self-scoped:
+
+```php
+private const PERFIL_DOCENTE = 3;
+private const METODOS_DOCENTE = [
+    'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
+    'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
+    'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'eliminarMiHorario',
+    'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
+];
+```
+
+Si `$request->user()->perfil === PERFIL_DOCENTE` y la acción está en esa lista, pasa sin
+necesitar la opción 99 — **el resto del controller (asignaturas, áreas, carga académica,
+esquemas/franjas fuera de listar, años escolares, calendario) sigue exigiéndola**. Al
+agregar un método nuevo que el docente deba poder usar desde autoservicio (Asistencia de
+clases / Mi horario), agrégalo a `METODOS_DOCENTE` explícitamente — no asumas que "es de
+lectura" es suficiente (`verFranjasHorarias` se quedó fuera al construir esto y rompió el
+flujo de "apartar horario" hasta que se agregó). `verMetricasAsistencia` se deja pasar
+siempre, pero el propio `AsistenciaEstudianteService::metricasPorCurso` recibe
+`id_docente_scope` (el `id_user` del docente, resuelto server-side, nunca de un
+parámetro) y restringe ahí los resultados a solo sus cursos — no confíes en que
+"whitelisteado en el controller" sea suficiente aislamiento para endpoints agregados,
+que también agregan datos de terceros.
+
+### Años escolares y Calendario A/B
+
+- `anio_escolar` (`id`, `anio_inicio`, `anio_fin`, `activo`, `fechareg`) sigue siendo
+  legacy sin migración propia en este repo — no la borres/recrees, solo se le agregan
+  filas nuevas.
+- `configuracion_academica` (single-row, id=1, `tipo_calendario` enum A/B — migración
+  `2026_08_21_140000_create_configuracion_academica_table`) reemplaza el cutoff fijo de
+  "Calendario B" (1 ago–30 jun) que antes estaba hardcodeado en `AnioEscolarServices`.
+  Calendario A = 1 feb–30 nov del mismo año calendario (`anio_inicio == anio_fin`);
+  Calendario B = 1 ago–30 jun del año siguiente. Toda la lógica de rango/resolución vive
+  en `AnioEscolarServices::rangoParaAnioInicio()`/`anioInicioParaFecha()` — no
+  reimplementar el cutoff en otro sitio, reusar estos dos métodos (`rangoDeAnioEscolar()`
+  ya expone el rango de un `Anio` existente para validaciones, ver
+  `PeriodoAcademicoRequest`).
+- `AnioEscolarServices::obtenerUltimoAnioEscolar()` (detrás de
+  `GET /compartido/anio-academico/ultimo`) **prioriza la fila con `activo=1`** sobre el
+  cálculo por calendario — solo recalcula por fecha si no hay ninguna fila habilitada
+  todavía (antes de la primera corrida del cron, o si un admin deshabilitó todas). Lo usan
+  también `AdmissionsController` (3 sitios) para resolver el año de nuevas inscripciones.
+- Comando programado `anio-escolar:cerrar-abrir` (`CerrarAbrirAnioEscolarCommand`,
+  `Schedule::...->daily()` en `routes/console.php`) llama
+  `AnioEscolarServices::cerrarYAbrirAnioEscolar()`: cierra (`activo=false`) cualquier año
+  activo que ya no corresponda a hoy según el calendario configurado, y abre (crea +
+  activa) el que sí corresponde si todavía no existe — pero si esa fila ya existe y fue
+  desactivada a mano, **no la reactiva** (respeta el override manual del admin). Igual que
+  el resto de `Schedule::`, no hace nada solo — necesita `php artisan schedule:run` cada
+  minuto vía el timer de systemd ya documentado para los otros jobs.
+- Endpoints nuevos en `GestionAcademicaController` (todos gateados por opción 99, sin
+  bypass de perfil): `GET|PUT /gestion-academica/configuracion-calendario`,
+  `POST /gestion-academica/anios-escolares` (creación manual, respaldo si el cron no
+  corrió), `PUT /gestion-academica/anios-escolares/estado` (habilitar/deshabilitar a
+  mano). El listado (`GET /compartido/anio-academico/todos`) sigue viviendo aparte,
+  compartido con Admisiones y sin gate de opción — no se tocó.
+
+### Tablas sin migración propia descubiertas/completadas en este repo
+
+`academico_asistencia_clase` y `academico_asistencia_estudiante` ya se usaban en
+`AsistenciaClaseService`/`AsistenciaEstudianteService` sin tener `Schema::create` en
+`database/migrations/` — mismo patrón legacy que `anio_escolar`/`cron_opciones`. Se les
+agregaron migraciones (`2026_08_21_160000_...`, `2026_08_22_100000_...`) con sus FKs y
+unique constraints (`(id_horario_clase, fecha)` / `(id_asistencia_clase, id_alumno)`).
+Si un `db:seed`/endpoint nuevo falla con "Base table ... doesn't exist" en una tabla de
+Gestión Académica, es probable que sea este mismo patrón — revisa si tiene migración real
+antes de asumir que el dato está mal.
+
+### Bug de índice único corregido: `uq_franja_horaria`
+
+La migración original de `academico_franja_horaria` puso el unique en
+`(id_anio_escolar, id_dia_semana, orden)`; cuando se introdujo `id_esquema` (franjas por
+nivel, no directo por año) nadie actualizó ese índice. Efecto real: dos niveles del mismo
+año no podían tener franjas en el mismo día+orden, aunque
+`FranjaHorariaService::añadirFranjaHoraria` ya valida duplicados por `id_esquema`, no por
+año — el índice de BD era más restrictivo que la regla de negocio. Corregido en
+`2026_08_21_150000_fix_uq_franja_horaria_scope_to_esquema` (nuevo índice
+`uq_franja_horaria_esquema` en `(id_esquema, id_dia_semana, orden)`; hubo que agregar un
+índice de reemplazo para `id_anio_escolar` antes de poder borrar el viejo, porque MySQL no
+deja quitar un índice del que depende una FK sin uno de repuesto).
+
+### Seeders de datos de prueba (`database/seeders/`)
+
+`DatabaseSeeder` corre, en orden: `AsignaturaSeeder` → `AreaAcademicaSeeder` (backfill de
+`id_area`) → `PeriodoAcademicoSeeder` (vía el Service real, respeta el calendario
+configurado) → `EsquemaHorarioSeeder` (uno por nivel usado) → `FranjaHorarioSeeder` →
+`DocenteAsignaturaSeeder` → `CargaAcademicaSeeder` → `HorarioSeeder` →
+`AsistenciaClaseSeeder`. Los últimos cuatro ya existían con datos reales (docentes,
+materias, 5 días de horario) pero estaban rotos: hardcodeaban `id_anio_escolar=1` (año
+inactivo) y buscaban al docente por `CONCAT(nombre,' ',apellido) = 'Nombre Completo'`
+exacto, que no matchea nada contra los datos reales de `usuarios` (nombres completos
+metidos en un solo campo, `apellido` a veces literalmente `"."`). Ambos arreglados:
+`FranjaHorarioSeeder` ahora resuelve el año activo dinámicamente y crea franjas por
+esquema (nivel); el matching de docente pasó a un resolver difuso compartido
+(`database/seeders/Concerns/ResolvesDocentePorNombre.php`) que compara por palabras sin
+importar orden ni palabras de más — reutilízalo en cualquier seeder nuevo que necesite
+resolver un `Usuario` por nombre "limpio" contra datos reales sucios.
+
 ## Proceso de compra (`/proveedores` + `/solicitudes`)
 
 Módulo de compras en dos tablas paralelas: la solicitud inicial (`solicitudes_inicial`)

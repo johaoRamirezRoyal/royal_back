@@ -5,10 +5,18 @@ namespace App\Services\GestionAcademica;
 use App\Models\GestionAcademica\CargaAcademica;
 use App\Services\Service;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 class CargaAcademicaService extends Service
 {
-    public function añadirCargaAcademicaDocente(int $id_curso, int $id_docente_asignatura)
+    /**
+     * @param bool $silentIfExists Con true, si la carga ya existe la reutiliza en vez de
+     * devolver error — usado por el autoservicio del docente (DocenteHorarioService), que
+     * solo quiere asegurarse de que la carga exista antes de apartar un horario, sin que
+     * "ya existe" sea un fallo. El flujo manual del admin (pestaña "Carga académica")
+     * sigue usando el default false: ahí sí es un error, sirve de aviso de duplicado.
+     */
+    public function añadirCargaAcademicaDocente(int $id_curso, int $id_docente_asignatura, bool $silentIfExists = false)
     {
         try {
 
@@ -19,7 +27,7 @@ class CargaAcademicaService extends Service
                 ]
             );
 
-            if (!$carga->wasRecentlyCreated) {
+            if (!$carga->wasRecentlyCreated && !$silentIfExists) {
                 return [
                     'error' => true,
                     'message' => 'Ya existe una carga académica para este docente en ese curso.',
@@ -30,7 +38,7 @@ class CargaAcademicaService extends Service
             return [
                 'error' => false,
                 'message' => "Se ha creado la carga académica correctamente.",
-                'data' => []
+                'data' => ['id' => $carga->id]
             ];
         } catch (Exception $e) {
 
@@ -79,6 +87,42 @@ class CargaAcademicaService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor...',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
+     * Lista plana (id, nombre) de los cursos donde el docente tiene carga académica
+     * activa — para poblar selectores de autoservicio (ej. el filtro de curso en el
+     * dashboard de Métricas de Asistencia) sin exponer el resto del listado de carga
+     * académica. Misma lógica de scoping que
+     * AsistenciaEstudianteService::metricasPorCurso.
+     */
+    public function obtenerCursosDocente(int $idDocente): array
+    {
+        try {
+            $cursos = DB::table('academico_carga_academica as ca')
+                ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+                ->join('curso as c', 'c.id', '=', 'ca.id_curso')
+                ->where('da.id_docente', $idDocente)
+                ->where('ca.activo', 1)
+                ->select('c.id', 'c.nombre')
+                ->distinct()
+                ->orderBy('c.nombre')
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Cursos del docente obtenidos correctamente.',
+                'data' => $cursos,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener los cursos del docente');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener los cursos del docente.',
                 'data' => [],
             ];
         }

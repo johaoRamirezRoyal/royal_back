@@ -15,6 +15,8 @@ class FranjaHorariaRequest extends FormRequest
     {
         return [
             'id_anio_escolar' => ['nullable', 'integer', 'exists:anio_escolar,id'],
+            'id_esquema' => ['nullable', 'integer', 'exists:academico_esquema_horario,id'],
+            'id_curso' => ['nullable', 'integer', 'exists:curso,id'],
             'id_dia_semana' => ['nullable', 'integer', 'exists:dias_semana,id'],
             'hora_inicio' => ['nullable', 'date_format:H:i:s'],
             'hora_fin' => ['nullable', 'date_format:H:i:s'],
@@ -32,6 +34,8 @@ class FranjaHorariaRequest extends FormRequest
     {
         return [
             'id_anio_escolar.exists' => 'El año escolar no existe.',
+            'id_esquema.exists' => 'El esquema de horario no existe.',
+            'id_curso.exists' => 'El curso no existe.',
             'id_dia_semana.exists' => 'El día de la semana no existe.',
             'hora_inicio.date_format' => 'La hora debe tener formato H:i:s.',
             'hora_fin.date_format' => 'La hora debe tener formato H:i:s.',

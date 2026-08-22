@@ -22,6 +22,14 @@ Schedule::command('asistencia:cerrar-vencidas')->everyFifteenMinutes();
 // cada minuto en el servidor (deploy/royal-back-scheduler.timer/.service).
 Schedule::command('periodos:desactivar-vencidos')->daily();
 
+// Cierra el año escolar vigente si ya terminó y abre/activa el que corresponde según el
+// calendario (A o B) configurado en Configuración académica (ver
+// AnioEscolarServices::cerrarYAbrirAnioEscolar). Igual que arriba, basta una vez al día
+// porque el corte es por fecha, no por hora. Misma nota operativa: requiere
+// `php artisan schedule:run` corriendo cada minuto en el servidor
+// (deploy/royal-back-scheduler.timer/.service).
+Schedule::command('anio-escolar:cerrar-abrir')->daily();
+
 // Purga logs_actividad con más de 90 días (ver LogsActividadService::purgarLogsAntiguos).
 // Laravel no tiene un ->everyThreeDays() nativo, así que se usa cron directo: corre a
 // las 2am en los días del mes múltiplos de 3 (aproximación estándar de "cada 3 días" con

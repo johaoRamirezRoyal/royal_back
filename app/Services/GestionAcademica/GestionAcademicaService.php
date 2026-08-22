@@ -14,7 +14,9 @@ class GestionAcademicaService extends Service
         private FranjaHorariaService $franjaHoraria,
         private HorarioClaseService $horarioClase,
         private AsistenciaClaseService $asistenciaClase,
-        private AsistenciaEstudianteService $asistenciaEstudiante
+        private AsistenciaEstudianteService $asistenciaEstudiante,
+        private EsquemaHorarioService $esquemaHorario,
+        private DocenteHorarioService $docenteHorario,
     ) {}
 
     public function asignatura(): Asignatura
@@ -55,5 +57,15 @@ class GestionAcademicaService extends Service
     public function asistenciaEstudiante(): AsistenciaEstudianteService
     {
         return $this->asistenciaEstudiante;
+    }
+
+    public function esquemaHorario(): EsquemaHorarioService
+    {
+        return $this->esquemaHorario;
+    }
+
+    public function docenteHorario(): DocenteHorarioService
+    {
+        return $this->docenteHorario;
     }
 }
