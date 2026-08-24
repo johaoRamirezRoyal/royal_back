@@ -16,7 +16,10 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AsignaturaSeeder::class,          // academico_asignatura
-            FranjaHorarioSeeder::class,       // academico_franja_horaria
+            AreaAcademicaSeeder::class,       // academico_area (requiere academico_asignatura para el backfill de id_area)
+            PeriodoAcademicoSeeder::class,    // periodo_academico (requiere un anio_escolar activo)
+            EsquemaHorarioSeeder::class,      // academico_esquema_horario (requiere un anio_escolar activo)
+            FranjaHorarioSeeder::class,       // academico_franja_horaria (requiere academico_esquema_horario)
             DocenteAsignaturaSeeder::class,   // academico_docente_asignatura (requiere usuarios ya cargados)
             CargaAcademicaSeeder::class,      // academico_carga_academica
             HorarioSeeder::class,             // academico_horario_clase

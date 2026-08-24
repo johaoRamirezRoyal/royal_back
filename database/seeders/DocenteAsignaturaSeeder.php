@@ -4,15 +4,19 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use App\Models\Usuarios\Usuario;
+use Database\Seeders\Concerns\ResolvesDocentePorNombre;
 
 class DocenteAsignaturaSeeder extends Seeder
 {
+    use ResolvesDocentePorNombre;
+
     /**
      * academico_docente_asignatura: cruza id_docente (usuarios.id_user) con id_asignatura.
      *
-     * Los docentes se buscan en `usuarios` concatenando nombre + apellido,
-     * ya que la tabla no tiene un campo de nombre completo único.
+     * Los docentes se resuelven con un match difuso por palabras (ver
+     * Concerns\ResolvesDocentePorNombre) — un match exacto de "nombre apellido" no
+     * encuentra nada porque `usuarios.nombre`/`apellido` viene con datos reales sucios
+     * (nombre completo en un solo campo, apellido="." de relleno).
      */
     public function run(): void
     {
@@ -87,15 +91,5 @@ class DocenteAsignaturaSeeder extends Seeder
                 'Docentes no encontrados en usuarios: '.implode(', ', array_unique($noEncontrados))
             );
         }
-    }
-
-    /**
-     * Busca el id_user del docente en `usuarios` por nombre completo
-     * (concatenación de nombre + apellido, ya que no existe un campo único).
-     */
-    private function resolverDocenteId(string $nombreCompleto): ?int
-    {
-        return Usuario::whereRaw("CONCAT(nombre, ' ', apellido) = ?", [$nombreCompleto])
-            ->value('id_user');
     }
 }

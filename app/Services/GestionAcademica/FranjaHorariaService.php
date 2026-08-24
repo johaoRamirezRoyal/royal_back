@@ -2,7 +2,9 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\CargaAcademica;
+use App\Models\GestionAcademica\EsquemaHorario;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Services\Service;
 use Exception;
@@ -10,9 +12,51 @@ use Illuminate\Support\Facades\DB;
 
 class FranjaHorariaService extends Service
 {
-    public function verFranjasHorarias(int $id_anio_escolar, ?int $id_dia_semana, ?bool $disponible = null, ?int $id_carga_academica = null)
+    /**
+     * Resuelve el id_esquema a consultar: directo si se envía, o derivado del nivel del
+     * curso + año escolar (usado por la página de autoservicio del docente y por la
+     * pestaña "Horario", que solo conocen el curso, no el esquema).
+     */
+    private function resolverIdEsquema(?int $id_esquema, ?int $id_curso, ?int $id_anio_escolar): ?int
     {
+        if ($id_esquema) {
+            return $id_esquema;
+        }
+
+        if (!$id_curso || !$id_anio_escolar) {
+            return null;
+        }
+
+        $curso = Cursos::find($id_curso);
+
+        if (!$curso || !$curso->id_nivel) {
+            return null;
+        }
+
+        return EsquemaHorario::where('id_nivel', $curso->id_nivel)
+            ->where('id_anio_escolar', $id_anio_escolar)
+            ->value('id');
+    }
+
+    public function verFranjasHorarias(
+        ?int $id_esquema,
+        ?int $id_curso = null,
+        ?int $id_anio_escolar = null,
+        ?int $id_dia_semana = null,
+        ?bool $disponible = null,
+        ?int $id_carga_academica = null
+    ) {
         try {
+            $idEsquemaResuelto = $this->resolverIdEsquema($id_esquema, $id_curso, $id_anio_escolar);
+
+            if (!$idEsquemaResuelto) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontró ninguna franja horaria',
+                    'data' => []
+                ];
+            }
+
             $franjaHoraria = FranjaHoraria::query()
                 ->join(
                     'dias_semana',
@@ -25,7 +69,7 @@ class FranjaHorariaService extends Service
                     'dias_semana.abreviatura',
                     'dias_semana.orden as orden_dia',
                     'academico_franja_horaria.*',
-                )->where('id_anio_escolar', $id_anio_escolar)
+                )->where('id_esquema', $idEsquemaResuelto)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
                 })->when($disponible, function ($query) use ($id_carga_academica) {
@@ -81,7 +125,7 @@ class FranjaHorariaService extends Service
      * Método para añadir una franja horaria.
      *
      * El array recibe:
-     * - id_anio_escolar
+     * - id_esquema
      * - id_dia_semana
      * - hora_inicio
      * - hora_fin
@@ -89,7 +133,7 @@ class FranjaHorariaService extends Service
      *
      * Validaciones:
      * - La hora de fin debe ser mayor que la de inicio.
-     * - No puede existir otra franja con el mismo orden para el mismo año escolar y día.
+     * - No puede existir otra franja con el mismo orden para el mismo esquema y día.
      * - No puede solaparse con otra franja del mismo día.
      *
      * @param array $data
@@ -98,6 +142,21 @@ class FranjaHorariaService extends Service
     public function añadirFranjaHoraria(array $data): array
     {
         try {
+
+            $esquema = EsquemaHorario::find($data['id_esquema']);
+
+            if (!$esquema) {
+                return [
+                    'error' => true,
+                    'message' => 'El esquema de horario no existe.',
+                    'data' => []
+                ];
+            }
+
+            // id_anio_escolar queda deprecado (ver 2026_08_21_130100_add_id_esquema_...)
+            // pero la columna sigue siendo NOT NULL en la tabla real — se deriva del
+            // esquema para no requerir una migración destructiva sobre esa columna.
+            $data['id_anio_escolar'] = $esquema->id_anio_escolar;
 
             // Validar horas
             if (strtotime($data['hora_fin']) <= strtotime($data['hora_inicio'])) {
@@ -109,7 +168,7 @@ class FranjaHorariaService extends Service
             }
 
             // Validar orden
-            $existeOrden = FranjaHoraria::where('id_anio_escolar', $data['id_anio_escolar'])
+            $existeOrden = FranjaHoraria::where('id_esquema', $data['id_esquema'])
                 ->where('id_dia_semana', $data['id_dia_semana'])
                 ->where('orden', $data['orden'])
                 ->exists();
@@ -123,7 +182,7 @@ class FranjaHorariaService extends Service
             }
 
             // Validar solapamiento de horarios
-            $hayCruce = FranjaHoraria::where('id_anio_escolar', $data['id_anio_escolar'])
+            $hayCruce = FranjaHoraria::where('id_esquema', $data['id_esquema'])
                 ->where('id_dia_semana', $data['id_dia_semana'])
                 ->where(function ($query) use ($data) {
                     $query
@@ -168,15 +227,15 @@ class FranjaHorariaService extends Service
      * Método para actualizar las franjas horarias.
      *
      * Permite actualizar:
-     * - Año escolar.
+     * - Esquema de horario.
      *
      * @param array $ids
-     * @param int|null $id_anio_escolar
+     * @param int|null $id_esquema
      * @return array
      */
     public function actualizarFranjaHoraria(
         array $ids,
-        ?int $id_anio_escolar
+        ?int $id_esquema
     ): array {
         try {
 
@@ -188,7 +247,7 @@ class FranjaHorariaService extends Service
                 ];
             }
 
-            if ($id_anio_escolar === null) {
+            if ($id_esquema === null) {
                 return [
                     'error' => true,
                     'message' => 'Debe enviar al menos un campo para actualizar.',
@@ -197,7 +256,7 @@ class FranjaHorariaService extends Service
             }
 
             $dataActualizar = [
-                'id_anio_escolar' => $id_anio_escolar,
+                'id_esquema' => $id_esquema,
             ];
 
             $actualizados = FranjaHoraria::whereIn('id', $ids)

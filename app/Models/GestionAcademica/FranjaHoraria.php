@@ -16,6 +16,7 @@ class FranjaHoraria extends Model
 
     protected $fillable = [
         'id_anio_escolar',
+        'id_esquema',
         'id_dia_semana',
         'hora_inicio',
         'hora_fin',
@@ -25,6 +26,11 @@ class FranjaHoraria extends Model
     public function anioEscolar()
     {
         return $this->belongsTo(Anio::class, 'id_anio_escolar', 'id');
+    }
+
+    public function esquema()
+    {
+        return $this->belongsTo(EsquemaHorario::class, 'id_esquema', 'id');
     }
 
     public function diaSemana()

@@ -4,10 +4,12 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use App\Models\Usuarios\Usuario;
+use Database\Seeders\Concerns\ResolvesDocentePorNombre;
 
 class HorarioSeeder extends Seeder
 {
+    use ResolvesDocentePorNombre;
+
     /**
      * academico_horario_clase: cruza id_carga_academica con id_franja_horaria.
      *
@@ -21,8 +23,6 @@ class HorarioSeeder extends Seeder
      */
     public function run(): void
     {
-        $idAnioEscolar = 1; // debe coincidir con el usado en FranjaHorarioSeeder
-
         $clases = [
             ['Corina Corpas', 'Biología', 'Noveno B', 1, 1],
             ['Corina Corpas', 'Biología', 'Octavo A', 1, 2],
@@ -462,28 +462,46 @@ class HorarioSeeder extends Seeder
             ['Yesid Olivares', 'Álgebra', 'Noveno B', 5, 12],
         ];
 
+        $cursoCache = [];
+        $esquemaCache = [];
         $franjaCache = [];
         $cargaCache = [];
         $omitidas = 0;
 
         foreach ($clases as [$nombreDocente, $nombreMateria, $nombreCurso, $diaSemana, $orden]) {
-            // --- resolver franja horaria (con cache para no repetir consultas) ---
-            $franjaKey = $diaSemana.'-'.$orden;
+            // --- resolver curso -> nivel -> esquema (con cache) ---
+            if (!array_key_exists($nombreCurso, $cursoCache)) {
+                $cursoCache[$nombreCurso] = DB::table('curso')->where('nombre', $nombreCurso)->first(['id', 'id_nivel']);
+            }
+            $curso = $cursoCache[$nombreCurso];
+            $idCurso = $curso->id ?? null;
+            $idNivel = $curso->id_nivel ?? null;
+
+            if (!isset($esquemaCache[$idNivel])) {
+                $esquemaCache[$idNivel] = $idNivel
+                    ? DB::table('academico_esquema_horario')->where('id_nivel', $idNivel)->value('id')
+                    : null;
+            }
+            $idEsquema = $esquemaCache[$idNivel] ?? null;
+
+            // --- resolver franja horaria (con cache) ---
+            $franjaKey = $idEsquema.'-'.$diaSemana.'-'.$orden;
             if (!isset($franjaCache[$franjaKey])) {
-                $franjaCache[$franjaKey] = DB::table('academico_franja_horaria')
-                    ->where('id_anio_escolar', $idAnioEscolar)
-                    ->where('id_dia_semana', $diaSemana)
-                    ->where('orden', $orden)
-                    ->value('id');
+                $franjaCache[$franjaKey] = $idEsquema
+                    ? DB::table('academico_franja_horaria')
+                        ->where('id_esquema', $idEsquema)
+                        ->where('id_dia_semana', $diaSemana)
+                        ->where('orden', $orden)
+                        ->value('id')
+                    : null;
             }
             $idFranja = $franjaCache[$franjaKey];
 
             // --- resolver carga academica (con cache) ---
             $cargaKey = $nombreDocente.'|'.$nombreMateria.'|'.$nombreCurso;
             if (!isset($cargaCache[$cargaKey])) {
-                $idDocente = Usuario::whereRaw("CONCAT(nombre, ' ', apellido) = ?", [$nombreDocente])->value('id_user');
+                $idDocente = $this->resolverDocenteId($nombreDocente);
                 $idAsignatura = DB::table('academico_asignatura')->where('nombre', $nombreMateria)->value('id');
-                $idCurso = DB::table('curso')->where('nombre', $nombreCurso)->value('id');
 
                 $idCarga = null;
                 if ($idDocente && $idAsignatura && $idCurso) {

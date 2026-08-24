@@ -127,14 +127,49 @@ class AsistenciaEstudianteService extends Service
      * Vicerrectoría/Directivo Docente (opción 102). Solo cuenta clases ya DICTADAs —
      * la asistencia de estudiantes solo registra excepciones (AUSENTE/TARDE/PERMISO,
      * ver agregarAsistenciaEstudiantes), no hay fila por cada presente.
+     *
+     * $id_docente_scope: cuando un Docente (sin opción 99) consulta esto vía su propio
+     * acceso de autoservicio (ver GestionAcademicaController::METODOS_DOCENTE), se le pasa
+     * su propio id_user acá — restringe los resultados a únicamente los cursos donde tiene
+     * carga académica activa, ignorando cualquier id_curso ajeno que llegue en la request
+     * (no basta con ocultar el selector en el frontend).
      */
-    public function metricasPorCurso(?string $fecha_inicio = null, ?string $fecha_fin = null, ?int $id_curso = null): array
+    public function metricasPorCurso(?string $fecha_inicio = null, ?string $fecha_fin = null, ?int $id_curso = null, ?int $id_docente_scope = null): array
     {
         try {
+            $cursosDocente = null;
+            if ($id_docente_scope !== null) {
+                $cursosDocente = DB::table('academico_carga_academica as ca')
+                    ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+                    ->where('da.id_docente', $id_docente_scope)
+                    ->where('ca.activo', 1)
+                    ->pluck('ca.id_curso')
+                    ->unique()
+                    ->values();
+
+                if ($cursosDocente->isEmpty()) {
+                    return [
+                        'error' => false,
+                        'message' => 'No dictas clases en ningún curso todavía.',
+                        'data' => ['por_curso' => [], 'top_ausentismo' => []],
+                    ];
+                }
+
+                // Si además mandan un id_curso puntual, solo se respeta si es uno de los
+                // propios — si no, se ignora (se queda con el set completo del docente) en
+                // vez de devolver datos de un curso ajeno.
+                if (filled($id_curso) && $cursosDocente->contains((int) $id_curso)) {
+                    $cursosDocente = collect([(int) $id_curso]);
+                } elseif (filled($id_curso)) {
+                    $id_curso = null;
+                }
+            }
+
             $totalEstudiantes = DB::table('usuarios')
                 ->where('perfil', 16) // Estudiante
                 ->where('estado', 'activo')
                 ->when(filled($id_curso), fn($q) => $q->where('id_curso', $id_curso))
+                ->when($cursosDocente !== null, fn($q) => $q->whereIn('id_curso', $cursosDocente))
                 ->groupBy('id_curso')
                 ->select('id_curso', DB::raw('count(*) as total'))
                 ->pluck('total', 'id_curso');
@@ -146,6 +181,7 @@ class AsistenciaEstudianteService extends Service
                 ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
                 ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
                 ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->when($cursosDocente !== null, fn($q) => $q->whereIn('ca.id_curso', $cursosDocente))
                 ->groupBy('ca.id_curso')
                 ->select('ca.id_curso', DB::raw('count(*) as total'))
                 ->pluck('total', 'id_curso');
@@ -158,6 +194,7 @@ class AsistenciaEstudianteService extends Service
                 ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
                 ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
                 ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->when($cursosDocente !== null, fn($q) => $q->whereIn('ca.id_curso', $cursosDocente))
                 ->groupBy('ca.id_curso', 'ae.estado')
                 ->select('ca.id_curso', 'ae.estado', DB::raw('count(*) as total'))
                 ->get()
@@ -165,6 +202,7 @@ class AsistenciaEstudianteService extends Service
 
             $cursos = DB::table('curso')
                 ->when(filled($id_curso), fn($q) => $q->where('id', $id_curso))
+                ->when($cursosDocente !== null, fn($q) => $q->whereIn('id', $cursosDocente))
                 ->pluck('nombre', 'id');
 
             $porCurso = [];
@@ -202,6 +240,7 @@ class AsistenciaEstudianteService extends Service
                 ->when(filled($fecha_inicio), fn($q) => $q->whereDate('ac.fecha', '>=', $fecha_inicio))
                 ->when(filled($fecha_fin), fn($q) => $q->whereDate('ac.fecha', '<=', $fecha_fin))
                 ->when(filled($id_curso), fn($q) => $q->where('ca.id_curso', $id_curso))
+                ->when($cursosDocente !== null, fn($q) => $q->whereIn('ca.id_curso', $cursosDocente))
                 ->groupBy('ae.id_alumno', 'u.nombre', 'u.apellido', 'c.nombre')
                 ->select(
                     'ae.id_alumno',
