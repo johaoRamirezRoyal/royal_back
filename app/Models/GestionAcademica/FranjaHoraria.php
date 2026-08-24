@@ -4,6 +4,7 @@ namespace App\Models\GestionAcademica;
 
 use App\Models\AnioEscolar\Anio;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class FranjaHoraria extends Model
@@ -21,6 +22,14 @@ class FranjaHoraria extends Model
         'hora_inicio',
         'hora_fin',
         'orden',
+        'asignable',
+        'color',
+        'etiqueta',
+        'id_franja_pivote',
+    ];
+
+    protected $casts = [
+        'asignable' => 'boolean',
     ];
 
     public function anioEscolar()
@@ -41,5 +50,15 @@ class FranjaHoraria extends Model
     public function horarioClase(): HasOne
     {
         return $this->hasOne(HorarioClase::class, 'id_franja_horaria', 'id');
+    }
+
+    public function pivote()
+    {
+        return $this->belongsTo(FranjaHoraria::class, 'id_franja_pivote', 'id');
+    }
+
+    public function dependientes(): HasMany
+    {
+        return $this->hasMany(FranjaHoraria::class, 'id_franja_pivote', 'id');
     }
 }

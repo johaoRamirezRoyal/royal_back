@@ -14,6 +14,7 @@ class AsistenciaHorario extends Model
         'nombre',
         'grupo_id',
         'hora_llegada_esperada',
+        'hora_minima_salida',
         'hora_salida_esperada',
         'hora_cierre_automatico',
         'notificar_trabajador',

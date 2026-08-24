@@ -66,6 +66,7 @@ php artisan serve         # dev server on localhost:8000
 | `/enfermeria` | `api/enfermeria.php` |
 | `/proveedores` | `api/proveedores.php` |
 | `/solicitudes` | `api/solicitudes.php` |
+| `/evaluaciones` | `api/evaluaciones.php` |
 
 ## Autenticación JWT
 
@@ -360,6 +361,158 @@ que la cantidad a ingresar no supere lo solicitado:
   ≥ 1, `id_area` activa, `id_usuario` activo, `id_categoria`; opcionales `estado`,
   `precio`, `fecha_compra`.
 - Respuesta: `articulos_creados` + `resumen[]` con `solicitado`/`ingresado`/`restante`.
+
+## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
+
+Módulo de evaluaciones académicas con estructura jerárquica:
+evaluación → secciones → preguntas → opciones. Tablas legacy sin migración en
+este repo (mismo patrón que `cron_opciones`/`anio_escolar`).
+
+### Tablas (9, sin migración propia)
+
+| Tabla | Modelo | PK | Timestamps | Soft Deletes |
+|-------|--------|----|------------|--------------|
+| `evaluaciones` | `Evaluacion` | `id` | sí | sí |
+| `evaluaciones_servicios` | `EvaluacionServicio` | `id` | sí | no |
+| `evaluaciones_tipos_pregunta` | `EvaluacionTipoPregunta` | `id` | no | no |
+| `evaluaciones_secciones` | `EvaluacionSeccion` | `id` | sí | no |
+| `evaluaciones_preguntas` | `EvaluacionPregunta` | `id` | sí | no |
+| `evaluaciones_opciones_pregunta` | `EvaluacionOpcionPregunta` | `id` | no | no |
+| `evaluaciones_nivel` | `EvaluacionNivel` | `id` | no | no |
+| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | no |
+| `evaluaciones_respuestas_pregunta` | `EvaluacionRespuestaPregunta` | `id` | sí | no |
+
+### Permisos (placeholder)
+
+Opciones en `cron_opciones` — **IDs 101, 102, 103 son placeholders**; no hay
+migración que los inserte. Hasta que se creen las filas en `cron_opciones` y
+se otorguen vía `cron_permisos`, todos los endpoints retornan 403.
+
+| Opción | Constante | Uso |
+|--------|-----------|-----|
+| 101 | `OPCION_ADMIN` | CRUD evaluaciones, secciones, preguntas, opciones |
+| 102 | `OPCION_VER` | Lectura de evaluaciones, respuestas, resultados |
+| 103 | `OPCION_RESPONDER` | Enviar respuestas a una evaluación |
+
+Patrón de permisos: **(b)** — helper `sinAcceso()` al inicio de cada método.
+Los endpoints de lectura aceptan OR de opciones (ej. 102, 101, 103 para
+`obtenerPorId`).
+
+### Endpoints (`routes/api/evaluaciones.php`)
+
+Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`.
+
+#### Catálogo de servicios
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/servicios` | 102, 101, 103 | Listar servicios activos |
+| `POST` | `/servicios` | 101 | Crear servicio |
+| `PUT` | `/servicios/{id}` | 101 | Actualizar servicio |
+| `DELETE` | `/servicios/{id}` | 101 | Deshabilitar servicio (`activo=0`, soft-disable) |
+
+#### Tipos de pregunta
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/tipos-pregunta` | 102, 101 | Listar tipos de pregunta |
+
+#### Evaluaciones
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/` | 102, 101 | Listado paginado; filtros: `id_servicio`, `activo`, `s` (busca en título/descripción), `per-page` |
+| `POST` | `/` | 101 | Crear evaluación + niveles + secciones anidadas (transacción) |
+| `GET` | `/{id}` | 102, 101, 103 | Detalle completo: servicio, niveles, secciones→preguntas→tipo→opciones, count respuestas |
+| `PUT` | `/{id}` | 101 | Actualizar campos + niveles (solo si `niveles` key existe) |
+| `DELETE` | `/{id}` | 101 | **Hard delete** |
+| `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
+
+#### Secciones
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `POST` | `/{idEvaluacion}/secciones` | 101 | Crear sección (auto-ordena) |
+| `PUT` | `/secciones/{idSeccion}` | 101 | Actualizar sección |
+| `DELETE` | `/secciones/{idSeccion}` | 101 | Eliminar sección (hard delete) |
+
+#### Preguntas
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `POST` | `/secciones/{idSeccion}/preguntas` | 101 | Crear pregunta + opciones anidadas |
+| `PUT` | `/preguntas/{idPregunta}` | 101 | Actualizar pregunta |
+| `DELETE` | `/preguntas/{idPregunta}` | 101 | Eliminar pregunta (hard delete) |
+
+#### Opciones
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `POST` | `/preguntas/{idPregunta}/opciones` | 101 | Crear opción |
+| `PUT` | `/opciones/{idOpcion}` | 101 | Actualizar opción |
+| `DELETE` | `/opciones/{idOpcion}` | 101 | Eliminar opción (hard delete) |
+
+#### Respuestas
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `respuestas[]` con `id_pregunta`, `id_opcion`/`valor_texto`/`comentario`, opcional `anonima`, `id_nivel` |
+| `GET` | `/{idEvaluacion}/respuestas` | 102, 101 | Listado paginado; filtro `anonima`, `per-page` |
+| `GET` | `/respuestas/{idRespuesta}` | 102, 101 | Detalle de respuesta con preguntas→tipo→opciones |
+
+#### Resultados
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/{idEvaluacion}/resultados` | 102, 101 | Promedio general ponderado por sección (`porcentaje`); desglose: `puntaje_obtenido`/`puntaje_maximo`/`promedio` |
+
+### Estructura de evaluación (creación anidada)
+
+`POST /evaluaciones` acepta secciones y preguntas en una sola llamada (transacción):
+
+```json
+{
+  "titulo": "Evaluación Final",
+  "id_servicio": 1,
+  "niveles": [1, 2],
+  "secciones": [
+    {
+      "titulo": "Teoría",
+      "porcentaje": 60,
+      "preguntas": [
+        {
+          "titulo": "Pregunta 1",
+          "id_tipo_pregunta": 1,
+          "opciones": [
+            { "titulo": "A", "valor": 10 },
+            { "titulo": "B", "valor": 0 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Score (`calcularResultados`)
+
+Suma `opcion.valor` de cada respuesta, divide por el máximo posible (mayor
+valor por pregunta), ponderado por el `porcentaje` de cada sección. Solo
+cuenta respuestas con opción seleccionada (multiple choice) — respuestas
+de texto no aportan puntaje.
+
+### Quirks
+
+- **Validación inline** — no hay FormRequest classes; todo es `Validator::make()`
+  en el controller con `response()->json()` directo (no usa `$this->error()`).
+- **Hard delete** en secciones/preguntas/opciones — no hay cascade explícito;
+  depende de FKs en BD (no confirmable sin migraciones).
+- **`eliminarServicio`** es soft-disable (`activo=0`) pero `eliminar` evaluación
+  es hard delete — inconsistencia intencional (servicios son catálogo compartido).
+- **Toggle activo** — el mensaje puede decir "activada" cuando se desactivó
+  (el flip ya pasó antes del ternario). No afecta funcionalidad.
+- **`evaluaciones_respuestas_evaluacion`** — `created_at` y `completada_en`
+  ambos se setean; el primero ordena, el segundo indica fin real.
 
 ## Convenciones de código
 

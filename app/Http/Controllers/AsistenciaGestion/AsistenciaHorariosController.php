@@ -40,6 +40,32 @@ class AsistenciaHorariosController extends Controller
         return $this->apiResponse($this->horariosService->listarHorarios());
     }
 
+    public function obtenerConfiguracion(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinPermiso($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->horariosService->obtenerConfiguracion());
+    }
+
+    public function actualizarConfiguracion(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinPermiso($request)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'hora_minima_salida_defecto' => 'required|date_format:H:i',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error($validator->errors()->first(), 422);
+        }
+
+        return $this->apiResponse($this->horariosService->actualizarConfiguracion($validator->validated()));
+    }
+
     public function store(Request $request): JsonResponse
     {
         if ($rechazo = $this->sinPermiso($request)) {
@@ -50,6 +76,7 @@ class AsistenciaHorariosController extends Controller
             'nombre' => 'required|string|max:100',
             'grupo_id' => 'nullable|integer',
             'hora_llegada_esperada' => 'required|date_format:H:i',
+            'hora_minima_salida' => 'required|date_format:H:i',
             'hora_salida_esperada' => 'required|date_format:H:i',
             'hora_cierre_automatico' => 'nullable|date_format:H:i',
             'notificar_trabajador' => 'sometimes|boolean',
@@ -76,6 +103,7 @@ class AsistenciaHorariosController extends Controller
             'nombre' => 'sometimes|string|max:100',
             'grupo_id' => 'sometimes|nullable|integer',
             'hora_llegada_esperada' => 'sometimes|date_format:H:i',
+            'hora_minima_salida' => 'sometimes|date_format:H:i',
             'hora_salida_esperada' => 'sometimes|date_format:H:i',
             'hora_cierre_automatico' => 'sometimes|nullable|date_format:H:i',
             'notificar_trabajador' => 'sometimes|boolean',
