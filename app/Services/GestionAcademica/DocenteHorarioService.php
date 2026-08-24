@@ -102,7 +102,7 @@ class DocenteHorarioService extends Service
         }
     }
 
-    public function reservar(int $id_docente, int $id_curso, int $id_asignatura, int $id_franja_horaria, int $id_anio_escolar): array
+    public function reservar(int $id_docente, int $id_curso, int $id_asignatura, int $id_franja_horaria, int $id_anio_escolar, ?string $descripcion = null): array
     {
         try {
             $docenteAsignatura = DocenteAsignatura::where('id_docente', $id_docente)
@@ -158,7 +158,7 @@ class DocenteHorarioService extends Service
 
             $carga = CargaAcademica::with('docenteAsignatura')->find($resultadoCarga['data']['id']);
 
-            $errorDisponibilidad = $this->horarioClaseService->franjaDisponibleParaCarga($id_franja_horaria, $carga);
+            $errorDisponibilidad = $this->horarioClaseService->franjaDisponibleParaCarga($franja, $carga);
 
             if ($errorDisponibilidad) {
                 return [
@@ -172,6 +172,7 @@ class DocenteHorarioService extends Service
                 'id_carga_academica' => $carga->id,
                 'id_franja_horaria' => $id_franja_horaria,
                 'tipo' => 'CLASE',
+                'descripcion' => $descripcion,
             ]);
 
             return [
@@ -196,6 +197,44 @@ class DocenteHorarioService extends Service
     public function misHorarios(int $id_docente): array
     {
         return $this->horarioClaseService->verHorario($id_docente, null, null, null);
+    }
+
+    public function actualizarDescripcion(int $id_docente, int $id, ?string $descripcion): array
+    {
+        try {
+            $horario = HorarioClase::with('cargaAcademica.docenteAsignatura')->find($id);
+
+            if (!$horario) {
+                return [
+                    'error' => true,
+                    'message' => 'El horario no existe.',
+                    'data' => []
+                ];
+            }
+
+            if (($horario->cargaAcademica?->docenteAsignatura?->id_docente ?? null) != $id_docente) {
+                return [
+                    'error' => true,
+                    'message' => 'No puedes editar un horario que no es tuyo.',
+                    'data' => []
+                ];
+            }
+
+            $horario->update(['descripcion' => $descripcion]);
+
+            return [
+                'error' => false,
+                'message' => 'Descripción actualizada correctamente.',
+                'data' => $horario
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la descripción del horario');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la descripción.',
+                'data' => []
+            ];
+        }
     }
 
     public function eliminar(int $id_docente, array $ids): array

@@ -164,6 +164,17 @@ http://localhost:8000/api/gestion-academica/franjas-horarias/horario
 Route::put('/franjas-horarias/horario', [GestionAcademicaController::class, 'actualizarHorarioFranja']);
 
 /**
+http://localhost:8000/api/gestion-academica/franjas-horarias/quitar-otros-dias
+
+Inverso de "aplicar a todos los días": vuelve a asignable=true las franjas de OTROS días
+del mismo esquema con esa misma hora, dejando la franja $id (la principal) tal como está.
+{
+  "id": 4
+}
+*/
+Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::class, 'quitarNoAsignableDeOtrosDias']);
+
+/**
  * DELETE /gestion-academica/franjas-horarias
 
 {
@@ -338,6 +349,17 @@ http://localhost:8000/api/gestion-academica/mi-horario
 }
  */
 Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario']);
+
+/**
+ * Actualiza la descripción de un bloque propio ya reservado (falla si el id no
+ * pertenece al docente autenticado).
+http://localhost:8000/api/gestion-academica/mi-horario
+{
+    "id": 10,
+    "descripcion": "Clase de refuerzo"
+}
+ */
+Route::put('/mi-horario', [GestionAcademicaController::class, 'actualizarDescripcionMiHorario']);
 
 /**
  * Elimina bloques del horario propio (falla si alguno de los ids no pertenece al

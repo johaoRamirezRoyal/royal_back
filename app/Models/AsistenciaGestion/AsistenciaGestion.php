@@ -30,6 +30,7 @@ class AsistenciaGestion extends Model
         'hora_asistencia',
         'hora_salida',
         'observacion',
+        'revocado',
         'fechareg',
         'QR',
     ];
@@ -38,6 +39,7 @@ class AsistenciaGestion extends Model
         'fecha_asistencia' => 'date',
         'hora_asistencia' => 'date:H:i:s',
         'hora_salida' => 'date:H:i:s',
+        'revocado' => 'boolean',
         'fechareg' => 'datetime',
     ];
 

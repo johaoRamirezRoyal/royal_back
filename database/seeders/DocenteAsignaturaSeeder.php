@@ -40,7 +40,7 @@ class DocenteAsignaturaSeeder extends Seeder
             ['Ingrid Almendrales', 'Español'],
             ['Ingrid Almendrales', 'Lectura Crítica'],
             ['Jaime Mejía', 'PE'],
-            ['John Arrieta', 'English'],
+            ['Jhon Arrieta', 'English'],
             ['Juan Pablo García', 'Chemistry'],
             ['Juan Pablo García', 'Science'],
             ['Katty Mercado', 'Aritmética'],
@@ -60,9 +60,9 @@ class DocenteAsignaturaSeeder extends Seeder
             ['Santiago Charris', 'Estadística'],
             ['Santiago Charris', 'Estadística y Geometría'],
             ['Santiago Charris', 'Álgebra'],
-            ['Yesid Olivares', 'Estadística'],
-            ['Yesid Olivares', 'Estadística y Geometría'],
-            ['Yesid Olivares', 'Álgebra'],
+            ['Yesid Oliveros', 'Estadística'],
+            ['Yesid Oliveros', 'Estadística y Geometría'],
+            ['Yesid Oliveros', 'Álgebra'],
         ];
 
         $noEncontrados = [];

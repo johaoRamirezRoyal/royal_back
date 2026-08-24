@@ -91,7 +91,7 @@ class HorarioClaseService extends Service
                 }
             }
 
-            $errorDisponibilidad = $this->franjaDisponibleParaCarga($data['id_franja_horaria'], $carga ?? null);
+            $errorDisponibilidad = $this->franjaDisponibleParaCarga($franja, $carga ?? null);
 
             if ($errorDisponibilidad) {
                 return [
@@ -128,31 +128,42 @@ class HorarioClaseService extends Service
      * carga, que la franja esté completamente libre — recesos/almuerzos compartidos por
      * todo el colegio). Devuelve el mensaje de error si está ocupada, o null si está
      * disponible. Compartido por el flujo manual del admin (añadirHorarioClase) y el
-     * autoservicio del docente (DocenteHorarioService::reservar).
+     * autoservicio del docente (DocenteHorarioService::reservar) — ambos ya cargan la
+     * FranjaHoraria antes de llamar este método, así que se reutiliza el objeto en vez
+     * de volver a consultarla por id.
      *
      * El cruce se valida por curso y por docente, no por franja global, ya que otro
      * curso con otro docente sí puede compartir la misma franja (ver
      * FranjaHorariaService::verFranjasHorarias). Lo que no puede pasar es que el MISMO
      * curso o el MISMO docente tengan dos actividades a la vez.
+     *
+     * El chequeo compara por HORA REAL (mismo día + intervalo cruzado), no por
+     * id_franja_horaria exacto: un docente puede dictar en curso de esquemas distintos
+     * (Primaria/Bachillerato con franjas numeradas distinto), y dos franjas con ids
+     * diferentes pero la misma hora real sí son un cruce igual de real.
      */
-    public function franjaDisponibleParaCarga(int $idFranjaHoraria, ?CargaAcademica $carga): ?string
+    public function franjaDisponibleParaCarga(FranjaHoraria $franja, ?CargaAcademica $carga): ?string
     {
+        if (!$franja->asignable) {
+            return 'Esta franja horaria no es asignable' . ($franja->etiqueta ? " ({$franja->etiqueta})." : '.');
+        }
+
         if ($carga) {
-            $cursoOcupado = HorarioClase::where('id_franja_horaria', $idFranjaHoraria)
-                ->whereHas('cargaAcademica', function ($q) use ($carga) {
-                    $q->where('id_curso', $carga->id_curso);
-                })
-                ->exists();
+            $cursoOcupado = $this->existeCruceHorarioClase($franja, function ($q) use ($carga) {
+                $q->whereHas('cargaAcademica', function ($q2) use ($carga) {
+                    $q2->where('id_curso', $carga->id_curso);
+                });
+            });
 
             if ($cursoOcupado) {
                 return 'El curso ya tiene una actividad asignada en esa franja horaria.';
             }
 
-            $docenteOcupado = HorarioClase::where('id_franja_horaria', $idFranjaHoraria)
-                ->whereHas('cargaAcademica.docenteAsignatura', function ($q) use ($carga) {
-                    $q->where('id_docente', $carga->docenteAsignatura->id_docente);
-                })
-                ->exists();
+            $docenteOcupado = $this->existeCruceHorarioClase($franja, function ($q) use ($carga) {
+                $q->whereHas('cargaAcademica.docenteAsignatura', function ($q2) use ($carga) {
+                    $q2->where('id_docente', $carga->docenteAsignatura->id_docente);
+                });
+            });
 
             if ($docenteOcupado) {
                 return 'El docente ya tiene una actividad asignada en esa franja horaria.';
@@ -163,9 +174,26 @@ class HorarioClaseService extends Service
 
         // Sin docente (receso, almuerzo, etc.): la franja es compartida por todo el
         // colegio, así que solo puede tener una actividad.
-        $existeHorario = HorarioClase::where('id_franja_horaria', $idFranjaHoraria)->exists();
+        $existeHorario = HorarioClase::where('id_franja_horaria', $franja->id)->exists();
 
         return $existeHorario ? 'La franja horaria ya tiene una actividad asignada.' : null;
+    }
+
+    /**
+     * Existe algún HorarioClase (filtrado por $scope, curso o docente) cuya franja caiga
+     * el mismo día y se cruce en hora con $franja — intervalo exclusivo, para no marcar
+     * como cruce a franjas contiguas (una termina justo cuando empieza la otra).
+     */
+    private function existeCruceHorarioClase(FranjaHoraria $franja, callable $scope): bool
+    {
+        return HorarioClase::query()
+            ->tap($scope)
+            ->whereHas('franjaHoraria', function ($q) use ($franja) {
+                $q->where('id_dia_semana', $franja->id_dia_semana)
+                    ->where('hora_inicio', '<', $franja->hora_fin)
+                    ->where('hora_fin', '>', $franja->hora_inicio);
+            })
+            ->exists();
     }
 
     /**

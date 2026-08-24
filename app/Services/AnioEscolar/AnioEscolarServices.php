@@ -133,7 +133,10 @@ class AnioEscolarServices extends Service
      * Crea manualmente un año escolar a partir de su año de inicio (respaldo si el cron
      * `anio-escolar:cerrar-abrir` no corrió, o para precrear años futuros). No cierra
      * ningún otro año escolar — a diferencia de cerrarYAbrirAnioEscolar(), esto es
-     * puramente aditivo.
+     * puramente aditivo. Solo nace activo si su anio_inicio es el que corresponde a hoy
+     * según el calendario; un año futuro precreado (el caso típico de este endpoint) nace
+     * inactivo para no competir con el año realmente vigente en obtenerUltimoAnioEscolar()
+     * (que toma el activo más reciente por id).
      */
     public function crearAnioEscolarManual(int $anioInicio): array
     {
@@ -148,11 +151,12 @@ class AnioEscolarServices extends Service
 
             $tipo = $this->obtenerTipoCalendario();
             $rango = $this->rangoParaAnioInicio($anioInicio, $tipo);
+            $anioInicioEsperado = $this->anioInicioParaFecha(Carbon::now(), $tipo);
 
             $anio = Anio::create([
                 'anio_inicio' => $anioInicio,
                 'anio_fin' => $rango['anio_fin'],
-                'activo' => true,
+                'activo' => $anioInicio === $anioInicioEsperado,
                 'fechareg' => Carbon::now(),
             ]);
 

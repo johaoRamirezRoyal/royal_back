@@ -20,6 +20,8 @@ class MiHorarioRequest extends FormRequest
             'id_asignatura' => [$isRequired, 'integer', 'exists:academico_asignatura,id'],
             'id_franja_horaria' => [$isRequired, 'integer', 'exists:academico_franja_horaria,id'],
             'id_anio_escolar' => [$isRequired, 'integer', 'exists:anio_escolar,id'],
+            'descripcion' => ['nullable', 'string', 'max:255'],
+            'id' => [$this->isMethod('PUT') ? 'required' : 'nullable', 'integer', 'exists:academico_horario_clase,id'],
             'ids' => [$this->isMethod('DELETE') ? 'required' : 'nullable', 'array'],
             'ids.*' => ['integer', 'exists:academico_horario_clase,id'],
         ];

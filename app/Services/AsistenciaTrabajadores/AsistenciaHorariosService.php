@@ -4,12 +4,56 @@ namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaHorario;
 use App\Models\AsistenciaGestion\AsistenciaPuntualidadBanda;
+use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class AsistenciaHorariosService extends Service
 {
+    // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
+    private const ID_CONFIG = 1;
+
+    /** Valor global de hora_minima_salida_defecto, usado por AsistenciaGestionService cuando ningún horario aplica al grupo/día del usuario. */
+    public function obtenerConfiguracion(): array
+    {
+        try {
+            return [
+                'error' => false,
+                'message' => 'Configuración obtenida correctamente',
+                'data' => ConfiguracionAsistencia::findOrFail(self::ID_CONFIG),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener la configuración de asistencia');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al obtener la configuración de asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function actualizarConfiguracion(array $datos): array
+    {
+        try {
+            $config = ConfiguracionAsistencia::findOrFail(self::ID_CONFIG);
+            $config->update($datos);
+
+            return [
+                'error' => false,
+                'message' => 'Configuración actualizada correctamente',
+                'data' => $config,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la configuración de asistencia');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la configuración de asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
     public function listarHorarios(): array
     {
         try {
@@ -46,6 +90,14 @@ class AsistenciaHorariosService extends Service
                 return [
                     'error' => true,
                     'message' => 'La hora de cierre automático no puede ser anterior a la hora de salida esperada',
+                    'data' => null,
+                ];
+            }
+
+            if ($datos['hora_minima_salida'] > $datos['hora_salida_esperada']) {
+                return [
+                    'error' => true,
+                    'message' => 'La hora mínima de salida no puede ser posterior a la hora de salida esperada',
                     'data' => null,
                 ];
             }
@@ -96,11 +148,20 @@ class AsistenciaHorariosService extends Service
 
             $horaSalida = $datos['hora_salida_esperada'] ?? $horario->hora_salida_esperada;
             $horaCierre = array_key_exists('hora_cierre_automatico', $datos) ? $datos['hora_cierre_automatico'] : $horario->hora_cierre_automatico;
+            $horaMinimaSalida = $datos['hora_minima_salida'] ?? $horario->hora_minima_salida;
 
             if (!empty($horaCierre) && $horaCierre < $horaSalida) {
                 return [
                     'error' => true,
                     'message' => 'La hora de cierre automático no puede ser anterior a la hora de salida esperada',
+                    'data' => null,
+                ];
+            }
+
+            if ($horaMinimaSalida > $horaSalida) {
+                return [
+                    'error' => true,
+                    'message' => 'La hora mínima de salida no puede ser posterior a la hora de salida esperada',
                     'data' => null,
                 ];
             }

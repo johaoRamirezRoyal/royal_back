@@ -14,6 +14,7 @@ class HorarioClase extends Model
         'id_carga_academica',
         'id_franja_horaria',
         'tipo',
+        'descripcion',
     ];
 
     public function cargaAcademica()

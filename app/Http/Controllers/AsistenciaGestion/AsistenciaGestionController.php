@@ -17,6 +17,11 @@ class AsistenciaGestionController extends Controller
     // no solo la propia (misma opción que ya gatea la ruta en el frontend).
     private const OPCION_VER_TODAS = 63;
 
+    // Super Admin y Recursos humanos — únicos perfiles autorizados a revocar una llegada
+    // tarde (a diferencia de OPCION_VER_TODAS, no es configurable desde "/permisos": el
+    // alcance lo pidió explícitamente así, sin incluir Administrador).
+    private const PERFILES_REVOCAR_LLEGADA_TARDE = [1, 8];
+
     public function __construct(
         private AsistenciaGestionService $asistenciaService,
         private UsuariosServices $usuariosService,
@@ -143,6 +148,24 @@ class AsistenciaGestionController extends Controller
         ]);
 
         $resultado = $this->asistenciaService->actualizarObservacion($id, $request->input('observacion'));
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function revocarLlegadaTarde(Request $request, int $id): JsonResponse
+    {
+        if (!in_array((int) $request->user()->perfil, self::PERFILES_REVOCAR_LLEGADA_TARDE, true)) {
+            return $this->error('No tienes permiso para revocar llegadas tarde', 403);
+        }
+
+        $request->validate([
+            'observacion' => ['nullable', 'string', 'max:255'],
+        ], [
+            'observacion.string' => 'La observación debe ser texto.',
+            'observacion.max' => 'La observación no puede superar los 255 caracteres.',
+        ]);
+
+        $resultado = $this->asistenciaService->revocarLlegadaTarde($id, $request->input('observacion'));
 
         return $this->apiResponse($resultado);
     }

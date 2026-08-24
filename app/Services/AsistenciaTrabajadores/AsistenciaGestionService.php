@@ -3,6 +3,7 @@
 namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaGestion;
+use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
 use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
@@ -20,6 +21,9 @@ class AsistenciaGestionService extends Service
 
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
     public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
+
+    // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
+    private const ID_CONFIG = 1;
 
     // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
     private const GRUPO_LABEL_POR_GROUP_ID = [
@@ -86,6 +90,24 @@ class AsistenciaGestionService extends Service
      *   - Con entrada y sin salida -> esta marcación es la salida.
      *   - Con entrada y salida ya registradas -> se descarta (tercer evento del día).
      */
+    /**
+     * Hora mínima para marcar salida: el campo hora_minima_salida del horario aplicable al
+     * usuario (mismo AsistenciaGestion::horarioAplicable() que ya usan la puntualidad y el
+     * cierre automático — no se hardcodea un corte global, cada grupo tiene el suyo). Si el
+     * usuario no existe o ningún horario aplica a su grupo/día, cae al valor global de
+     * configuracion_asistencia (editable desde Configuración de asistencia).
+     */
+    private function horaMinimaSalidaParaUsuario(int $idUsuario): string
+    {
+        $usuario = Usuario::find($idUsuario);
+        $grupoId = $usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $usuario->perfil] ?? null) : null;
+        $horario = AsistenciaGestion::horarioAplicable($grupoId);
+
+        return $horario->hora_minima_salida
+            ?? ConfiguracionAsistencia::find(self::ID_CONFIG)?->hora_minima_salida_defecto
+            ?? '09:00:00';
+    }
+
     public function registrarMarcacion(int $idUsuario, string $fecha, string $hora): array
     {
         try {
@@ -123,6 +145,16 @@ class AsistenciaGestionService extends Service
                 return [
                     'error' => false,
                     'message' => 'Ya existe un registro de salida para este usuario en esta fecha',
+                    'data' => null,
+                ];
+            }
+
+            $horaMinimaSalida = $this->horaMinimaSalidaParaUsuario($idUsuario);
+
+            if ($hora < $horaMinimaSalida) {
+                return [
+                    'error' => false,
+                    'message' => 'La salida no se puede marcar antes de las ' . $horaMinimaSalida,
                     'data' => null,
                 ];
             }
@@ -417,6 +449,7 @@ class AsistenciaGestionService extends Service
                     DB::raw('COUNT(*) as total_llegadas_tarde')
                 )
                 ->where('ag.hora_asistencia', '>', $horaLimite)
+                ->where('ag.revocado', false)
                 ->groupBy('ag.id_user', 'u.nombre', 'u.perfil');
 
             if (!empty($filtros['id_perfil'])) {
@@ -639,6 +672,57 @@ class AsistenciaGestionService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar observación de asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Revoca la llegada tarde de un trabajador: el registro de asistencia se conserva
+     * (no se borra, la hora real de marcación queda intacta) pero deja de contar en
+     * topUsuariosLlegadasTarde() — mismo patrón que
+     * LlegadasTardeEstudiantes\LlegadasTarde::revocarLlegadaTarde() para estudiantes. Solo
+     * RH y Super Admin pueden llamar esto (ver gate en AsistenciaGestionController). La
+     * observación es opcional y, si se manda, reemplaza la existente (para dejar el motivo
+     * de la revocación); si no, se conserva la que ya tenía el registro.
+     */
+    public function revocarLlegadaTarde(int $id, ?string $observacion = null): array
+    {
+        try {
+            $asistencia = AsistenciaGestion::find($id);
+
+            if (!$asistencia) {
+                return [
+                    'error' => true,
+                    'message' => 'Asistencia no encontrada',
+                    'data' => null,
+                    'status' => 404,
+                ];
+            }
+
+            if ($asistencia->revocado) {
+                return [
+                    'error' => false,
+                    'message' => 'La llegada tarde ya estaba revocada',
+                    'data' => $asistencia->toArray(),
+                ];
+            }
+
+            $asistencia->update(array_merge(
+                ['revocado' => true],
+                $observacion !== null ? ['observacion' => $observacion] : []
+            ));
+
+            return [
+                'error' => false,
+                'message' => 'Llegada tarde revocada correctamente',
+                'data' => $asistencia->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al revocar la llegada tarde');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al revocar la llegada tarde',
                 'data' => null,
             ];
         }

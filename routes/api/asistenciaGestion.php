@@ -16,9 +16,17 @@ Route::get('/grafica/distribucion-horas', [AsistenciaGestionController::class, '
 Route::get('/grafica/promedio-por-usuario', [AsistenciaGestionController::class, 'promedioHoraLlegadaPorUsuario']);
 Route::get('/ultimos-registros', [AsistenciaGestionController::class, 'ultimosRegistrosUsuario']);
 Route::delete('/', [AsistenciaGestionController::class, 'eliminarAsistencia']);
+
+// CONFIGURACIÓN — horarios estándar y bandas de puntualidad (solo RH/Administradores, ver
+// AsistenciaHorariosController). Antes de /{id}: si no, "configuracion" matchea el wildcard
+// {id} y actualizarObservacion() se lleva la petición en vez de actualizarConfiguracion().
+Route::get('/configuracion', [AsistenciaHorariosController::class, 'obtenerConfiguracion']);
+Route::put('/configuracion', [AsistenciaHorariosController::class, 'actualizarConfiguracion']);
+
+Route::put('/{id}/revocar', [AsistenciaGestionController::class, 'revocarLlegadaTarde']);
+
 Route::put('/{id}', [AsistenciaGestionController::class, 'actualizarObservacion']);
 
-// CONFIGURACIÓN — horarios estándar y bandas de puntualidad (solo RH/Administradores, ver AsistenciaHorariosController)
 Route::prefix('/horarios')->group(function () {
     Route::get('/', [AsistenciaHorariosController::class, 'index']);
     Route::post('/', [AsistenciaHorariosController::class, 'store']);

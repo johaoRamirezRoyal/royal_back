@@ -51,7 +51,7 @@ class GestionAcademicaController extends Controller
     private const METODOS_DOCENTE = [
         'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
         'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
-        'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'eliminarMiHorario',
+        'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'actualizarDescripcionMiHorario', 'eliminarMiHorario',
         'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
     ];
 
@@ -290,6 +290,18 @@ class GestionAcademicaController extends Controller
             $body['id_asignatura'],
             $body['id_franja_horaria'],
             $body['id_anio_escolar'],
+            $body['descripcion'] ?? null,
+        ));
+    }
+
+    public function actualizarDescripcionMiHorario(MiHorarioRequest $request)
+    {
+        $body = $request->validated();
+
+        return $this->apiResponse($this->service->docenteHorario()->actualizarDescripcion(
+            $request->user()->id_user,
+            $body['id'],
+            $body['descripcion'] ?? null,
         ));
     }
 
@@ -317,12 +329,26 @@ class GestionAcademicaController extends Controller
     public function actualizarHorarioFranja(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
-        return $this->apiResponse($this->service->franjaHoraria()->actualizarHorarioFranja($body['id'], $body['hora_inicio'] ?? null, $body['hora_fin'] ?? null));
+        return $this->apiResponse($this->service->franjaHoraria()->actualizarHorarioFranja(
+            $body['id'],
+            $body['hora_inicio'] ?? null,
+            $body['hora_fin'] ?? null,
+            $body['asignable'] ?? null,
+            $body['color'] ?? null,
+            $body['etiqueta'] ?? null,
+            $body['aplicar_todos_dias'] ?? null,
+        ));
     }
 
     public function eliminarFranjaHoraria(FranjaHorariaRequest $request)
     {
         return $this->apiResponse($this->service->franjaHoraria()->eliminarFranjaHoraria($request->input('ids')));
+    }
+
+    public function quitarNoAsignableDeOtrosDias(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->quitarNoAsignableDeOtrosDias($body['id']));
     }
 
     public function verHorario(Request $request)

@@ -18,9 +18,13 @@ trait ResolvesDocentePorNombre
     /** @var array<int, string[]>|null */
     private ?array $docentesNormalizados = null;
 
+    // 3 = Docente, 14 = Docente ICT, 25 = Psicóloga Secundaria (dicta "Guidance") — perfiles
+    // especializados que también dictan clase pero no están bajo el perfil genérico Docente.
+    private const PERFILES_DOCENTE = [3, 14, 25];
+
     private function resolverDocenteId(string $nombreBuscado): ?int
     {
-        $this->docentesNormalizados ??= Usuario::where('perfil', 3)
+        $this->docentesNormalizados ??= Usuario::whereIn('perfil', self::PERFILES_DOCENTE)
             ->where('estado', 'activo')
             ->get(['id_user', 'nombre', 'apellido'])
             ->mapWithKeys(fn ($u) => [$u->id_user => $this->normalizar($u->nombre.' '.$u->apellido)])
