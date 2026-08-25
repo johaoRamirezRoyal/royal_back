@@ -282,9 +282,26 @@ class UsuariosController extends Controller
     }
 
     // ===================== NIVELES ========================
-    public function mostrarTodosNiveles()
+    public function mostrarTodosNiveles(Request $request)
     {
-        $response = $this->service_niveles->mostrarTodosNiveles();
+        $response = $this->service_niveles->mostrarTodosNiveles($request->boolean('solo_academicos'));
+
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $response['message'],
+            ], 404);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $response['data'],
+        ], 200);
+    }
+
+    public function mostrarTodosNivelesAcademicos()
+    {
+        $response = $this->service_niveles->mostrarTodosNivelesAcademicos();
 
         if ($response['error']) {
             return response()->json([

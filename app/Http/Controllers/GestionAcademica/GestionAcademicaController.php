@@ -11,6 +11,7 @@ use App\Http\Requests\GestionAcademica\EsquemaHorarioRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
 use App\Http\Requests\GestionAcademica\MiHorarioRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
+use App\Http\Requests\GestionAcademica\AsistenciaClaseLoteRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -49,7 +50,7 @@ class GestionAcademicaController extends Controller
     // sheet de "apartar horario" (useMiHorario.hook.ts::abrirSeleccion) no puede listar
     // las franjas disponibles antes de reservar.
     private const METODOS_DOCENTE = [
-        'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
+        'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase', 'guardarAsistenciaClaseLote',
         'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
         'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'actualizarDescripcionMiHorario', 'eliminarMiHorario',
         'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
@@ -315,6 +316,21 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->franjaHoraria()->añadirFranjaHoraria($request->all()));
     }
 
+    public function crearFranjasHorariasEnLote(FranjaHorariaRequest $request)
+    {
+        return $this->apiResponse($this->service->franjaHoraria()->añadirFranjasHorariasEnLote($request->all()));
+    }
+
+    public function copiarFranjasDia(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->copiarFranjasDeDia(
+            $body['id_esquema'],
+            $body['id_dia_origen'],
+            $body['ids_dias_destino'],
+        ));
+    }
+
     public function actualizarTipoFranjaHoraria(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
@@ -345,6 +361,12 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->franjaHoraria()->eliminarFranjaHoraria($request->input('ids')));
     }
 
+    public function moverFranjaADia(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->moverFranjaADia($body['id'], $body['id_dia_semana']));
+    }
+
     public function quitarNoAsignableDeOtrosDias(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
@@ -357,8 +379,9 @@ class GestionAcademicaController extends Controller
         $id_curso = $request->input('id_curso');
         $id_asignatura = $request->input('id_asignatura');
         $id_dia_semana = $request->input('id_dia_semana');
+        $incluir_no_asignables = $request->boolean('incluir_no_asignables');
 
-        return $this->apiResponse($this->service->horarioClase()->verHorario($id_docente, $id_curso, $id_asignatura, $id_dia_semana));
+        return $this->apiResponse($this->service->horarioClase()->verHorario($id_docente, $id_curso, $id_asignatura, $id_dia_semana, $incluir_no_asignables));
     }
 
     public function crearHorarioClase(HorarioClaseRequest $request)
@@ -394,6 +417,19 @@ class GestionAcademicaController extends Controller
     public function actualizarAsistenciaClase(AsistenciaClaseRequest $request)
     {
         return $this->apiResponse($this->service->asistenciaClase()->actualizarAsistenciaClase($request->all()));
+    }
+
+    public function guardarAsistenciaClaseLote(AsistenciaClaseLoteRequest $request)
+    {
+        $validated = $request->validated();
+
+        return $this->apiResponse($this->service->asistenciaClase()->guardarLote(
+            $validated['ids_horario_clase'],
+            $validated['fecha'],
+            $validated['estado'],
+            $validated['observacion'] ?? null,
+            $validated['estudiantes'] ?? [],
+        ));
     }
 
     public function verAsistenciasEstudiantes(Request $request)

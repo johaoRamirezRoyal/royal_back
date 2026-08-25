@@ -17,7 +17,9 @@ class EsquemaHorarioRequest extends FormRequest
 
         return [
             'nombre' => [$isRequired, 'string', 'max:255'],
-            'id_nivel' => [$isRequired, 'integer', 'exists:nivel,id'],
+            // id_nivel apunta a nivel_academico (no a `nivel`) desde
+            // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico.
+            'id_nivel' => [$isRequired, 'integer', 'exists:nivel_academico,id'],
             'id_anio_escolar' => [$isRequired, 'integer', 'exists:anio_escolar,id'],
             'activo' => ['nullable', 'boolean'],
             'id' => [$this->isMethod('PUT') ? 'required' : 'nullable', 'integer', 'exists:academico_esquema_horario,id'],

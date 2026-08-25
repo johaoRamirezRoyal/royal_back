@@ -126,6 +126,35 @@ http://localhost:8000/api/gestion-academica/franjas-horarias
 Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
 
 /**
+http://localhost:8000/api/gestion-academica/franjas-horarias/lote
+
+Crea varias franjas de una sola vez, partiendo [hora_inicio, hora_fin) en bloques
+consecutivos de duracion_min minutos (descarta el sobrante final si no completa un bloque).
+{
+  "id_esquema": 3,
+  "id_dia_semana": 2,
+  "hora_inicio": "07:00:00",
+  "hora_fin": "12:00:00",
+  "duracion_min": 60,
+  "asignable": true
+}
+ */
+Route::post('/franjas-horarias/lote', [GestionAcademicaController::class, 'crearFranjasHorariasEnLote']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias/copiar-dia
+
+Copia todas las franjas de un día a otro(s) día(s) del mismo esquema. Nunca reemplaza: un
+día destino que ya tenga franjas se omite (no se borra nada) — hay que eliminarlas primero.
+{
+  "id_esquema": 3,
+  "id_dia_origen": 1,
+  "ids_dias_destino": [2, 3]
+}
+ */
+Route::post('/franjas-horarias/copiar-dia', [GestionAcademicaController::class, 'copiarFranjasDia']);
+
+/**
 http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
 {
     "ids": [3, 4],
@@ -184,7 +213,24 @@ Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::c
 Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria']);
 
 /**
+http://localhost:8000/api/gestion-academica/franjas-horarias/dia
+
+Mueve una franja a otro día del mismo esquema (drag & drop entre columnas de día en el
+frontend), conservando su hora_inicio/hora_fin. Se agrega al final del día destino.
+{
+  "id": 4,
+  "id_dia_semana": 3
+}
+ */
+Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFranjaADia']);
+
+/**
  * http://localhost:8000/api/gestion-academica/horario?id_docente=24&id_curso=1&id_asignatura=5&id_dia_semana=2
+ *
+ * incluir_no_asignables=1 agrega al resultado, como bloques de solo lectura (id negativo,
+ * es_no_asignable=true), las franjas asignable=false del mismo esquema — receso/almuerzo
+ * globales del esquema. Por defecto false: Attendances consume este mismo endpoint y usa
+ * `tipo` para filtrar clases reales, así que no lo pide.
  */
 Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
 
@@ -236,6 +282,26 @@ Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsis
 }
  */
 Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/asistencias-clase/lote
+ *
+ * Registra en una sola petición transaccional la sesión de un bloque fusionado (dos o más
+ * franjas seguidas de la misma clase, ver agruparRunsPorDia en el frontend) — crea/actualiza
+ * la asistencia de cada id_horario_clase con el mismo estado/observación, y reemplaza las
+ * excepciones de alumnos de todas ellas por las mismas `estudiantes` (opcional).
+{
+    "ids_horario_clase": [1, 2],
+    "fecha": "2026-07-02",
+    "estado": "DICTADA",
+    "observacion": "Clase normal",
+    "estudiantes": [
+        { "id_alumno": 1, "estado": "AUSENTE" },
+        { "id_alumno": 2, "estado": "TARDE" }
+    ]
+}
+ */
+Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote']);
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante

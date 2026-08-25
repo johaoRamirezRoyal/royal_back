@@ -236,6 +236,225 @@ class FranjaHorariaService extends Service
 
 
     /**
+     * Crea varias franjas de una sola vez, partiendo [hora_inicio, hora_fin) en bloques
+     * consecutivos de duracion_min minutos (descarta el sobrante final si no completa un
+     * bloque) — reemplaza el loop de POSTs individuales que hacía el frontend para "varios
+     * horarios por rango". Valida el rango completo contra lo ya existente ese día antes de
+     * crear nada, para no dejar el día a medio poblar si un bloque intermedio choca.
+     *
+     * El array recibe:
+     * - id_esquema, id_dia_semana, hora_inicio, hora_fin (rango), duracion_min
+     * - asignable, color, etiqueta (opcionales, iguales para todos los bloques creados)
+     *
+     * @param array $data
+     * @return array
+     */
+    public function añadirFranjasHorariasEnLote(array $data): array
+    {
+        try {
+            $esquema = EsquemaHorario::find($data['id_esquema']);
+
+            if (!$esquema) {
+                return [
+                    'error' => true,
+                    'message' => 'El esquema de horario no existe.',
+                    'data' => []
+                ];
+            }
+
+            $duracionMin = (int) ($data['duracion_min'] ?? 0);
+
+            if ($duracionMin <= 0) {
+                return [
+                    'error' => true,
+                    'message' => 'La duración de cada bloque debe ser mayor a 0.',
+                    'data' => []
+                ];
+            }
+
+            $inicio = strtotime($data['hora_inicio']);
+            $fin = strtotime($data['hora_fin']);
+
+            if ($fin <= $inicio) {
+                return [
+                    'error' => true,
+                    'message' => 'La hora de fin debe ser mayor que la hora de inicio.',
+                    'data' => []
+                ];
+            }
+
+            $bloques = [];
+            $cursor = $inicio;
+
+            while ($cursor + $duracionMin * 60 <= $fin) {
+                $bloques[] = [date('H:i:s', $cursor), date('H:i:s', $cursor + $duracionMin * 60)];
+                $cursor += $duracionMin * 60;
+            }
+
+            if (empty($bloques)) {
+                return [
+                    'error' => true,
+                    'message' => 'El rango no alcanza para ningún bloque de esa duración.',
+                    'data' => []
+                ];
+            }
+
+            $hayCruce = $this->existeCruceHorario(
+                FranjaHoraria::where('id_esquema', $data['id_esquema'])->where('id_dia_semana', $data['id_dia_semana']),
+                $bloques[0][0],
+                end($bloques)[1]
+            );
+
+            if ($hayCruce) {
+                return [
+                    'error' => true,
+                    'message' => 'El rango se cruza con una franja ya existente ese día.',
+                    'data' => []
+                ];
+            }
+
+            $ordenBase = (int) (FranjaHoraria::where('id_esquema', $data['id_esquema'])
+                ->where('id_dia_semana', $data['id_dia_semana'])
+                ->max('orden') ?? 0);
+
+            $creadas = [];
+
+            DB::transaction(function () use (&$creadas, $bloques, $data, $esquema, $ordenBase) {
+                $orden = $ordenBase;
+
+                foreach ($bloques as [$horaInicio, $horaFin]) {
+                    $orden++;
+
+                    $creadas[] = FranjaHoraria::create([
+                        'id_anio_escolar' => $esquema->id_anio_escolar,
+                        'id_esquema' => $data['id_esquema'],
+                        'id_dia_semana' => $data['id_dia_semana'],
+                        'hora_inicio' => $horaInicio,
+                        'hora_fin' => $horaFin,
+                        'orden' => $orden,
+                        'asignable' => $data['asignable'] ?? true,
+                        'color' => $data['color'] ?? null,
+                        'etiqueta' => $data['etiqueta'] ?? null,
+                    ])->toArray();
+                }
+            });
+
+            return [
+                'error' => false,
+                'message' => count($creadas) . ' franja(s) horaria(s) creada(s).',
+                'data' => $creadas,
+            ];
+        } catch (Exception $e) {
+
+            $this->sendError($e, 'Error al crear las franjas horarias en lote');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al crear las franjas horarias.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Copia todas las franjas de un día a otro(s) día(s) del mismo esquema, en una sola
+     * transacción. Nunca reemplaza: un día destino con franjas ya existentes se omite (no se
+     * borra nada) — hay que eliminarlas primero desde el propio módulo. Las no-asignables
+     * copiadas quedan como dependientes del mismo pivote que la original (o de la original
+     * misma si esta es el pivote) — "Quitar de los otros días" y el agrupado de "Horarios no
+     * asignables" ya las reconocen como parte del grupo, sin volver a marcar "aplicar a
+     * todos los días" a mano.
+     *
+     * @param int $idEsquema
+     * @param int $idDiaOrigen
+     * @param array $idsDiasDestino
+     * @return array
+     */
+    public function copiarFranjasDeDia(int $idEsquema, int $idDiaOrigen, array $idsDiasDestino): array
+    {
+        try {
+            $origen = FranjaHoraria::where('id_esquema', $idEsquema)
+                ->where('id_dia_semana', $idDiaOrigen)
+                ->orderBy('orden')
+                ->get();
+
+            if ($origen->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'El día de origen no tiene franjas para copiar.',
+                    'data' => []
+                ];
+            }
+
+            $ocupados = FranjaHoraria::where('id_esquema', $idEsquema)
+                ->whereIn('id_dia_semana', $idsDiasDestino)
+                ->distinct()
+                ->pluck('id_dia_semana');
+
+            $destinosValidos = collect($idsDiasDestino)->diff($ocupados)->values();
+
+            if ($destinosValidos->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'Los días seleccionados ya tienen horarios; elimínalos primero.',
+                    'data' => []
+                ];
+            }
+
+            DB::transaction(function () use ($origen, $destinosValidos, $idEsquema) {
+                foreach ($destinosValidos as $idDestino) {
+                    $orden = 1;
+
+                    foreach ($origen as $f) {
+                        // La copia de una franja no asignable queda como dependiente del
+                        // mismo pivote que la original (o de la original misma si esta es el
+                        // pivote): así "Quitar de los otros días" y el agrupado de "Horarios
+                        // no asignables" ya la reconocen como parte del grupo, sin que el
+                        // usuario tenga que volver a marcar "aplicar a todos los días" a mano.
+                        $idPivote = $f->asignable ? null : ($f->id_franja_pivote ?? $f->id);
+
+                        FranjaHoraria::create([
+                            'id_anio_escolar' => $f->id_anio_escolar,
+                            'id_esquema' => $idEsquema,
+                            'id_dia_semana' => $idDestino,
+                            'hora_inicio' => $f->hora_inicio,
+                            'hora_fin' => $f->hora_fin,
+                            'orden' => $orden++,
+                            'asignable' => $f->asignable,
+                            'color' => $f->asignable ? null : $f->color,
+                            'etiqueta' => $f->asignable ? null : $f->etiqueta,
+                            'id_franja_pivote' => $idPivote,
+                        ]);
+                    }
+                }
+            });
+
+            $omitidos = $ocupados->intersect($idsDiasDestino)->values();
+
+            $mensaje = "Horarios copiados a {$destinosValidos->count()} día(s).";
+
+            if ($omitidos->isNotEmpty()) {
+                $mensaje .= " Se omitieron {$omitidos->count()} día(s) que ya tenían horarios.";
+            }
+
+            return [
+                'error' => false,
+                'message' => $mensaje,
+                'data' => []
+            ];
+        } catch (Exception $e) {
+
+            $this->sendError($e, 'Error al copiar las franjas horarias');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al copiar los horarios.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
      * Método para actualizar las franjas horarias.
      *
      * Permite actualizar:
@@ -358,6 +577,86 @@ class FranjaHorariaService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el orden.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Mueve una franja a otro día del mismo esquema (arrastrar entre columnas de día en el
+     * frontend), conservando su hora_inicio/hora_fin. Se agrega al final del día destino
+     * (max(orden)+1) — la posición exacta dentro de ese día se ajusta después con
+     * actualizarOrdenFranjasHorarias(), igual que al crear una franja nueva.
+     *
+     * @param int $id
+     * @param int $idDiaDestino
+     * @return array
+     */
+    public function moverFranjaADia(int $id, int $idDiaDestino): array
+    {
+        try {
+            $franja = FranjaHoraria::find($id);
+
+            if (!$franja) {
+                return [
+                    'error' => true,
+                    'message' => 'La franja horaria no existe.',
+                    'data' => []
+                ];
+            }
+
+            if ($franja->id_dia_semana === $idDiaDestino) {
+                return [
+                    'error' => false,
+                    'message' => 'La franja ya está en ese día.',
+                    'data' => $franja->toArray()
+                ];
+            }
+
+            // Igual que al marcar una franja como no asignable: moverla a otro día dejaría
+            // huérfana la clase ya asignada en el día viejo — hay que eliminarla o
+            // reprogramarla desde Horario de clase antes de poder arrastrarla.
+            if ($franja->horarioClase()->exists()) {
+                return [
+                    'error' => true,
+                    'message' => 'Esta franja ya tiene una clase asignada; elimínala o reprográmala antes de moverla a otro día.',
+                    'data' => []
+                ];
+            }
+
+            $scopeDestino = fn () => FranjaHoraria::where('id_dia_semana', $idDiaDestino)
+                ->when(
+                    $franja->id_esquema !== null,
+                    fn ($q) => $q->where('id_esquema', $franja->id_esquema),
+                    fn ($q) => $q->where('id_anio_escolar', $franja->id_anio_escolar)
+                );
+
+            $hayCruce = $this->existeCruceHorario($scopeDestino(), $franja->hora_inicio, $franja->hora_fin);
+
+            if ($hayCruce) {
+                return [
+                    'error' => true,
+                    'message' => 'Ese horario ya se cruza con una franja existente en el día de destino.',
+                    'data' => []
+                ];
+            }
+
+            $ordenNueva = (int) ($scopeDestino()->max('orden') ?? 0) + 1;
+
+            $franja->update(['id_dia_semana' => $idDiaDestino, 'orden' => $ordenNueva]);
+
+            return [
+                'error' => false,
+                'message' => 'Franja movida correctamente.',
+                'data' => $franja->fresh()
+            ];
+        } catch (Exception $e) {
+
+            $this->sendError($e, 'Error al mover la franja horaria');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al mover la franja horaria.',
                 'data' => []
             ];
         }

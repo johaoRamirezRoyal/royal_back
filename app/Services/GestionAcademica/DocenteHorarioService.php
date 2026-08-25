@@ -7,6 +7,7 @@ use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\DocenteAsignatura;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\GestionAcademica\HorarioClase;
+use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Exception;
 
@@ -34,9 +35,44 @@ class DocenteHorarioService extends Service
                 ->filter(fn ($da) => $da->asignatura?->activo)
                 ->values();
 
-            $cursos = Cursos::with('nivel:id,nombre')->where('activo', 1)->orderBy('nombre')->get();
+            // Cursos del propio nivel académico del docente. usuarios.id_nivel vive en
+            // `nivel` (clasificación general del usuario), pero curso.id_nivel apunta a
+            // nivel_academico desde
+            // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay
+            // que puentear por nivel.id_nivel_academico para comparar en la misma
+            // numeración. Sin nivel asignado (id_nivel=0 en usuarios) o sin
+            // id_nivel_academico vinculado se trata igual que "sin cursos", no como "todos
+            // los niveles" — fail-closed igual que el resto del autoservicio.
+            $nivelDocente = Usuario::find($id_docente)?->nivelRelacion;
+            $idsNivelAcademico = $nivelDocente?->id_nivel_academico ? [$nivelDocente->id_nivel_academico] : [];
 
-            if ($asignaturasDocente->isEmpty() || $cursos->isEmpty()) {
+            // "Bachillerato" en `nivel` era el bucket único de 6°-11° antes del split de la
+            // migración de arriba — puentea 1:1 a nivel_academico Media, pero un docente
+            // clasificado así históricamente pudo enseñar en cualquiera de los dos niveles
+            // académicos reales (Secundaria O Media), no solo el que la FK 1:1 elige por
+            // defecto. `nivel` a propósito no tiene fila propia para Secundaria (ver
+            // conversación de diseño), así que no hay otro nivel.id_nivel_academico posible
+            // para representarlo — se agrega Secundaria (nivel_academico id 3) a mano solo
+            // en este caso puntual.
+            if ($nivelDocente?->nombre === 'Bachillerato') {
+                $idsNivelAcademico[] = 3;
+            }
+
+            if ($asignaturasDocente->isEmpty() || empty($idsNivelAcademico)) {
+                return [
+                    'error' => false,
+                    'message' => 'Menú de horario obtenido correctamente.',
+                    'data' => ['cursos' => []],
+                ];
+            }
+
+            $cursos = Cursos::with('nivel:id,nombre')
+                ->where('activo', 1)
+                ->whereIn('id_nivel', $idsNivelAcademico)
+                ->orderBy('nombre')
+                ->get();
+
+            if ($cursos->isEmpty()) {
                 return [
                     'error' => false,
                     'message' => 'Menú de horario obtenido correctamente.',
@@ -196,7 +232,10 @@ class DocenteHorarioService extends Service
 
     public function misHorarios(int $id_docente): array
     {
-        return $this->horarioClaseService->verHorario($id_docente, null, null, null);
+        // incluirNoAsignables=true: el docente también ve los recesos/almuerzos globales
+        // del esquema junto a sus clases, sin que un admin tenga que recrearlos a mano
+        // como HorarioClase (ver HorarioClaseService::mezclarFranjasNoAsignables).
+        return $this->horarioClaseService->verHorario($id_docente, null, null, null, true);
     }
 
     public function actualizarDescripcion(int $id_docente, int $id, ?string $descripcion): array

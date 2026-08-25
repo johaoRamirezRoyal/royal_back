@@ -13,15 +13,21 @@ class Nivel extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'id', 
+        'id',
         'nombre',
         'activo',
         'user_log',
-        'fechareg'
+        'fechareg',
+        'id_nivel_academico',
     ];
 
     public function perfil(){
         return $this->hasMany(Usuario::class, 'id_nivel');
+    }
+
+    public function nivelAcademico()
+    {
+        return $this->belongsTo(NivelAcademico::class, 'id_nivel_academico');
     }
 
 }
