@@ -360,8 +360,10 @@ class FranjaHorariaService extends Service
      * Copia todas las franjas de un día a otro(s) día(s) del mismo esquema, en una sola
      * transacción. Nunca reemplaza: un día destino con franjas ya existentes se omite (no se
      * borra nada) — hay que eliminarlas primero desde el propio módulo. Las no-asignables
-     * copiadas quedan independientes (id_franja_pivote null), no vinculadas al pivote
-     * original: "aplicar a todos los días" y "copiar día" son mecanismos separados.
+     * copiadas quedan como dependientes del mismo pivote que la original (o de la original
+     * misma si esta es el pivote) — "Quitar de los otros días" y el agrupado de "Horarios no
+     * asignables" ya las reconocen como parte del grupo, sin volver a marcar "aplicar a
+     * todos los días" a mano.
      *
      * @param int $idEsquema
      * @param int $idDiaOrigen
@@ -404,6 +406,13 @@ class FranjaHorariaService extends Service
                     $orden = 1;
 
                     foreach ($origen as $f) {
+                        // La copia de una franja no asignable queda como dependiente del
+                        // mismo pivote que la original (o de la original misma si esta es el
+                        // pivote): así "Quitar de los otros días" y el agrupado de "Horarios
+                        // no asignables" ya la reconocen como parte del grupo, sin que el
+                        // usuario tenga que volver a marcar "aplicar a todos los días" a mano.
+                        $idPivote = $f->asignable ? null : ($f->id_franja_pivote ?? $f->id);
+
                         FranjaHoraria::create([
                             'id_anio_escolar' => $f->id_anio_escolar,
                             'id_esquema' => $idEsquema,
@@ -414,6 +423,7 @@ class FranjaHorariaService extends Service
                             'asignable' => $f->asignable,
                             'color' => $f->asignable ? null : $f->color,
                             'etiqueta' => $f->asignable ? null : $f->etiqueta,
+                            'id_franja_pivote' => $idPivote,
                         ]);
                     }
                 }
