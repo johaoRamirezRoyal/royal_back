@@ -35,21 +35,30 @@ class DocenteHorarioService extends Service
                 ->filter(fn ($da) => $da->asignatura?->activo)
                 ->values();
 
-            // Solo los cursos del propio nivel académico del docente. usuarios.id_nivel
-            // vive en `nivel` (clasificación general del usuario), pero curso.id_nivel
-            // apunta a nivel_academico desde
+            // Cursos del propio nivel académico del docente. usuarios.id_nivel vive en
+            // `nivel` (clasificación general del usuario), pero curso.id_nivel apunta a
+            // nivel_academico desde
             // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay
             // que puentear por nivel.id_nivel_academico para comparar en la misma
             // numeración. Sin nivel asignado (id_nivel=0 en usuarios) o sin
             // id_nivel_academico vinculado se trata igual que "sin cursos", no como "todos
-            // los niveles" — fail-closed igual que el resto del autoservicio. Corte
-            // explícito acá (en vez de dejar que `where('id_nivel', null)` siga de largo):
-            // Laravel traduce eso a whereNull('id_nivel'), que SÍ tiene filas reales
-            // (cursos sin grado identificable, ej. "Stem A/B" — ver la misma migración) y
-            // las devolvería como si fueran del nivel del docente.
-            $idNivelAcademicoDocente = Usuario::find($id_docente)?->nivelRelacion?->id_nivel_academico;
+            // los niveles" — fail-closed igual que el resto del autoservicio.
+            $nivelDocente = Usuario::find($id_docente)?->nivelRelacion;
+            $idsNivelAcademico = $nivelDocente?->id_nivel_academico ? [$nivelDocente->id_nivel_academico] : [];
 
-            if ($asignaturasDocente->isEmpty() || !$idNivelAcademicoDocente) {
+            // "Bachillerato" en `nivel` era el bucket único de 6°-11° antes del split de la
+            // migración de arriba — puentea 1:1 a nivel_academico Media, pero un docente
+            // clasificado así históricamente pudo enseñar en cualquiera de los dos niveles
+            // académicos reales (Secundaria O Media), no solo el que la FK 1:1 elige por
+            // defecto. `nivel` a propósito no tiene fila propia para Secundaria (ver
+            // conversación de diseño), así que no hay otro nivel.id_nivel_academico posible
+            // para representarlo — se agrega Secundaria (nivel_academico id 3) a mano solo
+            // en este caso puntual.
+            if ($nivelDocente?->nombre === 'Bachillerato') {
+                $idsNivelAcademico[] = 3;
+            }
+
+            if ($asignaturasDocente->isEmpty() || empty($idsNivelAcademico)) {
                 return [
                     'error' => false,
                     'message' => 'Menú de horario obtenido correctamente.',
@@ -59,7 +68,7 @@ class DocenteHorarioService extends Service
 
             $cursos = Cursos::with('nivel:id,nombre')
                 ->where('activo', 1)
-                ->where('id_nivel', $idNivelAcademicoDocente)
+                ->whereIn('id_nivel', $idsNivelAcademico)
                 ->orderBy('nombre')
                 ->get();
 
