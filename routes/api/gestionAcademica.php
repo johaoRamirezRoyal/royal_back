@@ -284,6 +284,26 @@ Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsis
 Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase']);
 
 /**
+ * http://localhost:8000/api/gestion-academica/asistencias-clase/lote
+ *
+ * Registra en una sola petición transaccional la sesión de un bloque fusionado (dos o más
+ * franjas seguidas de la misma clase, ver agruparRunsPorDia en el frontend) — crea/actualiza
+ * la asistencia de cada id_horario_clase con el mismo estado/observación, y reemplaza las
+ * excepciones de alumnos de todas ellas por las mismas `estudiantes` (opcional).
+{
+    "ids_horario_clase": [1, 2],
+    "fecha": "2026-07-02",
+    "estado": "DICTADA",
+    "observacion": "Clase normal",
+    "estudiantes": [
+        { "id_alumno": 1, "estado": "AUSENTE" },
+        { "id_alumno": 2, "estado": "TARDE" }
+    ]
+}
+ */
+Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote']);
+
+/**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
  * Todos los parámetros son opcionales, pero si ninguno se envía se exige id_horario_clase.
  * ?id_estudiante=1&id_curso=1&fecha=2026-07-02&id_clase=1&id_horario_clase=1

@@ -3,6 +3,7 @@
 namespace App\Services\GestionAcademica;
 
 use App\Models\GestionAcademica\AsistenciaClase;
+use App\Models\GestionAcademica\AsistenciaEstudiante;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
@@ -150,6 +151,75 @@ class AsistenciaClaseService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar la asistencia.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Registra en una sola transacción la sesión de clase (estado/observación) y las
+     * excepciones de alumnos de CADA franja de un bloque fusionado (dos o más franjas
+     * seguidas de la misma clase, ver agruparRunsPorDia en el frontend) — todas quedan con
+     * el mismo estado y las mismas excepciones, así el bloque se sigue viendo fusionado en
+     * el calendario (que exige estado idéntico entre franjas consecutivas para fusionarlas).
+     * `id_horario_clase` con sesión existente (mismo par horario+fecha, ver la unique de
+     * academico_asistencia_clase) se actualiza en vez de duplicarse.
+     */
+    public function guardarLote(
+        array $idsHorarioClase,
+        string $fecha,
+        string $estado,
+        ?string $observacion,
+        array $estudiantes = []
+    ): array {
+        DB::beginTransaction();
+
+        try {
+            $asistencias = [];
+            foreach (array_unique($idsHorarioClase) as $idHorarioClase) {
+                $asistencia = AsistenciaClase::firstOrNew([
+                    'id_horario_clase' => $idHorarioClase,
+                    'fecha' => $fecha,
+                ]);
+                $asistencia->estado = $estado;
+                $asistencia->observacion = $observacion;
+                $asistencia->save();
+                $asistencias[] = $asistencia;
+            }
+
+            $idsAsistencia = collect($asistencias)->pluck('id');
+            AsistenciaEstudiante::whereIn('id_asistencia_clase', $idsAsistencia)->delete();
+
+            if (!empty($estudiantes)) {
+                $insert = [];
+                foreach ($idsAsistencia as $idAsistencia) {
+                    foreach ($estudiantes as $estudiante) {
+                        $insert[] = [
+                            'id_alumno' => $estudiante['id_alumno'],
+                            'id_asistencia_clase' => $idAsistencia,
+                            'estado' => $estudiante['estado'],
+                            'observacion' => $estudiante['observacion'] ?? null,
+                        ];
+                    }
+                }
+                AsistenciaEstudiante::insert($insert);
+            }
+
+            DB::commit();
+
+            return [
+                'error' => false,
+                'message' => 'Asistencia guardada correctamente.',
+                'data' => collect($asistencias)->map->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            $this->sendError($e, 'Error al guardar la asistencia del bloque');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al guardar la asistencia.',
                 'data' => []
             ];
         }

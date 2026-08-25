@@ -11,6 +11,7 @@ use App\Http\Requests\GestionAcademica\EsquemaHorarioRequest;
 use App\Http\Requests\GestionAcademica\FranjaHorariaRequest;
 use App\Http\Requests\GestionAcademica\MiHorarioRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaClaseRequest;
+use App\Http\Requests\GestionAcademica\AsistenciaClaseLoteRequest;
 use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -49,7 +50,7 @@ class GestionAcademicaController extends Controller
     // sheet de "apartar horario" (useMiHorario.hook.ts::abrirSeleccion) no puede listar
     // las franjas disponibles antes de reservar.
     private const METODOS_DOCENTE = [
-        'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
+        'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase', 'guardarAsistenciaClaseLote',
         'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
         'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'actualizarDescripcionMiHorario', 'eliminarMiHorario',
         'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
@@ -416,6 +417,19 @@ class GestionAcademicaController extends Controller
     public function actualizarAsistenciaClase(AsistenciaClaseRequest $request)
     {
         return $this->apiResponse($this->service->asistenciaClase()->actualizarAsistenciaClase($request->all()));
+    }
+
+    public function guardarAsistenciaClaseLote(AsistenciaClaseLoteRequest $request)
+    {
+        $validated = $request->validated();
+
+        return $this->apiResponse($this->service->asistenciaClase()->guardarLote(
+            $validated['ids_horario_clase'],
+            $validated['fecha'],
+            $validated['estado'],
+            $validated['observacion'] ?? null,
+            $validated['estudiantes'] ?? [],
+        ));
     }
 
     public function verAsistenciasEstudiantes(Request $request)
