@@ -6,9 +6,16 @@ use App\Models\Usuarios\Nivel;
 
 class NivelesServices 
 {
-    public function mostrarTodosNiveles(){
+    /**
+     * @param bool $soloAcademicos Si es true, solo trae niveles con id_nivel_academico
+     *   asignado (Preescolar/Primaria/Secundaria/Media) — excluye las categorías no
+     *   académicas de usuario (Administrativo/Acudiente/Operativo/Egresado, etc.).
+     */
+    public function mostrarTodosNiveles(bool $soloAcademicos = false){
         try{
-            $niveles = Nivel::all();
+            $niveles = Nivel::query()
+                ->when($soloAcademicos, fn ($q) => $q->whereNotNull('id_nivel_academico'))
+                ->get();
 
             return [
                 'error' => false,

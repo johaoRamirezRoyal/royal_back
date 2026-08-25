@@ -9,6 +9,8 @@ Route::post('/firma', [UsuariosController::class, 'subirFirma']);
 Route::get('/permiso', [UsuariosController::class, 'tienePermiso']);
 Route::get('/filtro', [UsuariosController::class, 'filtrarUsuarios']);
 Route::get('/perfiles', [UsuariosController::class, 'mostrarTodosPerfiles']);
+// ?solo_academicos=1 filtra a los niveles con id_nivel_academico asignado
+// (Preescolar/Primaria/Secundaria/Media) — excluye Administrativo/Acudiente/Operativo/Egresado.
 Route::get('/niveles', [UsuariosController::class, 'mostrarTodosNiveles']);
 
 Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
