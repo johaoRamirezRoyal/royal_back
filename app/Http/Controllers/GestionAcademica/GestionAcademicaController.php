@@ -378,8 +378,9 @@ class GestionAcademicaController extends Controller
         $id_curso = $request->input('id_curso');
         $id_asignatura = $request->input('id_asignatura');
         $id_dia_semana = $request->input('id_dia_semana');
+        $incluir_no_asignables = $request->boolean('incluir_no_asignables');
 
-        return $this->apiResponse($this->service->horarioClase()->verHorario($id_docente, $id_curso, $id_asignatura, $id_dia_semana));
+        return $this->apiResponse($this->service->horarioClase()->verHorario($id_docente, $id_curso, $id_asignatura, $id_dia_semana, $incluir_no_asignables));
     }
 
     public function crearHorarioClase(HorarioClaseRequest $request)

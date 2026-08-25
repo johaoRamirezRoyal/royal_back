@@ -232,6 +232,12 @@ class HorarioClaseService extends Service
      * @param int|null $id_curso ID del curso a filtrar.
      * @param int|null $id_asignatura ID de la asignatura a filtrar.
      * @param int|null $id_dia_semana ID del día de la semana a filtrar.
+     * @param bool $incluirNoAsignables Si es true, agrega al resultado (como bloques de
+     *   solo lectura, id negativo, sin id_carga_academica) las franjas asignable=false del
+     *   mismo esquema que ya aparecen en el resultado — receso/almuerzo globales del
+     *   esquema, sin que un admin tenga que recrearlos a mano como HorarioClase. Por
+     *   defecto en false para no alterar el contrato de quien ya consume este método sin
+     *   pedirlo explícitamente (ej. Attendances, que usa `tipo` para filtrar clases reales).
      *
      * @return array{
      *     error: bool,
@@ -243,7 +249,8 @@ class HorarioClaseService extends Service
         ?int $id_docente,
         ?int $id_curso,
         ?int $id_asignatura,
-        ?int $id_dia_semana
+        ?int $id_dia_semana,
+        bool $incluirNoAsignables = false
     ): array {
 
         try {
@@ -252,7 +259,7 @@ class HorarioClaseService extends Service
 
                 ->with([
 
-                    'franjaHoraria:id,id_dia_semana,hora_inicio,hora_fin,orden',
+                    'franjaHoraria:id,id_esquema,id_dia_semana,hora_inicio,hora_fin,orden',
 
                     'franjaHoraria.diaSemana:id,nombre,abreviatura',
 
@@ -351,13 +358,17 @@ class HorarioClaseService extends Service
 
                 ->get();
 
+            $data = $incluirNoAsignables
+                ? $this->mezclarFranjasNoAsignables($horario, $id_dia_semana)
+                : $horario;
+
             return [
 
                 'error' => false,
 
                 'message' => 'Horario obtenido correctamente.',
 
-                'data' => $horario
+                'data' => $data
 
             ];
         } catch (Exception $e) {
@@ -374,6 +385,72 @@ class HorarioClaseService extends Service
 
             ];
         }
+    }
+
+    /**
+     * Mezcla en $horario (colección de HorarioClase reales) las franjas asignable=false del
+     * mismo esquema que ya aparecen ahí, como bloques de solo lectura (receso, almuerzo,
+     * etc.), ordenados junto a los reales por día+hora. El esquema se infiere de las
+     * propias franjas de $horario (franjaHoraria.id_esquema) — si $horario viene vacío no
+     * hay de dónde inferirlo y no se agrega nada (ej. un docente que aún no tiene ninguna
+     * clase armada). Cada bloque sintético usa id = -id_franja_horaria (nunca choca con un
+     * id real de HorarioClase, que es autoincremental positivo) para que el frontend pueda
+     * usarlo como key/rowKey sin tocar el tipo de `id`, y se distingue con
+     * `es_no_asignable: true` — no se puede editar/eliminar, es puramente informativo.
+     */
+    private function mezclarFranjasNoAsignables($horario, ?int $id_dia_semana)
+    {
+        $idsEsquema = $horario->pluck('franjaHoraria.id_esquema')->filter()->unique()->values();
+
+        if ($idsEsquema->isEmpty()) {
+            return $horario;
+        }
+
+        $franjasNoAsignables = FranjaHoraria::whereIn('id_esquema', $idsEsquema)
+            ->where('asignable', false)
+            ->when($id_dia_semana, fn ($q) => $q->where('id_dia_semana', $id_dia_semana))
+            ->with('diaSemana:id,nombre,abreviatura')
+            ->get();
+
+        if ($franjasNoAsignables->isEmpty()) {
+            return $horario;
+        }
+
+        $bloques = $franjasNoAsignables->map(function (FranjaHoraria $franja) {
+            return [
+                'id' => -$franja->id,
+                'id_carga_academica' => null,
+                'id_franja_horaria' => $franja->id,
+                'tipo' => null,
+                'descripcion' => null,
+                'es_no_asignable' => true,
+                'etiqueta' => $franja->etiqueta,
+                'color' => $franja->color,
+                'franja_horaria' => [
+                    'id' => $franja->id,
+                    'id_dia_semana' => $franja->id_dia_semana,
+                    'hora_inicio' => $franja->hora_inicio,
+                    'hora_fin' => $franja->hora_fin,
+                    'orden' => $franja->orden,
+                    'dia_semana' => $franja->diaSemana,
+                ],
+                'carga_academica' => null,
+            ];
+        });
+
+        // dias_semana.id coincide con su orden (1=Lunes...7=Domingo, ver DiaSemanaSeeder) —
+        // se ordena directo por id_dia_semana sin otro join, igual para modelos reales
+        // (franjaHoraria->id_dia_semana) y arrays sintéticos (franja_horaria.id_dia_semana).
+        $ordenar = function ($item) {
+            if (is_array($item)) {
+                return [$item['franja_horaria']['id_dia_semana'] ?? 0, $item['franja_horaria']['hora_inicio'] ?? ''];
+            }
+            return [$item->franjaHoraria->id_dia_semana ?? 0, $item->franjaHoraria->hora_inicio ?? ''];
+        };
+
+        return $horario->concat($bloques)
+            ->sort(fn ($a, $b) => $ordenar($a) <=> $ordenar($b))
+            ->values();
     }
 
     /**

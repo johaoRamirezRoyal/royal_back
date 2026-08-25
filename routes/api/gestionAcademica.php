@@ -226,6 +226,11 @@ Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFr
 
 /**
  * http://localhost:8000/api/gestion-academica/horario?id_docente=24&id_curso=1&id_asignatura=5&id_dia_semana=2
+ *
+ * incluir_no_asignables=1 agrega al resultado, como bloques de solo lectura (id negativo,
+ * es_no_asignable=true), las franjas asignable=false del mismo esquema — receso/almuerzo
+ * globales del esquema. Por defecto false: Attendances consume este mismo endpoint y usa
+ * `tipo` para filtrar clases reales, así que no lo pide.
  */
 Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
 

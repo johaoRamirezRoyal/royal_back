@@ -196,7 +196,10 @@ class DocenteHorarioService extends Service
 
     public function misHorarios(int $id_docente): array
     {
-        return $this->horarioClaseService->verHorario($id_docente, null, null, null);
+        // incluirNoAsignables=true: el docente también ve los recesos/almuerzos globales
+        // del esquema junto a sus clases, sin que un admin tenga que recrearlos a mano
+        // como HorarioClase (ver HorarioClaseService::mezclarFranjasNoAsignables).
+        return $this->horarioClaseService->verHorario($id_docente, null, null, null, true);
     }
 
     public function actualizarDescripcion(int $id_docente, int $id, ?string $descripcion): array
