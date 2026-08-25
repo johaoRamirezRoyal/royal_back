@@ -16,11 +16,18 @@ return new class extends Migration
      * clasificar como "----------") quedan con id_nivel_academico = null.
      *
      * El match contra `nivel` es por nombre, no por id, y contempla tanto el nombre corto
-     * original (Preescolar/Primaria/Secundaria/Bachillerato) como el descriptivo largo
-     * ("Educación preescolar"/"Educación básica primaria"/"Educación básica secundaria"/
-     * "Educación media") por si un rename manual anterior ya lo había cambiado — y en ese
-     * caso, además de fijar la FK, revierte nivel.nombre a su forma corta original: el
-     * nombre largo pasa a vivir solo en nivel_academico.nombre.
+     * original (Preescolar/Primaria/Bachillerato) como el descriptivo largo ("Educación
+     * preescolar"/"Educación básica primaria"/"Educación media") por si un rename manual
+     * anterior ya lo había cambiado — y en ese caso, además de fijar la FK, revierte
+     * nivel.nombre a su forma corta original: el nombre largo pasa a vivir solo en
+     * nivel_academico.nombre.
+     *
+     * "Secundaria" NO tiene fila propia en `nivel` (nunca existió como categoría de
+     * usuario — nivel.nombre históricamente solo distinguía Preescolar/Primaria/
+     * Bachillerato) y a propósito no se crea acá: `nivel` es para clasificar un usuario
+     * (usuarios.id_nivel) y otros módulos no académicos; para lo académico (cursos,
+     * esquemas de horario) donde sí se necesitan los 4 niveles reales, usar
+     * nivel_academico directamente en vez de nivel.
      */
     public function up(): void
     {
@@ -32,7 +39,6 @@ return new class extends Migration
         $mapa = [
             1 => ['canonico' => 'Preescolar', 'nombres' => ['Preescolar', 'Educación preescolar']],
             2 => ['canonico' => 'Primaria', 'nombres' => ['Primaria', 'Educación básica primaria']],
-            3 => ['canonico' => 'Secundaria', 'nombres' => ['Secundaria', 'Educación básica secundaria']],
             4 => ['canonico' => 'Bachillerato', 'nombres' => ['Bachillerato', 'Media', 'Educación media']],
         ];
 
