@@ -360,6 +360,12 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->franjaHoraria()->eliminarFranjaHoraria($request->input('ids')));
     }
 
+    public function moverFranjaADia(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->moverFranjaADia($body['id'], $body['id_dia_semana']));
+    }
+
     public function quitarNoAsignableDeOtrosDias(FranjaHorariaRequest $request)
     {
         $body = $request->validated();

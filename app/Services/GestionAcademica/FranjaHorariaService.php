@@ -572,6 +572,86 @@ class FranjaHorariaService extends Service
         }
     }
 
+    /**
+     * Mueve una franja a otro día del mismo esquema (arrastrar entre columnas de día en el
+     * frontend), conservando su hora_inicio/hora_fin. Se agrega al final del día destino
+     * (max(orden)+1) — la posición exacta dentro de ese día se ajusta después con
+     * actualizarOrdenFranjasHorarias(), igual que al crear una franja nueva.
+     *
+     * @param int $id
+     * @param int $idDiaDestino
+     * @return array
+     */
+    public function moverFranjaADia(int $id, int $idDiaDestino): array
+    {
+        try {
+            $franja = FranjaHoraria::find($id);
+
+            if (!$franja) {
+                return [
+                    'error' => true,
+                    'message' => 'La franja horaria no existe.',
+                    'data' => []
+                ];
+            }
+
+            if ($franja->id_dia_semana === $idDiaDestino) {
+                return [
+                    'error' => false,
+                    'message' => 'La franja ya está en ese día.',
+                    'data' => $franja->toArray()
+                ];
+            }
+
+            // Igual que al marcar una franja como no asignable: moverla a otro día dejaría
+            // huérfana la clase ya asignada en el día viejo — hay que eliminarla o
+            // reprogramarla desde Horario de clase antes de poder arrastrarla.
+            if ($franja->horarioClase()->exists()) {
+                return [
+                    'error' => true,
+                    'message' => 'Esta franja ya tiene una clase asignada; elimínala o reprográmala antes de moverla a otro día.',
+                    'data' => []
+                ];
+            }
+
+            $scopeDestino = fn () => FranjaHoraria::where('id_dia_semana', $idDiaDestino)
+                ->when(
+                    $franja->id_esquema !== null,
+                    fn ($q) => $q->where('id_esquema', $franja->id_esquema),
+                    fn ($q) => $q->where('id_anio_escolar', $franja->id_anio_escolar)
+                );
+
+            $hayCruce = $this->existeCruceHorario($scopeDestino(), $franja->hora_inicio, $franja->hora_fin);
+
+            if ($hayCruce) {
+                return [
+                    'error' => true,
+                    'message' => 'Ese horario ya se cruza con una franja existente en el día de destino.',
+                    'data' => []
+                ];
+            }
+
+            $ordenNueva = (int) ($scopeDestino()->max('orden') ?? 0) + 1;
+
+            $franja->update(['id_dia_semana' => $idDiaDestino, 'orden' => $ordenNueva]);
+
+            return [
+                'error' => false,
+                'message' => 'Franja movida correctamente.',
+                'data' => $franja->fresh()
+            ];
+        } catch (Exception $e) {
+
+            $this->sendError($e, 'Error al mover la franja horaria');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al mover la franja horaria.',
+                'data' => []
+            ];
+        }
+    }
+
     public function eliminarFranjaHoraria(array $ids): array
     {
         try {

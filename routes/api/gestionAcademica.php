@@ -213,6 +213,18 @@ Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::c
 Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria']);
 
 /**
+http://localhost:8000/api/gestion-academica/franjas-horarias/dia
+
+Mueve una franja a otro día del mismo esquema (drag & drop entre columnas de día en el
+frontend), conservando su hora_inicio/hora_fin. Se agrega al final del día destino.
+{
+  "id": 4,
+  "id_dia_semana": 3
+}
+ */
+Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFranjaADia']);
+
+/**
  * http://localhost:8000/api/gestion-academica/horario?id_docente=24&id_curso=1&id_asignatura=5&id_dia_semana=2
  */
 Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
