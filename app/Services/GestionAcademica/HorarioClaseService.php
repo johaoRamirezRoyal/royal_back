@@ -397,6 +397,15 @@ class HorarioClaseService extends Service
      * id real de HorarioClase, que es autoincremental positivo) para que el frontend pueda
      * usarlo como key/rowKey sin tocar el tipo de `id`, y se distingue con
      * `es_no_asignable: true` — no se puede editar/eliminar, es puramente informativo.
+     *
+     * Un docente puede tener clases en más de un esquema a la vez (ej. Secundaria y Media,
+     * o cualquier combinación — ver DocenteHorarioService::verMenu) y todos los esquemas
+     * comparten la misma numeración de horas (FranjaHorarioSeeder les da los mismos
+     * bloques). Si se agregara sin más el receso de CADA esquema tocado, un receso del
+     * esquema B podía aparecer en la misma celda día+hora donde el docente ya tiene una
+     * clase real del esquema A — un "cruce" que en realidad nunca ocurre (son horarios de
+     * esquemas distintos, no del mismo día real del docente). Por eso se excluye cualquier
+     * franja no asignable cuyo día+hora ya coincida con una clase real de $horario.
      */
     private function mezclarFranjasNoAsignables($horario, ?int $id_dia_semana)
     {
@@ -406,11 +415,17 @@ class HorarioClaseService extends Service
             return $horario;
         }
 
+        $ocupados = $horario
+            ->map(fn ($h) => ($h->franjaHoraria->id_dia_semana ?? null) . '-' . ($h->franjaHoraria->hora_inicio ?? null))
+            ->unique()
+            ->flip();
+
         $franjasNoAsignables = FranjaHoraria::whereIn('id_esquema', $idsEsquema)
             ->where('asignable', false)
             ->when($id_dia_semana, fn ($q) => $q->where('id_dia_semana', $id_dia_semana))
             ->with('diaSemana:id,nombre,abreviatura')
-            ->get();
+            ->get()
+            ->reject(fn (FranjaHoraria $franja) => isset($ocupados["{$franja->id_dia_semana}-{$franja->hora_inicio}"]));
 
         if ($franjasNoAsignables->isEmpty()) {
             return $horario;
