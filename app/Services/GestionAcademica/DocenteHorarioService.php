@@ -7,6 +7,7 @@ use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\DocenteAsignatura;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\GestionAcademica\HorarioClase;
+use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Exception;
 
@@ -34,7 +35,16 @@ class DocenteHorarioService extends Service
                 ->filter(fn ($da) => $da->asignatura?->activo)
                 ->values();
 
-            $cursos = Cursos::with('nivel:id,nombre')->where('activo', 1)->orderBy('nombre')->get();
+            // Solo los cursos del propio nivel del docente (id_nivel=0 = sin nivel asignado
+            // en usuarios — se trata igual que "sin cursos", no como "todos los niveles",
+            // fail-closed igual que el resto del autoservicio).
+            $idNivelDocente = Usuario::find($id_docente)?->id_nivel;
+
+            $cursos = Cursos::with('nivel:id,nombre')
+                ->where('activo', 1)
+                ->where('id_nivel', $idNivelDocente)
+                ->orderBy('nombre')
+                ->get();
 
             if ($asignaturasDocente->isEmpty() || $cursos->isEmpty()) {
                 return [
