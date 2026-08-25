@@ -282,7 +282,9 @@ class HorarioClaseService extends Service
 
                     'cargaAcademica:id,id_docente_asignatura,id_curso',
 
-                    'cargaAcademica.curso:id,nombre',
+                    'cargaAcademica.curso:id,nombre,id_nivel',
+
+                    'cargaAcademica.curso.nivel:id,nombre',
 
                     'cargaAcademica.docenteAsignatura:id,id_docente,id_asignatura',
 
