@@ -126,6 +126,35 @@ http://localhost:8000/api/gestion-academica/franjas-horarias
 Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
 
 /**
+http://localhost:8000/api/gestion-academica/franjas-horarias/lote
+
+Crea varias franjas de una sola vez, partiendo [hora_inicio, hora_fin) en bloques
+consecutivos de duracion_min minutos (descarta el sobrante final si no completa un bloque).
+{
+  "id_esquema": 3,
+  "id_dia_semana": 2,
+  "hora_inicio": "07:00:00",
+  "hora_fin": "12:00:00",
+  "duracion_min": 60,
+  "asignable": true
+}
+ */
+Route::post('/franjas-horarias/lote', [GestionAcademicaController::class, 'crearFranjasHorariasEnLote']);
+
+/**
+http://localhost:8000/api/gestion-academica/franjas-horarias/copiar-dia
+
+Copia todas las franjas de un día a otro(s) día(s) del mismo esquema. Nunca reemplaza: un
+día destino que ya tenga franjas se omite (no se borra nada) — hay que eliminarlas primero.
+{
+  "id_esquema": 3,
+  "id_dia_origen": 1,
+  "ids_dias_destino": [2, 3]
+}
+ */
+Route::post('/franjas-horarias/copiar-dia', [GestionAcademicaController::class, 'copiarFranjasDia']);
+
+/**
 http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
 {
     "ids": [3, 4],

@@ -31,6 +31,10 @@ class FranjaHorariaRequest extends FormRequest
             'franjas' => ['nullable', 'array'],
             'franjas.*.id' => ['required_with:franjas', 'integer', 'exists:academico_franja_horaria,id'],
             'franjas.*.orden' => ['required_with:franjas', 'integer', 'min:1'],
+            'duracion_min' => ['nullable', 'integer', 'min:1'],
+            'id_dia_origen' => ['nullable', 'integer', 'exists:dias_semana,id'],
+            'ids_dias_destino' => ['nullable', 'array'],
+            'ids_dias_destino.*' => ['integer', 'exists:dias_semana,id'],
         ];
     }
 
@@ -47,6 +51,8 @@ class FranjaHorariaRequest extends FormRequest
             'ids.*.exists' => 'Una o más franjas no existen.',
             'franjas.*.id.required_with' => 'Cada franja debe tener un id.',
             'franjas.*.orden.required_with' => 'Cada franja debe tener un orden.',
+            'id_dia_origen.exists' => 'El día de origen no existe.',
+            'ids_dias_destino.*.exists' => 'Uno o más días de destino no existen.',
         ];
     }
 }

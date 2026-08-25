@@ -315,6 +315,21 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->franjaHoraria()->añadirFranjaHoraria($request->all()));
     }
 
+    public function crearFranjasHorariasEnLote(FranjaHorariaRequest $request)
+    {
+        return $this->apiResponse($this->service->franjaHoraria()->añadirFranjasHorariasEnLote($request->all()));
+    }
+
+    public function copiarFranjasDia(FranjaHorariaRequest $request)
+    {
+        $body = $request->validated();
+        return $this->apiResponse($this->service->franjaHoraria()->copiarFranjasDeDia(
+            $body['id_esquema'],
+            $body['id_dia_origen'],
+            $body['ids_dias_destino'],
+        ));
+    }
+
     public function actualizarTipoFranjaHoraria(FranjaHorariaRequest $request)
     {
         $body = $request->validated();
