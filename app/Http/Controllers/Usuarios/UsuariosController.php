@@ -299,6 +299,23 @@ class UsuariosController extends Controller
         ], 200);
     }
 
+    public function mostrarTodosNivelesAcademicos()
+    {
+        $response = $this->service_niveles->mostrarTodosNivelesAcademicos();
+
+        if ($response['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $response['message'],
+            ], 404);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $response['data'],
+        ], 200);
+    }
+
     // ==================== PERFILES ========================
     public function mostrarTodosPerfiles()
     {

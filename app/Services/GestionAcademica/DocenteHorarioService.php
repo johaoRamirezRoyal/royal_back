@@ -35,18 +35,35 @@ class DocenteHorarioService extends Service
                 ->filter(fn ($da) => $da->asignatura?->activo)
                 ->values();
 
-            // Solo los cursos del propio nivel del docente (id_nivel=0 = sin nivel asignado
-            // en usuarios — se trata igual que "sin cursos", no como "todos los niveles",
-            // fail-closed igual que el resto del autoservicio).
-            $idNivelDocente = Usuario::find($id_docente)?->id_nivel;
+            // Solo los cursos del propio nivel académico del docente. usuarios.id_nivel
+            // vive en `nivel` (clasificación general del usuario), pero curso.id_nivel
+            // apunta a nivel_academico desde
+            // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay
+            // que puentear por nivel.id_nivel_academico para comparar en la misma
+            // numeración. Sin nivel asignado (id_nivel=0 en usuarios) o sin
+            // id_nivel_academico vinculado se trata igual que "sin cursos", no como "todos
+            // los niveles" — fail-closed igual que el resto del autoservicio. Corte
+            // explícito acá (en vez de dejar que `where('id_nivel', null)` siga de largo):
+            // Laravel traduce eso a whereNull('id_nivel'), que SÍ tiene filas reales
+            // (cursos sin grado identificable, ej. "Stem A/B" — ver la misma migración) y
+            // las devolvería como si fueran del nivel del docente.
+            $idNivelAcademicoDocente = Usuario::find($id_docente)?->nivelRelacion?->id_nivel_academico;
+
+            if ($asignaturasDocente->isEmpty() || !$idNivelAcademicoDocente) {
+                return [
+                    'error' => false,
+                    'message' => 'Menú de horario obtenido correctamente.',
+                    'data' => ['cursos' => []],
+                ];
+            }
 
             $cursos = Cursos::with('nivel:id,nombre')
                 ->where('activo', 1)
-                ->where('id_nivel', $idNivelDocente)
+                ->where('id_nivel', $idNivelAcademicoDocente)
                 ->orderBy('nombre')
                 ->get();
 
-            if ($asignaturasDocente->isEmpty() || $cursos->isEmpty()) {
+            if ($cursos->isEmpty()) {
                 return [
                     'error' => false,
                     'message' => 'Menú de horario obtenido correctamente.',
