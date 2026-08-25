@@ -15,11 +15,12 @@ return new class extends Migration
      * académicas (Administrativo/Acudiente/Operativo/Egresado, y cualquier fila legada sin
      * clasificar como "----------") quedan con id_nivel_academico = null.
      *
-     * El match contra `nivel` es por nombre, no por id, y contempla tanto el nombre viejo
-     * (Preescolar/Primaria/Secundaria/Bachillerato) como el nuevo tras el rename a
-     * "Educación preescolar"/"Educación básica primaria"/"Educación básica secundaria"/
-     * "Educación media" — para que esta migración quede correcta sin importar si ese
-     * rename (aplicado directo en BD, no versionado) ya corrió en el entorno de destino.
+     * El match contra `nivel` es por nombre, no por id, y contempla tanto el nombre corto
+     * original (Preescolar/Primaria/Secundaria/Bachillerato) como el descriptivo largo
+     * ("Educación preescolar"/"Educación básica primaria"/"Educación básica secundaria"/
+     * "Educación media") por si un rename manual anterior ya lo había cambiado — y en ese
+     * caso, además de fijar la FK, revierte nivel.nombre a su forma corta original: el
+     * nombre largo pasa a vivir solo en nivel_academico.nombre.
      */
     public function up(): void
     {
@@ -29,14 +30,16 @@ return new class extends Migration
         });
 
         $mapa = [
-            1 => ['Preescolar', 'Educación preescolar'],
-            2 => ['Primaria', 'Educación básica primaria'],
-            3 => ['Secundaria', 'Educación básica secundaria'],
-            4 => ['Bachillerato', 'Media', 'Educación media'],
+            1 => ['canonico' => 'Preescolar', 'nombres' => ['Preescolar', 'Educación preescolar']],
+            2 => ['canonico' => 'Primaria', 'nombres' => ['Primaria', 'Educación básica primaria']],
+            3 => ['canonico' => 'Secundaria', 'nombres' => ['Secundaria', 'Educación básica secundaria']],
+            4 => ['canonico' => 'Bachillerato', 'nombres' => ['Bachillerato', 'Media', 'Educación media']],
         ];
 
-        foreach ($mapa as $idNivelAcademico => $nombres) {
-            DB::table('nivel')->whereIn('nombre', $nombres)->update(['id_nivel_academico' => $idNivelAcademico]);
+        foreach ($mapa as $idNivelAcademico => $info) {
+            DB::table('nivel')
+                ->whereIn('nombre', $info['nombres'])
+                ->update(['id_nivel_academico' => $idNivelAcademico, 'nombre' => $info['canonico']]);
         }
     }
 
