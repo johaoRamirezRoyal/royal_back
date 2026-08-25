@@ -255,6 +255,23 @@ class HorarioClaseService extends Service
 
         try {
 
+            // Esquemas donde el docente realmente tiene alguna clase propia — usado abajo
+            // para no mostrarle bloques "globales" (receso/almuerzo/planeación sin carga
+            // académica) de un esquema ajeno. Antes se mostraban TODOS sin importar el
+            // esquema ("las franjas sin carga académica no pertenecen a ningún docente en
+            // particular"), asumiendo un solo horario compartido por todo el colegio — pero
+            // cada esquema (Preescolar/Primaria/Secundaria/Media) tiene sus propios
+            // recesos, y como todos comparten la misma numeración horaria (mismo
+            // hora_inicio en distintos esquemas), un docente que dicta en el esquema A veía
+            // el receso del esquema B superpuesto en la misma celda día+hora de una clase
+            // real suya en A, aunque nunca dicta en B.
+            $idsEsquemaDocente = $id_docente
+                ? HorarioClase::whereHas('cargaAcademica.docenteAsignatura', fn ($q) => $q->where('id_docente', $id_docente))
+                    ->join('academico_franja_horaria', 'academico_franja_horaria.id', '=', 'academico_horario_clase.id_franja_horaria')
+                    ->distinct()
+                    ->pluck('academico_franja_horaria.id_esquema')
+                : collect();
+
             $horario = HorarioClase::query()
 
                 ->with([
@@ -291,13 +308,19 @@ class HorarioClaseService extends Service
                 })
 
                 // Las franjas sin carga académica (receso, almuerzo, planeación, etc.) no
-                // pertenecen a ningún docente en particular — se muestran siempre, sin
-                // filtrar por id_docente, igual que ya se hace con el chequeo de "activo".
-                ->when($id_docente, function ($query) use ($id_docente) {
+                // pertenecen a ningún docente en particular — se muestran, sin filtrar por
+                // id_docente, pero solo las de un esquema donde el docente sí dicta algo
+                // (ver $idsEsquemaDocente arriba).
+                ->when($id_docente, function ($query) use ($id_docente, $idsEsquemaDocente) {
 
-                    $query->where(function ($q) use ($id_docente) {
+                    $query->where(function ($q) use ($id_docente, $idsEsquemaDocente) {
 
-                        $q->whereNull('id_carga_academica')
+                        $q->where(function ($q2) use ($idsEsquemaDocente) {
+                            $q2->whereNull('id_carga_academica')
+                                ->whereHas('franjaHoraria', function ($q3) use ($idsEsquemaDocente) {
+                                    $q3->whereIn('id_esquema', $idsEsquemaDocente);
+                                });
+                        })
                             ->orWhereHas(
                                 'cargaAcademica.docenteAsignatura',
                                 function ($q2) use ($id_docente) {
