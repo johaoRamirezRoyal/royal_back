@@ -391,6 +391,39 @@ class UsuariosServices
         }
     }
 
+    /**
+     * Listado liviano de usuarios activos para poblar selects (ej. inventario): incluye
+     * trabajadores y estudiantes, excluye solo Proveedor (17) y Acudiente (6).
+     */
+    public function usuariosSelectInventario()
+    {
+        try {
+            $usuarios = Usuario::where('estado', 'activo')
+                ->whereNotIn('perfil', [17, 6])
+                ->select(
+                    'id_user',
+                    DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"),
+                    'nombre',
+                    'apellido',
+                    'documento',
+                    'perfil'
+                )
+                ->orderBy('nombre')
+                ->get();
+
+            return [
+                'error' => false,
+                'data' => $usuarios,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => 'Error obteniendo usuarios: '.$e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
     public function mostrarInfoUsuarioId($id_usuario)
     {
         try {

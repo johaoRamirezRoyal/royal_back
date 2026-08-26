@@ -16,6 +16,8 @@ Route::get('/perfiles', [UsuariosController::class, 'mostrarTodosPerfiles']);
 Route::get('/niveles', [UsuariosController::class, 'mostrarTodosNiveles']);
 Route::get('/niveles-academicos', [UsuariosController::class, 'mostrarTodosNivelesAcademicos']);
 
+Route::get('/select', [UsuariosController::class, 'usuariosSelectInventario']);
+
 Route::get('/all/activos', [UsuariosController::class, 'mostrarTodosUsuariosActivos']);
 Route::get('/all/general', [UsuariosController::class, 'mostrarTodosUsuariosPaginado']);
 Route::get('/', [UsuariosController::class, 'mostrarTodosUsuariosActivoPaginado']);

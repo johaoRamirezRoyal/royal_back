@@ -3,6 +3,7 @@
 namespace App\Services\inventario;
 
 use App\Models\AnioEscolar\Anio;
+use App\Models\Inventario\Categoria;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
@@ -237,7 +238,8 @@ class InventarioServices
                         $q->where('inventario.descripcion', 'like', "%{$s}%")
                             ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$s}%"])
                             ->orWhere('u.documento', 'like', "%{$s}%")
-                            ->orWhere('c.nombre', 'like', "%{$s}%");
+                            ->orWhere('c.nombre', 'like', "%{$s}%")
+                            ->orWhere('a.nombre', 'like', "%{$s}%");
                     });
                 });
 
@@ -643,17 +645,31 @@ class InventarioServices
      * @param mixed $inventario
      * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
-    public function agregarInventario($inventario)
+    /**
+     * Crea $cantidad filas idénticas (una unidad física = una fila, ver nota de
+     * agregarArticulosAInventario) en una sola transacción — permite cargar varias
+     * unidades del mismo artículo en un solo llamado en vez de repetir la petición.
+     */
+    public function agregarInventario(array $inventario, int $cantidad = 1)
     {
         try {
-            $inventario = Inventario::create($inventario);
+            $creados = DB::transaction(function () use ($inventario, $cantidad) {
+                $items = [];
+                for ($i = 0; $i < $cantidad; $i++) {
+                    $items[] = Inventario::create($inventario);
+                }
 
-            $this->registrarLog([$inventario], $inventario->estado, null);
+                $this->registrarLog($items, $inventario['estado'], null);
+
+                return $items;
+            });
 
             return [
                 'error' => false,
-                'data' => $inventario->toArray(),
-                'message' => "Inventario agregado"
+                'data' => array_map(fn ($item) => $item->toArray(), $creados),
+                'message' => count($creados) > 1
+                    ? 'Se agregaron '.count($creados).' artículos al inventario'
+                    : 'Inventario agregado',
             ];
         } catch (\Exception $e) {
             return [
@@ -993,8 +1009,15 @@ class InventarioServices
                                 ->where('rpe.estado', 3);
                         });
                 }, function ($q) {
-                    $q->where('iv.estado', 2)
-                        ->where('rp.estado', 2)
+                    // Antes hardcodeaba iv.estado=2 / rp.estado=2 (solo válido para reportes
+                    // correctivos): con tipo_reporte=2 (mantenimiento, estado 6) el `when`
+                    // de abajo agrega también rp.estado=6, y la combinación con este 2 fijo
+                    // era una contradicción que siempre devolvía cero filas — la vista de
+                    // mantenimientos pendientes nunca mostraba nada. El estado real (2 para
+                    // reportado, 6 para mantenimiento) ya lo aporta el filtro `estado` del
+                    // caller vía el `when(!is_null($estado))` de abajo.
+                    $q->whereNotIn('iv.estado', [4, 5])
+                        ->whereNull('rp.id_reporte')
                         ->whereNotExists(function ($query) {
                             $query->select(DB::raw(1))
                                 ->from('reportes as rpe')
@@ -1176,6 +1199,10 @@ class InventarioServices
      *
      * @param bool $conSolucion Si es true, además crea la solución del mantenimiento
      *                          en la misma fecha indicada + 45 minutos.
+     * @param int|null $id_tecnico Responsable explícito de los mantenimientos (id_resp). Si
+     *                             no se indica, se mantiene el fallback histórico: el dueño
+     *                             del equipo para el reporte, y quien programa para la
+     *                             solución (si $conSolucion).
      */
     public function programarMantenimientoPreventivo(
         array $ids,
@@ -1185,7 +1212,8 @@ class InventarioServices
         string $descripcion,
         ?int $id_anio,
         ?int $periodo,
-        bool $conSolucion = false
+        bool $conSolucion = false,
+        ?int $id_tecnico = null
     ): array {
         try {
             $inventarios = Inventario::whereIn('id', $ids)
@@ -1216,6 +1244,8 @@ class InventarioServices
                 $idAnio = $ultimoAnioEscolar->id;
             }
 
+            $creados = [];
+
             DB::transaction(function () use (
                 $inventarios,
                 $fecha_inicio,
@@ -1224,13 +1254,16 @@ class InventarioServices
                 $descripcion,
                 $idAnio,
                 $periodo,
-                $conSolucion
+                $conSolucion,
+                $id_tecnico,
+                &$creados
             ) {
                 $inicio = Carbon::parse($fecha_inicio);
                 $fin = Carbon::parse($fecha_fin);
 
                 foreach ($inventarios as $inventario) {
                     $fecha = $this->fechaMantenimientoAleatoria($inicio, $fin);
+                    $idRespReporte = $id_tecnico ?? $inventario->id_user;
 
                     $reporte = Reportes::create([
                         'id_inventario' => $inventario->id,
@@ -1239,7 +1272,7 @@ class InventarioServices
                         'estado' => 6,
                         'id_user' => $inventario->id_user,
                         'id_log' => $id_log,
-                        'id_resp' => $inventario->id_user,
+                        'id_resp' => $idRespReporte,
                         'tipo_reporte' => 2,
                         'descripcion' => $descripcion,
                         'id_anio' => $idAnio,
@@ -1261,7 +1294,7 @@ class InventarioServices
                             'estado' => 3,
                             'id_user' => $inventario->id_user,
                             'id_log' => $id_log,
-                            'id_resp' => $id_log,
+                            'id_resp' => $id_tecnico ?? $id_log,
                             'tipo_reporte' => 2,
                             'descripcion' => $descripcion,
                             'fecha_respuesta' => $fecha->copy()->addMinutes(45),
@@ -1269,8 +1302,12 @@ class InventarioServices
                             'periodo' => $periodo,
                         ]);
                     }
+
+                    $creados[] = ['inventario' => $inventario, 'id_resp' => $idRespReporte, 'fecha' => $fecha];
                 }
             });
+
+            $this->notificarMantenimientoProgramado($creados, $descripcion, $fecha_inicio, $fecha_fin);
 
             return [
                 'error' => false,
@@ -1282,6 +1319,135 @@ class InventarioServices
                 'error' => true,
                 'message' => $e->getMessage(),
                 'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Un correo por responsable (no uno por equipo) resumiendo cuántos mantenimientos se le
+     * programaron en este lote — evita spam cuando se programan muchos equipos a la vez.
+     * Falla en silencio (no revierte la programación) si el envío da error.
+     */
+    private function notificarMantenimientoProgramado(array $creados, string $descripcion, string $fechaInicio, string $fechaFin): void
+    {
+        if (empty($creados)) {
+            return;
+        }
+
+        try {
+            $porResponsable = [];
+            foreach ($creados as $item) {
+                $porResponsable[$item['id_resp']][] = $item['inventario'];
+            }
+
+            foreach ($porResponsable as $idResp => $inventarios) {
+                $responsable = Usuario::find($idResp);
+                $titulo = 'Notificación | Mantenimiento preventivo programado';
+                $contenido = "Se te asignó como responsable de " . count($inventarios) . " mantenimiento(s) preventivo(s), "
+                    . "con fecha estimada entre {$fechaInicio} y {$fechaFin}.\n\nDescripción: {$descripcion}\n\n"
+                    . "Equipos: " . collect($inventarios)->pluck('descripcion')->implode(', ');
+
+                $this->mailService->sendGeneric($this->destinatarios($responsable?->correo), $titulo, $contenido);
+            }
+        } catch (\Throwable $e) {
+            Log::error('No se pudo notificar la programación de mantenimiento: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * % de cumplimiento de mantenimiento preventivo por categoría: equipos con al menos un
+     * mantenimiento (tipo_reporte=2, reporte original) registrado en el periodo filtrado,
+     * sobre el total de equipos activos de esa categoría. Replica el indicador del SAMI
+     * legado (historial_mantenimiento.php / historialMantAires.php), agregado también por
+     * categoría en vez de un único porcentaje global.
+     */
+    public function indicadorMantenimiento(?int $tipoCategoria, ?int $idAnio, ?int $idPeriodo): array
+    {
+        try {
+            $categorias = Categoria::when($tipoCategoria, fn ($q) => $q->where('tipo_categoria', $tipoCategoria))
+                ->orderBy('nombre')
+                ->get();
+
+            $porCategoria = $categorias->map(function ($categoria) use ($idAnio, $idPeriodo) {
+                $totalEquipos = Inventario::where('id_categoria', $categoria->id)
+                    ->where('activo', 1)
+                    ->where('estado', '!=', 5)
+                    ->count();
+
+                $totalMantenimientos = DB::table('reportes as r')
+                    ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
+                    ->where('i.id_categoria', $categoria->id)
+                    ->where('r.tipo_reporte', 2)
+                    ->whereNull('r.id_reporte')
+                    ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
+                    ->when($idPeriodo, fn ($q) => $q->where('r.periodo', $idPeriodo))
+                    ->distinct()
+                    ->count('r.id_inventario');
+
+                return [
+                    'id_categoria' => $categoria->id,
+                    'nombre' => $categoria->nombre,
+                    'total_equipos' => $totalEquipos,
+                    'total_mantenimientos' => $totalMantenimientos,
+                    'porcentaje' => $totalEquipos > 0 ? round($totalMantenimientos / $totalEquipos * 100, 1) : 0,
+                ];
+            })->values();
+
+            $totalEquipos = (int) $porCategoria->sum('total_equipos');
+            $totalMantenimientos = (int) $porCategoria->sum('total_mantenimientos');
+
+            return [
+                'error' => false,
+                'message' => 'Indicador de mantenimiento obtenido',
+                'data' => [
+                    'total_equipos' => $totalEquipos,
+                    'total_mantenimientos' => $totalMantenimientos,
+                    'porcentaje' => $totalEquipos > 0 ? round($totalMantenimientos / $totalEquipos * 100, 1) : 0,
+                    'por_categoria' => $porCategoria,
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Mantenimientos preventivos programados por mes dentro de un año escolar — la
+     * "gráfica de comportamiento del indicador" que el legado solo insinuaba (tabla
+     * `indicadores_gestion` fuera de este módulo) sin implementarla realmente acá.
+     */
+    public function graficaMantenimientoPorMes(?int $tipoCategoria, ?int $idAnio): array
+    {
+        try {
+            $porMes = DB::table('reportes as r')
+                ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
+                ->join('categoria as c', 'c.id', '=', 'i.id_categoria')
+                ->where('r.tipo_reporte', 2)
+                ->whereNull('r.id_reporte')
+                ->when($tipoCategoria, fn ($q) => $q->where('c.tipo_categoria', $tipoCategoria))
+                ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
+                ->select(
+                    DB::raw('MONTH(r.fechareg) as mes'),
+                    DB::raw('COUNT(DISTINCT r.id_inventario) as total')
+                )
+                ->groupBy(DB::raw('MONTH(r.fechareg)'))
+                ->orderBy('mes')
+                ->get();
+
+            return [
+                'error' => false,
+                'message' => 'Gráfica de mantenimiento obtenida',
+                'data' => ['por_mes' => $porMes],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => null,
             ];
         }
     }
