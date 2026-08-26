@@ -73,6 +73,8 @@ class RegistrarInventarioRequest extends FormRequest
             "codigo" => ['nullable', 'string', 'max:200'],
 
             "detalles" => ['nullable', 'string', 'max:300'],
+
+            "cantidad" => ['nullable', 'integer', 'min:1', 'max:500'],
         ];
     }
 
@@ -131,7 +133,19 @@ class RegistrarInventarioRequest extends FormRequest
 
             'detalles.string' => 'Los detalles deben ser un texto',
             'detalles.max' => 'Los detalles no pueden superar los 300 caracteres',
+
+            'cantidad.integer' => 'La cantidad debe ser un número válido',
+            'cantidad.min' => 'La cantidad debe ser al menos 1',
+            'cantidad.max' => 'La cantidad no puede superar 500 por registro',
         ];
+    }
+
+    /**
+     * Cuántas filas idénticas crear (una unidad física de inventario = una fila).
+     */
+    public function cantidad(): int
+    {
+        return (int) ($this->cantidad ?? 1);
     }
 
     /**

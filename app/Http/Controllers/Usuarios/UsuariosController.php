@@ -115,6 +115,16 @@ class UsuariosController extends Controller
         );
     }
 
+    // GET /usuarios/select — listado liviano (id_user, nom_user, documento, perfil) para
+    // poblar selects; trabajadores + estudiantes, excluye Proveedor (17) y Acudiente (6).
+    public function usuariosSelectInventario()
+    {
+        return response()->json(
+            $this->service_usuarios->usuariosSelectInventario(),
+            200
+        );
+    }
+
     public function filtrarUsuarios(Request $request)
     {
         $datos = $request->all();
