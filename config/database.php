@@ -64,6 +64,31 @@ return [
             ]) : [],
         ],
 
+        // Base "admin_management": administra las distintas bases de datos vinculadas a la
+        // app (marcas por dominio, logs de actividad, y lo que se vaya sumando) — separada
+        // de la base operativa (`mysql`) porque es transversal a los dominios/tenants, no
+        // datos de un dominio en particular. Mismo servidor/credenciales que `mysql` por
+        // ahora (DB_ADMIN_HOST/PORT/USERNAME/PASSWORD solo si algún día vive en otro server).
+        'admin_management' => [
+            'driver' => 'mysql',
+            'url' => env('DB_ADMIN_URL'),
+            'host' => env('DB_ADMIN_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_ADMIN_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_ADMIN_DATABASE', 'admin_management'),
+            'username' => env('DB_ADMIN_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_ADMIN_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

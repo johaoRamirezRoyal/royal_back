@@ -13,6 +13,7 @@ use App\Models\Biblioteca\Subcategoria;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Mail\RecordatorioPrestamosEmail;
+use App\Services\branding\MarcaDominioService;
 use App\Services\FileStorageService;
 use App\Services\MailService;
 use App\Pdf\Biblioteca\PazYSalvoPdfService;
@@ -1573,7 +1574,7 @@ class BibliotecaServices extends Service
     public function generarPazYSalvoPdf(int $id_usuario): array
     {
         try {
-            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento'])->find($id_usuario);
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'correo'])->find($id_usuario);
 
             if (!$usuario) {
                 return [
@@ -1610,6 +1611,7 @@ class BibliotecaServices extends Service
             unset($fila);
 
             $pdfService = app(PazYSalvoPdfService::class);
+            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
             $contenido = $pdfService->generate([
                 'tipo' => 'paz_y_salvo',
                 'institucion' => config('app.name'),
@@ -1647,7 +1649,7 @@ class BibliotecaServices extends Service
     public function generarListadoPrestamosPdf(int $id_usuario): array
     {
         try {
-            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento'])->find($id_usuario);
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'correo'])->find($id_usuario);
 
             if (!$usuario) {
                 return [
@@ -1667,6 +1669,7 @@ class BibliotecaServices extends Service
                 ->get();
 
             $pdfService = app(PazYSalvoPdfService::class);
+            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
             $contenido = $pdfService->generate([
                 'tipo' => 'listado',
                 'institucion' => config('app.name'),
@@ -1775,7 +1778,7 @@ class BibliotecaServices extends Service
     public function generarListadoPrestamosPaquetesPdf(int $id_usuario): array
     {
         try {
-            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'id_curso'])
+            $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'id_curso', 'correo'])
                 ->with('cursoRelacion:id,nombre')
                 ->find($id_usuario);
 
@@ -1793,6 +1796,7 @@ class BibliotecaServices extends Service
                 ->get();
 
             $pdfService = app(PazYSalvoPdfService::class);
+            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
             $contenido = $pdfService->generate([
                 'tipo' => 'listado_paquetes',
                 'institucion' => config('app.name'),

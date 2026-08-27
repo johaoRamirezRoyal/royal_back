@@ -236,4 +236,17 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     Route::prefix('/evaluaciones')->group(function () {
         require __DIR__ . '/api/evaluaciones.php';
     });
+
+    // BRANDING (logo por dominio de correo — Super Admin únicamente, y solo accesible desde
+    // el dominio de administración, ver RestrictToAdminDomain)
+    Route::prefix('/branding')->middleware('admin.domain')->group(function () {
+        require __DIR__ . '/api/branding.php';
+    });
+
+    // ADMINISTRACIÓN TRANSVERSAL (bases de datos vinculadas, logs por dominio — todo en la
+    // base admin_management, Super Admin únicamente, y solo accesible desde el dominio de
+    // administración, ver RestrictToAdminDomain)
+    Route::prefix('/admin-management')->middleware('admin.domain')->group(function () {
+        require __DIR__ . '/api/adminManagement.php';
+    });
 });
