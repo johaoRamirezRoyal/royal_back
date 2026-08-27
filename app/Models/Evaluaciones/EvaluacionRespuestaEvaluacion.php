@@ -15,6 +15,7 @@ class EvaluacionRespuestaEvaluacion extends Model
     protected $fillable = [
         'id_evaluacion',
         'id_user',
+        'id_evaluado',
         'id_nivel',
         'anonima',
         'completada_en',
@@ -23,6 +24,7 @@ class EvaluacionRespuestaEvaluacion extends Model
     protected $casts = [
         'id_evaluacion' => 'integer',
         'id_user' => 'integer',
+        'id_evaluado' => 'integer',
         'id_nivel' => 'integer',
         'anonima' => 'integer',
         'completada_en' => 'datetime',
@@ -40,6 +42,11 @@ class EvaluacionRespuestaEvaluacion extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
+    }
+
+    public function evaluado()
+    {
+        return $this->belongsTo(Usuario::class, 'id_evaluado', 'id_user');
     }
 
     public function nivel()

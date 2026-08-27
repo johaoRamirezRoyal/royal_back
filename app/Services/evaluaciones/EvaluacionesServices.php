@@ -11,10 +11,17 @@ use App\Models\Evaluaciones\EvaluacionRespuestaPregunta;
 use App\Models\Evaluaciones\EvaluacionSeccion;
 use App\Models\Evaluaciones\EvaluacionServicio;
 use App\Models\Evaluaciones\EvaluacionTipoPregunta;
+use App\Models\Usuarios\Usuario;
 use Illuminate\Support\Facades\DB;
 
 class EvaluacionesServices
 {
+    // Coordinadores (perfil 26) solo pueden evaluar dentro de su propio nivel
+    // (usuarios.id_nivel); el resto de perfiles con acceso administrativo al
+    // módulo (Super Admin, Gestión Humana, Administrador, etc.) no tiene esa
+    // restricción — ver AGENTS.md, sección "Evaluaciones".
+    private const PERFIL_COORDINADOR = 26;
+
     // ─── Catálogo de servicios ───────────────────────────────────
 
     public function listarServicios(): array
@@ -80,7 +87,7 @@ class EvaluacionesServices
     public function listar(array $filtros): array
     {
         try {
-            $query = Evaluacion::with(['servicio', 'niveles', 'secciones'])
+            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles', 'secciones'])
                 ->withCount('respuestas');
 
             if (!empty($filtros['id_servicio'])) {
@@ -114,6 +121,7 @@ class EvaluacionesServices
             $evaluacion = Evaluacion::with([
                 'servicio',
                 'niveles',
+                'perfiles',
                 'secciones.preguntas.tipo',
                 'secciones.preguntas.opciones',
             ])->withCount('respuestas')->find($id);
@@ -142,6 +150,10 @@ class EvaluacionesServices
 
                 if (!empty($datos['niveles'])) {
                     $evaluacion->niveles()->sync($datos['niveles']);
+                }
+
+                if (!empty($datos['perfiles'])) {
+                    $evaluacion->perfiles()->sync($datos['perfiles']);
                 }
 
                 if (!empty($datos['secciones'])) {
@@ -178,7 +190,7 @@ class EvaluacionesServices
                     }
                 }
 
-                return ['error' => false, 'message' => 'Evaluación creada', 'data' => $evaluacion->fresh(['servicio', 'niveles', 'secciones.preguntas.tipo', 'secciones.preguntas.opciones'])];
+                return ['error' => false, 'message' => 'Evaluación creada', 'data' => $evaluacion->fresh(['servicio', 'niveles', 'perfiles', 'secciones.preguntas.tipo', 'secciones.preguntas.opciones'])];
             });
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -205,7 +217,11 @@ class EvaluacionesServices
                     $evaluacion->niveles()->sync($datos['niveles'] ?? []);
                 }
 
-                return ['error' => false, 'message' => 'Evaluación actualizada', 'data' => $evaluacion->fresh(['servicio', 'niveles'])];
+                if (array_key_exists('perfiles', $datos)) {
+                    $evaluacion->perfiles()->sync($datos['perfiles'] ?? []);
+                }
+
+                return ['error' => false, 'message' => 'Evaluación actualizada', 'data' => $evaluacion->fresh(['servicio', 'niveles', 'perfiles'])];
             });
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -233,6 +249,46 @@ class EvaluacionesServices
 
             $evaluacion->update(['activo' => $evaluacion->activo ? 0 : 1]);
             return ['error' => false, 'message' => $evaluacion->activo ? 'Evaluación activada' : 'Evaluación desactivada', 'data' => ['activo' => $evaluacion->activo]];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Usuarios que pueden ser evaluados en una evaluación, cruzando los
+     * perfiles y niveles configurados en ella contra la tabla `usuarios`.
+     * Si el solicitante es Coordinador (perfil 26), se restringe además a su
+     * propio nivel (un coordinador de primaria no puede evaluar docentes de
+     * bachillerato aunque la evaluación cubra varios niveles).
+     */
+    public function obtenerEvaluables(int $idEvaluacion, Usuario $solicitante): array
+    {
+        try {
+            $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
+            if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
+
+            $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
+            if ($perfilesEvaluables->isEmpty()) {
+                return ['error' => false, 'message' => 'ok', 'data' => []];
+            }
+
+            $query = Usuario::whereIn('perfil', $perfilesEvaluables)
+                ->where('estado', 'activo');
+
+            $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
+            if ($nivelesEvaluacion->isNotEmpty()) {
+                $query->whereIn('id_nivel', $nivelesEvaluacion);
+            }
+
+            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+                $query->where('id_nivel', $solicitante->id_nivel);
+            }
+
+            $data = $query->select(['id_user', 'nombre', 'apellido', 'documento', 'perfil', 'id_nivel'])
+                ->orderBy('nombre')
+                ->get();
+
+            return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -403,15 +459,31 @@ class EvaluacionesServices
     {
         try {
             return DB::transaction(function () use ($idEvaluacion, $idUser, $datos) {
-                $evaluacion = Evaluacion::find($idEvaluacion);
+                $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
                 if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
                 if (!$evaluacion->activo) return ['error' => true, 'message' => 'La evaluación no está activa', 'status' => 422];
+
+                $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
+                if ($perfilesEvaluables->isNotEmpty()) {
+                    $evaluado = Usuario::find($datos['id_evaluado']);
+                    if (!$evaluado) return ['error' => true, 'message' => 'Usuario a evaluar no encontrado', 'status' => 404];
+
+                    if (!$perfilesEvaluables->contains((int) $evaluado->perfil)) {
+                        return ['error' => true, 'message' => 'El usuario seleccionado no tiene un perfil evaluable en esta evaluación', 'status' => 422];
+                    }
+
+                    $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
+                    if ($nivelesEvaluacion->isNotEmpty() && !$nivelesEvaluacion->contains((int) $evaluado->id_nivel)) {
+                        return ['error' => true, 'message' => 'El usuario seleccionado no pertenece a un nivel evaluable en esta evaluación', 'status' => 422];
+                    }
+                }
 
                 $anonima = $datos['anonima'] ?? 0;
 
                 $respuestaEval = EvaluacionRespuestaEvaluacion::create([
                     'id_evaluacion' => $idEvaluacion,
                     'id_user' => $anonima ? null : $idUser,
+                    'id_evaluado' => $datos['id_evaluado'] ?? null,
                     'id_nivel' => $datos['id_nivel'] ?? null,
                     'anonima' => $anonima,
                     'completada_en' => now(),
@@ -441,7 +513,7 @@ class EvaluacionesServices
             $evaluacion = Evaluacion::find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
 
-            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'nivel', 'respuestasPreguntas.opcion'])
+            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'respuestasPreguntas.opcion'])
                 ->where('id_evaluacion', $idEvaluacion);
 
             if (isset($filtros['anonima'])) {
@@ -465,6 +537,7 @@ class EvaluacionesServices
             $respuesta = EvaluacionRespuestaEvaluacion::with([
                 'evaluacion.servicio',
                 'usuario',
+                'evaluado',
                 'nivel',
                 'respuestasPreguntas.pregunta.tipo',
                 'respuestasPreguntas.opcion',

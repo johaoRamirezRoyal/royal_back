@@ -4,6 +4,7 @@ namespace App\Models\Evaluaciones;
 
 use App\Models\Usuarios\Usuario;
 use App\Models\Usuarios\Nivel;
+use App\Models\Usuarios\Perfil;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -51,6 +52,11 @@ class Evaluacion extends Model
     public function niveles()
     {
         return $this->belongsToMany(Nivel::class, 'evaluaciones_nivel', 'id_evaluacion', 'id_nivel');
+    }
+
+    public function perfiles()
+    {
+        return $this->belongsToMany(Perfil::class, 'evaluaciones_perfil', 'id_evaluacion', 'id_perfil', 'id', 'id_perfil');
     }
 
     public function secciones()
