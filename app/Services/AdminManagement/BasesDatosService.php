@@ -3,6 +3,7 @@
 namespace App\Services\AdminManagement;
 
 use App\Models\BaseDatosNombre;
+use App\Models\ConexionActiva;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,55 @@ class BasesDatosService extends Service
             $this->sendError($e, 'Error al restablecer el nombre de la base de datos');
 
             return ['error' => true, 'message' => 'Error en el servidor al restablecer el nombre.', 'data' => []];
+        }
+    }
+
+    /** Usado también por SwitchActiveConnection para no confiar en un valor arbitrario de
+     * `admin_conexion_activa` como `database.default` — fail-closed ante datos corruptos. */
+    public static function esConnectionValida(string $connection): bool
+    {
+        return array_key_exists($connection, self::CONNECTIONS);
+    }
+
+    /**
+     * Connection que este usuario eligió como `database.default` para el resto de la app
+     * (ver SwitchActiveConnection) — `mysql` (la operativa) si nunca eligió una o si el
+     * valor guardado ya no es una connection conocida.
+     */
+    public function conexionActiva(int $idUser): string
+    {
+        $connection = ConexionActiva::find($idUser)?->connection;
+
+        return $connection && self::esConnectionValida($connection) ? $connection : 'mysql';
+    }
+
+    public function establecerConexionActiva(int $idUser, string $connection): array
+    {
+        try {
+            if (!self::esConnectionValida($connection)) {
+                return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
+            }
+
+            ConexionActiva::updateOrCreate(['id_user' => $idUser], ['connection' => $connection]);
+
+            return ['error' => false, 'message' => 'Base de datos activa actualizada.', 'data' => []];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al establecer la base de datos activa');
+
+            return ['error' => true, 'message' => 'Error en el servidor al establecer la base de datos activa.', 'data' => []];
+        }
+    }
+
+    public function restablecerConexionActiva(int $idUser): array
+    {
+        try {
+            ConexionActiva::where('id_user', $idUser)->delete();
+
+            return ['error' => false, 'message' => 'Base de datos activa restablecida a la operativa.', 'data' => []];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al restablecer la base de datos activa');
+
+            return ['error' => true, 'message' => 'Error en el servidor al restablecer la base de datos activa.', 'data' => []];
         }
     }
 

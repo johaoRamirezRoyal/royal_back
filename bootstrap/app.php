@@ -6,6 +6,7 @@ use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
 use App\Http\Middleware\RestrictToAdminDomain;
 use App\Http\Middleware\RestrictToHikvisionDevices;
+use App\Http\Middleware\SwitchActiveConnection;
 use App\Http\Middleware\ValidateSystem;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -22,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prependToGroup('api', JwtFromCookie::class);
+        // Necesita $request->user() (JwtFromCookie ya corrió) y debe correr ANTES que
+        // cualquier modelo de negocio toque la DB — por eso va primero entre los appended.
+        $middleware->appendToGroup('api', SwitchActiveConnection::class);
         $middleware->appendToGroup('api', LogActividadMiddleware::class);
         $middleware->appendToGroup('api', LogDominioMiddleware::class);
         $middleware->encryptCookies(except: ['token', 'admissions_token']);

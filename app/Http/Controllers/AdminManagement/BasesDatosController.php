@@ -43,4 +43,29 @@ class BasesDatosController extends Controller
 
         return $this->apiResponse($this->service->restablecerNombre($request->input('connection')));
     }
+
+    public function conexionActiva(Request $request)
+    {
+        return $this->apiResponse([
+            'error' => false,
+            'message' => 'Base de datos activa obtenida.',
+            'data' => ['connection' => $this->service->conexionActiva($request->user()->id_user)],
+        ]);
+    }
+
+    public function establecerConexionActiva(Request $request)
+    {
+        $request->validate([
+            'connection' => ['required', 'string'],
+        ]);
+
+        return $this->apiResponse(
+            $this->service->establecerConexionActiva($request->user()->id_user, $request->input('connection'))
+        );
+    }
+
+    public function restablecerConexionActiva(Request $request)
+    {
+        return $this->apiResponse($this->service->restablecerConexionActiva($request->user()->id_user));
+    }
 }
