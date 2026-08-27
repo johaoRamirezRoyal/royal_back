@@ -52,7 +52,7 @@ class GestionAcademicaController extends Controller
     private const METODOS_DOCENTE = [
         'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase', 'guardarAsistenciaClaseLote',
         'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
-        'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'actualizarDescripcionMiHorario', 'eliminarMiHorario',
+        'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'actualizarDescripcionMiHorario', 'eliminarMiHorario', 'exportarMiHorario',
         'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
     ];
 
@@ -311,6 +311,12 @@ class GestionAcademicaController extends Controller
         return $this->apiResponse($this->service->docenteHorario()->eliminar($request->user()->id_user, $request->input('ids', [])));
     }
 
+    /** Descarga el .xlsx del horario propio (mismo docente autenticado que verMiHorario). */
+    public function exportarMiHorario(Request $request)
+    {
+        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->user()->id_user));
+    }
+
     public function crearFranjaHoraria(FranjaHorariaRequest $request)
     {
         return $this->apiResponse($this->service->franjaHoraria()->añadirFranjaHoraria($request->all()));
@@ -392,6 +398,31 @@ class GestionAcademicaController extends Controller
     public function eliminarHorarios(HorarioClaseRequest $request)
     {
         return $this->apiResponse($this->service->horarioClase()->eliminarHorarios($request->input('ids')));
+    }
+
+    /** Descarga el .xlsx del horario de UN docente (admin, desde Configuración académica > Horario). */
+    public function exportarHorarioDocente(Request $request)
+    {
+        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->integer('id_docente')));
+    }
+
+    /** Descarga un único .xlsx con una hoja por docente (los que tengan bloques de horario). */
+    public function exportarHorariosTodosLosDocentes(Request $request)
+    {
+        return $this->responderXlsx($this->service->horarioExcel()->exportarTodosLosDocentes());
+    }
+
+    /** Mismo patrón de descarga binaria que BibliotecaController::generarPazYSalvoPdf, para .xlsx en vez de .pdf. */
+    private function responderXlsx(array $response)
+    {
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
+        return response($response['data']['contenido'], 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$response['data']['nombre_archivo'].'"',
+        ]);
     }
 
     public function verAsistenciasClase(Request $request)
