@@ -4,7 +4,7 @@ use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
-use App\Http\Middleware\RestrictToAdminDomain;
+use App\Http\Middleware\RestrictToAdminEmails;
 use App\Http\Middleware\RestrictToHikvisionDevices;
 use App\Http\Middleware\SwitchActiveConnection;
 use App\Http\Middleware\ValidateSystem;
@@ -33,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => Authenticate::class,
             'system' => ValidateSystem::class,
             'hikvision.device' => RestrictToHikvisionDevices::class,
-            'admin.domain' => RestrictToAdminDomain::class,
+            'admin.access' => RestrictToAdminEmails::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
