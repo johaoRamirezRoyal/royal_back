@@ -87,14 +87,16 @@ class EvaluacionesServices
     public function listar(array $filtros): array
     {
         try {
-            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles', 'secciones'])
+            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
                 ->withCount('respuestas');
 
             if (!empty($filtros['id_servicio'])) {
-                $query->where('id_servicio', $filtros['id_servicio']);
+                $idServicio = is_array($filtros['id_servicio']) ? $filtros['id_servicio'] : [$filtros['id_servicio']];
+                $query->whereIn('id_servicio', $idServicio);
             }
-            if (isset($filtros['activo'])) {
-                $query->where('activo', $filtros['activo']);
+            if (isset($filtros['activo']) && $filtros['activo'] !== '') {
+                $activo = is_array($filtros['activo']) ? $filtros['activo'] : [$filtros['activo']];
+                $query->whereIn('activo', $activo);
             }
             if (!empty($filtros['s'])) {
                 $busqueda = $filtros['s'];
