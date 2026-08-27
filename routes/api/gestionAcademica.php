@@ -253,6 +253,23 @@ Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase']
 Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios']);
 
 /**
+ * http://localhost:8000/api/gestion-academica/horario/exportar?id_docente=24
+ *
+ * Descarga el .xlsx del horario de ese docente (misma grilla día×hora que la pantalla
+ * "Horario" del admin) — arma el archivo en el servidor, el frontend solo dispara el
+ * download del binario devuelto (Content-Disposition: attachment).
+ */
+Route::get('/horario/exportar', [GestionAcademicaController::class, 'exportarHorarioDocente']);
+
+/**
+ * http://localhost:8000/api/gestion-academica/horario/exportar-todos
+ *
+ * Descarga un único .xlsx con una hoja por docente (solo los que tengan al menos un
+ * bloque de horario real) — evita exportar docente por docente desde el frontend.
+ */
+Route::get('/horario/exportar-todos', [GestionAcademicaController::class, 'exportarHorariosTodosLosDocentes']);
+
+/**
  * http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1&fecha=2026-07-02
  *
  * id_horario_clase también acepta un array: ?id_horario_clase[]=1&id_horario_clase[]=2
@@ -401,6 +418,12 @@ Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHor
  * http://localhost:8000/api/gestion-academica/mi-horario
  */
 Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario']);
+
+/**
+ * Descarga el .xlsx del horario propio (mismo docente autenticado que GET /mi-horario).
+ * http://localhost:8000/api/gestion-academica/mi-horario/exportar
+ */
+Route::get('/mi-horario/exportar', [GestionAcademicaController::class, 'exportarMiHorario']);
 
 /**
  * Aparta una franja para una asignatura propia en un curso. Solo se pueden elegir

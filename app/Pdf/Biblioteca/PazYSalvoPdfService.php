@@ -77,6 +77,20 @@ class PazYSalvoPdfService
     }
 
     /**
+     * Sobrescribe el logo después de construir el service (resuelto por dominio de correo,
+     * ver MarcaDominioService::resolverPorCorreo) — se resuelve instancia a instancia por
+     * este medio en vez de por constructor porque el service se obtiene vía `app(...)` y el
+     * correo del usuario dueño del documento solo se conoce en el caller, no en el
+     * container. Un path null (sin marca configurada para ese dominio) no cambia nada.
+     */
+    public function setLogoPath(?string $logoPath): void
+    {
+        if ($logoPath) {
+            $this->logoPath = $logoPath;
+        }
+    }
+
+    /**
      * TCPDF no soporta WEBP nativamente: si la imagen viene en ese formato la
      * convierte a un PNG temporal (vía GD) y devuelve esa ruta.
      */

@@ -3,13 +3,17 @@
 namespace App\Services\GestionAcademica;
 
 use App\Models\GestionAcademica\CargaAcademica;
+use App\Models\GestionAcademica\EsquemaHorario;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\GestionAcademica\HorarioClase;
+use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Service;
 use Exception;
 
 class HorarioClaseService extends Service
 {
+    public function __construct(private AnioEscolarServices $anioEscolarService) {}
+
     /**
      * Añade un horario de clase.
      *
@@ -196,6 +200,30 @@ class HorarioClaseService extends Service
             ->exists();
     }
 
+    /** Ids de los esquemas que pertenecen al año escolar activo (null si no hay ninguno marcado activo=1). */
+    public function idsEsquemaAnioActivo(): ?\Illuminate\Support\Collection
+    {
+        $anioActivo = $this->anioEscolarService->obtenerUltimoAnioEscolar()['data'] ?? null;
+
+        return $anioActivo ? EsquemaHorario::where('id_anio_escolar', $anioActivo->id)->pluck('id') : null;
+    }
+
+    /**
+     * Esquemas donde el docente realmente tiene alguna clase propia (opcionalmente
+     * restringidos a un subconjunto de esquemas, ej. los del año activo — ver
+     * idsEsquemaAnioActivo). Usado tanto para no mezclar recesos de un esquema ajeno (ver
+     * verHorario) como por HorarioExcelService para saber contra qué esquema(s) pedir la
+     * grilla completa de franjas de este docente (incluidas las vacías).
+     */
+    public function esquemasDelDocente(int $idDocente, ?\Illuminate\Support\Collection $idsEsquemaPermitidos = null): \Illuminate\Support\Collection
+    {
+        return HorarioClase::whereHas('cargaAcademica.docenteAsignatura', fn ($q) => $q->where('id_docente', $idDocente))
+            ->join('academico_franja_horaria', 'academico_franja_horaria.id', '=', 'academico_horario_clase.id_franja_horaria')
+            ->when($idsEsquemaPermitidos, fn ($q) => $q->whereIn('academico_franja_horaria.id_esquema', $idsEsquemaPermitidos))
+            ->distinct()
+            ->pluck('academico_franja_horaria.id_esquema');
+    }
+
     /**
      * Obtiene el horario de clases con filtros opcionales.
      *
@@ -238,6 +266,14 @@ class HorarioClaseService extends Service
      *   esquema, sin que un admin tenga que recrearlos a mano como HorarioClase. Por
      *   defecto en false para no alterar el contrato de quien ya consume este método sin
      *   pedirlo explícitamente (ej. Attendances, que usa `tipo` para filtrar clases reales).
+     * @param bool $incluirInactivos Si es true, no oculta los HorarioClase cuya carga
+     *   académica o asignatura estén desactivadas (o la relación esté rota/incompleta) —
+     *   por defecto quedan ocultos en TODAS partes (Asistencia de clases, Mi horario,
+     *   Horario admin) porque no tiene sentido tomar asistencia o armar horario nuevo
+     *   sobre algo desactivado. El export a Excel (HorarioExcelService) sí lo pide en true:
+     *   es un documento informativo de "todo lo que hay agendado", no un flujo de edición,
+     *   así que un bloque con una asignatura desactivada igual debe aparecer en vez de
+     *   desaparecer silenciosamente del horario del docente.
      *
      * @return array{
      *     error: bool,
@@ -250,10 +286,22 @@ class HorarioClaseService extends Service
         ?int $id_curso,
         ?int $id_asignatura,
         ?int $id_dia_semana,
-        bool $incluirNoAsignables = false
+        bool $incluirNoAsignables = false,
+        bool $incluirInactivos = false
     ): array {
 
         try {
+
+            // Un docente puede tener HorarioClase de MÁS de un año escolar a la vez (el año
+            // activo cambia con el tiempo — cron cerrarYAbrirAnioEscolar — pero las filas
+            // del año anterior nunca se borran, quedan como historial). verHorario() nunca
+            // filtró por año, así que un docente con horario armado tanto para el año
+            // activo como para el siguiente (ej. preparado con anticipación) veía AMBOS
+            // mezclados en la misma celda día+hora, como si tuviera 2 clases simultáneas —
+            // "Mi horario"/"Horario" solo deben mostrar el año activo (misma fuente de
+            // verdad que fetchAnioAcademicoActual() en el frontend, ver
+            // AnioEscolarServices::obtenerUltimoAnioEscolar).
+            $idsEsquemaAnioActivo = $this->idsEsquemaAnioActivo();
 
             // Esquemas donde el docente realmente tiene alguna clase propia — usado abajo
             // para no mostrarle bloques "globales" (receso/almuerzo/planeación sin carga
@@ -265,12 +313,7 @@ class HorarioClaseService extends Service
             // hora_inicio en distintos esquemas), un docente que dicta en el esquema A veía
             // el receso del esquema B superpuesto en la misma celda día+hora de una clase
             // real suya en A, aunque nunca dicta en B.
-            $idsEsquemaDocente = $id_docente
-                ? HorarioClase::whereHas('cargaAcademica.docenteAsignatura', fn ($q) => $q->where('id_docente', $id_docente))
-                    ->join('academico_franja_horaria', 'academico_franja_horaria.id', '=', 'academico_horario_clase.id_franja_horaria')
-                    ->distinct()
-                    ->pluck('academico_franja_horaria.id_esquema')
-                : collect();
+            $idsEsquemaDocente = $id_docente ? $this->esquemasDelDocente($id_docente, $idsEsquemaAnioActivo) : collect();
 
             $horario = HorarioClase::query()
 
@@ -346,19 +389,23 @@ class HorarioClaseService extends Service
 
                 // Oculta clases de carga académica o asignatura desactivada; las franjas
                 // sin carga académica (descansos, etc.) no aplican y se muestran siempre.
-                ->where(function ($query) {
+                // $incluirInactivos se salta este filtro (ver doc del método arriba).
+                ->when(!$incluirInactivos, function ($query) {
 
-                    $query->whereNull('id_carga_academica')
-                        ->orWhere(function ($q) {
+                    $query->where(function ($q1) {
 
-                            $q->whereHas('cargaAcademica', function ($q2) {
+                        $q1->whereNull('id_carga_academica')
+                            ->orWhere(function ($q) {
 
-                                $q2->where('activo', 1);
-                            })->whereHas('cargaAcademica.docenteAsignatura.asignatura', function ($q2) {
+                                $q->whereHas('cargaAcademica', function ($q2) {
 
-                                $q2->where('activo', 1);
+                                    $q2->where('activo', 1);
+                                })->whereHas('cargaAcademica.docenteAsignatura.asignatura', function ($q2) {
+
+                                    $q2->where('activo', 1);
+                                });
                             });
-                        });
+                    });
                 })
 
                 ->join(
@@ -374,6 +421,11 @@ class HorarioClaseService extends Service
                     '=',
                     'dias_semana.id'
                 )
+
+                ->when($idsEsquemaAnioActivo, function ($query) use ($idsEsquemaAnioActivo) {
+
+                    $query->whereIn('academico_franja_horaria.id_esquema', $idsEsquemaAnioActivo);
+                })
 
                 ->select('academico_horario_clase.*')
 

@@ -3,6 +3,8 @@
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
+use App\Http\Middleware\LogDominioMiddleware;
+use App\Http\Middleware\RestrictToAdminDomain;
 use App\Http\Middleware\RestrictToHikvisionDevices;
 use App\Http\Middleware\ValidateSystem;
 use Illuminate\Auth\AuthenticationException;
@@ -21,11 +23,13 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prependToGroup('api', JwtFromCookie::class);
         $middleware->appendToGroup('api', LogActividadMiddleware::class);
+        $middleware->appendToGroup('api', LogDominioMiddleware::class);
         $middleware->encryptCookies(except: ['token', 'admissions_token']);
         $middleware->alias([
             'auth' => Authenticate::class,
             'system' => ValidateSystem::class,
             'hikvision.device' => RestrictToHikvisionDevices::class,
+            'admin.domain' => RestrictToAdminDomain::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

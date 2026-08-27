@@ -17,6 +17,7 @@ class GestionAcademicaService extends Service
         private AsistenciaEstudianteService $asistenciaEstudiante,
         private EsquemaHorarioService $esquemaHorario,
         private DocenteHorarioService $docenteHorario,
+        private HorarioExcelService $horarioExcel,
     ) {}
 
     public function asignatura(): Asignatura
@@ -67,5 +68,10 @@ class GestionAcademicaService extends Service
     public function docenteHorario(): DocenteHorarioService
     {
         return $this->docenteHorario;
+    }
+
+    public function horarioExcel(): HorarioExcelService
+    {
+        return $this->horarioExcel;
     }
 }
