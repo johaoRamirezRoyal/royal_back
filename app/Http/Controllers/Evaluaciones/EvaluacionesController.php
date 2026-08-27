@@ -142,6 +142,8 @@ class EvaluacionesController extends Controller
             'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
             'niveles' => 'sometimes|array',
             'niveles.*' => 'integer|exists:nivel,id',
+            'perfiles' => 'sometimes|array',
+            'perfiles.*' => 'integer|exists:perfiles,id_perfil',
             'secciones' => 'sometimes|array',
             'secciones.*.titulo' => 'required_with:secciones|string|max:255',
             'secciones.*.descripcion' => 'nullable|string',
@@ -182,6 +184,8 @@ class EvaluacionesController extends Controller
             'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
             'niveles' => 'sometimes|array',
             'niveles.*' => 'integer|exists:nivel,id',
+            'perfiles' => 'sometimes|array',
+            'perfiles.*' => 'integer|exists:perfiles,id_perfil',
         ]);
 
         if ($validator->fails()) {
@@ -207,6 +211,15 @@ class EvaluacionesController extends Controller
         }
 
         return $this->apiResponse($this->evaluacionesServices->toggleActivo($id));
+    }
+
+    public function obtenerEvaluables(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->obtenerEvaluables($id, $request->user()));
     }
 
     // ─── Secciones ─────────────────────────────────────────────
@@ -378,6 +391,7 @@ class EvaluacionesController extends Controller
 
         $validator = Validator::make($request->all(), [
             'anonima' => 'sometimes|integer',
+            'id_evaluado' => 'nullable|integer|exists:usuarios,id_user',
             'id_nivel' => 'nullable|integer|exists:nivel,id',
             'respuestas' => 'required|array|min:1',
             'respuestas.*.id_pregunta' => 'required|integer|exists:evaluaciones_preguntas,id',
