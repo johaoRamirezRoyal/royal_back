@@ -7,6 +7,7 @@ use App\Http\Requests\Inventario\ActualizarInventarioRequest;
 use App\Http\Requests\Inventario\EditarDescripcionListadoInventarioRequest;
 use App\Http\Requests\Inventario\GestionarCantidadListadoInventarioRequest;
 use App\Http\Requests\Inventario\ListadoInventarioRequest;
+use App\Http\Requests\Inventario\MantenimientoIndicadorRequest;
 use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
@@ -61,7 +62,7 @@ class InventariosController extends Controller
 
         $inventario_data = $request->toInventarioCreate();
 
-        $agregar = $this->inventario_services->agregarInventario($inventario_data);
+        $agregar = $this->inventario_services->agregarInventario($inventario_data, $request->cantidad());
 
         if($agregar['error']){
             return response()->json([
@@ -356,6 +357,7 @@ class InventariosController extends Controller
             "periodo" => "required|integer|in:1,2",
             "id_log" => "required|integer|exists:usuarios,id_user",
             "con_solucion" => "boolean",
+            "id_tecnico" => "nullable|integer|exists:usuarios,id_user",
         ]);
 
         if ($validator->fails()) {
@@ -373,7 +375,40 @@ class InventariosController extends Controller
             $data['descripcion'],
             $data['id_anio'],
             $data['periodo'],
-            $data['con_solucion'] ?? false
+            $data['con_solucion'] ?? false,
+            $data['id_tecnico'] ?? null
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    // GET /inventario/mantenimiento/indicador — % de cumplimiento por categoría (equipos
+    // con mantenimiento registrado en el periodo / total de equipos activos).
+    public function indicadorMantenimiento(MantenimientoIndicadorRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->indicadorMantenimiento(
+            $request->input('tipo_categoria'),
+            $request->input('id_anio'),
+            $request->input('id_periodo')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    // GET /inventario/mantenimiento/grafica — mantenimientos programados por mes.
+    public function graficaMantenimiento(MantenimientoIndicadorRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->graficaMantenimientoPorMes(
+            $request->input('tipo_categoria'),
+            $request->input('id_anio')
         );
 
         return $this->apiResponse($resultado);

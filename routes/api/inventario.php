@@ -31,6 +31,8 @@ Route::post('/reportar', [InventariosController::class, 'reportarInventario']);
 Route::get('/reportes', [InventariosController::class, 'mostrarReportesDeInventario']);
 Route::put('/reportes/solucionar', [InventariosController::class, 'solucionarReporteInventario']);
 Route::post('/mantenimiento', [InventariosController::class, 'programarMantenimientoPreventivo']);
+Route::get('/mantenimiento/indicador', [InventariosController::class, 'indicadorMantenimiento']);
+Route::get('/mantenimiento/grafica', [InventariosController::class, 'graficaMantenimiento']);
 
 // Rutas con {id} al final para no interceptar las rutas estáticas de arriba
 // (Laravel matchea en orden de registro, no por especificidad).
