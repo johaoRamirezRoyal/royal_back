@@ -31,7 +31,7 @@ class UsuarioResource extends JsonResource
             // Logo y nombre de la marca del dominio de este correo (multi-tenant) — logo_path
             // ya es una URL de Cloudinary lista para usar en un <img src>, no una ruta
             // relativa. Ambos null si no hay marca configurada/activa para el dominio (el
-            // frontend cae al logo/título genérico de S.A.M.I ahí).
+            // frontend cae al logo/título genérico de OMNIA ahí).
             'logo_path' => $marca['url'],
             'nombre_marca' => $marca['nombre'],
         ];

@@ -1,6 +1,6 @@
 # Gestión Académica: franjas no asignables, autoservicio de horario del docente y asistencia de trabajadores
 
-Documento único para backend (`royal_back`) y frontend (`frontend-New_S.A.M.I`) — resume
+Documento único para backend (`royal_back`) y frontend (`frontend-New_OMNIA`) — resume
 todo lo agregado/corregido en la sesión del 2026-08-24 (continuación del trabajo de
 `GESTION_ACADEMICA_ANIOS_DOCENTE_FRONTEND.md`).
 

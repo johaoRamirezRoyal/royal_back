@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
 class BasesDatosService extends Service
 {
     private const CONNECTIONS = [
-        'mysql' => 'Base operativa (S.A.M.I)',
+        'mysql' => 'Base operativa (OMNIA)',
         'admin_management' => 'Administración (marcas por dominio, logs)',
     ];
 

@@ -15,7 +15,7 @@ return new class extends Migration
      * usado para que el logo mostrado en la app (sidebar/header/favicon) y en los
      * documentos generados (paz y salvo, horario) se adapte según el dominio del correo
      * del usuario, en vez de mostrar siempre el mismo logo hardcodeado. Un dominio sin fila
-     * acá (o con activo=false) cae al logo genérico de S.A.M.I. — ver
+     * acá (o con activo=false) cae al logo genérico de OMNIA. — ver
      * MarcaDominioService::resolverPorCorreo.
      *
      * El logo se sube a Cloudinary (mismo storage que firmas/documentos de admisiones,

@@ -386,7 +386,7 @@ class HorarioExcelService
      * que otro, las filas sobrantes quedan en blanco para ese día.
      *
      * @param ?string $logoPath Logo resuelto por dominio de correo del docente (ver
-     * MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de S.A.M.I.
+     * MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
      */
     private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null): bool
     {
