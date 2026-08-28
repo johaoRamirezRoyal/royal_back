@@ -8,7 +8,7 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 
 class JwtService
 {
-    public function generateToken(Authenticatable $user): string
+    public function generateToken(Authenticatable $user, string $connection = 'mysql'): string
     {
         /** @var Usuario $user */
 
@@ -17,6 +17,7 @@ class JwtService
         return JWTAuth::claims([
             'active' => true,
             'system' => 'general',
+            'db_connection' => $connection,
             'user_id' => $user->id_user,
             'nombre' => $user->nombre,
             'apellido' => $user->apellido,

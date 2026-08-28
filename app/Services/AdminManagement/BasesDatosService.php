@@ -20,8 +20,9 @@ use Illuminate\Support\Facades\DB;
 class BasesDatosService extends Service
 {
     private const CONNECTIONS = [
-        'mysql' => 'Base operativa (OMNIA)',
-        'admin_management' => 'Administración (marcas por dominio, logs)',
+        'mysql' => 'Base de datos (Royal School)',
+        'sami_hebreo' => 'Base de datos de Sami (hebreo)',
+        'admin_management' => 'Administración (marcas por dominio, logs)'
     ];
 
     public function listar(): array
@@ -93,6 +94,15 @@ class BasesDatosService extends Service
     public static function esConnectionValida(string $connection): bool
     {
         return array_key_exists($connection, self::CONNECTIONS);
+    }
+
+    /** Connections que representan un tenant real con su propia tabla `usuarios` — usado por
+     * el login multi-tenant (AuthServices::resolverUsuarioMultiTenant) para saber en qué
+     * bases buscar credenciales. Excluye `admin_management`, que es transversal (marcas por
+     * dominio, logs) y no tiene usuarios propios. */
+    public static function connectionsConUsuarios(): array
+    {
+        return array_values(array_diff(array_keys(self::CONNECTIONS), ['admin_management']));
     }
 
     /**
