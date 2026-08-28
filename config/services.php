@@ -63,11 +63,6 @@ return [
             // opcionales (puerto cae al de arriba). Vacío/ausente = un solo
             // dispositivo (comportamiento original, sin cambios para Royal).
             'extra_hosts' => env('HIKVISION_HOSTS'),
-            // IP(s) pública(s) (WAN/NAT) desde las que el colegio le habla al webhook
-            // entrante /pushNotification — separado de host/extra_hosts (esas son las
-            // IPs LAN del terminal, usadas para las llamadas salientes ISAPI). El
-            // webhook llega con la IP pública del router del colegio, no la interna.
-            'webhook_ips' => env('HIKVISION_WEBHOOK_IPS'),
         ],
 
         // Hebreo Union: sin terminal física todavía — las variables quedan vacías a
@@ -81,7 +76,6 @@ return [
             'username' => env('HIKVISION_HEBREO_USERNAME'),
             'password' => env('HIKVISION_HEBREO_PASSWORD'),
             'extra_hosts' => env('HIKVISION_HEBREO_HOSTS'),
-            'webhook_ips' => env('HIKVISION_HEBREO_WEBHOOK_IPS'),
         ],
     ],
 

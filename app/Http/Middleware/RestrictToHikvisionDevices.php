@@ -61,9 +61,6 @@ class RestrictToHikvisionDevices
             return null;
         }
 
-        $esIpConocida = in_array($ip, hikvisionattendanceService::hostsDeTenant($tenant), true)
-            || in_array($ip, hikvisionattendanceService::webhookIpsDeTenant($tenant), true);
-
-        return $esIpConocida ? $tenant : null;
+        return in_array($ip, hikvisionattendanceService::hostsDeTenant($tenant), true) ? $tenant : null;
     }
 }
