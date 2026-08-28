@@ -128,22 +128,32 @@ class hikvisionattendanceService
 
     /**
      * Busca en TODOS los tenants (colegios) configurados cuál tiene una terminal con esta
-     * IP de origen — usado por RestrictToHikvisionDevices para el webhook público de
-     * /pushNotification, que llega sin JWT y por lo tanto sin forma de saber a qué colegio
-     * pertenece hasta identificar el dispositivo por su IP. Null si ninguna terminal de
-     * ningún colegio coincide (origen no autorizado, se rechaza igual que antes).
+     * IP de origen — usado por RestrictToHikvisionDevices cuando el webhook llega SIN el
+     * colegio explícito en la URL (terminales viejas, sin reconfigurar todavía — ver
+     * hostsDeTenant()). Null si ninguna terminal de ningún colegio coincide (origen no
+     * autorizado, se rechaza igual que antes).
      */
     public static function resolverTenantPorIp(string $ip): ?string
     {
         foreach (BasesDatosService::connectionsConUsuarios() as $tenant) {
-            $hosts = array_column(self::parseDispositivos(self::configParaTenant($tenant)), 'host');
-
-            if (in_array($ip, $hosts, true)) {
+            if (in_array($ip, self::hostsDeTenant($tenant), true)) {
                 return $tenant;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Hosts (IPs) de las terminales configuradas para UN colegio puntual — usado por
+     * RestrictToHikvisionDevices para verificar, cuando el colegio ya viene explícito en la
+     * URL del webhook (/pushNotification/{tenant}, terminal reconfigurada para avisar a su
+     * propia URL), que la IP de origen sea realmente una terminal conocida DE ESE colegio.
+     * La URL sola no autentica — cualquiera podría adivinarla y decir ser otro colegio.
+     */
+    public static function hostsDeTenant(string $tenant): array
+    {
+        return array_column(self::parseDispositivos(self::configParaTenant($tenant)), 'host');
     }
 
     /**

@@ -12,7 +12,11 @@ Route::get('/', function () {
     ]);
 });
 
-Route::post('/pushNotification', [HikvisionController::class, 'testNotificationHikvision'])
+// {tenant} opcional: terminales ya reconfiguradas para avisar a la URL propia de su colegio
+// (ver docs/segundo-colegio-hebreo-union.md) la traen explícita; las que no, siguen
+// funcionando igual que antes (identificación por IP contra todos los colegios) — ver
+// RestrictToHikvisionDevices.
+Route::post('/pushNotification/{tenant?}', [HikvisionController::class, 'testNotificationHikvision'])
     ->middleware('hikvision.device');
 
 // RUTAS PÚBLICAS (sin token)
