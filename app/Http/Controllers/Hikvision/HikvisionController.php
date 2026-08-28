@@ -164,6 +164,8 @@ class HikvisionController extends Controller
     {
         $pageSize = $request->input('per-page', 30);
 
+        Log::info('[hikvision] Solicitud de empleados registrados', ['pageSize' => $pageSize]);
+
         $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize);
 
         return $this->apiResponse($usuarios);
@@ -180,6 +182,8 @@ class HikvisionController extends Controller
                 'data' => [],
             ]);
         }
+
+        Log::info('[hikvision] Solicitud de empleado específico', ['id_user' => $id_user]);
 
         $datos_usuario = $this->hikvision_service->obtenerUnEmpleadoEspecifico($id_user);
 
@@ -198,6 +202,8 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de imagen de empleado', ['path' => $path, 'deviceId' => $request->input('deviceId')]);
+
         $resultado = $this->hikvision_service->obtenerImagenEmpleado($path, $request->input('deviceId'));
 
         if ($resultado['error']) {
@@ -215,6 +221,12 @@ class HikvisionController extends Controller
         $start_date = $request->input('start_date', null);
         $end_date = $request->input('end_date', null);
 
+        Log::info('[hikvision] Solicitud de asistencia de empleado', [
+            'id_empleado' => $id_empleado,
+            'start_date' => $start_date,
+            'end_date' => $end_date,
+        ]);
+
         $response = $this->hikvision_service->obtenerAsistenciaEmpleado($id_empleado, $start_date, $end_date);
 
         return $this->apiResponse($response);
@@ -223,6 +235,8 @@ class HikvisionController extends Controller
     public function obtenerEmpleadosRegistradosPorPerfil(Request $request)
     {
         $id_perfil = $request->input('id_perfil');
+
+        Log::info('[hikvision] Solicitud de empleados registrados por perfil', ['id_perfil' => $id_perfil]);
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
@@ -259,6 +273,10 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de registro de empleado(s)', [
+            'ids' => array_column($empleados, 'id_user'),
+        ]);
+
         if (count($empleados) === 1) {
             return $this->apiResponse($this->hikvision_service->registrarEmpleado($empleados[0]));
         }
@@ -269,6 +287,8 @@ class HikvisionController extends Controller
     public function registrarEmpleadosMasivoPerfil(Request $request)
     {
         $id_perfil = $request->input('id_perfil');
+
+        Log::info('[hikvision] Solicitud de registro masivo por perfil', ['id_perfil' => $id_perfil]);
 
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
@@ -303,9 +323,11 @@ class HikvisionController extends Controller
     {
         $id_perfil = $request->input('id_perfil');
 
+        Log::info('[hikvision] Solicitud de eliminación de registrados por perfil', ['id_perfil' => $id_perfil]);
+
         $usuarios = $this->usuario_services->mostrarUsuariosPorPerfil($id_perfil);
 
-        Log::info('usuarios obtenidos', [
+        Log::info('[hikvision] usuarios obtenidos', [
             'users' => $usuarios,
         ]);
 
@@ -354,6 +376,10 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de eliminación de empleado(s)', [
+            'ids' => array_column($empleados, 'id_user'),
+        ]);
+
         $resultado = $this->hikvision_service->eliminarUsuariosRegistrados($empleados);
 
         if (! $resultado['error']) {
@@ -384,6 +410,11 @@ class HikvisionController extends Controller
 
         $enable = $request->input('enable');
         $resultado = ['success' => [], 'error' => []];
+
+        Log::info('[hikvision] Solicitud de activar/desactivar usuario(s)', [
+            'ids' => $request->input('id_user'),
+            'enable' => $enable,
+        ]);
 
         foreach ($request->input('id_user') as $id_user) {
             $usuario = $this->usuario_services->mostrarInfoUsuarioId($id_user);
@@ -428,6 +459,12 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de registro de huella', [
+            'employeeNo' => $request->input('employeeNo'),
+            'fingerPrintID' => $request->input('fingerPrintID', 1),
+            'deviceId' => $request->input('deviceId'),
+        ]);
+
         $resultado = $this->hikvision_service->registrarHuellaEmpleado(
             $request->input('employeeNo'),
             (int) $request->input('fingerPrintID', 1),
@@ -452,6 +489,11 @@ class HikvisionController extends Controller
                 'data' => [],
             ], 400);
         }
+
+        Log::info('[hikvision] Solicitud de registro de tarjeta', [
+            'employeeNo' => $request->input('employeeNo'),
+            'cardNo' => $request->input('cardNo'),
+        ]);
 
         $resultado = $this->hikvision_service->registrarTarjetaEmpleado(
             $request->input('employeeNo'),
@@ -478,6 +520,11 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de registro de tarjeta con captura', [
+            'employeeNo' => $request->input('employeeNo'),
+            'deviceId' => $request->input('deviceId'),
+        ]);
+
         $resultado = $this->hikvision_service->registrarTarjetaEmpleadoConCaptura(
             $request->input('employeeNo'),
             $request->input('cardType', 'normalCard'),
@@ -500,6 +547,8 @@ class HikvisionController extends Controller
                 'data' => [],
             ], 400);
         }
+
+        Log::info('[hikvision] Solicitud de eliminación de tarjeta', ['employeeNo' => $request->input('employeeNo')]);
 
         $resultado = $this->hikvision_service->eliminarTarjetaEmpleado(
             $request->input('employeeNo')
@@ -534,6 +583,8 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de registro de contraseña', ['employeeNo' => $employeeNo]);
+
         $resultado = $this->hikvision_service->registrarContrasenaEmpleado(
             (string) $employeeNo,
             (string) $usuario['usuario']->documento
@@ -558,6 +609,11 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de registro de rostro', [
+            'employeeNo' => $request->input('employeeNo'),
+            'deviceId' => $request->input('deviceId'),
+        ]);
+
         $resultado = $this->hikvision_service->registrarRostroEmpleado(
             $request->input('employeeNo'),
             $request->input('faceLibraryId', '1'),
@@ -581,6 +637,11 @@ class HikvisionController extends Controller
                 'data' => [],
             ], 400);
         }
+
+        Log::info('[hikvision] Solicitud de cancelación de captura de rostro', [
+            'employeeNo' => $request->input('employeeNo'),
+            'deviceId' => $request->input('deviceId'),
+        ]);
 
         $resultado = $this->hikvision_service->cancelarRegistroRostro(
             $request->input('employeeNo'),
@@ -621,6 +682,11 @@ class HikvisionController extends Controller
             ], 400);
         }
 
+        Log::info('[hikvision] Solicitud de guardar nombre de dispositivo', [
+            'deviceId' => $request->input('deviceId'),
+            'nombre' => $request->input('nombre'),
+        ]);
+
         $resultado = $this->hikvision_service->guardarNombreDispositivo(
             $request->input('deviceId'),
             $request->input('nombre')
@@ -642,6 +708,8 @@ class HikvisionController extends Controller
                 'data' => [],
             ], 400);
         }
+
+        Log::info('[hikvision] Solicitud de eliminación de huellas', ['employeeNo' => $request->input('employeeNo')]);
 
         $resultado = $this->hikvision_service->eliminarTodasLasHuellasEmpleado(
             $request->input('employeeNo')

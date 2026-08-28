@@ -113,6 +113,11 @@ class hikvisionattendanceService
 
         $this->handlerStack = HandlerStack::create();
         $this->handlerStack->push($this->retryMiddleware(3, 1000)); // 3 intentos
+
+        Log::info('[hikvision] Servicio inicializado', [
+            'tenant' => config('database.default', 'mysql'),
+            'devices' => array_column($this->devices, 'id'),
+        ]);
     }
 
     /**
