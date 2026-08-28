@@ -141,7 +141,7 @@ class hikvisionattendanceService
     public static function resolverTenantPorIp(string $ip): ?string
     {
         foreach (BasesDatosService::connectionsConUsuarios() as $tenant) {
-            if (in_array($ip, self::hostsDeTenant($tenant), true)) {
+            if (in_array($ip, self::hostsDeTenant($tenant), true) || in_array($ip, self::webhookIpsDeTenant($tenant), true)) {
                 return $tenant;
             }
         }
@@ -159,6 +159,20 @@ class hikvisionattendanceService
     public static function hostsDeTenant(string $tenant): array
     {
         return array_column(self::parseDispositivos(self::configParaTenant($tenant)), 'host');
+    }
+
+    /**
+     * IPs públicas (WAN/NAT) permitidas para el webhook entrante de UN colegio puntual
+     * (`services.hikvision.{tenant}.webhook_ips`, formato "ip1,ip2"). Separado de
+     * hostsDeTenant() porque el webhook /pushNotification llega con la IP pública del
+     * router del colegio, no con la IP LAN del terminal usada para las llamadas ISAPI
+     * salientes — esas nunca coinciden cuando el backend no está en la misma red física.
+     */
+    public static function webhookIpsDeTenant(string $tenant): array
+    {
+        $ips = (string) (self::configParaTenant($tenant)['webhook_ips'] ?? '');
+
+        return array_values(array_filter(array_map('trim', explode(',', $ips))));
     }
 
     /**
