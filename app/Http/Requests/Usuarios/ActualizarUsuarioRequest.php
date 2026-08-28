@@ -101,9 +101,12 @@ class ActualizarUsuarioRequest extends FormRequest
             'telefono',
         ]);
 
-        // Solo agregar contraseña si viene (útil para update)
+        // Solo agregar contraseña si viene (útil para update). No se hashea acá: el
+        // mutator Usuario::setPassAttribute() ya lo hace al hacer update($data), y
+        // hashear también acá duplicaba el bcrypt (bcrypt(bcrypt(pass))), dejando al
+        // usuario sin poder loguearse con la contraseña que se le asignó.
         if ($this->filled('pass')) {
-            $data['pass'] = bcrypt($this->pass);
+            $data['pass'] = $this->pass;
         }
 
         return $data;
