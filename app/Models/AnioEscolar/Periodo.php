@@ -22,6 +22,7 @@ class Periodo extends Model
         'fecha_inicio',
         'fecha_fin',
         'activo',
+        'en_curso',
         'id_log',
         'fechareg',
     ];
@@ -30,6 +31,7 @@ class Periodo extends Model
         'fecha_inicio' => 'date',
         'fecha_fin' => 'date',
         'activo' => 'boolean',
+        'en_curso' => 'boolean',
         'fechareg' => 'datetime',
     ];
 

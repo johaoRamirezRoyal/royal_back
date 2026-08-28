@@ -89,6 +89,29 @@ return [
             ]) : [],
         ],
 
+        // Base "sami_hebreo": segundo tenant (Colegio Hebreo) en el mismo servidor/
+        // credenciales que `mysql` por ahora (DB_HEBREO_HOST/PORT/USERNAME/PASSWORD solo si
+        // algún día vive en otro server) — mismo espíritu que `admin_management` arriba.
+        'sami_hebreo' => [
+            'driver' => 'mysql',
+            'url' => env('DB_HEBREO_URL'),
+            'host' => env('DB_HEBREO_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_HEBREO_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_HEBREO_DATABASE', 'sami_hebreo'),
+            'username' => env('DB_HEBREO_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_HEBREO_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

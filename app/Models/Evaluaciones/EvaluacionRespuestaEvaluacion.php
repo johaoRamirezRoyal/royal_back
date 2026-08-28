@@ -4,6 +4,7 @@ namespace App\Models\Evaluaciones;
 
 use App\Models\Usuarios\Usuario;
 use App\Models\Usuarios\Nivel;
+use App\Models\AnioEscolar\Periodo;
 use Illuminate\Database\Eloquent\Model;
 
 class EvaluacionRespuestaEvaluacion extends Model
@@ -17,6 +18,7 @@ class EvaluacionRespuestaEvaluacion extends Model
         'id_user',
         'id_evaluado',
         'id_nivel',
+        'id_periodo',
         'anonima',
         'completada_en',
     ];
@@ -26,6 +28,7 @@ class EvaluacionRespuestaEvaluacion extends Model
         'id_user' => 'integer',
         'id_evaluado' => 'integer',
         'id_nivel' => 'integer',
+        'id_periodo' => 'integer',
         'anonima' => 'integer',
         'completada_en' => 'datetime',
     ];
@@ -52,6 +55,11 @@ class EvaluacionRespuestaEvaluacion extends Model
     public function nivel()
     {
         return $this->belongsTo(Nivel::class, 'id_nivel');
+    }
+
+    public function periodo()
+    {
+        return $this->belongsTo(Periodo::class, 'id_periodo');
     }
 
     public function respuestasPreguntas()

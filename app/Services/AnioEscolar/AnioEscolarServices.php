@@ -51,6 +51,17 @@ class AnioEscolarServices extends Service
                     ?? Anio::latest('id')->first();
             }
 
+            // fecha_inicio/fecha_fin no persisten en la tabla `anios` — se calculan al vuelo
+            // a partir del calendario configurado, igual que rangoDeAnioEscolar(), para que
+            // el frontend (Home, "año escolar transcurrido") no tenga que reimplementar las
+            // reglas de calendario A/B ni pegarle a un segundo endpoint gateado por la opción 99.
+            if ($anioVigente) {
+                $tipo = $this->obtenerTipoCalendario();
+                $rango = $this->rangoParaAnioInicio((int) $anioVigente->anio_inicio, $tipo);
+                $anioVigente->fecha_inicio = $rango['fecha_min'];
+                $anioVigente->fecha_fin = $rango['fecha_max'];
+            }
+
             return [
                 'error' => false,
                 'message' => 'Último año escolar obtenido exitosamente',

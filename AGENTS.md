@@ -364,39 +364,88 @@ que la cantidad a ingresar no supere lo solicitado:
 
 ## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
 
-Módulo de evaluaciones académicas con estructura jerárquica:
-evaluación → secciones → preguntas → opciones. Tablas legacy sin migración en
-este repo (mismo patrón que `cron_opciones`/`anio_escolar`).
+Módulo de **evaluaciones de calidad de servicios / desempeño** (Gestor de
+Calidad, no académico): un Coordinador (perfil `26`) evalúa periódicamente
+(hasta 3 veces al año, una por `periodo` institucional) a los usuarios de
+ciertos perfiles/niveles a su cargo — ej. Docentes de su propio nivel,
+Proveedores. Estructura jerárquica: `Evaluacion` → `EvaluacionServicio`
+(catálogo del "servicio" evaluado) → `EvaluacionSeccion` (ponderada por
+`porcentaje`) → `EvaluacionPregunta` (tipada vía `EvaluacionTipoPregunta`) →
+`EvaluacionOpcionPregunta` (cada una con un `valor` numérico). Cada
+`EvaluacionRespuestaEvaluacion` es la respuesta completa de un evaluador a un
+evaluado en un periodo, con sus `EvaluacionRespuestaPregunta` hijas.
 
-### Tablas (9, sin migración propia)
+### Tablas (10)
 
-| Tabla | Modelo | PK | Timestamps | Soft Deletes |
-|-------|--------|----|------------|--------------|
-| `evaluaciones` | `Evaluacion` | `id` | sí | sí |
+La mayoría son legacy sin migración en este repo (mismo patrón que
+`cron_opciones`/`anio_escolar`); las tres marcadas sí tienen migración propia,
+añadida en 2026-08 al construir el flujo de "realizar evaluaciones".
+
+| Tabla | Modelo | PK | Timestamps | Migración propia |
+|-------|--------|----|------------|-------------------|
+| `evaluaciones` | `Evaluacion` (SoftDeletes) | `id` | sí | no |
 | `evaluaciones_servicios` | `EvaluacionServicio` | `id` | sí | no |
-| `evaluaciones_tipos_pregunta` | `EvaluacionTipoPregunta` | `id` | no | no |
+| `evaluaciones_tipos_pregunta` | `EvaluacionTipoPregunta` | `id` | no | no (filas via migraciones puntuales, ver "Tipos de pregunta" abajo) |
 | `evaluaciones_secciones` | `EvaluacionSeccion` | `id` | sí | no |
 | `evaluaciones_preguntas` | `EvaluacionPregunta` | `id` | sí | no |
 | `evaluaciones_opciones_pregunta` | `EvaluacionOpcionPregunta` | `id` | no | no |
-| `evaluaciones_nivel` | `EvaluacionNivel` | `id` | no | no |
-| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | no |
+| `evaluaciones_nivel` | `EvaluacionNivel` (pivote `Evaluacion`↔`Nivel`) | `id` | no | no |
+| `evaluaciones_perfil` | `EvaluacionPerfil` (pivote `Evaluacion`↔`Perfil`, perfiles evaluables) | `id` | no | sí — `2026_08_26_100000_create_evaluaciones_perfil_table` |
+| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | columnas `id_evaluado`/`id_periodo` añadidas vía migración (ver abajo) |
 | `evaluaciones_respuestas_pregunta` | `EvaluacionRespuestaPregunta` | `id` | sí | no |
 
-### Permisos (placeholder)
+`evaluaciones_respuestas_evaluacion` empezó sin `id_evaluado`/`id_periodo`
+(migraciones `2026_08_26_100100_add_id_evaluado_...` y
+`2026_08_28_100000_add_id_periodo_...`); el índice único
+`uq_resp_eval_evaluado_periodo` (`id_evaluacion`+`id_evaluado`+`id_periodo`)
+es el mecanismo real que impide evaluar dos veces al mismo usuario en el mismo
+periodo — MySQL permite múltiples `NULL` en un unique, así que no rompe filas
+viejas sin periodo. `id_periodo` referencia `periodos` (periodo institucional
+general, **no** `periodo_academico` — eso es solo para lo académico).
 
-Opciones en `cron_opciones` — **IDs 101, 102, 103 son placeholders**; no hay
-migración que los inserte. Hasta que se creen las filas en `cron_opciones` y
-se otorguen vía `cron_permisos`, todos los endpoints retornan 403.
+### Periodo institucional activo
+
+`EvaluacionesServices::resolverPeriodoActivo()` lee `periodos` filtrando
+`en_curso = 1` (columna explícita, no derivada de `periodos.activo` ni del año
+escolar activo — puede haber varios "activos" a la vez, `en_curso` es la única
+fuente confiable de "cuál es el vigente ahora"). No hay CRUD para `periodos`
+todavía, se marca a mano en BD. Sin periodo activo, `enviarRespuesta` rechaza
+con 422 ("No hay un periodo activo configurado").
+
+### Permisos (reales, ya otorgados)
+
+Opciones en `cron_opciones`, creadas a mano el 2026-08-21 (no hay migración de
+creación de las opciones en sí) y otorgadas a Super Admin por defecto; el
+Coordinador (perfil `26`) recibió 102/103 vía
+`2026_08_28_110000_grant_opciones_evaluaciones_a_coordinador` (idempotente,
+solo inserta si no existe ya).
 
 | Opción | Constante | Uso |
 |--------|-----------|-----|
-| 101 | `OPCION_ADMIN` | CRUD evaluaciones, secciones, preguntas, opciones |
+| 101 | `OPCION_ADMIN` | CRUD evaluaciones, servicios, secciones, preguntas, opciones |
 | 102 | `OPCION_VER` | Lectura de evaluaciones, respuestas, resultados |
-| 103 | `OPCION_RESPONDER` | Enviar respuestas a una evaluación |
+| 103 | `OPCION_RESPONDER` | Ver "mis evaluaciones", evaluables, enviar/editar respuestas, reenviar correo, descargar PDF |
 
-Patrón de permisos: **(b)** — helper `sinAcceso()` al inicio de cada método.
-Los endpoints de lectura aceptan OR de opciones (ej. 102, 101, 103 para
-`obtenerPorId`).
+Patrón de permisos: **(b)** — helper `sinAcceso()` al inicio de cada método,
+vía `UsuariosServices::tieneAlgunPermiso()` (OR de varias opciones). Casi todo
+endpoint de lectura acepta el OR de las tres opciones.
+
+**Ojo con el alcance real más allá del gate de opción** — varios métodos del
+servicio aplican una segunda capa de scoping por perfil que el gate de opción
+por sí solo no cubre:
+- **Coordinador** (`PERFIL_COORDINADOR = 26`): en `obtenerEvaluables` y
+  `enviarRespuesta` solo puede ver/evaluar usuarios de **su propio nivel**
+  (`usuarios.id_nivel`), aunque la evaluación cubra varios niveles; en
+  `listarDisponiblesParaCoordinador` (`mis-evaluaciones`) solo ve evaluaciones
+  que él mismo creó o que incluyen su nivel; en `listarRespuestas`,
+  `obtenerRespuesta`, `actualizarRespuesta`, `reenviarCorreo` y
+  `generarPdf` solo puede tocar sus propias respuestas (`id_user` = él).
+- **Super Admin** (`PERFIL_SUPER_ADMIN = 1`): sin ninguna de esas
+  restricciones — ve/edita todo.
+- **`PERFILES_SIN_NIVEL = [17]`** (Proveedor): usuarios de perfiles cuyo
+  `id_nivel` legítimamente queda `NULL`/`0` (son empresas externas, no
+  personal de un nivel académico/administrativo) — el filtro de nivel se
+  ignora para ellos en vez de dejarlos fuera de la lista de evaluables.
 
 ### Endpoints (`routes/api/evaluaciones.php`)
 
@@ -417,16 +466,32 @@ Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`
 |--------|------|------|-----|
 | `GET` | `/tipos-pregunta` | 102, 101 | Listar tipos de pregunta |
 
+**Catálogo de solo lectura desde la API** — no hay `crear`/`actualizar`/
+`eliminar` para `evaluaciones_tipos_pregunta` en el controller; una fila nueva
+se agrega por migración (`DB::table('evaluaciones_tipos_pregunta')->insert()`,
+idempotente por `slug`), siguiendo el mismo patrón que
+`grant_opciones_evaluaciones_a_coordinador`. Slugs conocidos consumidos por el
+frontend (ver `PreguntaField.parts.tsx` y
+`opcionesPorDefecto.helpers.ts` en el repo frontend):
+`escala_likert`, `escala_real`, `si_no`, `calificacion_numerica`,
+`opcion_multiple`, `seleccion_multiple` (multi-selección — se guarda como
+varias filas `evaluaciones_respuestas_pregunta`, una por opción marcada, no
+hay columna many-to-many propia), `texto_libre` (sin opciones, usa
+`valor_texto`).
+
 #### Evaluaciones
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `GET` | `/` | 102, 101 | Listado paginado; filtros: `id_servicio`, `activo`, `s` (busca en título/descripción), `per-page` |
-| `POST` | `/` | 101 | Crear evaluación + niveles + secciones anidadas (transacción) |
-| `GET` | `/{id}` | 102, 101, 103 | Detalle completo: servicio, niveles, secciones→preguntas→tipo→opciones, count respuestas |
-| `PUT` | `/{id}` | 101 | Actualizar campos + niveles (solo si `niveles` key existe) |
-| `DELETE` | `/{id}` | 101 | **Hard delete** |
+| `GET` | `/` | 102, 101 | Listado paginado (admin); filtros: `id_servicio`, `activo`, `s` (busca en título/descripción), `per-page` |
+| `POST` | `/` | 101 | Crear evaluación + niveles + perfiles + secciones anidadas (transacción) |
+| `GET` | `/{id}` | 102, 101, 103 | Detalle completo: servicio, niveles, perfiles, secciones→preguntas→tipo→opciones, count respuestas |
+| `PUT` | `/{id}` | 101 | Actualizar campos + niveles/perfiles (solo si la key existe en el payload) |
+| `DELETE` | `/{id}` | 101 | Soft delete (`Evaluacion` usa `SoftDeletes`) |
 | `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
+| `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` respecto al periodo activo |
+| `GET` | `/mis-evaluaciones` | 103, 101 | Evaluaciones activas disponibles para el solicitante (ver `listarDisponiblesParaCoordinador`), con `evaluables_count`/`evaluados_count` del periodo activo |
+| `GET` | `/periodo-activo` | 102, 101, 103 | Periodo institucional `en_curso=1` (con año escolar) |
 
 #### Secciones
 
@@ -456,9 +521,12 @@ Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `respuestas[]` con `id_pregunta`, `id_opcion`/`valor_texto`/`comentario`, opcional `anonima`, `id_nivel` |
-| `GET` | `/{idEvaluacion}/respuestas` | 102, 101 | Listado paginado; filtro `anonima`, `per-page` |
-| `GET` | `/respuestas/{idRespuesta}` | 102, 101 | Detalle de respuesta con preguntas→tipo→opciones |
+| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `id_evaluado`, opcional `anonima`/`id_nivel`, `respuestas[]` con `id_pregunta` + (`id_opcion` y/o `valor_texto`) + `comentario` opcional. Valida perfil/nivel evaluable, scoping de Coordinador, y que no exista ya una respuesta para ese evaluado+periodo. Dispara el correo con PDF al terminar (fuera de la transacción). |
+| `PUT` | `/respuestas/{idRespuesta}` | 103, 101 | Reemplaza (`delete`+`create`) las `evaluaciones_respuestas_pregunta` de una respuesta ya guardada — solo el creador o Super Admin |
+| `GET` | `/{idEvaluacion}/respuestas` | 102, 101, 103 | Listado paginado; filtro `anonima`, `per-page`; Coordinador solo ve las suyas |
+| `GET` | `/respuestas/{idRespuesta}` | 102, 101, 103 | Detalle de respuesta con evaluacion→servicio, evaluado, nivel, periodo→año escolar, preguntas→tipo→opciones |
+| `POST` | `/respuestas/{idRespuesta}/reenviar-correo` | 103, 101 | Regenera el PDF y reenvía el correo al evaluado — solo creador o Super Admin; falla con 422 si el evaluado no tiene `correo` |
+| `GET` | `/respuestas/{idRespuesta}/pdf` | 103, 101 | Descarga directa del PDF (no envía correo); responde `application/pdf` binario o, si hay error de negocio, 200 con JSON (el frontend distingue por `content-type`, mismo patrón que `fetchPdfBlob` en Biblioteca) |
 
 #### Resultados
 
@@ -468,24 +536,28 @@ Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`
 
 ### Estructura de evaluación (creación anidada)
 
-`POST /evaluaciones` acepta secciones y preguntas en una sola llamada (transacción):
+`POST /evaluaciones` acepta niveles, perfiles y secciones→preguntas→opciones
+en una sola llamada (transacción). Nombres de campo reales (no "titulo" en
+pregunta/opción — es `texto`):
 
 ```json
 {
-  "titulo": "Evaluación Final",
+  "titulo": "Encuesta de Calidad - Cafetería 2026",
   "id_servicio": 1,
   "niveles": [1, 2],
+  "perfiles": [26],
   "secciones": [
     {
-      "titulo": "Teoría",
+      "titulo": "Atención",
       "porcentaje": 60,
       "preguntas": [
         {
-          "titulo": "Pregunta 1",
+          "texto": "¿Cómo calificaría la atención recibida?",
           "id_tipo_pregunta": 1,
+          "permite_comentario": 1,
           "opciones": [
-            { "titulo": "A", "valor": 10 },
-            { "titulo": "B", "valor": 0 }
+            { "texto": "Bajo", "valor": 1 },
+            { "texto": "Insignia Real", "valor": 4 }
           ]
         }
       ]
@@ -494,25 +566,51 @@ Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`
 }
 ```
 
+### Correo + PDF (`EvaluacionRespuestaPdfService`, `EvaluacionRespuestaMail`)
+
+Al guardar una respuesta (`enviarRespuesta`), `enviarCorreoRespuesta` genera un
+PDF simple (TCPDF, no pixel-perfect como `PazYSalvoPdfService`) con los datos
+del evaluado/servicio/periodo y, por sección, cada pregunta con su respuesta y
+observación; lo envía por `MailService` al correo del evaluado como adjunto.
+Se llama **fuera** de la transacción de guardado — un fallo de correo/PDF
+(evaluado sin `correo`, error de TCPDF, etc.) solo queda logueado
+(`Log::error`), nunca hace rollback de la respuesta ya guardada. El mismo
+servicio de PDF se reutiliza para el botón "Descargar PDF" del coordinador
+(`generarPdf`, sin enviar correo) y para "Reenviar correo" (`reenviarCorreo`,
+regenera el PDF desde el estado vigente de la respuesta).
+
 ### Score (`calcularResultados`)
 
 Suma `opcion.valor` de cada respuesta, divide por el máximo posible (mayor
 valor por pregunta), ponderado por el `porcentaje` de cada sección. Solo
 cuenta respuestas con opción seleccionada (multiple choice) — respuestas
-de texto no aportan puntaje.
+de texto libre no aportan puntaje. **Sin consumidor en el frontend todavía**
+— la página `/evaluaciones/resultados` está "en construcción"
+(`EvaluacionesResultadosPage`), este endpoint no se llama desde ninguna
+pantalla aún.
 
 ### Quirks
 
 - **Validación inline** — no hay FormRequest classes; todo es `Validator::make()`
   en el controller con `response()->json()` directo (no usa `$this->error()`).
 - **Hard delete** en secciones/preguntas/opciones — no hay cascade explícito;
-  depende de FKs en BD (no confirmable sin migraciones).
+  depende de FKs en BD (no confirmable sin migraciones). `Evaluacion` y su
+  tabla de respuestas sí son soft/append-only por diseño (SoftDeletes en la
+  primera, nunca se borran respuestas vía API).
 - **`eliminarServicio`** es soft-disable (`activo=0`) pero `eliminar` evaluación
-  es hard delete — inconsistencia intencional (servicios son catálogo compartido).
+  es soft delete vía `SoftDeletes` (no hard) — no confundir con secciones/
+  preguntas/opciones, esas sí son hard delete.
 - **Toggle activo** — el mensaje puede decir "activada" cuando se desactivó
   (el flip ya pasó antes del ternario). No afecta funcionalidad.
 - **`evaluaciones_respuestas_evaluacion`** — `created_at` y `completada_en`
   ambos se setean; el primero ordena, el segundo indica fin real.
+- **`id_nivel` en la respuesta** — se toma de `datos['id_nivel']` si viene, si
+  no del `id_nivel` del evaluado, con `?:` (no `??`) para descartar también
+  `0` — los perfiles de `PERFILES_SIN_NIVEL` traen `0`/`NULL` y romperían la FK.
+- **Relación `tipo()` de `EvaluacionPregunta`** se serializa como `tipo`, no
+  `tipo_pregunta` — el tipo TS del frontend declara ambos campos por
+  compatibilidad con código viejo, pero solo `tipo` viene poblado en
+  respuestas reales del API.
 
 ## Convenciones de código
 

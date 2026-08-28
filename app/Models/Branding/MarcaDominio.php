@@ -20,6 +20,7 @@ class MarcaDominio extends Model
     protected $fillable = [
         'dominio',
         'nombre',
+        'color',
         'logo_path',
         'logo_public_id',
         'activo',

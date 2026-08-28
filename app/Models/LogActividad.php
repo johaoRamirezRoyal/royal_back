@@ -8,12 +8,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LogActividad extends Model
 {
-    /** Vive en la base operativa (`mysql`), no en `admin_management` — es auditoría propia
-     * de ESTA base (FK real a usuarios.id_user), a diferencia de LogDominio, que es
+    /** Vive en la base operativa de CADA tenant (no en `admin_management`) — es auditoría
+     * propia de esa base (FK real a usuarios.id_user), a diferencia de LogDominio, que es
      * transversal a todos los dominios/tenants y por eso sí vive en admin_management (ver
-     * config/database.php). Cada base que se sume a futuro (por tenant/dominio) tendría su
-     * propio log de actividad igual que este, no uno compartido. */
-    protected $connection = 'mysql';
+     * config/database.php). Se fija en el constructor a `database.default` vigente (mismo
+     * mecanismo que Usuario::$connection) para que cada tenant escriba en su propio
+     * logs_actividad en vez de todos compartiendo el de `mysql`. */
+    protected $connection;
+
+    public function __construct(array $attributes = [])
+    {
+        $this->connection = config('database.default', 'mysql');
+        parent::__construct($attributes);
+    }
 
     protected $table = 'logs_actividad';
 

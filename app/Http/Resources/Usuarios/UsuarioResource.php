@@ -28,12 +28,14 @@ class UsuarioResource extends JsonResource
             'nombre_nivel' => $this->whenLoaded('nivelRelacion', fn () => $this->nivelRelacion->nombre),
             'foto_carnet' => $this->foto_carnet,
             'correo' => $this->correo,
-            // Logo y nombre de la marca del dominio de este correo (multi-tenant) — logo_path
-            // ya es una URL de Cloudinary lista para usar en un <img src>, no una ruta
-            // relativa. Ambos null si no hay marca configurada/activa para el dominio (el
-            // frontend cae al logo/título genérico de OMNIA ahí).
+            // Logo, nombre y color de la marca del dominio de este correo (multi-tenant) —
+            // logo_path ya es una URL de Cloudinary lista para usar en un <img src>, no una
+            // ruta relativa. Los tres null si no hay marca configurada/activa para el
+            // dominio (el frontend cae al logo/título/color genérico de OMNIA ahí, ver
+            // useAppLogo.hook.ts / useMarcaColor.hook.ts).
             'logo_path' => $marca['url'],
             'nombre_marca' => $marca['nombre'],
+            'color_marca' => $marca['color'],
         ];
     }
 }

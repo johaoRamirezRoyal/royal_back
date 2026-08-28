@@ -3,6 +3,7 @@
 namespace App\Services\Hikvisionattendance;
 
 use App\Models\Hikvision\HikvisionDispositivo;
+use App\Services\AdminManagement\BasesDatosService;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -104,40 +105,75 @@ class hikvisionattendanceService
 
     public function __construct()
     {
-        $this->username = config('services.hikvision.username');
-        $this->password = config('services.hikvision.password');
-        $this->devices = $this->resolverDispositivos();
+        $config = self::configParaTenant(config('database.default', 'mysql'));
+
+        $this->username = $config['username'] ?? '';
+        $this->password = $config['password'] ?? '';
+        $this->devices = self::parseDispositivos($config);
 
         $this->handlerStack = HandlerStack::create();
         $this->handlerStack->push($this->retryMiddleware(3, 1000)); // 3 intentos
     }
 
     /**
-     * Resuelve la lista de terminales configurados: el dispositivo "principal"
-     * (HIKVISION_HOST/PORT/PROTOCOL, como hoy) más los adicionales declarados
-     * en HIKVISION_HOSTS (formato "Nombre@host[:port],Nombre2@host2[:port2]"
-     * — el nombre es opcional, si se omite cae al propio id "host:port"; el
-     * puerto opcional cae al HIKVISION_PORT). Si no hay adicionales, el
-     * resultado es exactamente el dispositivo único de siempre.
+     * Bloque de configuración (`services.hikvision.{tenant}`) para un tenant/connection
+     * dado — cada colegio tiene sus propias terminales físicas (ver config/services.php).
+     * Cae al de 'mysql' (Royal) si el tenant pedido no tiene bloque propio, para no
+     * romper si algún día se agrega una connection nueva sin su config de Hikvision.
+     */
+    private static function configParaTenant(string $tenant): array
+    {
+        return config("services.hikvision.{$tenant}") ?? config('services.hikvision.mysql') ?? [];
+    }
+
+    /**
+     * Busca en TODOS los tenants (colegios) configurados cuál tiene una terminal con esta
+     * IP de origen — usado por RestrictToHikvisionDevices para el webhook público de
+     * /pushNotification, que llega sin JWT y por lo tanto sin forma de saber a qué colegio
+     * pertenece hasta identificar el dispositivo por su IP. Null si ninguna terminal de
+     * ningún colegio coincide (origen no autorizado, se rechaza igual que antes).
+     */
+    public static function resolverTenantPorIp(string $ip): ?string
+    {
+        foreach (BasesDatosService::connectionsConUsuarios() as $tenant) {
+            $hosts = array_column(self::parseDispositivos(self::configParaTenant($tenant)), 'host');
+
+            if (in_array($ip, $hosts, true)) {
+                return $tenant;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resuelve la lista de terminales de UN tenant a partir de su bloque de config: el
+     * dispositivo "principal" (host/port/protocol) más los adicionales declarados en
+     * `extra_hosts` (formato "Nombre@host[:port],Nombre2@host2[:port2]" — el nombre es
+     * opcional, si se omite cae al propio id "host:port"; el puerto opcional cae al
+     * principal). Sin `host` configurado (colegio sin terminal física todavía, ej. Hebreo
+     * Union por ahora) devuelve una lista vacía — nunca un dispositivo con host inventado.
      *
-     * El nombre "de fábrica" resuelto aquí es solo el fallback antes de que
-     * alguien nombre el terminal desde el frontend (devicesInfo() prioriza
-     * el nombre guardado en hikvision_dispositivos sobre este).
+     * El nombre "de fábrica" resuelto aquí es solo el fallback antes de que alguien nombre
+     * el terminal desde el frontend (devicesInfo() prioriza el nombre guardado en
+     * hikvision_dispositivos sobre este).
      *
      * @return array<int, array{id: string, protocol: string, host: string, port: mixed, name: string}>
      */
-    private function resolverDispositivos(): array
+    private static function parseDispositivos(array $config): array
     {
-        $protocol = config('services.hikvision.protocol');
-        $puertoDefault = config('services.hikvision.port');
+        $host = $config['host'] ?? null;
 
-        $lista = [$this->normalizarDispositivo(
-            $protocol,
-            config('services.hikvision.host'),
-            $puertoDefault
-        )];
+        if (empty($host)) {
+            return [];
+        }
 
-        foreach (explode(',', (string) config('services.hikvision.extra_hosts')) as $entrada) {
+        $protocol = $config['protocol'] ?? 'http';
+        $puertoDefault = $config['port'] ?? 8000;
+
+        $lista = [self::normalizarDispositivo($protocol, $host, $puertoDefault)];
+
+        foreach (explode(',', (string) ($config['extra_hosts'] ?? '')) as $entrada) {
             $entrada = trim($entrada);
 
             if ($entrada === '') {
@@ -148,14 +184,14 @@ class hikvisionattendanceService
                 ? explode('@', $entrada, 2)
                 : [null, $entrada];
 
-            [$host, $puerto] = array_pad(explode(':', trim($entrada), 2), 2, null);
-            $lista[] = $this->normalizarDispositivo($protocol, $host, $puerto ?? $puertoDefault, $nombre ? trim($nombre) : null);
+            [$h, $puerto] = array_pad(explode(':', trim($entrada), 2), 2, null);
+            $lista[] = self::normalizarDispositivo($protocol, $h, $puerto ?? $puertoDefault, $nombre ? trim($nombre) : null);
         }
 
         return collect($lista)->unique('id')->values()->all();
     }
 
-    private function normalizarDispositivo(string $protocol, string $host, $port, ?string $name = null): array
+    private static function normalizarDispositivo(string $protocol, string $host, $port, ?string $name = null): array
     {
         $id = "{$host}:{$port}";
 
@@ -188,6 +224,10 @@ class hikvisionattendanceService
 
     protected function primaryDeviceId(): string
     {
+        if (empty($this->devices)) {
+            throw new \RuntimeException('No hay terminales Hikvision configuradas para esta institución.');
+        }
+
         return $this->devices[0]['id'];
     }
 
@@ -197,16 +237,6 @@ class hikvisionattendanceService
     public function deviceIds(): array
     {
         return array_column($this->devices, 'id');
-    }
-
-    /**
-     * Hosts (IPs) de todos los terminales configurados en .env (HIKVISION_HOST +
-     * HIKVISION_HOSTS), sin I/O extra — usado para validar el origen de las
-     * peticiones entrantes en /pushNotification (ver RestrictToHikvisionDevices).
-     */
-    public function deviceHosts(): array
-    {
-        return array_column($this->devices, 'host');
     }
 
     /**

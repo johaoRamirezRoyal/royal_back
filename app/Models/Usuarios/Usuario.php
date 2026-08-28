@@ -13,11 +13,22 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class Usuario extends Authenticatable implements JWTSubject
 {
-    // Explícito (aunque coincide con el default `mysql`) para que un `belongsTo(Usuario::class)`
-    // desde un modelo de otra connection (ej. LogActividad, en `admin_management`) no herede
-    // esa connection — Eloquent solo propaga la del padre cuando el relacionado no declara
-    // la propia (ver HasRelationships::newRelatedInstance).
-    protected $connection = 'mysql';
+    // Se fija en el constructor (no como default estático) a `database.default` vigente en
+    // ESE momento — así un usuario de un tenant distinto a `mysql` (ver login multi-tenant en
+    // AuthServices::resolverUsuarioMultiTenant + JwtFromCookie, que switchean
+    // `database.default` según el JWT) resuelve contra su propia base. Se sigue declarando
+    // explícito (nunca null) por la misma razón que antes: un `belongsTo(Usuario::class)`
+    // desde un modelo de otra connection (ej. LogActividad, en `admin_management`) no debe
+    // heredar esa connection — Eloquent solo propaga la del padre cuando el relacionado no
+    // declara la propia (ver HasRelationships::newRelatedInstance). `Usuario::on($conn)` sigue
+    // pisando esto explícitamente para las búsquedas multi-tenant del login.
+    protected $connection;
+
+    public function __construct(array $attributes = [])
+    {
+        $this->connection = config('database.default', 'mysql');
+        parent::__construct($attributes);
+    }
 
     // Nombre de la tabla
     protected $table = 'usuarios';

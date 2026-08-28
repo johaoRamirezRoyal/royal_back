@@ -167,35 +167,30 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $credentials = [
-            'user' => $request->user,
-            'password' => $request->pass,
-        ];
+        // El identificador acepta usuario, correo o documento — busca entre todas las bases
+        // con tabla `usuarios` (ver BasesDatosService::connectionsConUsuarios). El estado
+        // 'activo' ya se valida ahí mismo (no hay una comprobación aparte después).
+        $resultado = $this->service_auth->resolverUsuarioMultiTenant($request->user, $request->pass);
 
-        if (! $token = auth()->guard('api')->attempt($credentials)) {
+        if (! $resultado) {
             return response()->json([
                 'error' => true,
                 'message' => 'Credenciales incorrectas',
             ], 401);
         }
 
-        // Usuario autenticado por JWT
-        $usuario = auth('api')->user();
+        ['usuario' => $usuario, 'connection' => $connection] = $resultado;
 
-        // 🔹 Validación adicional de negocio (opcional)
-        if ($usuario->estado !== 'activo') {
-            return response()->json([
-                'error' => true,
-                'message' => 'Usuario inactivo',
-            ], 403);
-        }
+        // A partir de acá el resto de la petición (y el JWT que se genera) queda anclado a
+        // la base del tenant al que pertenece este usuario.
+        config(['database.default' => $connection]);
 
         // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla)
         $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
 
         return response()
             ->json(['Message' => 'Login Exitoso'])
-            ->withCookie('token', $this->jwt->generateToken($usuario));
+            ->withCookie('token', $this->jwt->generateToken($usuario, $connection));
     }
 
     public function me()

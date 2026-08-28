@@ -35,10 +35,11 @@ class MarcaDominioController extends Controller
         $request->validate([
             'dominio' => ['required', 'string', 'max:190'],
             'nombre' => ['nullable', 'string', 'max:190'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo' => ['required', 'file', 'image', 'max:5120'],
         ]);
 
-        return $this->apiResponse($this->service->crear($request->only(['dominio', 'nombre']), $request->file('logo')));
+        return $this->apiResponse($this->service->crear($request->only(['dominio', 'nombre', 'color']), $request->file('logo')));
     }
 
     public function actualizar(Request $request)
@@ -47,12 +48,13 @@ class MarcaDominioController extends Controller
             'id' => ['required', 'integer'],
             'dominio' => ['sometimes', 'string', 'max:190'],
             'nombre' => ['nullable', 'string', 'max:190'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo' => ['nullable', 'file', 'image', 'max:5120'],
         ]);
 
         return $this->apiResponse($this->service->actualizar(
             $request->integer('id'),
-            $request->only(['dominio', 'nombre']),
+            $request->only(['dominio', 'nombre', 'color']),
             $request->file('logo'),
         ));
     }
