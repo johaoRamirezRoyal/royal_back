@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Validator;
 
 class EvaluacionesController extends Controller
 {
-    // ponytail: IDs de permisos placeholder — ajustar al crear la opción en cron_opciones
     private const OPCION_VER = 102;
     private const OPCION_ADMIN = 101;
     private const OPCION_RESPONDER = 103;
@@ -213,11 +212,29 @@ class EvaluacionesController extends Controller
 
     public function obtenerEvaluables(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
             return $rechazo;
         }
 
         return $this->apiResponse($this->evaluacionesServices->obtenerEvaluables($id, $request->user()));
+    }
+
+    public function misEvaluaciones(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->listarDisponiblesParaCoordinador($request->user()));
+    }
+
+    public function periodoActivo(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->periodoActivo());
     }
 
     // ─── Secciones ─────────────────────────────────────────────
@@ -405,30 +422,80 @@ class EvaluacionesController extends Controller
         return $this->apiResponse(
             $this->evaluacionesServices->enviarRespuesta(
                 $idEvaluacion,
-                $request->user()->id_user,
+                $request->user(),
                 $validator->validated()
             )
         );
     }
 
+    public function actualizarRespuesta(Request $request, int $idRespuesta): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'respuestas' => 'required|array|min:1',
+            'respuestas.*.id_pregunta' => 'required|integer|exists:evaluaciones_preguntas,id',
+            'respuestas.*.id_opcion' => 'nullable|integer|exists:evaluaciones_opciones_pregunta,id',
+            'respuestas.*.valor_texto' => 'nullable|string',
+            'respuestas.*.comentario' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse(
+            $this->evaluacionesServices->actualizarRespuesta($idRespuesta, $request->user(), $validator->validated())
+        );
+    }
+
+    public function reenviarCorreo(Request $request, int $idRespuesta): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->reenviarCorreo($idRespuesta, $request->user()));
+    }
+
+    public function descargarPdf(Request $request, int $idRespuesta)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->evaluacionesServices->generarPdf($idRespuesta, $request->user());
+
+        if ($resultado['error']) {
+            return response()->json(['error' => true, 'message' => $resultado['message']], $resultado['status'] ?? 422);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre'] . '"',
+        ]);
+    }
+
     public function listarRespuestas(Request $request, int $idEvaluacion): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
             return $rechazo;
         }
 
         return $this->paginatedResponse(
-            $this->evaluacionesServices->listarRespuestas($idEvaluacion, $request->only(['anonima', 'per-page']))
+            $this->evaluacionesServices->listarRespuestas($idEvaluacion, $request->only(['anonima', 'per-page']), $request->user())
         );
     }
 
     public function obtenerRespuesta(Request $request, int $idRespuesta): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
             return $rechazo;
         }
 
-        return $this->apiResponse($this->evaluacionesServices->obtenerRespuesta($idRespuesta));
+        return $this->apiResponse($this->evaluacionesServices->obtenerRespuesta($idRespuesta, $request->user()));
     }
 
     // ─── Resultados ────────────────────────────────────────────

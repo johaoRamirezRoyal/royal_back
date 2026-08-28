@@ -13,6 +13,8 @@ Route::delete('/servicios/{id}', [EvaluacionesController::class, 'eliminarServic
 Route::get('/tipos-pregunta', [EvaluacionesController::class, 'listarTiposPregunta']);
 
 // ─── Evaluaciones ─────────────────────────────────────────
+Route::get('/mis-evaluaciones', [EvaluacionesController::class, 'misEvaluaciones']);
+Route::get('/periodo-activo', [EvaluacionesController::class, 'periodoActivo']);
 Route::get('/', [EvaluacionesController::class, 'listar']);
 Route::post('/', [EvaluacionesController::class, 'crear']);
 Route::get('/{id}', [EvaluacionesController::class, 'obtenerPorId']);
@@ -40,6 +42,9 @@ Route::delete('/opciones/{idOpcion}', [EvaluacionesController::class, 'eliminarO
 Route::post('/{idEvaluacion}/responder', [EvaluacionesController::class, 'enviarRespuesta']);
 Route::get('/{idEvaluacion}/respuestas', [EvaluacionesController::class, 'listarRespuestas']);
 Route::get('/respuestas/{idRespuesta}', [EvaluacionesController::class, 'obtenerRespuesta']);
+Route::put('/respuestas/{idRespuesta}', [EvaluacionesController::class, 'actualizarRespuesta']);
+Route::post('/respuestas/{idRespuesta}/reenviar-correo', [EvaluacionesController::class, 'reenviarCorreo']);
+Route::get('/respuestas/{idRespuesta}/pdf', [EvaluacionesController::class, 'descargarPdf']);
 
 // ─── Resultados ───────────────────────────────────────────
 Route::get('/{idEvaluacion}/resultados', [EvaluacionesController::class, 'calcularResultados']);
