@@ -11,8 +11,13 @@ use App\Models\Evaluaciones\EvaluacionRespuestaPregunta;
 use App\Models\Evaluaciones\EvaluacionSeccion;
 use App\Models\Evaluaciones\EvaluacionServicio;
 use App\Models\Evaluaciones\EvaluacionTipoPregunta;
+use App\Models\AnioEscolar\Periodo;
 use App\Models\Usuarios\Usuario;
+use App\Services\MailService;
+use App\Mail\EvaluacionRespuestaMail;
+use App\Pdf\Evaluaciones\EvaluacionRespuestaPdfService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class EvaluacionesServices
 {
@@ -21,6 +26,57 @@ class EvaluacionesServices
     // módulo (Super Admin, Gestión Humana, Administrador, etc.) no tiene esa
     // restricción — ver AGENTS.md, sección "Evaluaciones".
     private const PERFIL_COORDINADOR = 26;
+
+    // Ve todas las evaluaciones sin restricción de nivel/creador — mismo id que
+    // App\Http\Middleware\SwitchActiveConnection::PERFIL_SUPER_ADMIN.
+    private const PERFIL_SUPER_ADMIN = 1;
+
+    // Perfiles cuyos usuarios no tienen un nivel institucional real (usuarios.id_nivel
+    // queda en NULL/0 para todos ellos) — Proveedor (17) son empresas externas, no
+    // personal asignado a un nivel académico/administrativo. Si una evaluación con uno
+    // de estos perfiles además tiene niveles configurados (ej. el usuario seleccionó un
+    // nivel sin darse cuenta de que no aplica), el filtro de nivel se ignora para ellos
+    // en vez de dejar la lista de evaluables vacía.
+    private const PERFILES_SIN_NIVEL = [17];
+
+    /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de PERFILES_SIN_NIVEL) + activos. */
+    private function usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion)
+    {
+        $query = Usuario::whereIn('perfil', $perfilesEvaluables)->where('estado', 'activo');
+
+        if ($nivelesEvaluacion->isNotEmpty()) {
+            $query->where(function ($q) use ($nivelesEvaluacion) {
+                $q->whereIn('id_nivel', $nivelesEvaluacion)
+                  ->orWhereIn('perfil', self::PERFILES_SIN_NIVEL);
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * Periodo institucional activo (tabla `periodos`, NO `periodo_academico` — esa es
+     * solo para lo académico). `en_curso` es explícito y no se deriva de nada más
+     * (ni de `periodos.activo` ni del año escolar activo): en la práctica puede haber
+     * varios años escolares y periodos con `activo=1` a la vez, lo que hacía imposible
+     * resolver de forma confiable "cuál es el periodo vigente ahora" — de ahí la
+     * columna dedicada. No hay CRUD para `periodos` todavía, se marca a mano.
+     */
+    private function resolverPeriodoActivo(): ?Periodo
+    {
+        return Periodo::where('en_curso', 1)->latest('id')->first();
+    }
+
+    public function periodoActivo(): array
+    {
+        try {
+            $periodo = $this->resolverPeriodoActivo();
+
+            return ['error' => false, 'message' => 'ok', 'data' => $periodo?->load('anioEscolar')];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
 
     // ─── Catálogo de servicios ───────────────────────────────────
 
@@ -110,6 +166,55 @@ class EvaluacionesServices
 
             $perPage = $filtros['per-page'] ?? 15;
             $data = $query->paginate($perPage);
+
+            return ['error' => false, 'message' => 'ok', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Evaluaciones que un coordinador puede realizar: las que él mismo creó, o las que
+     * incluyen su propio nivel entre los niveles configurados. Super Admin (perfil 1) ve
+     * todas las activas sin restricción — ver requerimiento original del módulo.
+     */
+    public function listarDisponiblesParaCoordinador(Usuario $solicitante): array
+    {
+        try {
+            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
+                ->where('activo', 1);
+
+            if ((int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN) {
+                $idNivel = $solicitante->id_nivel;
+                $query->where(function ($q) use ($solicitante, $idNivel) {
+                    $q->where('id_user', $solicitante->id_user)
+                      ->orWhereHas('niveles', fn ($nq) => $nq->where('nivel.id', $idNivel));
+                });
+            }
+
+            $evaluaciones = $query->orderBy('created_at', 'desc')->get();
+
+            $periodo = $this->resolverPeriodoActivo();
+
+            $data = $evaluaciones->map(function (Evaluacion $evaluacion) use ($periodo) {
+                $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
+                $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
+
+                $evaluablesCount = $perfilesEvaluables->isEmpty()
+                    ? 0
+                    : $this->usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion)->count();
+
+                $evaluadosCount = $periodo
+                    ? EvaluacionRespuestaEvaluacion::where('id_evaluacion', $evaluacion->id)
+                        ->where('id_periodo', $periodo->id)
+                        ->count()
+                    : 0;
+
+                $evaluacion->setAttribute('evaluables_count', $evaluablesCount);
+                $evaluacion->setAttribute('evaluados_count', $evaluadosCount);
+
+                return $evaluacion;
+            });
 
             return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
@@ -274,21 +379,33 @@ class EvaluacionesServices
                 return ['error' => false, 'message' => 'ok', 'data' => []];
             }
 
-            $query = Usuario::whereIn('perfil', $perfilesEvaluables)
-                ->where('estado', 'activo');
-
             $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
-            if ($nivelesEvaluacion->isNotEmpty()) {
-                $query->whereIn('id_nivel', $nivelesEvaluacion);
-            }
+            $query = $this->usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion);
 
             if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
-                $query->where('id_nivel', $solicitante->id_nivel);
+                $query->where(function ($q) use ($solicitante) {
+                    $q->where('id_nivel', $solicitante->id_nivel)
+                      ->orWhereIn('perfil', self::PERFILES_SIN_NIVEL);
+                });
             }
 
             $data = $query->select(['id_user', 'nombre', 'apellido', 'documento', 'perfil', 'id_nivel'])
                 ->orderBy('nombre')
                 ->get();
+
+            $periodo = $this->resolverPeriodoActivo();
+            $respuestasPeriodo = $periodo
+                ? EvaluacionRespuestaEvaluacion::where('id_evaluacion', $idEvaluacion)
+                    ->where('id_periodo', $periodo->id)
+                    ->get(['id', 'id_evaluado'])
+                    ->keyBy('id_evaluado')
+                : collect();
+
+            $data->each(function (Usuario $usuario) use ($respuestasPeriodo) {
+                $respuesta = $respuestasPeriodo->get($usuario->id_user);
+                $usuario->setAttribute('evaluado', (bool) $respuesta);
+                $usuario->setAttribute('id_respuesta', $respuesta?->id);
+            });
 
             return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
@@ -457,15 +574,21 @@ class EvaluacionesServices
 
     // ─── Respuestas ────────────────────────────────────────────
 
-    public function enviarRespuesta(int $idEvaluacion, int $idUser, array $datos): array
+    public function enviarRespuesta(int $idEvaluacion, Usuario $solicitante, array $datos): array
     {
         try {
-            return DB::transaction(function () use ($idEvaluacion, $idUser, $datos) {
+            $periodo = $this->resolverPeriodoActivo();
+            if (!$periodo) {
+                return ['error' => true, 'message' => 'No hay un periodo activo configurado', 'status' => 422];
+            }
+
+            $resultado = DB::transaction(function () use ($idEvaluacion, $solicitante, $datos, $periodo) {
                 $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
                 if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
                 if (!$evaluacion->activo) return ['error' => true, 'message' => 'La evaluación no está activa', 'status' => 422];
 
                 $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
+                $evaluado = null;
                 if ($perfilesEvaluables->isNotEmpty()) {
                     $evaluado = Usuario::find($datos['id_evaluado']);
                     if (!$evaluado) return ['error' => true, 'message' => 'Usuario a evaluar no encontrado', 'status' => 404];
@@ -474,49 +597,123 @@ class EvaluacionesServices
                         return ['error' => true, 'message' => 'El usuario seleccionado no tiene un perfil evaluable en esta evaluación', 'status' => 422];
                     }
 
+                    $evaluadoSinNivel = in_array((int) $evaluado->perfil, self::PERFILES_SIN_NIVEL, true);
+
                     $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
-                    if ($nivelesEvaluacion->isNotEmpty() && !$nivelesEvaluacion->contains((int) $evaluado->id_nivel)) {
+                    if ($nivelesEvaluacion->isNotEmpty() && !$evaluadoSinNivel && !$nivelesEvaluacion->contains((int) $evaluado->id_nivel)) {
                         return ['error' => true, 'message' => 'El usuario seleccionado no pertenece a un nivel evaluable en esta evaluación', 'status' => 422];
                     }
+
+                    if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR && !$evaluadoSinNivel) {
+                        if ((int) $evaluado->id_nivel !== (int) $solicitante->id_nivel) {
+                            return ['error' => true, 'message' => 'Solo puedes evaluar usuarios de tu propio nivel', 'status' => 422];
+                        }
+                    }
+                }
+
+                $yaEvaluado = EvaluacionRespuestaEvaluacion::where('id_evaluacion', $idEvaluacion)
+                    ->where('id_evaluado', $datos['id_evaluado'] ?? null)
+                    ->where('id_periodo', $periodo->id)
+                    ->exists();
+                if ($yaEvaluado) {
+                    return ['error' => true, 'message' => 'Ya se registró una evaluación a este usuario en el periodo actual', 'status' => 422];
                 }
 
                 $anonima = $datos['anonima'] ?? 0;
 
                 $respuestaEval = EvaluacionRespuestaEvaluacion::create([
                     'id_evaluacion' => $idEvaluacion,
-                    'id_user' => $anonima ? null : $idUser,
+                    'id_user' => $anonima ? null : $solicitante->id_user,
                     'id_evaluado' => $datos['id_evaluado'] ?? null,
-                    'id_nivel' => $datos['id_nivel'] ?? null,
+                    // Usuarios de perfiles sin nivel real (proveedores) traen id_nivel en
+                    // NULL/0 en `usuarios` — 0 no es un nivel válido y rompe la FK de esta
+                    // columna, por eso el `?:` (no `??`) descarta también el 0.
+                    'id_nivel' => $datos['id_nivel'] ?? ($evaluado?->id_nivel ?: null),
+                    'id_periodo' => $periodo->id,
                     'anonima' => $anonima,
                     'completada_en' => now(),
                 ]);
 
-                if (!empty($datos['respuestas'])) {
-                    foreach ($datos['respuestas'] as $respData) {
-                        $respuestaEval->respuestasPreguntas()->create([
-                            'id_pregunta' => $respData['id_pregunta'],
-                            'id_opcion' => $respData['id_opcion'] ?? null,
-                            'valor_texto' => $respData['valor_texto'] ?? null,
-                            'comentario' => $respData['comentario'] ?? null,
-                        ]);
-                    }
-                }
+                $this->guardarRespuestasPreguntas($respuestaEval, $datos['respuestas'] ?? []);
 
                 return ['error' => false, 'message' => 'Respuesta registrada', 'data' => $respuestaEval->fresh(['respuestasPreguntas.opcion'])];
             });
+
+            if (!$resultado['error'] && !empty($resultado['data'])) {
+                $this->enviarCorreoRespuesta($resultado['data']);
+            }
+
+            return $resultado;
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
     }
 
-    public function listarRespuestas(int $idEvaluacion, array $filtros): array
+    /** Reemplaza (delete + recreate) las respuestas por pregunta de una respuesta de evaluación. */
+    private function guardarRespuestasPreguntas(EvaluacionRespuestaEvaluacion $respuestaEval, array $respuestas): void
+    {
+        $respuestaEval->respuestasPreguntas()->delete();
+
+        foreach ($respuestas as $respData) {
+            $respuestaEval->respuestasPreguntas()->create([
+                'id_pregunta' => $respData['id_pregunta'],
+                'id_opcion' => $respData['id_opcion'] ?? null,
+                'valor_texto' => $respData['valor_texto'] ?? null,
+                'comentario' => $respData['comentario'] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * Genera el PDF de la respuesta y envía el correo con el resumen al evaluado. Se
+     * llama fuera de la transacción de guardado — un fallo de correo/PDF no debe hacer
+     * rollback de la respuesta ya guardada, solo queda en el log.
+     */
+    private function enviarCorreoRespuesta(EvaluacionRespuestaEvaluacion $respuestaEval): void
+    {
+        try {
+            $respuestaEval->loadMissing([
+                'evaluacion.servicio',
+                'evaluado',
+                'usuario',
+                'nivel',
+                'periodo.anioEscolar',
+                'respuestasPreguntas.pregunta.tipo',
+                'respuestasPreguntas.opcion',
+            ]);
+
+            $evaluado = $respuestaEval->evaluado;
+            if (!$evaluado || empty($evaluado->correo)) {
+                return;
+            }
+
+            $pdfBinario = app(EvaluacionRespuestaPdfService::class)->generate($respuestaEval);
+            $nombrePdf = 'evaluacion-' . $respuestaEval->id . '.pdf';
+
+            app(MailService::class)->send(
+                $evaluado->correo,
+                new EvaluacionRespuestaMail($respuestaEval, $pdfBinario, $nombrePdf)
+            );
+        } catch (\Throwable $e) {
+            Log::error('No se pudo enviar el correo de la evaluación de desempeño', [
+                'id_respuesta' => $respuestaEval->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    public function listarRespuestas(int $idEvaluacion, array $filtros, Usuario $solicitante): array
     {
         try {
             $evaluacion = Evaluacion::find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
 
-            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'respuestasPreguntas.opcion'])
+            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'periodo', 'respuestasPreguntas.opcion'])
                 ->where('id_evaluacion', $idEvaluacion);
+
+            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+                $query->where('id_user', $solicitante->id_user);
+            }
 
             if (isset($filtros['anonima'])) {
                 $query->where('anonima', $filtros['anonima']);
@@ -533,7 +730,7 @@ class EvaluacionesServices
         }
     }
 
-    public function obtenerRespuesta(int $idRespuesta): array
+    public function obtenerRespuesta(int $idRespuesta, Usuario $solicitante): array
     {
         try {
             $respuesta = EvaluacionRespuestaEvaluacion::with([
@@ -541,13 +738,103 @@ class EvaluacionesServices
                 'usuario',
                 'evaluado',
                 'nivel',
+                'periodo.anioEscolar',
                 'respuestasPreguntas.pregunta.tipo',
                 'respuestasPreguntas.opcion',
             ])->find($idRespuesta);
 
             if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
 
+            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR && (int) $respuesta->id_user !== (int) $solicitante->id_user) {
+                return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
+            }
+
             return ['error' => false, 'message' => 'ok', 'data' => $respuesta];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Editar las respuestas ya guardadas — solo quien la creó, o Super Admin. */
+    public function actualizarRespuesta(int $idRespuesta, Usuario $solicitante, array $datos): array
+    {
+        try {
+            return DB::transaction(function () use ($idRespuesta, $solicitante, $datos) {
+                $respuesta = EvaluacionRespuestaEvaluacion::find($idRespuesta);
+                if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
+
+                if (
+                    (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
+                    && (int) $respuesta->id_user !== (int) $solicitante->id_user
+                ) {
+                    return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
+                }
+
+                $this->guardarRespuestasPreguntas($respuesta, $datos['respuestas'] ?? []);
+
+                return ['error' => false, 'message' => 'Respuesta actualizada', 'data' => $respuesta->fresh(['respuestasPreguntas.opcion'])];
+            });
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Reenvía el correo con el PDF actual de la respuesta (regenerado desde el estado vigente). */
+    public function reenviarCorreo(int $idRespuesta, Usuario $solicitante): array
+    {
+        try {
+            $respuesta = EvaluacionRespuestaEvaluacion::find($idRespuesta);
+            if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
+
+            if (
+                (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
+                && (int) $respuesta->id_user !== (int) $solicitante->id_user
+            ) {
+                return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
+            }
+
+            $respuesta->loadMissing('evaluado');
+            if (!$respuesta->evaluado || empty($respuesta->evaluado->correo)) {
+                return ['error' => true, 'message' => 'El usuario evaluado no tiene un correo registrado', 'status' => 422];
+            }
+
+            $this->enviarCorreoRespuesta($respuesta);
+
+            return ['error' => false, 'message' => 'Correo reenviado'];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Binario del PDF de una respuesta, para descarga directa (no envía correo). */
+    public function generarPdf(int $idRespuesta, Usuario $solicitante): array
+    {
+        try {
+            $respuesta = EvaluacionRespuestaEvaluacion::with([
+                'evaluacion.servicio',
+                'evaluado',
+                'usuario',
+                'nivel',
+                'periodo.anioEscolar',
+                'respuestasPreguntas.pregunta.tipo',
+                'respuestasPreguntas.opcion',
+            ])->find($idRespuesta);
+
+            if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
+
+            if (
+                (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
+                && (int) $respuesta->id_user !== (int) $solicitante->id_user
+            ) {
+                return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
+            }
+
+            $pdfBinario = app(EvaluacionRespuestaPdfService::class)->generate($respuesta);
+
+            return ['error' => false, 'message' => 'ok', 'data' => [
+                'contenido' => $pdfBinario,
+                'nombre' => 'evaluacion-' . $respuesta->id . '.pdf',
+            ]];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
