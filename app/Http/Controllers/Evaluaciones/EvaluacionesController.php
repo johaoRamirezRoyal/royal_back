@@ -25,10 +25,8 @@ class EvaluacionesController extends Controller
     {
         $perfil = $request->user()->perfil;
 
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
+        if ($this->usuariosService->tieneAlgunPermiso($opciones, $perfil)['permiso'] ?? false) {
+            return null;
         }
 
         return $this->error('No tienes permiso para esta acción', 403);

@@ -134,7 +134,7 @@
             <div class="gold-line"></div>
 
             <div class="body">
-                <p class="greeting">Aviso automático de S.A.M.I.</p>
+                <p class="greeting">Aviso automático de OMNIA.</p>
 
                 <p class="intro">El estudiante <strong>{{ $nombreEstudiante }}</strong> (documento {{ $documento }}),
                     del grado {{ $grado }}, alcanzó el límite de llegadas tarde permitidas en el Periodo
@@ -144,14 +144,14 @@
                     tarde. Última llegada tarde registrada: {{ $fecha }} a las {{ $hora }}.</p>
 
                 <p class="note">Si el estudiante registra una nueva llegada tarde durante este mismo periodo, el
-                    sistema ya no permite registrarla — deberá gestionarse por fuera de S.A.M.I. según el
+                    sistema ya no permite registrarla — deberá gestionarse por fuera de OMNIA. según el
                     Reglamento Escolar.</p>
             </div>
 
             <div class="footer">
                 <div>
                     <p class="footer-name">Colegio Real Royal School</p>
-                    <p class="footer-sub">Notificación automática — S.A.M.I.</p>
+                    <p class="footer-sub">Notificación automática — OMNIA.</p>
                 </div>
                 <div class="footer-dot"></div>
             </div>

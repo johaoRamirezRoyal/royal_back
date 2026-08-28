@@ -37,7 +37,7 @@ class PasswordRestoreEmail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Recuperacion de contraseña | S.A.M.I',
+            subject: 'Recuperacion de contraseña | OMNIA',
         );
     }
 

@@ -213,6 +213,28 @@ class UsuariosServices
         }
     }
 
+    /**
+     * Igual que tienePermiso() pero verifica varias opciones (OR) en una sola
+     * consulta en vez de una por opción — usar cuando un endpoint acepta
+     * cualquiera de varias opciones válidas (patrón sinAcceso() de controllers).
+     */
+    public function tieneAlgunPermiso(array $opciones, $perfil): array
+    {
+        try {
+            $permiso = DB::table('cron_permisos as p')
+                ->join('cron_opciones as o', 'o.id', '=', 'p.id_opcion')
+                ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+                ->whereIn('p.id_opcion', $opciones)
+                ->where('p.id_perfil', $perfil)
+                ->where('p.activo', 1)
+                ->exists();
+
+            return ['permiso' => $permiso, 'error' => false];
+        } catch (QueryException $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     public function mostrarTodosUsuariosPaginado($perPage)
     {
         try {

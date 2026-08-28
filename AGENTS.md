@@ -1,4 +1,4 @@
-# AGENTS.md — Royal Backend (S.A.M.I.)
+# AGENTS.md — Royal Backend (OMNIA.)
 
 Laravel 12 REST API (PHP ^8.2) para gestión escolar. JWT via `tymon/jwt-auth`.
 

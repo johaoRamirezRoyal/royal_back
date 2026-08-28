@@ -57,6 +57,10 @@ class DocumentoController extends Controller
             abort(404);
         }
 
-        return $disk->response($ruta);
+        // `private` (no `public`): esta ruta va detrás de auth:api, no debe cachearse en
+        // proxies/CDNs compartidos, solo en el navegador del propio usuario. Fotos de
+        // carnet y demás archivos acá casi nunca cambian una vez subidos — evita que se
+        // vuelvan a descargar completas cada vez que se abre el mismo curso/roster.
+        return $disk->response($ruta, null, ['Cache-Control' => 'private, max-age=604800']);
     }
 }
