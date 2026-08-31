@@ -110,9 +110,17 @@ class EvaluacionesController extends Controller
 
         return $this->paginatedResponse(
             $this->evaluacionesServices->listar($request->only([
-                'id_servicio', 'activo', 's', 'per-page',
-            ]))
+                'id_servicio', 'activo', 's', 'per-page', 'con_respuestas',
+            ]), $request->user())
         );
+    }
+
+    // Catálogo de solo lectura (numero/fechas de periodo, año escolar) — sin gate: lo usan
+    // tanto las pantallas administrativas como el autoservicio "Mis resultados" para armar
+    // sus filtros de periodo/año escolar (mismo criterio que misResultados más abajo).
+    public function listarPeriodos(): JsonResponse
+    {
+        return $this->apiResponse($this->evaluacionesServices->listarPeriodos());
     }
 
     public function obtenerPorId(Request $request, int $id): JsonResponse
@@ -460,12 +468,12 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->reenviarCorreo($idRespuesta, $request->user()));
     }
 
+    // Sin gate por opción a nivel de controller: el propio evaluado (usuario común, sin
+    // 101/102/103) también debe poder ver el PDF de su propia evaluación — el acceso real
+    // se resuelve en EvaluacionesServices::puedeVerRespuesta (admin pleno, coordinador de su
+    // mismo nivel, o el evaluado consultando su propio resultado).
     public function descargarPdf(Request $request, int $idRespuesta)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
-            return $rechazo;
-        }
-
         $resultado = $this->evaluacionesServices->generarPdf($idRespuesta, $request->user());
 
         if ($resultado['error']) {
@@ -485,16 +493,26 @@ class EvaluacionesController extends Controller
         }
 
         return $this->paginatedResponse(
-            $this->evaluacionesServices->listarRespuestas($idEvaluacion, $request->only(['anonima', 'per-page']), $request->user())
+            $this->evaluacionesServices->listarRespuestas($idEvaluacion, $request->only([
+                'anonima', 'per-page', 's', 'id_periodo', 'id_anio_escolar', 'perfil', 'id_nivel',
+            ]), $request->user())
         );
     }
 
+    // Autoservicio: evaluaciones que el usuario autenticado recibió (es el evaluado). Sin
+    // gate por opción — cualquier usuario puede ver sus propios resultados (mismo criterio
+    // que otras rutas self-scoped del sistema, ver frontend CLAUDE.md).
+    public function misResultados(Request $request): JsonResponse
+    {
+        return $this->apiResponse(
+            $this->evaluacionesServices->misResultados($request->user(), $request->only(['id_periodo', 'id_anio_escolar']))
+        );
+    }
+
+    // Mismo criterio que descargarPdf: sin gate por opción, el evaluado también puede
+    // consultar su propia respuesta — ver EvaluacionesServices::puedeVerRespuesta.
     public function obtenerRespuesta(Request $request, int $idRespuesta): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
-            return $rechazo;
-        }
-
         return $this->apiResponse($this->evaluacionesServices->obtenerRespuesta($idRespuesta, $request->user()));
     }
 

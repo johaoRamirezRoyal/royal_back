@@ -62,4 +62,10 @@ class SolicitudInicial extends Model
     {
         return $this->hasOne(SolicitudVerificacionInicial::class, 'id_solicitud');
     }
+
+    /** La fila formalizada en `solicitudes`, si el coordinador ya aprobó (null si no). */
+    public function solicitudFinal()
+    {
+        return $this->hasOne(Solicitud::class, 'id_solicitud_inicial');
+    }
 }
