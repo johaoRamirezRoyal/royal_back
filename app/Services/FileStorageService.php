@@ -33,6 +33,17 @@ class FileStorageService
     }
 
     /**
+     * URL pública de un archivo ya guardado en el disco de uploads.
+     */
+    public function url(?string $nombre, ?string $disk = null): ?string {
+        if (!$nombre) {
+            return null;
+        }
+
+        return Storage::disk($this->resolveDisk($disk))->url($nombre);
+    }
+
+    /**
      * Eliminar archivo
      */
     public function eliminar(?string $ruta, ?string $disk = null): bool {

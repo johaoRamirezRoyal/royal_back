@@ -5,12 +5,12 @@ namespace App\Http\Controllers\ProcesoCompra;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProcesoCompra\ProveedorBancoRequest;
 use App\Http\Requests\ProcesoCompra\ProveedorContactoRequest;
+use App\Http\Requests\ProcesoCompra\ProveedorDocumentoRequest;
 use App\Http\Requests\ProcesoCompra\ProveedorRequest;
 use App\Services\ProcesoCompra\ProveedoresServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class ProveedoresController extends Controller
 {
@@ -28,6 +28,11 @@ class ProveedoresController extends Controller
         $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_PROVEEDORES, $request->user()->perfil)['permiso'] ?? false;
 
         return $tienePermiso ? null : $this->error('No tienes permiso para gestionar proveedores', 403);
+    }
+
+    private function estadoBinarioInvalido(mixed $activo): ?JsonResponse
+    {
+        return in_array($activo, [0, 1], true) ? null : $this->error('El estado debe ser 0 o 1', 422);
     }
 
     // GET /proveedores — lectura compartida (dropdown de solicitudes)
@@ -86,7 +91,7 @@ class ProveedoresController extends Controller
             return $rechazo;
         }
 
-        $estado = $request->input('estado', 'activo');
+        $estado = $request->input('estado');
 
         if (!in_array($estado, ['activo', 'inactivo'], true)) {
             return $this->error('El estado debe ser "activo" o "inactivo"', 422);
@@ -115,11 +120,9 @@ class ProveedoresController extends Controller
     // Lectura compartida: opción 61 (Proveedores) u 60 (Listado de solicitudes).
     public function listarCompras(Request $request, int $id)
     {
-        $perfil = $request->user()->perfil;
-        $tieneProveedores = $this->usuariosService->tienePermiso(self::OPCION_PROVEEDORES, $perfil)['permiso'] ?? false;
-        $tieneSolicitudes = $this->usuariosService->tienePermiso(60, $perfil)['permiso'] ?? false;
+        $tienePermiso = $this->usuariosService->tieneAlgunPermiso([self::OPCION_PROVEEDORES, 60], $request->user()->perfil)['permiso'] ?? false;
 
-        if (!$tieneProveedores && !$tieneSolicitudes) {
+        if (!$tienePermiso) {
             return $this->error('No tienes permiso para ver las compras del proveedor', 403);
         }
 
@@ -137,84 +140,32 @@ class ProveedoresController extends Controller
     }
 
     // POST /proveedores/{id}/documentos (multipart: archivo, tipo_documento, activo)
-    public function subirDocumento(Request $request, int $id)
+    public function subirDocumento(ProveedorDocumentoRequest $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request)) {
             return $rechazo;
         }
 
-        if (!$request->hasFile('archivo')) {
-            return $this->apiResponse([
-                'error'   => true,
-                'message' => 'Debe adjuntar el archivo del documento',
-                'data'    => [],
-            ]);
-        }
-
-        $tipoDocumento = $request->integer('tipo_documento');
-
-        if (!$tipoDocumento) {
-            return $this->apiResponse([
-                'error'   => true,
-                'message' => 'Debe indicar el tipo de documento',
-                'data'    => [],
-            ]);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'archivo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
-        ]);
-
-        if ($validator->fails()) {
-            return $this->apiResponse([
-                'error'   => true,
-                'message' => $validator->errors()->first(),
-                'data'    => [],
-            ]);
-        }
-
         return $this->apiResponse($this->proveedoresServices->subirDocumento(
             $id,
-            $tipoDocumento,
-            $request->has('activo') ? (int) $request->input('activo') : 1,
+            $request->integer('tipo_documento'),
+            $request->integer('activo', 1),
             $request->file('archivo'),
             $request->user()->id_user,
         ));
     }
 
     // PUT /proveedores/documentos/{docId} (multipart opcional)
-    public function actualizarDocumento(Request $request, int $docId)
+    public function actualizarDocumento(ProveedorDocumentoRequest $request, int $docId)
     {
         if ($rechazo = $this->sinAcceso($request)) {
             return $rechazo;
         }
 
-        $tipoDocumento = $request->integer('tipo_documento');
-
-        if (!$tipoDocumento) {
-            return $this->apiResponse([
-                'error'   => true,
-                'message' => 'Debe indicar el tipo de documento',
-                'data'    => [],
-            ]);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'archivo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
-        ]);
-
-        if ($validator->fails()) {
-            return $this->apiResponse([
-                'error'   => true,
-                'message' => $validator->errors()->first(),
-                'data'    => [],
-            ]);
-        }
-
         return $this->apiResponse($this->proveedoresServices->actualizarDocumento(
             $docId,
-            $tipoDocumento,
-            $request->has('activo') ? (int) $request->input('activo') : 1,
+            $request->integer('tipo_documento'),
+            $request->integer('activo', 1),
             $request->file('archivo'),
             $request->user()->id_user,
         ));
@@ -227,10 +178,8 @@ class ProveedoresController extends Controller
             return $rechazo;
         }
 
-        $activo = $request->input('activo');
-
-        if (!in_array($activo, [0, 1], true)) {
-            return $this->error('El estado debe ser 0 o 1', 422);
+        if ($rechazo = $this->estadoBinarioInvalido($activo = $request->input('activo'))) {
+            return $rechazo;
         }
 
         return $this->apiResponse($this->proveedoresServices->cambiarEstadoDocumento($docId, $activo, $request->user()->id_user));
@@ -291,10 +240,8 @@ class ProveedoresController extends Controller
             return $rechazo;
         }
 
-        $activo = $request->input('activo');
-
-        if (!in_array($activo, [0, 1], true)) {
-            return $this->error('El estado debe ser 0 o 1', 422);
+        if ($rechazo = $this->estadoBinarioInvalido($activo = $request->input('activo'))) {
+            return $rechazo;
         }
 
         return $this->apiResponse($this->proveedoresServices->cambiarEstadoContacto($contactoId, $activo, $request->user()->id_user));
@@ -355,10 +302,8 @@ class ProveedoresController extends Controller
             return $rechazo;
         }
 
-        $activo = $request->input('activo');
-
-        if (!in_array($activo, [0, 1], true)) {
-            return $this->error('El estado debe ser 0 o 1', 422);
+        if ($rechazo = $this->estadoBinarioInvalido($activo = $request->input('activo'))) {
+            return $rechazo;
         }
 
         return $this->apiResponse($this->proveedoresServices->cambiarEstadoBanco($bancoId, $activo, $request->user()->id_user));
