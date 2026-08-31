@@ -31,6 +31,10 @@ class EvaluacionesServices
     // App\Http\Middleware\SwitchActiveConnection::PERFIL_SUPER_ADMIN.
     private const PERFIL_SUPER_ADMIN = 1;
 
+    // Administrador general: mismo trato que Super Admin en el listado de
+    // configuración de evaluaciones (ve todos los niveles, sin restricción).
+    private const PERFIL_ADMIN = 2;
+
     // Perfiles cuyos usuarios no tienen un nivel institucional real (usuarios.id_nivel
     // queda en NULL/0 para todos ellos) — Proveedor (17) son empresas externas, no
     // personal asignado a un nivel académico/administrativo. Si una evaluación con uno
@@ -38,6 +42,35 @@ class EvaluacionesServices
     // nivel sin darse cuenta de que no aplica), el filtro de nivel se ignora para ellos
     // en vez de dejar la lista de evaluables vacía.
     private const PERFILES_SIN_NIVEL = [17];
+
+    /** Acceso administrativo pleno al módulo: ve/edita cualquier respuesta sin restricción de nivel/propiedad. */
+    private function esAdminEvaluaciones(Usuario $u): bool
+    {
+        return in_array((int) $u->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true);
+    }
+
+    /**
+     * Quién puede VER una respuesta ya guardada (detalle, PDF, reenviar correo): admin pleno,
+     * el coordinador de su mismo nivel (`id_nivel` de la respuesta, no necesariamente quien la
+     * creó), o el propio usuario evaluado consultando su resultado.
+     */
+    private function puedeVerRespuesta(Usuario $solicitante, EvaluacionRespuestaEvaluacion $respuesta): bool
+    {
+        if ($this->esAdminEvaluaciones($solicitante)) return true;
+
+        if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+            return (int) $respuesta->id_nivel === (int) $solicitante->id_nivel;
+        }
+
+        return (int) $respuesta->id_evaluado === (int) $solicitante->id_user;
+    }
+
+    /** Quién puede EDITAR una respuesta ya guardada: admin pleno, o quien la creó originalmente. */
+    private function puedeEditarRespuesta(Usuario $solicitante, EvaluacionRespuestaEvaluacion $respuesta): bool
+    {
+        return $this->esAdminEvaluaciones($solicitante)
+            || (int) $respuesta->id_user === (int) $solicitante->id_user;
+    }
 
     /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de PERFILES_SIN_NIVEL) + activos. */
     private function usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion)
@@ -140,11 +173,26 @@ class EvaluacionesServices
 
     // ─── Evaluaciones (CRUD + estructura completa) ───────────────
 
-    public function listar(array $filtros): array
+    /**
+     * Listado de evaluaciones para la pantalla de configuración. Fuera de Super Admin (1) y
+     * Administrador (2), cada usuario solo ve evaluaciones de su propio nivel (o sin nivel
+     * configurado, que aplican a todos) — mismo criterio de scoping que
+     * listarDisponiblesParaCoordinador, pero sin la excepción "las que él mismo creó" porque
+     * esta pantalla es de gestión, no de "evaluaciones que puedo responder".
+     */
+    public function listar(array $filtros, ?Usuario $solicitante = null): array
     {
         try {
             $query = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
                 ->withCount('respuestas');
+
+            if ($solicitante && !in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true)) {
+                $idNivel = $solicitante->id_nivel;
+                $query->where(function ($q) use ($idNivel) {
+                    $q->whereDoesntHave('niveles')
+                      ->orWhereHas('niveles', fn ($nq) => $nq->where('nivel.id', $idNivel));
+                });
+            }
 
             if (!empty($filtros['id_servicio'])) {
                 $idServicio = is_array($filtros['id_servicio']) ? $filtros['id_servicio'] : [$filtros['id_servicio']];
@@ -161,12 +209,32 @@ class EvaluacionesServices
                       ->orWhere('descripcion', 'like', "%{$busqueda}%");
                 });
             }
+            // Para el paso "elegí una evaluación" de la pantalla de Resultados: solo
+            // evaluaciones que ya tienen al menos una respuesta registrada.
+            if (!empty($filtros['con_respuestas'])) {
+                $query->having('respuestas_count', '>', 0);
+            }
 
             $query->orderBy('created_at', 'desc');
 
             $perPage = $filtros['per-page'] ?? 15;
             $data = $query->paginate($perPage);
 
+            return ['error' => false, 'message' => 'ok', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Catálogo de periodos institucionales (tabla `periodos`, con su año escolar) para los
+     * filtros de la pantalla de Resultados. Sin CRUD propio todavía (se marcan a mano), así
+     * que esto es solo lectura — ver comentario de `resolverPeriodoActivo`.
+     */
+    public function listarPeriodos(): array
+    {
+        try {
+            $data = Periodo::with('anioEscolar')->orderByDesc('id_anio')->orderByDesc('numero')->get();
             return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -702,17 +770,48 @@ class EvaluacionesServices
         }
     }
 
+    /**
+     * Listado de usuarios evaluados de una evaluación, para la pantalla de Resultados. El
+     * coordinador solo ve evaluados de su propio nivel (`id_nivel` de la respuesta); admin
+     * pleno (Super Admin/Administrador) puede además filtrar libremente por perfil/nivel.
+     */
     public function listarRespuestas(int $idEvaluacion, array $filtros, Usuario $solicitante): array
     {
         try {
             $evaluacion = Evaluacion::find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
 
-            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'periodo', 'respuestasPreguntas.opcion'])
+            $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'periodo.anioEscolar', 'respuestasPreguntas.opcion'])
                 ->where('id_evaluacion', $idEvaluacion);
 
             if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
-                $query->where('id_user', $solicitante->id_user);
+                $query->where('id_nivel', $solicitante->id_nivel);
+            } elseif (!empty($filtros['id_nivel'])) {
+                $query->where('id_nivel', $filtros['id_nivel']);
+            }
+
+            if (!empty($filtros['id_periodo'])) {
+                $query->where('id_periodo', $filtros['id_periodo']);
+            }
+
+            if (!empty($filtros['id_anio_escolar'])) {
+                $idAnio = $filtros['id_anio_escolar'];
+                $query->whereHas('periodo', fn ($q) => $q->where('id_anio', $idAnio));
+            }
+
+            if (!empty($filtros['perfil'])) {
+                $perfilBuscado = $filtros['perfil'];
+                $query->whereHas('evaluado', fn ($q) => $q->where('perfil', $perfilBuscado));
+            }
+
+            if (!empty($filtros['s'])) {
+                $busqueda = $filtros['s'];
+                $query->whereHas('evaluado', function ($q) use ($busqueda) {
+                    $q->where('nombre', 'like', "%{$busqueda}%")
+                      ->orWhere('apellido', 'like', "%{$busqueda}%")
+                      ->orWhere('documento', 'like', "%{$busqueda}%")
+                      ->orWhere('id_user', 'like', "%{$busqueda}%");
+                });
             }
 
             if (isset($filtros['anonima'])) {
@@ -723,6 +822,34 @@ class EvaluacionesServices
 
             $perPage = $filtros['per-page'] ?? 15;
             $data = $query->paginate($perPage);
+
+            return ['error' => false, 'message' => 'ok', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Evaluaciones recibidas por el propio usuario autenticado (donde es el evaluado), para
+     * el autoservicio "Mis resultados" — sin necesidad de opciones 101/102, cualquier usuario
+     * puede ver sus propios resultados. Filtrable por periodo/año escolar.
+     */
+    public function misResultados(Usuario $solicitante, array $filtros): array
+    {
+        try {
+            $query = EvaluacionRespuestaEvaluacion::with(['evaluacion.servicio', 'periodo.anioEscolar'])
+                ->where('id_evaluado', $solicitante->id_user);
+
+            if (!empty($filtros['id_periodo'])) {
+                $query->where('id_periodo', $filtros['id_periodo']);
+            }
+
+            if (!empty($filtros['id_anio_escolar'])) {
+                $idAnio = $filtros['id_anio_escolar'];
+                $query->whereHas('periodo', fn ($q) => $q->where('id_anio', $idAnio));
+            }
+
+            $data = $query->orderBy('created_at', 'desc')->get();
 
             return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
@@ -745,7 +872,7 @@ class EvaluacionesServices
 
             if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
 
-            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR && (int) $respuesta->id_user !== (int) $solicitante->id_user) {
+            if (!$this->puedeVerRespuesta($solicitante, $respuesta)) {
                 return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
             }
 
@@ -763,10 +890,7 @@ class EvaluacionesServices
                 $respuesta = EvaluacionRespuestaEvaluacion::find($idRespuesta);
                 if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
 
-                if (
-                    (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
-                    && (int) $respuesta->id_user !== (int) $solicitante->id_user
-                ) {
+                if (!$this->puedeEditarRespuesta($solicitante, $respuesta)) {
                     return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
                 }
 
@@ -786,10 +910,7 @@ class EvaluacionesServices
             $respuesta = EvaluacionRespuestaEvaluacion::find($idRespuesta);
             if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
 
-            if (
-                (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
-                && (int) $respuesta->id_user !== (int) $solicitante->id_user
-            ) {
+            if (!$this->puedeVerRespuesta($solicitante, $respuesta)) {
                 return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
             }
 
@@ -822,10 +943,7 @@ class EvaluacionesServices
 
             if (!$respuesta) return ['error' => true, 'message' => 'Respuesta no encontrada', 'status' => 404];
 
-            if (
-                (int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN
-                && (int) $respuesta->id_user !== (int) $solicitante->id_user
-            ) {
+            if (!$this->puedeVerRespuesta($solicitante, $respuesta)) {
                 return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
             }
 

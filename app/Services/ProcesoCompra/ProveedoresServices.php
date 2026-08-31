@@ -12,7 +12,7 @@ use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use Exception;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class ProveedoresServices
 {
@@ -57,7 +57,7 @@ class ProveedoresServices
                 return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
             }
 
-            $proveedor->documentos->each(fn ($doc) => $doc->url_documento = $this->urlDocumento($doc->nombre));
+            $proveedor->documentos->each(fn ($doc) => $doc->url_documento = $this->fileStorage->url($doc->nombre));
 
             return ['error' => false, 'message' => 'Proveedor encontrado', 'data' => $proveedor];
         } catch (Exception $e) {
@@ -68,21 +68,23 @@ class ProveedoresServices
     public function crear(array $usuarioData, array $proveedorData, int $idLog): array
     {
         try {
-            $usuario = Usuario::create([
-                ...$usuarioData,
-                'perfil' => self::PERFIL_PROVEEDOR,
-                'estado' => 'activo',
-                'fechareg' => now(),
-            ]);
+            $proveedor = DB::transaction(function () use ($usuarioData, $proveedorData, $idLog) {
+                $usuario = Usuario::create([
+                    ...$usuarioData,
+                    'perfil' => self::PERFIL_PROVEEDOR,
+                    'estado' => 'activo',
+                    'fechareg' => now(),
+                ]);
 
-            // La columna tiene default '0000-00-00' que MySQL strict rechaza si se omite.
-            $proveedorData['fecha_ingreso'] = $proveedorData['fecha_ingreso'] ?? null;
+                // La columna tiene default '0000-00-00' que MySQL strict rechaza si se omite.
+                $proveedorData['fecha_ingreso'] = $proveedorData['fecha_ingreso'] ?? null;
 
-            $proveedor = ProveedorDetalle::create([
-                ...$proveedorData,
-                'id_proveedor' => $usuario->id_user,
-                'id_log' => $idLog,
-            ]);
+                return ProveedorDetalle::create([
+                    ...$proveedorData,
+                    'id_proveedor' => $usuario->id_user,
+                    'id_log' => $idLog,
+                ]);
+            });
 
             return [
                 'error' => false,
@@ -103,12 +105,14 @@ class ProveedoresServices
                 return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
             }
 
-            $proveedor->update([...$proveedorData, 'id_log' => $idLog]);
+            DB::transaction(function () use ($proveedor, $usuarioData, $proveedorData, $idLog) {
+                $proveedor->update([...$proveedorData, 'id_log' => $idLog]);
 
-            if ($usuarioData && $proveedor->id_proveedor) {
-                $usuario = Usuario::find($proveedor->id_proveedor);
-                $usuario?->update($usuarioData);
-            }
+                if ($usuarioData && $proveedor->id_proveedor) {
+                    $usuario = Usuario::find($proveedor->id_proveedor);
+                    $usuario?->update($usuarioData);
+                }
+            });
 
             return [
                 'error' => false,
@@ -178,8 +182,8 @@ class ProveedoresServices
                 ->get();
 
             $compras->each(function ($compra) {
-                $compra->url_cotizacion = $this->urlArchivo($compra->cotizacion_doc);
-                $compra->url_factura = $this->urlArchivo($compra->verificacion?->factura_doc);
+                $compra->url_cotizacion = $this->fileStorage->url($compra->cotizacion_doc);
+                $compra->url_factura = $this->fileStorage->url($compra->verificacion?->factura_doc);
             });
 
             return ['error' => false, 'message' => 'Compras obtenidas correctamente', 'data' => $compras];
@@ -202,7 +206,7 @@ class ProveedoresServices
                 ->orderByDesc('id')
                 ->get();
 
-            $documentos->each(fn ($doc) => $doc->url_documento = $this->urlDocumento($doc->nombre));
+            $documentos->each(fn ($doc) => $doc->url_documento = $this->fileStorage->url($doc->nombre));
 
             return ['error' => false, 'message' => 'Documentos obtenidos correctamente', 'data' => $documentos];
         } catch (Exception $e) {
@@ -513,21 +517,4 @@ class ProveedoresServices
         }
     }
 
-    private function urlDocumento(?string $nombre): ?string
-    {
-        if (!$nombre) {
-            return null;
-        }
-
-        return Storage::disk(config('filesystems.uploads_disk', 'public'))->url($nombre);
-    }
-
-    private function urlArchivo(?string $nombre): ?string
-    {
-        if (!$nombre) {
-            return null;
-        }
-
-        return Storage::disk(config('filesystems.uploads_disk', 'public'))->url($nombre);
-    }
 }
