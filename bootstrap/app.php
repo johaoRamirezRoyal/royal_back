@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\Authenticate;
+use App\Http\Middleware\EnsureInstitucionSession;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth' => Authenticate::class,
             'system' => ValidateSystem::class,
+            'institucion.session' => EnsureInstitucionSession::class,
             'hikvision.device' => RestrictToHikvisionDevices::class,
             'admin.access' => RestrictToAdminEmails::class,
         ]);

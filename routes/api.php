@@ -99,6 +99,10 @@ Route::group(['prefix' => 'admissions'], function () {
     require __DIR__.'/api/admissions.php';
 });
 
+Route::group(['prefix' => 'institucion'], function () {
+    require __DIR__.'/api/institucion.php';
+});
+
 // Ruta protegida de la pagina de admisiones
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     // ADMISIONES
@@ -224,6 +228,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // ENFERMERÍA
     Route::prefix('/enfermeria')->group(function () {
         require __DIR__ . '/api/enfermeria.php';
+    });
+
+    // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la
+    // autenticación NIT de las propias instituciones)
+    Route::prefix('/instituciones-admin')->group(function () {
+        require __DIR__ . '/api/instituciones-admin.php';
     });
 
     // MODULOS (métricas de módulos más visitados — Home)
