@@ -106,11 +106,11 @@ class CartaRecomendacionPdfService
         $this->drawCamposEncabezado($pdf, $en, $datos, $nombreInstitucion);
 
         $pdf->Ln(8);
-        $this->drawPregunta($pdf, '1.', $en ? 'How long ago do you know the student?' : '¿Cuánto tiempo hace que conoce al estudiante?', $en ? '' : ($datos['tiempo_conoce'] ?? ''));
-        // El formato en inglés no pregunta "hace cuánto lo conoce" como campo propio — se omite ese dato ahí, igual que en el PDF original.
-        if ($en) {
-            $pdf->Ln(4);
-        }
+        // Pregunta 1 existe igual en ambos idiomas del PDF original (CARTA RECOMENDACION
+        // COORD PSICOL ENG.pdf trae literalmente "1. How long ago do you know the
+        // student?") — antes se forzaba en blanco para EN por error.
+        $this->drawPregunta($pdf, '1.', $en ? 'How long ago do you know the student?' : '¿Cuánto tiempo hace que conoce al estudiante?', $datos['tiempo_conoce'] ?? '');
+        $pdf->Ln(4);
         $this->drawPregunta($pdf, '2.', $en ? "Which, do you consider, are the student's strengths?" : '¿Cuáles considera son las fortalezas del estudiante?', $datos['fortalezas'] ?? '');
         $pdf->Ln(4);
         $this->drawPregunta($pdf, '3.', $en ? "Which, do you consider, are the student's weaknesses?" : '¿Cuáles considera son las debilidades del estudiante?', $datos['debilidades'] ?? '');
@@ -127,7 +127,10 @@ class CartaRecomendacionPdfService
             $idioma
         );
 
-        $pdf->Ln(10);
+        // "Información de los padres" arranca en una página nueva junto con todo lo que le
+        // sigue (comentario adicional + datos de quien diligencia) — a pedido explícito, no
+        // se deja que la tabla se reparta a la mitad entre las dos secciones.
+        $pdf->AddPage();
         $this->drawTablaRespuestas(
             $pdf,
             $en ? 'INFORMATION ABOUT PARENTS' : 'INFORMACIÓN DE LOS PADRES',
@@ -145,7 +148,7 @@ class CartaRecomendacionPdfService
             ? 'Please, include any additional information you may consider necessary for a detailed admission evaluation of the student above mentioned, as a candidate to be admitted to the Royal School.'
             : 'Favor incluir cualquier comentario adicional que considere pueda servirnos para hacer una evaluación minuciosa del estudiante como candidato para admisión a nuestro Colegio.', 0, 'L');
         $pdf->Ln(3);
-        $pdf->MultiCell(self::CONTENT_W, 12, ($datos['comentario_adicional'] ?? '') !== '' ? $datos['comentario_adicional'] : '—', 0, 'L');
+        $pdf->MultiCell(self::CONTENT_W, 12, ($datos['comentario_adicional'] ?? '') !== '' ? $datos['comentario_adicional'] : '-', 0, 'L');
 
         $pdf->Ln(14);
         $this->drawFirmante($pdf, $en, $datos['firmante'] ?? [], $nombreInstitucion);
@@ -165,16 +168,11 @@ class CartaRecomendacionPdfService
         $pdf->SetFillColorArray(self::GRAY_LIGHT);
         $pdf->Polygon([595.28, 0, 595.28, $headerH, 370, $headerH, 470, 0], 'F');
 
+        // Logotipo blanco (escudo + wordmark en una sola imagen, fondo ya recortado a
+        // transparente) — pensado para fondos oscuros como este encabezado navy.
         if (is_file($this->logoPath)) {
-            $pdf->Image($this->logoPath, self::MARGIN, 18, 64, 64, 'PNG');
+            $pdf->Image($this->logoPath, self::MARGIN, 18, 164.6, 64, 'PNG');
         }
-
-        $pdf->SetTextColorArray([255, 255, 255]);
-        $pdf->SetFont('helvetica', 'B', 15);
-        $pdf->SetXY(self::MARGIN + 75, 30);
-        $pdf->Cell(200, 18, 'COLEGIO REAL', 0, 2, 'L');
-        $pdf->SetX(self::MARGIN + 75);
-        $pdf->Cell(200, 18, 'ROYAL SCHOOL', 0, 0, 'L');
 
         $pdf->SetFont('helvetica', '', 7.5);
         $pdf->SetTextColorArray(self::NAVY);
@@ -232,7 +230,7 @@ class CartaRecomendacionPdfService
         $pdf->Cell($labelW, 12, $label, 0, 0, 'L');
 
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->Cell($width - $labelW, 12, $valor !== '' ? $valor : '', 'B', 0, 'L');
+        $pdf->Cell($width - $labelW, 12, $valor !== '' ? $valor : '-', 'B', 0, 'L');
         $pdf->SetXY($x, $y + 12);
     }
 
@@ -246,11 +244,9 @@ class CartaRecomendacionPdfService
         $pdf->SetXY(self::MARGIN + 20, $y);
         $pdf->MultiCell(self::CONTENT_W - 20, 12, $label, 0, 'L');
 
-        if ($valor !== '') {
-            $pdf->SetFont('helvetica', '', 9.5);
-            $pdf->SetX(self::MARGIN + 20);
-            $pdf->MultiCell(self::CONTENT_W - 20, 12, $valor, 'B', 'L');
-        }
+        $pdf->SetFont('helvetica', '', 9.5);
+        $pdf->SetX(self::MARGIN + 20);
+        $pdf->MultiCell(self::CONTENT_W - 20, 12, $valor !== '' ? $valor : '-', 'B', 'L');
     }
 
     /** Columnas: pregunta | SI | NO | COMENTARIOS. */
@@ -406,10 +402,12 @@ class CartaRecomendacionPdfService
 
     private function drawFirmante(TCPDF $pdf, bool $en, array $firmante, string $nombreInstitucion): void
     {
+        $labelFirma = $en ? 'Signature:' : 'Firma:';
+
         $campos = $en
             ? [
                 ['Name:', $firmante['nombre'] ?? ''],
-                ['Signature:', ''],
+                [$labelFirma, ''],
                 ['Position:', $firmante['cargo'] ?? ''],
                 ['School:', $nombreInstitucion],
                 ['Telephone:', $firmante['telefono'] ?? ''],
@@ -418,7 +416,7 @@ class CartaRecomendacionPdfService
             ]
             : [
                 ['Nombre:', $firmante['nombre'] ?? ''],
-                ['Firma:', ''],
+                [$labelFirma, ''],
                 ['Cargo:', $firmante['cargo'] ?? ''],
                 ['Teléfono / Celular:', $firmante['telefono'] ?? ''],
                 ['Correo electrónico:', $firmante['correo'] ?? ''],
@@ -427,14 +425,78 @@ class CartaRecomendacionPdfService
 
         $labelW = 120.0;
         foreach ($campos as [$label, $valor]) {
+            if ($label === $labelFirma) {
+                $this->drawFilaFirma($pdf, $label, $labelW, (string) ($firmante['firma'] ?? ''));
+                continue;
+            }
+
             $this->ensureSpacio($pdf, 16);
             $y = $pdf->GetY();
             $pdf->SetFont('helvetica', '', 9.5);
             $pdf->SetXY(self::MARGIN, $y);
             $pdf->Cell($labelW, 14, $label, 0, 0, 'L');
-            $pdf->Cell(self::CONTENT_W - $labelW, 14, $valor, 'B', 0, 'L');
+            $pdf->Cell(self::CONTENT_W - $labelW, 14, $valor !== '' ? $valor : '-', 'B', 0, 'L');
             $pdf->SetXY(self::MARGIN, $y + 16);
         }
+    }
+
+    /** Dibuja la fila "Firma:" — si la institución subió una imagen de la firma (data URL
+     * base64, ver FirmanteFields.parts.tsx en el frontend) la incrusta sobre la línea; si
+     * no, deja la línea en blanco como el resto de campos. */
+    private function drawFilaFirma(TCPDF $pdf, string $label, float $labelW, string $firmaDataUrl): void
+    {
+        $firma = $this->decodeFirmaTemp($firmaDataUrl);
+        $rowH = 16.0;
+        $imgW = 0.0;
+        $imgH = 0.0;
+
+        if ($firma) {
+            $tamano = @getimagesize($firma['path']);
+            if ($tamano && $tamano[0] > 0 && $tamano[1] > 0) {
+                $maxW = 150.0;
+                $maxH = 36.0;
+                $escala = min($maxW / $tamano[0], $maxH / $tamano[1], 1.0);
+                $imgW = $tamano[0] * $escala;
+                $imgH = $tamano[1] * $escala;
+                $rowH = max($rowH, $imgH + 4);
+            }
+        }
+
+        $this->ensureSpacio($pdf, $rowH);
+        $y = $pdf->GetY();
+
+        $pdf->SetFont('helvetica', '', 9.5);
+        $pdf->SetXY(self::MARGIN, $y);
+        $pdf->Cell($labelW, $rowH, $label, 0, 0, 'L');
+
+        if ($firma && $imgH > 0) {
+            $pdf->Image($firma['path'], self::MARGIN + $labelW, $y, $imgW, $imgH, $firma['type']);
+            $pdf->Line(self::MARGIN + $labelW, $y + $rowH, self::RIGHT_X, $y + $rowH);
+            @unlink($firma['path']);
+        } else {
+            $pdf->Cell(self::CONTENT_W - $labelW, $rowH, '', 'B', 0, 'L');
+        }
+
+        $pdf->SetXY(self::MARGIN, $y + $rowH);
+    }
+
+    /** @return array{path: string, type: string}|null */
+    private function decodeFirmaTemp(string $dataUrl): ?array
+    {
+        if (! preg_match('#^data:image/(png|jpe?g);base64,(.+)$#i', $dataUrl, $m)) {
+            return null;
+        }
+
+        $tipo = strtolower($m[1]) === 'jpg' ? 'jpeg' : strtolower($m[1]);
+        $binario = base64_decode($m[2], true);
+        if ($binario === false || $binario === '') {
+            return null;
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'firma') . '.' . $tipo;
+        file_put_contents($path, $binario);
+
+        return ['path' => $path, 'type' => strtoupper($tipo)];
     }
 
     private function drawFooter(TCPDF $pdf): void
@@ -500,7 +562,9 @@ class CartaRecomendacionPdfService
         $pdf->Ln(10);
         $this->drawTablaRespuestas($pdf, 'INFORMACIÓN DEL ESTUDIANTE', 'SI', 'NO', 'COMENTARIOS', self::FILAS_ESTUDIANTE, $datos['estudiante'] ?? [], 'es');
 
-        $pdf->Ln(10);
+        // Igual que en Coordinador/Psicólogo: "Información de los padres" y todo lo que
+        // le sigue arrancan juntos en una página nueva.
+        $pdf->AddPage();
         $this->drawTablaRespuestas($pdf, 'INFORMACIÓN DE LOS PADRES', 'SI', 'NO', 'COMENTARIOS', self::FILAS_PADRES, $datos['padres'] ?? [], 'es');
 
         $pdf->Ln(14);
@@ -520,7 +584,7 @@ class CartaRecomendacionPdfService
         $pdf->SetFont('helvetica', '', 9.5);
         $pdf->MultiCell(self::CONTENT_W, 12, 'Favor incluir comentario adicional que considere importante para hacer una evaluación detallada del estudiante, como candidato para admisión al Colegio Real Royal School.', 0, 'L');
         $pdf->Ln(3);
-        $pdf->MultiCell(self::CONTENT_W, 12, ($datos['comentario_adicional'] ?? '') !== '' ? $datos['comentario_adicional'] : '—', 0, 'L');
+        $pdf->MultiCell(self::CONTENT_W, 12, ($datos['comentario_adicional'] ?? '') !== '' ? $datos['comentario_adicional'] : '-', 0, 'L');
 
         $pdf->Ln(14);
         $this->drawFirmante($pdf, false, $datos['firmante'] ?? [], $nombreInstitucion);
@@ -545,7 +609,7 @@ class CartaRecomendacionPdfService
         $mesLabelW = $pdf->GetStringWidth('Mes') + 6;
         $pdf->Cell($mesLabelW, 12, 'Mes', 0, 0, 'L');
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->Cell(100, 12, $pyl['fecha_ingreso_mes'] ?? '', 'B', 0, 'L');
+        $pdf->Cell(100, 12, ($pyl['fecha_ingreso_mes'] ?? '') !== '' ? $pyl['fecha_ingreso_mes'] : '-', 'B', 0, 'L');
 
         $x2 = $x + $mesLabelW + 100 + 20;
         $pdf->SetFont('helvetica', 'B', 9.5);
@@ -553,7 +617,7 @@ class CartaRecomendacionPdfService
         $anioLabelW = $pdf->GetStringWidth('Año') + 6;
         $pdf->Cell($anioLabelW, 12, 'Año', 0, 0, 'L');
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->Cell(self::RIGHT_X - ($x2 + $anioLabelW), 12, $pyl['fecha_ingreso_anio'] ?? '', 'B', 0, 'L');
+        $pdf->Cell(self::RIGHT_X - ($x2 + $anioLabelW), 12, ($pyl['fecha_ingreso_anio'] ?? '') !== '' ? $pyl['fecha_ingreso_anio'] : '-', 'B', 0, 'L');
 
         $pdf->SetXY(self::MARGIN, $y + 12);
     }
@@ -590,7 +654,7 @@ class CartaRecomendacionPdfService
         $gaLabelW = $pdf->GetStringWidth($gaLabel) + 6;
         $pdf->Cell($gaLabelW, 12, $gaLabel, 0, 0, 'L');
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->Cell(self::RIGHT_X - ($x + $gaLabelW), 12, $gradoActual, 'B', 0, 'L');
+        $pdf->Cell(self::RIGHT_X - ($x + $gaLabelW), 12, $gradoActual !== '' ? $gradoActual : '-', 'B', 0, 'L');
 
         $pdf->SetXY(self::MARGIN, $y + 12);
     }
@@ -636,7 +700,7 @@ class CartaRecomendacionPdfService
         $aeW = $pdf->GetStringWidth($aeLabel) + 6;
         $pdf->Cell($aeW, 12, $aeLabel, 0, 0, 'L');
         $pdf->SetFont('helvetica', '', 9.5);
-        $pdf->Cell(self::RIGHT_X - ($x + $aeW), 12, $anio, 'B', 0, 'L');
+        $pdf->Cell(self::RIGHT_X - ($x + $aeW), 12, $anio !== '' ? $anio : '-', 'B', 0, 'L');
 
         $pdf->SetXY(self::MARGIN, $y + 12);
     }

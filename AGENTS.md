@@ -666,6 +666,167 @@ pantalla aún.
   compatibilidad con código viejo, pero solo `tipo` viene poblado en
   respuestas reales del API.
 
+## Instituciones (jardines asociados — `/api/institucion` público + `/api/instituciones-admin`)
+
+Portal de login para **jardines infantiles asociados** (no son `usuarios` — no tienen
+perfil ni nivel) que diligencian una carta de recomendación digital para sus egresados
+que aplican a admisión. Dos controllers: `InstitucionController` (público, autenticación
+propia por NIT) e `InstitucionAdminController` (gestión desde el módulo admin general,
+`auth:api`+`system:general` normal).
+
+### Sesión propia — deliberadamente NO usa JWT/`usuarios`
+
+`EnsureInstitucionSession` (alias `institucion.session` en `bootstrap/app.php`) es un
+middleware aparte del guard `auth:api` — una institución no es un `Authenticatable`.
+Mismo patrón de token opaco en caché que ya usa `AdmissionsController` para el acudiente
+(`verificacion_{token}`/`register_session_{token}`):
+
+- `institucion_session_{token}` en `Cache`, con `expires_at` guardado dentro del propio
+  valor (no solo como TTL del store) para poder devolvérselo al frontend —
+  `Cache::get()` no expone el TTL restante.
+- TTL: **12h** normalmente, **15 minutos en producción**
+  (`app()->environment('production')` en `InstitucionController::otorgarSesion()`).
+- El middleware revisa `activo` en **cada request**, no solo al hacer login — si un
+  admin deshabilita la institución mientras ya está logueada, la sesión cacheada deja de
+  servir de inmediato (`Cache::forget` + 401), no espera a que expire sola.
+- Cookie httpOnly vía el mismo trait `HasAuthCookie` que usa el resto de la app.
+
+### Login por NIT — flujo y seguridad
+
+`POST /api/institucion/login` (`id_institucion`, `nit`) — el NIT se guarda **hasheado**
+(`Hash::make`, columna `instituciones.nit`, `$hidden` en el modelo) y actúa como
+contraseña; nunca se expone en texto plano ni en `GET /instituciones` (listado público
+para el selector, solo `id`+`nombre`). Rate limit `institucion_login_{ip}_{id}` (5/10min,
+`Cache::increment`+TTL). Mensaje de error genérico ("Institución o NIT incorrectos") sin
+importar cuál de los dos falló, para no permitir enumeración.
+
+El NIT correcto **por sí solo otorga la sesión** — verificar el correo no es requisito de
+acceso (se pide después, ver abajo) — **excepto** cuando la institución ya tiene correo
+verificado y el login llega desde una IP distinta a `ultima_ip` (columna, se actualiza en
+cada `otorgarSesion()`): ahí se exige un código de un solo uso enviado a ese correo antes
+de otorgar la sesión (`iniciarVerificacionLogin`/`POST verify-login-otp`, mismo patrón de
+dos niveles de caché de 15min/5min que el resto del flujo). Misma IP de siempre no vuelve
+a pedir nada.
+
+### Registro/verificación del correo (una sola vez)
+
+`POST request-email-otp` / `verify-email-otp` (autenticadas, `institucion.session`) — solo
+aplica al **primer** registro: si ya hay `email_verified_at`, se rechaza con 409 (cambiar
+un correo ya verificado no está cubierto). Correo único reforzado dos veces: constraint
+`unique` en BD + chequeo explícito contra otras instituciones antes de reenviar OTP. Al
+verificar, si el dominio del correo coincide con `ConfiguracionInstituciones::dominio_play_and_learn`
+(configurable), pre-asigna `tipo_documento = 'play_and_learn'` — no reemplaza el selector
+manual del admin, solo lo pre-completa (mismo helper `tipoDocumentoParaCorreo()` se
+reutiliza en `InstitucionAdminController::store()`/`update()` cuando el admin fija el
+correo directamente sin pasar por OTP).
+
+### Bloqueo por correo sin registrar (`Institucion::estaBloqueada()`)
+
+`primer_ingreso_at` arranca en el **primer login exitoso** (no en la creación del
+registro). `fechaBloqueo()` = `primer_ingreso_at + ConfiguracionInstituciones::dias_plazo_bloqueo_correo`
+(configurable desde el admin, default 7). Pasado ese plazo sin `email_verified_at`,
+`estaBloqueada()` devuelve `true` y `guardarCartaRecomendacion` rechaza con 403 — el resto
+de la sesión (login, ver documentos ya enviados) sigue funcionando, solo el envío de
+cartas nuevas queda bloqueado hasta registrar el correo. Si un admin **desactiva** una
+institución que aún no verificó correo, `primer_ingreso_at` se resetea a `null`
+(`InstitucionAdminController::cambiarEstado`) — el tiempo deshabilitada no cuenta en su
+contra; el plazo vuelve a arrancar en el próximo login tras reactivarla.
+
+### `configuracion_instituciones` — fila única (id=1), sin `.env`
+
+Reemplaza lo que antes vivía en `config/instituciones.php`/`.env`
+(`dias_plazo_bloqueo_correo`, `correo_notificacion`) para que sea editable desde el admin
+sin tocar el servidor — mismo patrón de "tabla dedicada de una fila" que
+`configuracion_calendario`/`configuracion_asistencia`/`configuracion_llegadas_tarde` (no
+hay tabla genérica key-value en este repo). `ConfiguracionInstituciones::actual()` =
+`findOrFail(1)`. `correosNotificacion()` parsea el campo separado por comas (mismo
+formato que `config/adminmanagement.php` legado). Columna `dominio_play_and_learn`
+(default sembrado `playandlearn.edu.co`) se agregó después, ver
+`tipoDocumentoParaCorreo()` arriba.
+
+### Carta de recomendación — dos formatos según `instituciones.tipo_documento`
+
+`Institucion::TIPOS_DOCUMENTO = ['coordinador_psicologo', 'play_and_learn']`. La carta se
+guarda como JSON libre en `cartas_recomendacion.datos` (no columnas sueltas — el
+formulario tiene demasiadas preguntas SI/NO+comentarios anidadas) más `idioma` (`es`/`en`,
+Play and Learn solo existe en español). `CartaRecomendacionRequest` solo valida la forma
+general (`datos: required|array`) + `datos.nombre_estudiante` como mínimo indispensable,
+no cada pregunta — el formato oficial no exige responder todas.
+
+`guardarCartaRecomendacion()` guarda primero, luego llama `generarSubirYNotificar()`
+**fuera** de cualquier transacción (mismo patrón que
+`EvaluacionesServices::enviarCorreoRespuesta`): un fallo generando el PDF, subiéndolo a
+Cloudinary o enviando el correo solo se loguea (`Log::error`), nunca hace rollback de la
+carta ya guardada.
+
+### `CartaRecomendacionPdfService` — recreación fiel de los PDFs originales
+
+Recrea el diseño real de los formatos originales en
+`src/assets/Admissions/LettersOfRecommendation` del frontend (no un reporte genérico):
+`CARTA RECOMENDACION COORD-PISCOL ESP.pdf`/`COORD PSICOL ENG.pdf` para Coordinador/
+Psicólogo (ES/EN, mismo helper `drawEncabezado()`/`drawTablaRespuestas()`/etc. parametrizado
+por idioma) y `CARTA RECOMENDACION P AND L.pdf` para Play and Learn (comparte los mismos
+helpers de tabla/footer/firmante, con sus propios campos de encabezado). Coordenadas en
+`pt` (no `mm`), logo blanco (escudo+wordmark, fondo ya recortado a transparente) en
+`storage/app/public/images/instituciones/logo.png`. `checkPageBreak` de TCPDF es
+`protected` — no se puede llamar desde fuera de la clase, de ahí el wrapper propio
+`ensureSpacio()` que replica el chequeo para las filas dibujadas con coordenadas
+manuales (tablas, campos de firmante). "Información de los padres" fuerza un salto de
+página (`$pdf->AddPage()` explícito) para no repartirse a la mitad entre esa tabla y lo
+que le sigue. Todo campo sin diligenciar se muestra como `"-"` (no en blanco) — incluye
+un helper `drawFilaFirma()` que decodifica una firma subida como data URL base64
+(`firmante.firma`, PNG/JPG) y la incrusta como imagen real sobre la línea de firma; sin
+firma, queda la línea en blanco como el resto del formato en papel.
+
+### Endpoints
+
+**Públicos** (`routes/api/institucion.php`, prefijo `/api/institucion`):
+
+| Método | Ruta | Auth | Uso |
+|--------|------|------|-----|
+| `GET` | `/instituciones` | — | Selector del login: solo `id`+`nombre`, activas |
+| `POST` | `/login` | — | NIT (ver flujo arriba) |
+| `POST` | `/resend-login-otp` | — | Reenvía el código de verificación por IP nueva |
+| `POST` | `/verify-login-otp` | — | Verifica el código, otorga sesión |
+| `GET` | `/check` | `institucion.session` | Estado de sesión para el frontend (institución, tipo_documento, bloqueo, `session_expires_at`) |
+| `POST` | `/logout` | `institucion.session` | Olvida la sesión cacheada |
+| `POST` | `/request-email-otp` | `institucion.session` | Primer registro de correo |
+| `POST` | `/verify-email-otp` | `institucion.session` | Verifica y guarda el correo |
+| `POST` | `/carta-recomendacion` | `institucion.session` | Envía la carta (genera PDF, sube, notifica) |
+| `GET` | `/carta-recomendacion` | `institucion.session` | Historial propio de cartas enviadas |
+
+**Admin** (`routes/api/instituciones-admin.php`, prefijo `/api/instituciones-admin`, dentro
+de `auth:api`+`system:general`; `/configuracion` está registrado **antes** del wildcard
+`/{id}`, si no se interpretaría "configuracion" como un id):
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/` | 104, 105 | Listado con estado derivado (`bloqueada`, `bloqueo_fecha`, etc.) |
+| `POST` | `/` | 104 | Crear (NIT hasheado; correo opcional, si se da queda verificado de una vez) |
+| `PUT` | `/{id}` | 104 | Actualizar (todos los campos `sometimes` — nunca pisa con NULL lo no enviado) |
+| `PUT` | `/estado` | 104 | Activar/desactivar (resetea `primer_ingreso_at` si aplica, ver arriba) |
+| `GET` | `/{id}/cartas` | 104, 105 | Documentos subidos por una institución |
+| `GET` | `/configuracion` | 104 | Días de plazo, correos de notificación, dominio Play and Learn |
+| `PUT` | `/configuracion` | 104 | Actualiza esos tres campos |
+
+### Permisos — 104 (gestión completa) vs 105 (solo lectura)
+
+Dos opciones separadas en `cron_opciones`, patrón (b) (`sinAcceso()` por método, no
+constructor único — ver "Sistema de permisos" arriba):
+
+| Opción | Otorgada a | Alcance |
+|--------|-----------|---------|
+| 104 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos |
+| 105 "Ver Instituciones y Documentos" | Admisiones (perfil 9) | Solo `index()`/`cartas()` — sin crear/editar/activar-desactivar/configuración |
+
+104 se sembró primero con Super Admin **y** Admisiones
+(`2026_08_31_110000_seed_opcion_gestion_instituciones`), y luego se le retiró el acceso a
+Admisiones (`2026_08_31_130000_restrict_opcion_gestion_instituciones_a_super_admin`) a
+pedido explícito de que el módulo completo fuera exclusivo de Super Admin. 105 se agregó
+después (`2026_08_31_190000_seed_opcion_ver_instituciones_documentos`) para devolverle a
+Admisiones acceso de solo lectura sin reabrir la gestión completa — `index()` y `cartas()`
+aceptan el OR de ambas opciones, el resto de métodos solo acepta 104.
+
 ## Convenciones de código
 
 ### Naming de directorios

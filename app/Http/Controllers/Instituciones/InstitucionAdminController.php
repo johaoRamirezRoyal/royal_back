@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Hash;
 class InstitucionAdminController extends Controller
 {
     private const OPCION_GESTION = 104;
+    // Solo lectura — listado de instituciones y sus documentos, sin crear/editar/
+    // activar-desactivar ni tocar la configuración (ver index()/cartas() vs. el resto de
+    // métodos de este controller). Otorgada al perfil Admisiones (9), ver
+    // 2026_08_31_190000_seed_opcion_ver_instituciones_documentos.
+    private const OPCION_LECTURA = 105;
 
     public function __construct(private UsuariosServices $usuariosService)
     {
@@ -22,14 +27,18 @@ class InstitucionAdminController extends Controller
 
     /**
      * Chequeo server-side del permiso, no solo ocultar la ruta en el frontend — ver
-     * docs/sistema-permisos.md.
+     * docs/sistema-permisos.md. Por defecto exige la opción de gestión completa; los
+     * métodos de solo lectura (index/cartas) pasan también OPCION_LECTURA para aceptar
+     * cualquiera de las dos (OR).
      */
-    private function sinAcceso(Request $request): ?JsonResponse
+    private function sinAcceso(Request $request, ?array $opciones = null): ?JsonResponse
     {
         $perfil = $request->user()->perfil;
 
-        if ($this->usuariosService->tienePermiso(self::OPCION_GESTION, $perfil)['permiso'] ?? false) {
-            return null;
+        foreach ($opciones ?? [self::OPCION_GESTION] as $opcion) {
+            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
+                return null;
+            }
         }
 
         return $this->error('No tienes permiso para esta acción', 403);
@@ -53,7 +62,7 @@ class InstitucionAdminController extends Controller
 
     public function index(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, [self::OPCION_GESTION, self::OPCION_LECTURA])) {
             return $rechazo;
         }
 
@@ -183,7 +192,7 @@ class InstitucionAdminController extends Controller
      */
     public function cartas(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, [self::OPCION_GESTION, self::OPCION_LECTURA])) {
             return $rechazo;
         }
 
