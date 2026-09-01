@@ -18,6 +18,7 @@ use App\Mail\EvaluacionRespuestaMail;
 use App\Pdf\Evaluaciones\EvaluacionRespuestaPdfService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class EvaluacionesServices
 {
@@ -70,6 +71,40 @@ class EvaluacionesServices
     {
         return $this->esAdminEvaluaciones($solicitante)
             || (int) $respuesta->id_user === (int) $solicitante->id_user;
+    }
+
+    /** Adjunta `foto_url` (pública, del disco de uploads) a partir de la relación `fotoPerfil` ya cargada. */
+    private function adjuntarFotoUrl(?Usuario $usuario): void
+    {
+        if (!$usuario || !$usuario->relationLoaded('fotoPerfil')) return;
+
+        $foto = $usuario->fotoPerfil->first();
+        $usuario->setAttribute(
+            'foto_url',
+            $foto ? Storage::disk(config('filesystems.uploads_disk', 'public'))->url($foto->nombre_foto) : null
+        );
+    }
+
+    /** Info básica + foto de un usuario evaluable/evaluado, para el encabezado de las pantallas de Realizar/Resultados. */
+    public function obtenerUsuarioEvaluado(int $idUsuario): array
+    {
+        try {
+            $usuario = Usuario::with([
+                'perfilRelacion:id_perfil,nombre',
+                'nivelRelacion:id,nombre',
+                'fotoPerfil' => fn ($q) => $q->activas()->latest('id'),
+            ])
+                ->select(['id_user', 'nombre', 'apellido', 'documento', 'correo', 'perfil', 'id_nivel'])
+                ->find($idUsuario);
+
+            if (!$usuario) return ['error' => true, 'message' => 'Usuario no encontrado', 'status' => 404];
+
+            $this->adjuntarFotoUrl($usuario);
+
+            return ['error' => false, 'message' => 'ok', 'data' => $usuario];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
     }
 
     /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de PERFILES_SIN_NIVEL) + activos. */
@@ -862,8 +897,11 @@ class EvaluacionesServices
         try {
             $respuesta = EvaluacionRespuestaEvaluacion::with([
                 'evaluacion.servicio',
+                'evaluacion.secciones.preguntas.opciones',
                 'usuario',
-                'evaluado',
+                'evaluado.perfilRelacion:id_perfil,nombre',
+                'evaluado.nivelRelacion:id,nombre',
+                'evaluado.fotoPerfil' => fn ($q) => $q->activas()->latest('id'),
                 'nivel',
                 'periodo.anioEscolar',
                 'respuestasPreguntas.pregunta.tipo',
@@ -875,6 +913,9 @@ class EvaluacionesServices
             if (!$this->puedeVerRespuesta($solicitante, $respuesta)) {
                 return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
             }
+
+            $this->adjuntarFotoUrl($respuesta->evaluado);
+            $respuesta->setAttribute('resultado', $this->calcularPuntajeRespuesta($respuesta));
 
             return ['error' => false, 'message' => 'ok', 'data' => $respuesta];
         } catch (\Exception $e) {
@@ -959,6 +1000,54 @@ class EvaluacionesServices
     }
 
     // ─── Resultados / Puntaje ──────────────────────────────────
+
+    /**
+     * Puntaje ponderado de UNA respuesta individual (no el agregado de todos los
+     * evaluados de `calcularResultados`) — usado para la tarjeta de promedio en la
+     * pantalla "Ver evaluación" de un evaluado puntual. Misma fórmula por sección
+     * (puntaje obtenido / puntaje máximo posible * 100, ponderado por
+     * `seccion.porcentaje`) pero contra las respuestas de una sola fila de
+     * `evaluaciones_respuestas_evaluacion`.
+     */
+    private function calcularPuntajeRespuesta(EvaluacionRespuestaEvaluacion $respuesta): array
+    {
+        $sumaGeneral = 0;
+
+        $porSeccion = ($respuesta->evaluacion->secciones ?? collect())->map(function ($seccion) use ($respuesta, &$sumaGeneral) {
+            $preguntasIds = $seccion->preguntas->pluck('id')->toArray();
+
+            $puntajeObtenido = 0;
+            foreach ($respuesta->respuestasPreguntas as $rp) {
+                if (in_array($rp->id_pregunta, $preguntasIds) && $rp->opcion) {
+                    $puntajeObtenido += $rp->opcion->valor;
+                }
+            }
+
+            $maxPosible = 0;
+            foreach ($seccion->preguntas as $pregunta) {
+                if ($pregunta->opciones->isNotEmpty()) {
+                    $maxPosible += $pregunta->opciones->max('valor');
+                }
+            }
+
+            $promedioSeccion = $maxPosible > 0 ? round(($puntajeObtenido / $maxPosible) * 100, 2) : 0;
+            $sumaGeneral += $promedioSeccion * ($seccion->porcentaje / 100);
+
+            return [
+                'id_seccion' => $seccion->id,
+                'titulo' => $seccion->titulo,
+                'porcentaje_ponderacion' => $seccion->porcentaje,
+                'puntaje_obtenido' => round($puntajeObtenido, 2),
+                'puntaje_maximo' => round($maxPosible, 2),
+                'promedio' => $promedioSeccion,
+            ];
+        })->values();
+
+        return [
+            'promedio_general' => round($sumaGeneral, 2),
+            'por_seccion' => $porSeccion,
+        ];
+    }
 
     public function calcularResultados(int $idEvaluacion): array
     {

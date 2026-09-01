@@ -227,6 +227,16 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->obtenerEvaluables($id, $request->user()));
     }
 
+    /** Info básica + foto de un usuario evaluable/evaluado, para el encabezado de Realizar/Resultados. */
+    public function obtenerUsuarioEvaluado(Request $request, int $idUsuario): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN, self::OPCION_RESPONDER, self::OPCION_VER)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->obtenerUsuarioEvaluado($idUsuario));
+    }
+
     public function misEvaluaciones(Request $request): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_RESPONDER, self::OPCION_ADMIN)) {
