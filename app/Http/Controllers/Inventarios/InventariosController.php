@@ -339,6 +339,42 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    public function reportesPendientesVistoBueno(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->reportesPendientesVistoBueno(
+            $request->input('search'),
+            $request->input('per_page')
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function vistoBuenoReporte(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->vistoBuenoReporte($id);
+
+        return $this->apiResponse($resultado);
+    }
+
+    public function vistoBuenoGeneral(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->vistoBuenoGeneral();
+
+        return $this->apiResponse($resultado);
+    }
+
     public function programarMantenimientoPreventivo(Request $request)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {

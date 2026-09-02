@@ -362,6 +362,60 @@ que la cantidad a ingresar no supere lo solicitado:
   `precio`, `fecha_compra`.
 - Respuesta: `articulos_creados` + `resumen[]` con `solicitado`/`ingresado`/`restante`.
 
+### Reportes de inventario y Visto Bueno (`InventariosController`, `InventarioServices`, `routes/api/inventario.php`)
+
+Reemplaza al módulo legacy `vistas/modulos/reportes` (`index.php` + `visto.php` +
+`excelInventario.php`). Un `inventario` puede tener varias filas en `reportes`: la
+original (`id_reporte IS NULL`, `estado` 2=reportado o 6=mantenimiento) y, cuando se
+resuelve, una fila "solución" (`estado=3`) con `id_reporte` apuntando a la original.
+
+- **`GET /inventario/reportes`** (`mostrarReportesDeInventario`) — listado de reportes
+  pendientes o solucionados (`estado_solucion=pendiente|solucionado`), join
+  `inventario` + `reportes`. En la rama "pendientes", cuando el caller manda `estado`
+  (p. ej. `/inventario/reportado` con `estado=2`, o Mantenimiento con `estado=6`), se
+  exige `iv.estado = estado` — replica el filtro exacto del legacy
+  (`ModeloReportes::mostrarReportesModel`: `iv.estado=2 AND rp.estado=2`). Sin `estado`
+  explícito (la pestaña general "Reportes") se usa el filtro amplio
+  `iv.estado NOT IN (4,5)`, para no ocultar mantenimientos. **Antes de este ajuste** el
+  filtro amplio se aplicaba siempre, y colaba inventario cuyo `iv.estado` ya había
+  cambiado por otra vía pero conservaba un reporte sin resolver — si el listado de
+  "Reportado"/"Mantenimiento" vuelve a mostrar filas que no debería, revisar primero que
+  el frontend siga mandando `estado` en `externalFilters`. El parámetro `sin_solucion`
+  se acepta pero no se usa en la query (queda muerto, la rama pendientes/solucionados ya
+  la decide `estado_solucion`).
+- **`PUT /inventario/reportes/solucionar`** (`solucionarReporteInventario`) — crea la
+  fila "solución" (`estado=3`). Guarda el texto de la solución en **`descripcion`**, no
+  en `observacion` (`observacion` queda `NULL` en la fila de solución). **Quirk de
+  datos migrados**: el legacy (`ModeloReportes::solucionarReporteModel`) guardaba ese
+  mismo texto en `observacion` — los reportes solucionados antes de la migración a
+  Laravel tienen el texto en `observacion`, no en `descripcion`. Cualquier vista que
+  muestre "la solución" de un reporte debe leer `descripcion` con fallback a
+  `observacion` (ver `VistoBueno/index.tsx` en el frontend).
+- **Visto bueno** (equivalente a `visto.php`) — tres endpoints nuevos:
+  - `GET /inventario/reportes/visto-bueno` (`reportesPendientesVistoBueno`) — filas
+    `reportes` con `estado=3 AND visto_bueno=0`, con `inventario.area` y `usuario`
+    eager-loaded. Acepta `search` (contra `descripcion`/`codigo`/`marca` del inventario)
+    y `per_page`.
+  - `PUT /inventario/reportes/{id}/visto-bueno` (`vistoBuenoReporte`) — marca una fila.
+  - `PUT /inventario/reportes/visto-bueno` (`vistoBuenoGeneral`) — marca todas las
+    `estado=3 AND visto_bueno=0` (el legacy también tocaba `reportes_zonas`, tabla de
+    otro módulo no migrado aún — si aparece, replicar ahí también).
+
+### Orden de los listados de inventario
+
+Ninguno de los dos listados tenía `ORDER BY` alfabético por defecto — ambos se
+corrigieron para ordenar por `inventario.descripcion` cuando no hay un sort explícito:
+
+- **`GET /inventario/listado`** (`obtenerListadoInventario`, usado por
+  `InventarioPorEstado` — Liberado/Descontinuado/Mis Inventarios) — sin `sort=usuario`
+  ni `sort=cantidad`, ahora aplica `orderBy('inventario.descripcion', $dir)`. Antes no
+  tenía ningún `ORDER BY` (orden indefinido de la BD).
+- **`GET /inventario/listado-consolidado`** (`obtenerListadoConsolidado`, modo
+  agrupado — el que realmente usa la página `/inventario/listado`) — antes ordenaba por
+  `MAX(inventario.id) DESC` (lo más reciente primero); ahora por
+  `inventario.descripcion` ascendente. Es el endpoint que importa si "el listado
+  principal de inventario" vuelve a reportarse como desordenado.
+
 ## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
 
 Módulo de **evaluaciones de calidad de servicios / desempeño** (Gestor de
@@ -391,7 +445,7 @@ añadida en 2026-08 al construir el flujo de "realizar evaluaciones".
 | `evaluaciones_opciones_pregunta` | `EvaluacionOpcionPregunta` | `id` | no | no |
 | `evaluaciones_nivel` | `EvaluacionNivel` (pivote `Evaluacion`↔`Nivel`) | `id` | no | no |
 | `evaluaciones_perfil` | `EvaluacionPerfil` (pivote `Evaluacion`↔`Perfil`, perfiles evaluables) | `id` | no | sí — `2026_08_26_100000_create_evaluaciones_perfil_table` |
-| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | columnas `id_evaluado`/`id_periodo` añadidas vía migración (ver abajo) |
+| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | columnas `id_evaluado`/`id_periodo`/`id_anio_escolar` añadidas vía migración (ver abajo) |
 | `evaluaciones_respuestas_pregunta` | `EvaluacionRespuestaPregunta` | `id` | sí | no |
 
 `evaluaciones_respuestas_evaluacion` empezó sin `id_evaluado`/`id_periodo`
@@ -401,16 +455,53 @@ añadida en 2026-08 al construir el flujo de "realizar evaluaciones".
 es el mecanismo real que impide evaluar dos veces al mismo usuario en el mismo
 periodo — MySQL permite múltiples `NULL` en un unique, así que no rompe filas
 viejas sin periodo. `id_periodo` referencia `periodos` (periodo institucional
-general, **no** `periodo_academico` — eso es solo para lo académico).
+general, **no** `periodo_academico` — eso es solo para lo académico). Por eso
+la acción "Evaluar" del listado (`GET /{id}/evaluables`) queda **siempre**
+visible en el frontend, incluso para un usuario ya evaluado en el periodo
+activo — el evaluador puede registrar una evaluación de un periodo distinto
+y el unique lo permite (solo bloquea repetir el mismo evaluado+periodo). Por
+la misma razón, `evaluado`/`id_respuesta` en `obtenerEvaluables` apuntan a la
+respuesta **más reciente** (`MAX(completada_en)`) del usuario para esa
+evaluación, sin filtrar por periodo — así "Editar respuesta" en el frontend
+siempre trae la última evaluación realizada para editarla, sea cual sea el
+periodo en que se hizo, en vez de exigir que sea la del periodo activo.
 
-### Periodo institucional activo
+`id_anio_escolar` (migración
+`2026_09_02_090000_add_id_anio_escolar_to_evaluaciones_respuestas_evaluacion_table`,
+FK a `anio_escolar`) se agregó porque el año que trae `periodo.id_anio` es un
+dato del catálogo legacy `periodos` y puede no coincidir con el año escolar
+realmente vigente (`anio_escolar.activo=1`) al momento de la respuesta —
+`enviarRespuesta` lo resuelve aparte vía `AnioEscolarServices::obtenerUltimoAnioEscolar()`
+(la misma fuente que el indicador "Año escolar activo" en `Responder.tsx`) y
+lo guarda en la fila, en vez de derivarlo de `periodo.anioEscolar`. Cualquier
+lugar que muestre "el año de una evaluación ya guardada" (ej. la columna
+"Última evaluación" de `Detalle.tsx`) debe leer `respuesta.anioEscolar`
+(relación `EvaluacionRespuestaEvaluacion::anioEscolar()`), no
+`respuesta.periodo.anioEscolar`.
 
-`EvaluacionesServices::resolverPeriodoActivo()` lee `periodos` filtrando
-`en_curso = 1` (columna explícita, no derivada de `periodos.activo` ni del año
-escolar activo — puede haber varios "activos" a la vez, `en_curso` es la única
-fuente confiable de "cuál es el vigente ahora"). No hay CRUD para `periodos`
-todavía, se marca a mano en BD. Sin periodo activo, `enviarRespuesta` rechaza
-con 422 ("No hay un periodo activo configurado").
+### Periodo institucional (catálogo y activo — lógica en `PeriodoServices`)
+
+`periodos` es dato del dominio año académico, no de Evaluaciones — ver "A qué
+archivo pertenece una funcionalidad" en Convenciones de código. La lógica vive
+en `App\Services\AnioEscolar\PeriodoServices`:
+- `listar(array $filtros)` — catálogo completo (con `anioEscolar`), filtrable
+  por `activo`. Expuesto en `GET /evaluaciones/periodos`.
+- `resolverActivo(): ?Periodo` — lee `periodos` filtrando `en_curso = 1`
+  (columna explícita, no derivada de `periodos.activo` ni del año escolar
+  activo — puede haber varios "activos" a la vez, `en_curso` es la única
+  fuente confiable de "cuál es el vigente ahora"). No hay CRUD para `periodos`
+  todavía, se marca a mano en BD. Consumido por `EvaluacionesServices`
+  (inyectado) para el conteo de evaluados/evaluables de un periodo.
+- `periodoActivo(): array` — mismo `resolverActivo()` en shape de respuesta
+  API. Expuesto en `GET /evaluaciones/periodo-activo`.
+
+Desde 2026-09, el periodo de una respuesta ya **no** se resuelve
+automáticamente al enviarla — `enviarRespuesta` exige `id_periodo` explícito
+en el payload (lo elige el evaluador, ver frontend `Responder.tsx`) y rechaza
+con 422 si no es un periodo activo válido ("Selecciona un periodo activo
+válido"). `resolverActivo()`/`periodoActivo()` siguen existiendo para el
+conteo de evaluados/evaluables por periodo activo, no para fijar un valor por
+defecto en el formulario de respuesta.
 
 ### Permisos (reales, ya otorgados)
 
@@ -489,9 +580,10 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `PUT` | `/{id}` | 101 | Actualizar campos + niveles/perfiles (solo si la key existe en el payload) |
 | `DELETE` | `/{id}` | 101 | Soft delete (`Evaluacion` usa `SoftDeletes`) |
 | `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
-| `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` respecto al periodo activo |
+| `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` de la evaluación **más reciente** a ese usuario para ESTA evaluación (cualquier periodo, no solo el activo — así "Editar respuesta"/"Reenviar correo"/"Descargar PDF" en el frontend siempre operan sobre la última, y "Evaluar" queda libre para registrar una nueva en un periodo distinto), + `ultima_evaluacion` (mismo `id`, con periodo/año escolar, para la columna informativa del listado) |
 | `GET` | `/mis-evaluaciones` | 103, 101 | Evaluaciones activas disponibles para el solicitante (ver `listarDisponiblesParaCoordinador`), con `evaluables_count`/`evaluados_count` del periodo activo |
-| `GET` | `/periodo-activo` | 102, 101, 103 | Periodo institucional `en_curso=1` (con año escolar) |
+| `GET` | `/periodos` | sin gate | Catálogo de periodos institucionales (con año escolar), filtrable por `activo`; lógica en `PeriodoServices::listar()` (ver "Periodo institucional" arriba) |
+| `GET` | `/periodo-activo` | 102, 101, 103 | Periodo institucional `en_curso=1` (con año escolar); lógica en `PeriodoServices::periodoActivo()` |
 
 #### Secciones
 
@@ -521,7 +613,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `id_evaluado`, opcional `anonima`/`id_nivel`, `respuestas[]` con `id_pregunta` + (`id_opcion` y/o `valor_texto`) + `comentario` opcional. Valida perfil/nivel evaluable, scoping de Coordinador, y que no exista ya una respuesta para ese evaluado+periodo. Dispara el correo con PDF al terminar (fuera de la transacción). |
+| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `id_evaluado`, `id_periodo` (**requerido**, debe ser un periodo activo — lo elige el evaluador, no hay valor por defecto, ver "Periodo institucional" arriba), opcional `anonima`/`id_nivel`, `respuestas[]` con `id_pregunta` + (`id_opcion` y/o `valor_texto`) + `comentario` opcional. Valida perfil/nivel evaluable, scoping de Coordinador, y que no exista ya una respuesta para ese evaluado+periodo. Dispara el correo con PDF al terminar (fuera de la transacción). |
 | `PUT` | `/respuestas/{idRespuesta}` | 103, 101 | Reemplaza (`delete`+`create`) las `evaluaciones_respuestas_pregunta` de una respuesta ya guardada — solo el creador o Super Admin |
 | `GET` | `/{idEvaluacion}/respuestas` | 102, 101, 103 | Listado paginado; filtro `anonima`, `per-page`; Coordinador solo ve las suyas |
 | `GET` | `/respuestas/{idRespuesta}` | 102, 101, 103 | Detalle de respuesta con evaluacion→servicio, evaluado, nivel, periodo→año escolar, preguntas→tipo→opciones |
@@ -612,6 +704,167 @@ pantalla aún.
   compatibilidad con código viejo, pero solo `tipo` viene poblado en
   respuestas reales del API.
 
+## Instituciones (jardines asociados — `/api/institucion` público + `/api/instituciones-admin`)
+
+Portal de login para **jardines infantiles asociados** (no son `usuarios` — no tienen
+perfil ni nivel) que diligencian una carta de recomendación digital para sus egresados
+que aplican a admisión. Dos controllers: `InstitucionController` (público, autenticación
+propia por NIT) e `InstitucionAdminController` (gestión desde el módulo admin general,
+`auth:api`+`system:general` normal).
+
+### Sesión propia — deliberadamente NO usa JWT/`usuarios`
+
+`EnsureInstitucionSession` (alias `institucion.session` en `bootstrap/app.php`) es un
+middleware aparte del guard `auth:api` — una institución no es un `Authenticatable`.
+Mismo patrón de token opaco en caché que ya usa `AdmissionsController` para el acudiente
+(`verificacion_{token}`/`register_session_{token}`):
+
+- `institucion_session_{token}` en `Cache`, con `expires_at` guardado dentro del propio
+  valor (no solo como TTL del store) para poder devolvérselo al frontend —
+  `Cache::get()` no expone el TTL restante.
+- TTL: **12h** normalmente, **15 minutos en producción**
+  (`app()->environment('production')` en `InstitucionController::otorgarSesion()`).
+- El middleware revisa `activo` en **cada request**, no solo al hacer login — si un
+  admin deshabilita la institución mientras ya está logueada, la sesión cacheada deja de
+  servir de inmediato (`Cache::forget` + 401), no espera a que expire sola.
+- Cookie httpOnly vía el mismo trait `HasAuthCookie` que usa el resto de la app.
+
+### Login por NIT — flujo y seguridad
+
+`POST /api/institucion/login` (`id_institucion`, `nit`) — el NIT se guarda **hasheado**
+(`Hash::make`, columna `instituciones.nit`, `$hidden` en el modelo) y actúa como
+contraseña; nunca se expone en texto plano ni en `GET /instituciones` (listado público
+para el selector, solo `id`+`nombre`). Rate limit `institucion_login_{ip}_{id}` (5/10min,
+`Cache::increment`+TTL). Mensaje de error genérico ("Institución o NIT incorrectos") sin
+importar cuál de los dos falló, para no permitir enumeración.
+
+El NIT correcto **por sí solo otorga la sesión** — verificar el correo no es requisito de
+acceso (se pide después, ver abajo) — **excepto** cuando la institución ya tiene correo
+verificado y el login llega desde una IP distinta a `ultima_ip` (columna, se actualiza en
+cada `otorgarSesion()`): ahí se exige un código de un solo uso enviado a ese correo antes
+de otorgar la sesión (`iniciarVerificacionLogin`/`POST verify-login-otp`, mismo patrón de
+dos niveles de caché de 15min/5min que el resto del flujo). Misma IP de siempre no vuelve
+a pedir nada.
+
+### Registro/verificación del correo (una sola vez)
+
+`POST request-email-otp` / `verify-email-otp` (autenticadas, `institucion.session`) — solo
+aplica al **primer** registro: si ya hay `email_verified_at`, se rechaza con 409 (cambiar
+un correo ya verificado no está cubierto). Correo único reforzado dos veces: constraint
+`unique` en BD + chequeo explícito contra otras instituciones antes de reenviar OTP. Al
+verificar, si el dominio del correo coincide con `ConfiguracionInstituciones::dominio_play_and_learn`
+(configurable), pre-asigna `tipo_documento = 'play_and_learn'` — no reemplaza el selector
+manual del admin, solo lo pre-completa (mismo helper `tipoDocumentoParaCorreo()` se
+reutiliza en `InstitucionAdminController::store()`/`update()` cuando el admin fija el
+correo directamente sin pasar por OTP).
+
+### Bloqueo por correo sin registrar (`Institucion::estaBloqueada()`)
+
+`primer_ingreso_at` arranca en el **primer login exitoso** (no en la creación del
+registro). `fechaBloqueo()` = `primer_ingreso_at + ConfiguracionInstituciones::dias_plazo_bloqueo_correo`
+(configurable desde el admin, default 7). Pasado ese plazo sin `email_verified_at`,
+`estaBloqueada()` devuelve `true` y `guardarCartaRecomendacion` rechaza con 403 — el resto
+de la sesión (login, ver documentos ya enviados) sigue funcionando, solo el envío de
+cartas nuevas queda bloqueado hasta registrar el correo. Si un admin **desactiva** una
+institución que aún no verificó correo, `primer_ingreso_at` se resetea a `null`
+(`InstitucionAdminController::cambiarEstado`) — el tiempo deshabilitada no cuenta en su
+contra; el plazo vuelve a arrancar en el próximo login tras reactivarla.
+
+### `configuracion_instituciones` — fila única (id=1), sin `.env`
+
+Reemplaza lo que antes vivía en `config/instituciones.php`/`.env`
+(`dias_plazo_bloqueo_correo`, `correo_notificacion`) para que sea editable desde el admin
+sin tocar el servidor — mismo patrón de "tabla dedicada de una fila" que
+`configuracion_calendario`/`configuracion_asistencia`/`configuracion_llegadas_tarde` (no
+hay tabla genérica key-value en este repo). `ConfiguracionInstituciones::actual()` =
+`findOrFail(1)`. `correosNotificacion()` parsea el campo separado por comas (mismo
+formato que `config/adminmanagement.php` legado). Columna `dominio_play_and_learn`
+(default sembrado `playandlearn.edu.co`) se agregó después, ver
+`tipoDocumentoParaCorreo()` arriba.
+
+### Carta de recomendación — dos formatos según `instituciones.tipo_documento`
+
+`Institucion::TIPOS_DOCUMENTO = ['coordinador_psicologo', 'play_and_learn']`. La carta se
+guarda como JSON libre en `cartas_recomendacion.datos` (no columnas sueltas — el
+formulario tiene demasiadas preguntas SI/NO+comentarios anidadas) más `idioma` (`es`/`en`,
+Play and Learn solo existe en español). `CartaRecomendacionRequest` solo valida la forma
+general (`datos: required|array`) + `datos.nombre_estudiante` como mínimo indispensable,
+no cada pregunta — el formato oficial no exige responder todas.
+
+`guardarCartaRecomendacion()` guarda primero, luego llama `generarSubirYNotificar()`
+**fuera** de cualquier transacción (mismo patrón que
+`EvaluacionesServices::enviarCorreoRespuesta`): un fallo generando el PDF, subiéndolo a
+Cloudinary o enviando el correo solo se loguea (`Log::error`), nunca hace rollback de la
+carta ya guardada.
+
+### `CartaRecomendacionPdfService` — recreación fiel de los PDFs originales
+
+Recrea el diseño real de los formatos originales en
+`src/assets/Admissions/LettersOfRecommendation` del frontend (no un reporte genérico):
+`CARTA RECOMENDACION COORD-PISCOL ESP.pdf`/`COORD PSICOL ENG.pdf` para Coordinador/
+Psicólogo (ES/EN, mismo helper `drawEncabezado()`/`drawTablaRespuestas()`/etc. parametrizado
+por idioma) y `CARTA RECOMENDACION P AND L.pdf` para Play and Learn (comparte los mismos
+helpers de tabla/footer/firmante, con sus propios campos de encabezado). Coordenadas en
+`pt` (no `mm`), logo blanco (escudo+wordmark, fondo ya recortado a transparente) en
+`storage/app/public/images/instituciones/logo.png`. `checkPageBreak` de TCPDF es
+`protected` — no se puede llamar desde fuera de la clase, de ahí el wrapper propio
+`ensureSpacio()` que replica el chequeo para las filas dibujadas con coordenadas
+manuales (tablas, campos de firmante). "Información de los padres" fuerza un salto de
+página (`$pdf->AddPage()` explícito) para no repartirse a la mitad entre esa tabla y lo
+que le sigue. Todo campo sin diligenciar se muestra como `"-"` (no en blanco) — incluye
+un helper `drawFilaFirma()` que decodifica una firma subida como data URL base64
+(`firmante.firma`, PNG/JPG) y la incrusta como imagen real sobre la línea de firma; sin
+firma, queda la línea en blanco como el resto del formato en papel.
+
+### Endpoints
+
+**Públicos** (`routes/api/institucion.php`, prefijo `/api/institucion`):
+
+| Método | Ruta | Auth | Uso |
+|--------|------|------|-----|
+| `GET` | `/instituciones` | — | Selector del login: solo `id`+`nombre`, activas |
+| `POST` | `/login` | — | NIT (ver flujo arriba) |
+| `POST` | `/resend-login-otp` | — | Reenvía el código de verificación por IP nueva |
+| `POST` | `/verify-login-otp` | — | Verifica el código, otorga sesión |
+| `GET` | `/check` | `institucion.session` | Estado de sesión para el frontend (institución, tipo_documento, bloqueo, `session_expires_at`) |
+| `POST` | `/logout` | `institucion.session` | Olvida la sesión cacheada |
+| `POST` | `/request-email-otp` | `institucion.session` | Primer registro de correo |
+| `POST` | `/verify-email-otp` | `institucion.session` | Verifica y guarda el correo |
+| `POST` | `/carta-recomendacion` | `institucion.session` | Envía la carta (genera PDF, sube, notifica) |
+| `GET` | `/carta-recomendacion` | `institucion.session` | Historial propio de cartas enviadas |
+
+**Admin** (`routes/api/instituciones-admin.php`, prefijo `/api/instituciones-admin`, dentro
+de `auth:api`+`system:general`; `/configuracion` está registrado **antes** del wildcard
+`/{id}`, si no se interpretaría "configuracion" como un id):
+
+| Método | Ruta | Gate | Uso |
+|--------|------|------|-----|
+| `GET` | `/` | 104, 105 | Listado con estado derivado (`bloqueada`, `bloqueo_fecha`, etc.) |
+| `POST` | `/` | 104 | Crear (NIT hasheado; correo opcional, si se da queda verificado de una vez) |
+| `PUT` | `/{id}` | 104 | Actualizar (todos los campos `sometimes` — nunca pisa con NULL lo no enviado) |
+| `PUT` | `/estado` | 104 | Activar/desactivar (resetea `primer_ingreso_at` si aplica, ver arriba) |
+| `GET` | `/{id}/cartas` | 104, 105 | Documentos subidos por una institución |
+| `GET` | `/configuracion` | 104 | Días de plazo, correos de notificación, dominio Play and Learn |
+| `PUT` | `/configuracion` | 104 | Actualiza esos tres campos |
+
+### Permisos — 104 (gestión completa) vs 105 (solo lectura)
+
+Dos opciones separadas en `cron_opciones`, patrón (b) (`sinAcceso()` por método, no
+constructor único — ver "Sistema de permisos" arriba):
+
+| Opción | Otorgada a | Alcance |
+|--------|-----------|---------|
+| 104 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos |
+| 105 "Ver Instituciones y Documentos" | Admisiones (perfil 9) | Solo `index()`/`cartas()` — sin crear/editar/activar-desactivar/configuración |
+
+104 se sembró primero con Super Admin **y** Admisiones
+(`2026_08_31_110000_seed_opcion_gestion_instituciones`), y luego se le retiró el acceso a
+Admisiones (`2026_08_31_130000_restrict_opcion_gestion_instituciones_a_super_admin`) a
+pedido explícito de que el módulo completo fuera exclusivo de Super Admin. 105 se agregó
+después (`2026_08_31_190000_seed_opcion_ver_instituciones_documentos`) para devolverle a
+Admisiones acceso de solo lectura sin reabrir la gestión completa — `index()` y `cartas()`
+aceptan el OR de ambas opciones, el resto de métodos solo acepta 104.
+
 ## Convenciones de código
 
 ### Naming de directorios
@@ -622,6 +875,32 @@ pantalla aún.
 | Services | **lowercase** | `app/Services/inventario/` |
 | Requests | Capitalized | `app/Http/Requests/Inventario/` |
 | Routes | lowercase (excepción: `Biblioteca.php`) | `routes/api/inventario.php` |
+
+### A qué archivo pertenece una funcionalidad (ruta / controller / service)
+
+La lógica va en el service **del dominio dueño del dato**, no en el service del
+primer módulo que la necesitó. Un módulo puede *consumir* (inyectar) el
+service de otro dominio y exponerlo bajo su propia ruta/endpoint — eso es
+normal y no mueve la lógica —, pero no debe reimplementar ni copiar la
+consulta/regla que ya vive en el service dueño.
+
+Ejemplo real: `periodos` (tabla y concepto de periodo institucional/año
+académico) es dato del dominio **año académico**, aunque el módulo de
+Evaluaciones fue el primero en necesitar "listar periodos" y "cuál es el
+periodo activo". La lógica vive en `App\Services\AnioEscolar\PeriodoServices`
+(`listar()`, `resolverActivo()`, `periodoActivo()`); `EvaluacionesController`
+solo inyecta `PeriodoServices` y expone `GET /evaluaciones/periodos` y
+`GET /evaluaciones/periodo-activo` porque ahí es donde el frontend del módulo
+ya los consume — el endpoint puede quedarse en la ruta del módulo consumidor,
+la lógica no. `EvaluacionesServices` también inyecta `PeriodoServices` para
+resolver el periodo activo internamente (`obtenerEvaluables`,
+`listarDisponiblesParaCoordinador`) en vez de tener su propia copia de la
+consulta.
+
+Al agregar una funcionalidad nueva, antes de escribirla pregúntate: ¿de qué
+dominio es este dato/regla realmente? Si la respuesta es "de otro módulo que
+ya tiene su propio service", inyéctalo — no dupliques ni la dejes en el
+service del módulo que solo la consume.
 
 ### Controllers
 ```php

@@ -119,30 +119,18 @@ class ReservasServices extends Service
                 ];
             }
 
-            if ($fechaReserva->gt($hoy->copy()->addDay())) {
+            // "El día siguiente" es el próximo día hábil, no el próximo día calendario:
+            // un viernes después de las 12:00, el lunes cuenta como "el día siguiente" a
+            // efectos de este cutoff (isTomorrow() se saltaba esta regla el viernes,
+            // porque el lunes no es el día calendario siguiente).
+            $proximoDiaHabil = $hoy->copy()->addWeekday();
+
+            if ($fechaReserva->equalTo($proximoDiaHabil) && now()->gte($hoy->copy()->setTime(12, 0, 0))) {
                 return [
                     'error' => true,
-                    'message' => "La reserva solo puede hacerse para hoy o el día siguiente.",
+                    'message' => "La reserva para el día siguiente ({$combo['fecha']}) debe hacerse antes de las 12:00 del mediodía.",
                     'data' => []
                 ];
-            }
-
-            if ($fechaReserva->isTomorrow()) {
-                if (now()->gte($hoy->copy()->setTime(12, 0, 0))) {
-                    return [
-                        'error' => true,
-                        'message' => "La reserva para mañana ({$combo['fecha']}) debe hacerse antes de las 12:00 del mediodía.",
-                        'data' => []
-                    ];
-                }
-
-                if ($hoy->isWeekend() || $fechaReserva->isWeekend()) {
-                    return [
-                        'error' => true,
-                        'message' => "No se puede reservar de un día laboral a otro a través del fin de semana.",
-                        'data' => []
-                    ];
-                }
             }
 
             $hora = Horas::find($combo['hora']);

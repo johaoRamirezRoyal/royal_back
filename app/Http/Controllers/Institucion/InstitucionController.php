@@ -221,7 +221,9 @@ class InstitucionController extends Controller
         $institucion->update($data);
 
         $sessionToken = Str::random(64);
-        $expiresAt = now()->addHours(12);
+        // En producción la sesión dura 15 minutos (a pedido explícito); fuera de
+        // producción se mantiene la ventana larga de 12h para no entorpecer pruebas.
+        $expiresAt = app()->environment('production') ? now()->addMinutes(15) : now()->addHours(12);
 
         // `expires_at` va dentro del propio valor cacheado (no solo como TTL del store)
         // para poder devolvérselo al frontend — Cache::get() no expone el TTL restante.

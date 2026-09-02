@@ -177,6 +177,11 @@ class InventarioServices
                 ->when($sort === 'cantidad', function ($query) use ($dir) {
                     $query->orderByRaw("COUNT(inventario.id) {$dir}");
                 })
+                // Sin orden explícito no había ORDER BY (orden indefinido de la BD); por
+                // defecto se ordena alfabéticamente por descripción del inventario.
+                ->when(!in_array($sort, ['usuario', 'cantidad'], true), function ($query) use ($dir) {
+                    $query->orderBy('inventario.descripcion', $dir);
+                })
                 ->paginate($perPage);
 
             // convertir string a JSON real
@@ -278,7 +283,7 @@ class InventarioServices
                         'u.apellido',
                         'a.nombre'
                     )
-                    ->orderByDesc(DB::raw('MAX(inventario.id)'))
+                    ->orderBy('inventario.descripcion')
                     ->paginate($perPage);
             }
 
@@ -1008,15 +1013,19 @@ class InventarioServices
                                 ->whereColumn('rpe.id_reporte', 'rp.id')
                                 ->where('rpe.estado', 3);
                         });
-                }, function ($q) {
-                    // Antes hardcodeaba iv.estado=2 / rp.estado=2 (solo válido para reportes
-                    // correctivos): con tipo_reporte=2 (mantenimiento, estado 6) el `when`
-                    // de abajo agrega también rp.estado=6, y la combinación con este 2 fijo
-                    // era una contradicción que siempre devolvía cero filas — la vista de
-                    // mantenimientos pendientes nunca mostraba nada. El estado real (2 para
-                    // reportado, 6 para mantenimiento) ya lo aporta el filtro `estado` del
-                    // caller vía el `when(!is_null($estado))` de abajo.
-                    $q->whereNotIn('iv.estado', [4, 5])
+                }, function ($q) use ($estado) {
+                    // El estado real (2 para reportado, 6 para mantenimiento) lo aporta el
+                    // filtro `estado` del caller — cuando viene, replicamos el comportamiento
+                    // legacy de exigir iv.estado = rp.estado (antes se relajó a un simple
+                    // NOT IN [4,5], lo que dejaba colar inventario cuyo estado real ya había
+                    // cambiado por otra vía pero conservaba un reporte sin resolver, algo que
+                    // el listado viejo nunca mostraba). Sin `estado` explícito (ej. la pestaña
+                    // general "Reportes") se mantiene el filtro amplio.
+                    $q->when($estado, function ($q) use ($estado) {
+                        $q->where('iv.estado', $estado);
+                    }, function ($q) {
+                        $q->whereNotIn('iv.estado', [4, 5]);
+                    })
                         ->whereNull('rp.id_reporte')
                         ->whereNotExists(function ($query) {
                             $query->select(DB::raw(1))
@@ -1190,6 +1199,73 @@ class InventarioServices
                 'data' => []
             ];
         }
+    }
+
+    /**
+     * Reportes ya solucionados (estado 3) a la espera de visto bueno administrativo.
+     * Equivalente a `visto.php` del sistema legacy.
+     */
+    public function reportesPendientesVistoBueno(?string $search = null, ?int $per_page = null): array
+    {
+        try {
+            $query = Reportes::with(['inventario.area', 'usuario'])
+                ->where('estado', 3)
+                ->where('visto_bueno', false)
+                ->when($search, function ($q) use ($search) {
+                    $q->whereHas('inventario', function ($iq) use ($search) {
+                        $iq->where('descripcion', 'like', "%{$search}%")
+                            ->orWhere('codigo', 'like', "%{$search}%")
+                            ->orWhere('marca', 'like', "%{$search}%");
+                    });
+                })
+                ->orderByDesc('fecha_respuesta');
+
+            $reportes = $per_page ? $query->paginate($per_page) : $query->get();
+
+            return [
+                'error' => false,
+                'message' => 'Reportes obtenidos correctamente.',
+                'data' => $reportes,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    public function vistoBuenoReporte(int $id): array
+    {
+        $reporte = Reportes::find($id);
+
+        if (!$reporte) {
+            return [
+                'error' => true,
+                'message' => 'No se encontró el reporte.',
+                'data' => null,
+            ];
+        }
+
+        $reporte->update(['visto_bueno' => true]);
+
+        return [
+            'error' => false,
+            'message' => 'Visto bueno concedido correctamente.',
+            'data' => $reporte,
+        ];
+    }
+
+    public function vistoBuenoGeneral(): array
+    {
+        Reportes::where('estado', 3)->where('visto_bueno', false)->update(['visto_bueno' => true]);
+
+        return [
+            'error' => false,
+            'message' => 'Visto bueno concedido a todos los reportes solucionados.',
+            'data' => null,
+        ];
     }
 
     /**

@@ -13,14 +13,22 @@ use App\Models\Evaluaciones\EvaluacionServicio;
 use App\Models\Evaluaciones\EvaluacionTipoPregunta;
 use App\Models\AnioEscolar\Periodo;
 use App\Models\Usuarios\Usuario;
+use App\Services\AnioEscolar\AnioEscolarServices;
+use App\Services\AnioEscolar\PeriodoServices;
 use App\Services\MailService;
 use App\Mail\EvaluacionRespuestaMail;
 use App\Pdf\Evaluaciones\EvaluacionRespuestaPdfService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class EvaluacionesServices
 {
+    public function __construct(
+        private PeriodoServices $periodoServices,
+        private AnioEscolarServices $anioEscolarServices,
+    ) {}
+
     // Coordinadores (perfil 26) solo pueden evaluar dentro de su propio nivel
     // (usuarios.id_nivel); el resto de perfiles con acceso administrativo al
     // módulo (Super Admin, Gestión Humana, Administrador, etc.) no tiene esa
@@ -72,6 +80,40 @@ class EvaluacionesServices
             || (int) $respuesta->id_user === (int) $solicitante->id_user;
     }
 
+    /** Adjunta `foto_url` (pública, del disco de uploads) a partir de la relación `fotoPerfil` ya cargada. */
+    private function adjuntarFotoUrl(?Usuario $usuario): void
+    {
+        if (!$usuario || !$usuario->relationLoaded('fotoPerfil')) return;
+
+        $foto = $usuario->fotoPerfil->first();
+        $usuario->setAttribute(
+            'foto_url',
+            $foto ? Storage::disk(config('filesystems.uploads_disk', 'public'))->url($foto->nombre_foto) : null
+        );
+    }
+
+    /** Info básica + foto de un usuario evaluable/evaluado, para el encabezado de las pantallas de Realizar/Resultados. */
+    public function obtenerUsuarioEvaluado(int $idUsuario): array
+    {
+        try {
+            $usuario = Usuario::with([
+                'perfilRelacion:id_perfil,nombre',
+                'nivelRelacion:id,nombre',
+                'fotoPerfil' => fn ($q) => $q->activas()->latest('id'),
+            ])
+                ->select(['id_user', 'nombre', 'apellido', 'documento', 'correo', 'perfil', 'id_nivel'])
+                ->find($idUsuario);
+
+            if (!$usuario) return ['error' => true, 'message' => 'Usuario no encontrado', 'status' => 404];
+
+            $this->adjuntarFotoUrl($usuario);
+
+            return ['error' => false, 'message' => 'ok', 'data' => $usuario];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de PERFILES_SIN_NIVEL) + activos. */
     private function usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion)
     {
@@ -85,30 +127,6 @@ class EvaluacionesServices
         }
 
         return $query;
-    }
-
-    /**
-     * Periodo institucional activo (tabla `periodos`, NO `periodo_academico` — esa es
-     * solo para lo académico). `en_curso` es explícito y no se deriva de nada más
-     * (ni de `periodos.activo` ni del año escolar activo): en la práctica puede haber
-     * varios años escolares y periodos con `activo=1` a la vez, lo que hacía imposible
-     * resolver de forma confiable "cuál es el periodo vigente ahora" — de ahí la
-     * columna dedicada. No hay CRUD para `periodos` todavía, se marca a mano.
-     */
-    private function resolverPeriodoActivo(): ?Periodo
-    {
-        return Periodo::where('en_curso', 1)->latest('id')->first();
-    }
-
-    public function periodoActivo(): array
-    {
-        try {
-            $periodo = $this->resolverPeriodoActivo();
-
-            return ['error' => false, 'message' => 'ok', 'data' => $periodo?->load('anioEscolar')];
-        } catch (\Exception $e) {
-            return ['error' => true, 'message' => $e->getMessage()];
-        }
     }
 
     // ─── Catálogo de servicios ───────────────────────────────────
@@ -227,21 +245,6 @@ class EvaluacionesServices
     }
 
     /**
-     * Catálogo de periodos institucionales (tabla `periodos`, con su año escolar) para los
-     * filtros de la pantalla de Resultados. Sin CRUD propio todavía (se marcan a mano), así
-     * que esto es solo lectura — ver comentario de `resolverPeriodoActivo`.
-     */
-    public function listarPeriodos(): array
-    {
-        try {
-            $data = Periodo::with('anioEscolar')->orderByDesc('id_anio')->orderByDesc('numero')->get();
-            return ['error' => false, 'message' => 'ok', 'data' => $data];
-        } catch (\Exception $e) {
-            return ['error' => true, 'message' => $e->getMessage()];
-        }
-    }
-
-    /**
      * Evaluaciones que un coordinador puede realizar: las que él mismo creó, o las que
      * incluyen su propio nivel entre los niveles configurados. Super Admin (perfil 1) ve
      * todas las activas sin restricción — ver requerimiento original del módulo.
@@ -262,7 +265,7 @@ class EvaluacionesServices
 
             $evaluaciones = $query->orderBy('created_at', 'desc')->get();
 
-            $periodo = $this->resolverPeriodoActivo();
+            $periodo = $this->periodoServices->resolverActivo();
 
             $data = $evaluaciones->map(function (Evaluacion $evaluacion) use ($periodo) {
                 $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
@@ -461,18 +464,34 @@ class EvaluacionesServices
                 ->orderBy('nombre')
                 ->get();
 
-            $periodo = $this->resolverPeriodoActivo();
-            $respuestasPeriodo = $periodo
-                ? EvaluacionRespuestaEvaluacion::where('id_evaluacion', $idEvaluacion)
-                    ->where('id_periodo', $periodo->id)
-                    ->get(['id', 'id_evaluado'])
-                    ->keyBy('id_evaluado')
-                : collect();
+            // Última evaluación registrada a cada usuario para ESTA evaluación, sin importar
+            // el periodo. Es la fuente tanto del flag `evaluado`/`id_respuesta` (así "Editar
+            // respuesta"/"Reenviar correo"/"Descargar PDF" en el frontend siempre operan
+            // sobre la evaluación más reciente, sin importar en qué periodo se hizo — "Evaluar"
+            // sigue disponible aparte para registrar una nueva en un periodo distinto) como de
+            // la columna informativa "Última evaluación" del listado (ver frontend
+            // Detalle.tsx). El año escolar sale de `anioEscolar` (guardado en la respuesta al
+            // momento de enviarla, ver enviarRespuesta), NO de `periodo.anioEscolar` — el año
+            // de `periodos` es un catálogo legacy aparte que puede no coincidir.
+            $ultimasEvaluaciones = EvaluacionRespuestaEvaluacion::where('id_evaluacion', $idEvaluacion)
+                ->whereIn('id_evaluado', $data->pluck('id_user'))
+                ->with(['periodo', 'anioEscolar'])
+                ->orderByDesc('completada_en')
+                ->get()
+                ->groupBy('id_evaluado');
 
-            $data->each(function (Usuario $usuario) use ($respuestasPeriodo) {
-                $respuesta = $respuestasPeriodo->get($usuario->id_user);
-                $usuario->setAttribute('evaluado', (bool) $respuesta);
-                $usuario->setAttribute('id_respuesta', $respuesta?->id);
+            $data->each(function (Usuario $usuario) use ($ultimasEvaluaciones) {
+                $ultima = $ultimasEvaluaciones->get($usuario->id_user)?->first();
+                $usuario->setAttribute('evaluado', (bool) $ultima);
+                $usuario->setAttribute('id_respuesta', $ultima?->id);
+
+                $usuario->setAttribute('ultima_evaluacion', $ultima ? [
+                    'id' => $ultima->id,
+                    'id_periodo' => $ultima->id_periodo,
+                    'numero' => $ultima->periodo?->numero,
+                    'anio_escolar' => $ultima->anioEscolar,
+                    'completada_en' => $ultima->completada_en,
+                ] : null);
             });
 
             return ['error' => false, 'message' => 'ok', 'data' => $data];
@@ -645,12 +664,20 @@ class EvaluacionesServices
     public function enviarRespuesta(int $idEvaluacion, Usuario $solicitante, array $datos): array
     {
         try {
-            $periodo = $this->resolverPeriodoActivo();
-            if (!$periodo) {
-                return ['error' => true, 'message' => 'No hay un periodo activo configurado', 'status' => 422];
+            // El periodo lo designa el propio evaluador (ver frontend Responder.tsx) — no se
+            // toma un valor por defecto, así que se valida que sea uno de los periodos activos.
+            $periodo = Periodo::find($datos['id_periodo'] ?? null);
+            if (!$periodo || !$periodo->activo) {
+                return ['error' => true, 'message' => 'Selecciona un periodo activo válido', 'status' => 422];
             }
 
-            $resultado = DB::transaction(function () use ($idEvaluacion, $solicitante, $datos, $periodo) {
+            // El año escolar de la respuesta es el vigente AHORA (tabla `anio_escolar`,
+            // resuelto igual que el indicador que ve el evaluador en Responder.tsx) — no el
+            // que traiga `periodo.id_anio`, que es un catálogo legacy aparte y puede no
+            // coincidir (ver AGENTS.md, sección Evaluaciones).
+            $anioEscolar = $this->anioEscolarServices->obtenerUltimoAnioEscolar()['data'] ?? null;
+
+            $resultado = DB::transaction(function () use ($idEvaluacion, $solicitante, $datos, $periodo, $anioEscolar) {
                 $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
                 if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
                 if (!$evaluacion->activo) return ['error' => true, 'message' => 'La evaluación no está activa', 'status' => 422];
@@ -698,6 +725,7 @@ class EvaluacionesServices
                     // columna, por eso el `?:` (no `??`) descarta también el 0.
                     'id_nivel' => $datos['id_nivel'] ?? ($evaluado?->id_nivel ?: null),
                     'id_periodo' => $periodo->id,
+                    'id_anio_escolar' => $anioEscolar?->id,
                     'anonima' => $anonima,
                     'completada_en' => now(),
                 ]);
@@ -862,8 +890,11 @@ class EvaluacionesServices
         try {
             $respuesta = EvaluacionRespuestaEvaluacion::with([
                 'evaluacion.servicio',
+                'evaluacion.secciones.preguntas.opciones',
                 'usuario',
-                'evaluado',
+                'evaluado.perfilRelacion:id_perfil,nombre',
+                'evaluado.nivelRelacion:id,nombre',
+                'evaluado.fotoPerfil' => fn ($q) => $q->activas()->latest('id'),
                 'nivel',
                 'periodo.anioEscolar',
                 'respuestasPreguntas.pregunta.tipo',
@@ -875,6 +906,9 @@ class EvaluacionesServices
             if (!$this->puedeVerRespuesta($solicitante, $respuesta)) {
                 return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
             }
+
+            $this->adjuntarFotoUrl($respuesta->evaluado);
+            $respuesta->setAttribute('resultado', $this->calcularPuntajeRespuesta($respuesta));
 
             return ['error' => false, 'message' => 'ok', 'data' => $respuesta];
         } catch (\Exception $e) {
@@ -959,6 +993,54 @@ class EvaluacionesServices
     }
 
     // ─── Resultados / Puntaje ──────────────────────────────────
+
+    /**
+     * Puntaje ponderado de UNA respuesta individual (no el agregado de todos los
+     * evaluados de `calcularResultados`) — usado para la tarjeta de promedio en la
+     * pantalla "Ver evaluación" de un evaluado puntual. Misma fórmula por sección
+     * (puntaje obtenido / puntaje máximo posible * 100, ponderado por
+     * `seccion.porcentaje`) pero contra las respuestas de una sola fila de
+     * `evaluaciones_respuestas_evaluacion`.
+     */
+    private function calcularPuntajeRespuesta(EvaluacionRespuestaEvaluacion $respuesta): array
+    {
+        $sumaGeneral = 0;
+
+        $porSeccion = ($respuesta->evaluacion->secciones ?? collect())->map(function ($seccion) use ($respuesta, &$sumaGeneral) {
+            $preguntasIds = $seccion->preguntas->pluck('id')->toArray();
+
+            $puntajeObtenido = 0;
+            foreach ($respuesta->respuestasPreguntas as $rp) {
+                if (in_array($rp->id_pregunta, $preguntasIds) && $rp->opcion) {
+                    $puntajeObtenido += $rp->opcion->valor;
+                }
+            }
+
+            $maxPosible = 0;
+            foreach ($seccion->preguntas as $pregunta) {
+                if ($pregunta->opciones->isNotEmpty()) {
+                    $maxPosible += $pregunta->opciones->max('valor');
+                }
+            }
+
+            $promedioSeccion = $maxPosible > 0 ? round(($puntajeObtenido / $maxPosible) * 100, 2) : 0;
+            $sumaGeneral += $promedioSeccion * ($seccion->porcentaje / 100);
+
+            return [
+                'id_seccion' => $seccion->id,
+                'titulo' => $seccion->titulo,
+                'porcentaje_ponderacion' => $seccion->porcentaje,
+                'puntaje_obtenido' => round($puntajeObtenido, 2),
+                'puntaje_maximo' => round($maxPosible, 2),
+                'promedio' => $promedioSeccion,
+            ];
+        })->values();
+
+        return [
+            'promedio_general' => round($sumaGeneral, 2),
+            'por_seccion' => $porSeccion,
+        ];
+    }
 
     public function calcularResultados(int $idEvaluacion): array
     {
