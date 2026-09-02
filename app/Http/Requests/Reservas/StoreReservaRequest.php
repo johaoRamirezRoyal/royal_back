@@ -27,7 +27,7 @@ class StoreReservaRequest extends FormRequest
                 'integer',
                 Rule::exists('usuarios', 'id_user')->where('estado', 'activo'),
             ],
-            'portatil' => ['nullable', 'integer', 'min:1'],
+            'portatil' => ['nullable', 'integer', 'min:0'],
             'sonido' => ['nullable', 'boolean'],
             'titulo' => ['nullable', 'string', 'max:255'],
             'detalle_reserva' => ['nullable', 'string', 'max:1000'],
@@ -51,7 +51,7 @@ class StoreReservaRequest extends FormRequest
             'id_user.exists' => 'El usuario no existe o no está activo.',
 
             'portatil.integer' => 'Los portátiles deben ser un número entero.',
-            'portatil.min' => 'La cantidad de portátiles debe ser al menos 1.',
+            'portatil.min' => 'La cantidad de portátiles no puede ser negativa.',
 
             'sonido.boolean' => 'El campo sonido debe ser verdadero o falso.',
 
