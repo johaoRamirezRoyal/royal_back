@@ -362,6 +362,60 @@ que la cantidad a ingresar no supere lo solicitado:
   `precio`, `fecha_compra`.
 - Respuesta: `articulos_creados` + `resumen[]` con `solicitado`/`ingresado`/`restante`.
 
+### Reportes de inventario y Visto Bueno (`InventariosController`, `InventarioServices`, `routes/api/inventario.php`)
+
+Reemplaza al módulo legacy `vistas/modulos/reportes` (`index.php` + `visto.php` +
+`excelInventario.php`). Un `inventario` puede tener varias filas en `reportes`: la
+original (`id_reporte IS NULL`, `estado` 2=reportado o 6=mantenimiento) y, cuando se
+resuelve, una fila "solución" (`estado=3`) con `id_reporte` apuntando a la original.
+
+- **`GET /inventario/reportes`** (`mostrarReportesDeInventario`) — listado de reportes
+  pendientes o solucionados (`estado_solucion=pendiente|solucionado`), join
+  `inventario` + `reportes`. En la rama "pendientes", cuando el caller manda `estado`
+  (p. ej. `/inventario/reportado` con `estado=2`, o Mantenimiento con `estado=6`), se
+  exige `iv.estado = estado` — replica el filtro exacto del legacy
+  (`ModeloReportes::mostrarReportesModel`: `iv.estado=2 AND rp.estado=2`). Sin `estado`
+  explícito (la pestaña general "Reportes") se usa el filtro amplio
+  `iv.estado NOT IN (4,5)`, para no ocultar mantenimientos. **Antes de este ajuste** el
+  filtro amplio se aplicaba siempre, y colaba inventario cuyo `iv.estado` ya había
+  cambiado por otra vía pero conservaba un reporte sin resolver — si el listado de
+  "Reportado"/"Mantenimiento" vuelve a mostrar filas que no debería, revisar primero que
+  el frontend siga mandando `estado` en `externalFilters`. El parámetro `sin_solucion`
+  se acepta pero no se usa en la query (queda muerto, la rama pendientes/solucionados ya
+  la decide `estado_solucion`).
+- **`PUT /inventario/reportes/solucionar`** (`solucionarReporteInventario`) — crea la
+  fila "solución" (`estado=3`). Guarda el texto de la solución en **`descripcion`**, no
+  en `observacion` (`observacion` queda `NULL` en la fila de solución). **Quirk de
+  datos migrados**: el legacy (`ModeloReportes::solucionarReporteModel`) guardaba ese
+  mismo texto en `observacion` — los reportes solucionados antes de la migración a
+  Laravel tienen el texto en `observacion`, no en `descripcion`. Cualquier vista que
+  muestre "la solución" de un reporte debe leer `descripcion` con fallback a
+  `observacion` (ver `VistoBueno/index.tsx` en el frontend).
+- **Visto bueno** (equivalente a `visto.php`) — tres endpoints nuevos:
+  - `GET /inventario/reportes/visto-bueno` (`reportesPendientesVistoBueno`) — filas
+    `reportes` con `estado=3 AND visto_bueno=0`, con `inventario.area` y `usuario`
+    eager-loaded. Acepta `search` (contra `descripcion`/`codigo`/`marca` del inventario)
+    y `per_page`.
+  - `PUT /inventario/reportes/{id}/visto-bueno` (`vistoBuenoReporte`) — marca una fila.
+  - `PUT /inventario/reportes/visto-bueno` (`vistoBuenoGeneral`) — marca todas las
+    `estado=3 AND visto_bueno=0` (el legacy también tocaba `reportes_zonas`, tabla de
+    otro módulo no migrado aún — si aparece, replicar ahí también).
+
+### Orden de los listados de inventario
+
+Ninguno de los dos listados tenía `ORDER BY` alfabético por defecto — ambos se
+corrigieron para ordenar por `inventario.descripcion` cuando no hay un sort explícito:
+
+- **`GET /inventario/listado`** (`obtenerListadoInventario`, usado por
+  `InventarioPorEstado` — Liberado/Descontinuado/Mis Inventarios) — sin `sort=usuario`
+  ni `sort=cantidad`, ahora aplica `orderBy('inventario.descripcion', $dir)`. Antes no
+  tenía ningún `ORDER BY` (orden indefinido de la BD).
+- **`GET /inventario/listado-consolidado`** (`obtenerListadoConsolidado`, modo
+  agrupado — el que realmente usa la página `/inventario/listado`) — antes ordenaba por
+  `MAX(inventario.id) DESC` (lo más reciente primero); ahora por
+  `inventario.descripcion` ascendente. Es el endpoint que importa si "el listado
+  principal de inventario" vuelve a reportarse como desordenado.
+
 ## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
 
 Módulo de **evaluaciones de calidad de servicios / desempeño** (Gestor de

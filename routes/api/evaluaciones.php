@@ -17,6 +17,7 @@ Route::get('/mis-evaluaciones', [EvaluacionesController::class, 'misEvaluaciones
 Route::get('/mis-resultados', [EvaluacionesController::class, 'misResultados']);
 Route::get('/periodo-activo', [EvaluacionesController::class, 'periodoActivo']);
 Route::get('/periodos', [EvaluacionesController::class, 'listarPeriodos']);
+Route::get('/evaluado/{idUsuario}', [EvaluacionesController::class, 'obtenerUsuarioEvaluado']);
 Route::get('/', [EvaluacionesController::class, 'listar']);
 Route::post('/', [EvaluacionesController::class, 'crear']);
 Route::get('/{id}', [EvaluacionesController::class, 'obtenerPorId']);
