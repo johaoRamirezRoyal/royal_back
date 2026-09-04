@@ -14,6 +14,13 @@ Route::prefix('admissions')->group(function () {
 Route::post('login', [AuthController::class, 'login']);
 Route::post('register', [AuthController::class, 'register']);
 Route::get('/check', [AuthController::class, 'check']);
+Route::get('branding-preview', [AuthController::class, 'brandingPreview']);
+
+// Compartida entre ambos sistemas (igual que check) — el método ya elige qué cookie
+// invalidar según ?system=, no necesita el guard system:general que antes la bloqueaba
+// para las peticiones de logout de admisiones (ver JwtFromCookie para cómo resuelve
+// auth('api')->user() en este caso).
+Route::post('logout', [AuthController::class, 'logout']);
 
 Route::prefix('password')->group(function () {
     Route::post('restore', [PasswordResetController::class, 'createToken']);

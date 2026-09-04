@@ -236,6 +236,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/instituciones-admin.php';
     });
 
+    // ACUDIENTES (gestión admin de los acudientes auto-registrados vía Admisiones)
+    Route::prefix('/acudientes-admin')->group(function () {
+        require __DIR__ . '/api/acudientes-admin.php';
+    });
+
     // MODULOS (métricas de módulos más visitados — Home)
     Route::prefix('/modulos')->group(function () {
         require __DIR__ . '/api/modulos.php';

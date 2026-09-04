@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
 use App\Services\Auth\AuthServices;
+use App\Services\branding\MarcaDominioService;
 use App\Services\JwtService;
 use App\Services\Sami\SamiSsoService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -30,9 +32,50 @@ class AuthController extends Controller
         AuthServices $service_auth,
         private JwtService $jwt,
         private SamiSsoService $samiSso,
+        private MarcaDominioService $marcaDominioService,
     ) {
         $this->service_usuarios = $usuariosServices;
         $this->service_auth = $service_auth;
+    }
+
+    /**
+     * Vista previa (pre-login, sin token) de nombre/color de marca para un correo o
+     * dominio — usada por la pantalla de Login para variar su identidad visual según el
+     * último dominio ingresado, antes de que exista sesión (useMarcaColor.hook.ts hace lo
+     * mismo pero post-login, leyendo el JWT). Reutiliza
+     * MarcaDominioService::resolverPorCorreo (mismo método que UsuarioResource), que ya
+     * acepta tanto un correo completo como un dominio suelto. Público a propósito — solo
+     * expone nombre/color de marca, ya visible para cualquier usuario autenticado de ese
+     * dominio, con rate limit básico por IP para evitar scraping.
+     */
+    public function brandingPreview(Request $request)
+    {
+        $request->validate(
+            ['correo' => 'required|string|max:190'],
+            ['correo.required' => 'El correo o dominio es obligatorio.']
+        );
+
+        $ip = $request->ip();
+        $rateLimitKey = "branding_preview_{$ip}";
+        $attempts = Cache::increment($rateLimitKey);
+
+        if ($attempts === 1) {
+            Cache::put($rateLimitKey, 1, now()->addMinute());
+        }
+
+        if ($attempts > 60) {
+            return response()->json(['error' => true, 'message' => 'Demasiadas solicitudes.'], 429);
+        }
+
+        $marca = $this->marcaDominioService->resolverPorCorreo($request->correo);
+
+        return response()->json([
+            'error' => false,
+            'data' => [
+                'nombre_marca' => $marca['nombre'],
+                'color_marca' => $marca['color'],
+            ],
+        ]);
     }
 
     // ===== GOOGLE OAUTH CONFIG (BEGIN) =====
@@ -278,35 +321,38 @@ class AuthController extends Controller
         }
     }
 
+    /**
+     * Compartido entre ambos sistemas (system=general|admissions) — ver el registro de
+     * la ruta en routes/api/auth.php. Invalidar el token y cerrar la sesión SAMI son
+     * "best effort" (un token ya vencido/corrupto no debe impedir que la cookie se
+     * limpie, que es el efecto que realmente le importa al usuario al hacer logout).
+     */
     public function logout(Request $request)
     {
-        try {
-            $system = $request->query('system', 'general');
+        $system = $request->query('system', 'general');
+        $cookieName = $system === 'admissions' ? 'admissions_token' : 'token';
+        $token = $request->cookie($cookieName);
 
-            $cookieName = $system === 'admissions' ? 'admissions_token' : 'token';
-
-            $token = $request->cookie($cookieName);
-
-            if ($token) {
+        if ($token) {
+            try {
                 JWTAuth::setToken($token)->invalidate();
+            } catch (\Exception $e) {
+                Log::warning('No se pudo invalidar el token en logout (puede ya estar vencido)', ['error' => $e->getMessage()]);
             }
+        }
 
-            // Limpiar sesión SAMI
+        try {
             $user = auth('api')->user();
             if ($user) {
                 $this->samiSso->olvidarSesion($user->id_user);
             }
-
-            return response()->json([
-                'error' => false,
-                'message' => 'Sesión cerrada correctamente',
-            ])->withCookie(cookie()->forget($cookieName));
-
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => true,
-                'message' => 'No se pudo cerrar sesión',
-            ], 500);
+            Log::warning('No se pudo cerrar la sesión SAMI SSO en logout', ['error' => $e->getMessage()]);
         }
+
+        return response()->json([
+            'error' => false,
+            'message' => 'Sesión cerrada correctamente',
+        ])->withCookie(cookie()->forget($cookieName));
     }
 }

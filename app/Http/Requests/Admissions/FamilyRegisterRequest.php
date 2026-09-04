@@ -24,6 +24,7 @@ class FamilyRegisterRequest extends FormRequest
             'apellido' => 'required|string|max:100',
             'correo' => ['required', 'email', 'max:140', Rule::unique('usuarios', 'correo')],
             'telefono' => ['required', 'string', 'max:20', Rule::unique('usuarios', 'telefono')],
+            'password' => 'required|string|min:8|confirmed',
         ];
     }
 
@@ -62,6 +63,11 @@ class FamilyRegisterRequest extends FormRequest
             'telefono.string' => 'El teléfono debe ser una cadena de texto.',
             'telefono.unique' => 'Ya existe una cuenta registrada con este telefono.',
             'telefono.max' => 'El teléfono no debe superar los 20 caracteres.',
+
+            // ── Contraseña ──
+            'password.required' => 'La contraseña es obligatoria.',
+            'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
+            'password.confirmed' => 'Las contraseñas no coinciden.',
         ];
     }
 

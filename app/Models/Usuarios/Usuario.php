@@ -108,10 +108,13 @@ class Usuario extends Authenticatable implements JWTSubject
         'asignatura',
         'user',
         'pass',
+        'ultima_ip',
+        'ultima_conexion',
         'perfil',
         'id_empresa',
         'id_super_empresa',
         'user_log',
+        'origen_registro',
         'estado',
         'id_nivel',
         'id_curso',
@@ -147,7 +150,8 @@ class Usuario extends Authenticatable implements JWTSubject
         'fechareg' => 'datetime',
         'fecha_activo' => 'datetime',
         'fecha_inactivo' => 'datetime',
-        'fecha_editado' => 'datetime'
+        'fecha_editado' => 'datetime',
+        'ultima_conexion' => 'datetime',
     ];
 
     // Valores por defecto (opcional)

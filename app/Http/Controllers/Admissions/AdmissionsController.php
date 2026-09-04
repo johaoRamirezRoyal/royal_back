@@ -13,6 +13,7 @@ use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Http\Traits\HasAuthCookie;
+use App\Models\Usuarios\Usuario;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Auth\AuthServices;
@@ -22,6 +23,7 @@ use App\Services\MailService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -71,8 +73,18 @@ class AdmissionsController extends Controller
             ]
         );
 
-        $email = $request->email;
+        return $this->enviarCodigoRegistro($request->email);
+    }
 
+    /**
+     * Envía el código de verificación por correo del flujo histórico (primera
+     * inscripción, o acudiente ya registrado pero sin contraseña todavía — ver
+     * iniciarAcceso). Extraído de requestVerification para que iniciarAcceso pueda
+     * dispararlo sin pasar por la validación de esa ruta pública (que exige `email`,
+     * no `correo`).
+     */
+    private function enviarCodigoRegistro(string $email)
+    {
         $key = "send_{$email}";
         $attempts = Cache::increment($key);
 
@@ -83,8 +95,6 @@ class AdmissionsController extends Controller
         if ($attempts > 3) {
             return $this->error('Demasiadas solicitudes', 429);
         }
-
-        Log::info('Haciendo algo en la función requestVerification');
 
         $token = Cache::get("email_token_{$email}") ?? Str::random(64);
 
@@ -97,36 +107,15 @@ class AdmissionsController extends Controller
 
         Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
 
-        $message = $message = <<<HTML
-                                    <p style="font-size:16px; color:#333; margin:0 0 16px;">Estimado acudiente,</p>
-                                    <p style="font-size:15px; color:#444; margin:0 0 16px;">Hemos recibido tu solicitud de admisión. Para continuar con el proceso, por favor verifica tu correo electrónico con el siguiente código:</p>
-
-                                    <div style="background:#f1f5f9; border-radius:8px; padding:20px; text-align:center; margin:20px 0;">
-                                        <p style="margin:0 0 8px; font-size:13px; color:#666;">Código de verificación</p>
-                                        <p style="margin:0; font-size:28px; font-weight:bold; color:#2563eb;">{$code}</p>
-                                        <p style="margin:8px 0 0; font-size:12px; color:#999;">Válido por 5 minutos</p>
-                                    </div>
-
-                                    <p style="font-size:13px; color:#888;">Si no realizaste esta solicitud, puedes ignorar este mensaje. Nadie más puede usar este código sin acceso a tu correo.</p>
-                                    HTML;
-
-        $mail = $this->mail_service->sendView($email, 'Verifica tu correo — Admisiones Royal School', 'emails.sendRequestEmail', [
+        $this->mail_service->sendView($email, 'Verifica tu correo — Admisiones Royal School', 'emails.sendRequestEmail', [
             'verificationCode' => $code,
             'email'           => $email,
         ]);
 
-        try {
-            Log::info("Enviando correo de verificacion a {$email}");
-            //event(new RequestEmailAdmission($email, $token, $code));
-        } catch (\Exception $err) {
-            Log::alert('Ha ocurrido un error inesperado en el envio del correo', ['Error' => $err]);
-
-            return $this->error('Ha ocurrido un error inesperado en la peticion del correo');
-            Log::alert("Ha ocurrido un error inesperado en el envio del correo", ["Error" => $err]);
-            return $this->error("Ha ocurrido un error inesperado en la peticion del correo");
-        }
+        Log::info("Enviando correo de verificacion a {$email}");
 
         return $this->success('Codigo enviado!', [
+            'modo' => 'registro',
             'token' => $token,
         ]);
     }
@@ -194,6 +183,12 @@ class AdmissionsController extends Controller
         $userExists = $this->usuarios_services->infoUserWhitEmail($email);
 
         if ($userExists) {
+            // Igual que el login por contraseña (ver otorgarSesionAcudiente): se deja
+            // registrada la IP de este acceso, sin importar por cuál de los dos flujos
+            // haya entrado, para que loginConPassword sepa comparar contra la más
+            // reciente sin importar si vino de acá o de ahí.
+            $userExists->update(['ultima_ip' => $request->ip(), 'ultima_conexion' => now()]);
+
             return $this->success('Cuenta existente. Redirigiendo...', [
                 'cookie_token' => true,
             ])
@@ -225,6 +220,17 @@ class AdmissionsController extends Controller
         // Se asigna el perfil de "Acudiente"
         $data['perfil'] = 6;
 
+        // Marca explícita de origen — reemplaza la heurística anterior basada en
+        // user_log (quién creó el registro), que no era confiable (ver migración
+        // add_origen_registro_to_usuarios_table). Este es el único lugar de la app que
+        // debe escribir 'admisiones' acá.
+        $data['origen_registro'] = 'admisiones';
+
+        // Usuario::setPassAttribute ya se encarga de hashear — se le pasa el valor plano,
+        // no un Hash::make() (eso duplicaría el hasheo y rompería el login).
+        $data['pass'] = $data['password'];
+        unset($data['password'], $data['password_confirmation']);
+
         if (! $validation) {
             return $this->error('Tu sesión de registro ha expirado o no es válida. Inicia el proceso nuevamente.', 401);
         }
@@ -240,17 +246,271 @@ class AdmissionsController extends Controller
 
             $lastYear = $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
 
-            $userId = $userCreated['data']->id_user;
+            $usuario = $userCreated['data'];
 
             $this->admisiones_services->registrarInscripcion([
-                'id_usuario_registro' => $userId,
+                'id_usuario_registro' => $usuario->id_user,
                 'anio_academico' => $lastYear,
             ]);
 
-            return $this->success('Registro completado exitosamente.', 201);
+            // Deja registrada la IP de este primer acceso, igual que el resto de flujos
+            // de login (ver otorgarSesionAcudiente/forgetVerificationCode) — para que un
+            // futuro loginConPassword desde el mismo lugar no la trate como IP nueva.
+            $usuario->update(['ultima_ip' => $request->ip(), 'ultima_conexion' => now()]);
+
+            // El registro por sí solo no otorgaba sesión — el usuario quedaba creado
+            // pero sin cookie, así que el redirect posterior a registrationProcess
+            // rebotaba por falta de autenticación. Mismo mecanismo que el resto de
+            // AdmissionsController (otorgarSesionAcudiente/forgetVerificationCode).
+            return $this->success('Registro completado exitosamente.', 201)
+                ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario), 'admissions_token'));
         } catch (\Exception $e) {
             return $this->error('Ocurrió un error al procesar el registro. Intenta de nuevo.', 500);
         }
+    }
+
+    /**
+     * Login por contraseña para acudientes que ya la registraron (ver
+     * FamilyRegisterRequest::password) — alternativa al flujo de solo-OTP existente
+     * (requestVerification/forgetVerificationCode), que sigue disponible sin cambios
+     * para quien todavía no tiene contraseña. Mismo patrón de InstitucionController::
+     * login(): la contraseña sola basta si la IP coincide con la del último login
+     * exitoso (usuarios.ultima_ip); si es distinta (o es la primera vez), se exige
+     * además el código enviado al correo antes de otorgar la sesión.
+     */
+    public function loginConPassword(Request $request)
+    {
+        $request->validate(
+            [
+                'correo' => 'required|email',
+                'password' => 'required|string',
+            ],
+            [
+                'correo.required' => 'El correo es obligatorio.',
+                'correo.email' => 'El correo no tiene un formato válido.',
+                'password.required' => 'La contraseña es obligatoria.',
+            ]
+        );
+
+        $usuario = $this->usuarios_services->infoUserWhitEmail($request->correo);
+
+        if (! $usuario || ! $usuario->pass) {
+            return $this->error('Correo o contraseña incorrectos.', 401);
+        }
+
+        return $this->intentarLoginConPassword($usuario, $request->password, $request->ip());
+    }
+
+    /**
+     * Punto de entrada único de /admissions: un solo formulario correo+contraseña que
+     * decide por sí mismo qué flujo aplica, en vez de dos pantallas separadas.
+     * - Correo ya registrado y con contraseña → intenta login por contraseña (con el
+     *   paso de IP nueva de intentarLoginConPassword).
+     * - Correo nuevo, o registrado antes de que existiera contraseña → cae al flujo
+     *   histórico de solo-OTP (registro o, si ya tiene cuenta, entra directo al
+     *   verificar el código — ver forgetVerificationCode).
+     * El frontend distingue el resultado por `modo` ("login" vs "registro") para saber
+     * contra qué endpoint verificar el código si `requires_otp` viene en true.
+     */
+    public function iniciarAcceso(Request $request)
+    {
+        $request->validate(
+            [
+                'correo' => 'required|email|min:10|max:140',
+                'password' => 'nullable|string',
+            ],
+            [
+                'correo.required' => 'El correo es un campo obligatorio.',
+                'correo.email' => 'El correo no tiene un formato valido.',
+                'correo.min' => 'El correo debe tener al menos 10 caracteres',
+                'correo.max' => 'El correo no puede superar los 140 caracteres',
+            ]
+        );
+
+        $correo = $request->correo;
+        $usuario = $this->usuarios_services->infoUserWhitEmail($correo);
+
+        if ($usuario && $usuario->pass) {
+            if (! $request->filled('password')) {
+                return $this->error('Ingresa tu contraseña.', 422);
+            }
+
+            return $this->intentarLoginConPassword($usuario, $request->password, $request->ip());
+        }
+
+        return $this->enviarCodigoRegistro($correo);
+    }
+
+    private function intentarLoginConPassword(Usuario $usuario, string $password, string $ip)
+    {
+        $correo = $usuario->correo;
+
+        $rateLimitKey = "admisiones_login_{$ip}_{$correo}";
+        $attempts = Cache::increment($rateLimitKey);
+
+        if ($attempts === 1) {
+            Cache::put($rateLimitKey, 1, now()->addMinutes(10));
+        }
+
+        if ($attempts > 5) {
+            return $this->error('Demasiados intentos. Intenta de nuevo más tarde.', 429);
+        }
+
+        if (! Hash::check($password, $usuario->pass)) {
+            Log::warning('Intento de login de acudiente fallido', ['correo' => $correo, 'ip' => $ip]);
+
+            return $this->error('Correo o contraseña incorrectos.', 401);
+        }
+
+        Cache::forget($rateLimitKey);
+
+        if ($usuario->ultima_ip && $usuario->ultima_ip === $ip) {
+            return $this->otorgarSesionAcudiente($usuario, $ip);
+        }
+
+        return $this->iniciarVerificacionLoginAcudiente($usuario);
+    }
+
+    /**
+     * Envía el código de verificación de un login desde una IP nueva. Token de corta
+     * vida (15 min) que solo identifica al usuario en pausa de verificación — el
+     * código en sí vive en una entrada separada de 5 min, mismo patrón de dos niveles
+     * que InstitucionController::iniciarVerificacionLogin.
+     */
+    private function iniciarVerificacionLoginAcudiente(Usuario $usuario)
+    {
+        $rateLimitKey = "admisiones_login_otp_send_{$usuario->id_user}";
+        $attempts = Cache::increment($rateLimitKey);
+
+        if ($attempts === 1) {
+            Cache::put($rateLimitKey, 1, now()->addMinutes(5));
+        }
+
+        if ($attempts > 3) {
+            return $this->error('Demasiadas solicitudes. Intenta de nuevo más tarde.', 429);
+        }
+
+        $token = Str::random(64);
+        $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+
+        Cache::put("admisiones_login_pending_{$token}", ['id' => $usuario->id_user], now()->addMinutes(15));
+        Cache::put("admisiones_login_otp_{$token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
+
+        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — Admisiones Royal School', 'emails.sendAcudienteLoginOtp', [
+            'verificationCode' => $code,
+            'nombre' => $usuario->nombre,
+        ]);
+
+        Log::info("Login desde IP nueva para acudiente {$usuario->id_user}, verificación enviada");
+
+        return $this->success('Verificación requerida', [
+            'modo' => 'login',
+            'requires_otp' => true,
+            'token' => $token,
+        ]);
+    }
+
+    public function resendLoginOtpAcudiente(Request $request)
+    {
+        $request->validate(
+            ['token' => 'required|string|size:64'],
+            ['token.required' => 'El token es obligatorio.', 'token.size' => 'El token no es válido.']
+        );
+
+        $pending = Cache::get("admisiones_login_pending_{$request->token}");
+
+        if (! $pending) {
+            return $this->error('Sesión inválida o expirada. Inicia sesión nuevamente.', 401);
+        }
+
+        $usuario = Usuario::find($pending['id']);
+
+        if (! $usuario) {
+            return $this->error('Usuario no encontrado.', 404);
+        }
+
+        $rateLimitKey = "admisiones_login_otp_send_{$usuario->id_user}";
+        $attempts = Cache::increment($rateLimitKey);
+
+        if ($attempts === 1) {
+            Cache::put($rateLimitKey, 1, now()->addMinutes(5));
+        }
+
+        if ($attempts > 3) {
+            return $this->error('Demasiadas solicitudes. Intenta de nuevo más tarde.', 429);
+        }
+
+        $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
+
+        Cache::put("admisiones_login_otp_{$request->token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
+
+        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — Admisiones Royal School', 'emails.sendAcudienteLoginOtp', [
+            'verificationCode' => $code,
+            'nombre' => $usuario->nombre,
+        ]);
+
+        return $this->success('Código reenviado');
+    }
+
+    public function verifyLoginOtpAcudiente(Request $request)
+    {
+        $request->validate(
+            ['token' => 'required|string|size:64', 'code' => 'required|digits:5'],
+            [
+                'token.required' => 'El token es obligatorio.',
+                'token.size' => 'El token no es válido.',
+                'code.required' => 'El código de verificación es obligatorio.',
+                'code.digits' => 'El código debe tener 5 dígitos.',
+            ]
+        );
+
+        $token = $request->token;
+        $key = "admisiones_login_otp_{$token}";
+        $attemptsKey = "admisiones_login_otp_attempts_{$token}";
+
+        $data = Cache::get($key);
+
+        if (! $data) {
+            return $this->error('Token inválido o expirado.', 400);
+        }
+
+        $attempts = Cache::increment($attemptsKey);
+
+        if ($attempts === 1) {
+            Cache::put($attemptsKey, 1, now()->addMinutes(5));
+        }
+
+        if ($attempts > 5) {
+            Cache::forget($key);
+            Cache::forget($attemptsKey);
+            Cache::forget("admisiones_login_pending_{$token}");
+
+            return $this->error('Demasiados intentos.', 429);
+        }
+
+        if ($data['code'] !== $request->code) {
+            return $this->error('Código inválido.', 400);
+        }
+
+        $usuario = Usuario::find($data['id']);
+
+        if (! $usuario) {
+            return $this->error('Usuario no encontrado.', 404);
+        }
+
+        Cache::forget($key);
+        Cache::forget($attemptsKey);
+        Cache::forget("admisiones_login_pending_{$token}");
+
+        return $this->otorgarSesionAcudiente($usuario, $request->ip());
+    }
+
+    private function otorgarSesionAcudiente(Usuario $usuario, string $ip)
+    {
+        $usuario->update(['ultima_ip' => $ip, 'ultima_conexion' => now()]);
+
+        return $this->success('Sesión iniciada', ['redirect' => true])
+            ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario), 'admissions_token'));
     }
 
     public function registrarInscripcion(RegistrarInscripcionRequest $request)
