@@ -34,8 +34,9 @@ class LlegadasTardeController extends Controller
         $hora = $body['hora'];
         $justificada = $body['justificada'] ?? false;
         $observacion = $body['observacion'] ?? null;
+        $soporte = $request->file('soporte');
 
-        $response = $this->llegadas_tarde->agregarLlegadaTarde($id_alumno, $fecha, $hora, $justificada, $observacion);
+        $response = $this->llegadas_tarde->agregarLlegadaTarde($id_alumno, $fecha, $hora, $justificada, $observacion, $soporte);
 
         return $this->apiResponse($response);
     }

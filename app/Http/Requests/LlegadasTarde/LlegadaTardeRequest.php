@@ -45,6 +45,15 @@ class LlegadaTardeRequest extends FormRequest
                 'nullable',
                 'string',
                 'max:1000'
+            ],
+
+            // Documento/foto de soporte de la excusa — mismos tipos/tamaño que
+            // CloudinaryService::validateFile (10MB, jpg/jpeg/png/webp/pdf).
+            'soporte' => [
+                'nullable',
+                'file',
+                'mimes:jpg,jpeg,png,webp,pdf',
+                'max:10240',
             ]
         ];
     }
@@ -69,7 +78,11 @@ class LlegadaTardeRequest extends FormRequest
             'justificada.boolean' => 'El campo justificada debe ser verdadero o falso.',
 
             'observacion.string' => 'La observación debe ser un texto.',
-            'observacion.max' => 'La observación no puede superar los 1000 caracteres.'
+            'observacion.max' => 'La observación no puede superar los 1000 caracteres.',
+
+            'soporte.file' => 'El soporte debe ser un archivo.',
+            'soporte.mimes' => 'El soporte debe ser una imagen (jpg, png, webp) o un PDF.',
+            'soporte.max' => 'El soporte no puede superar 10MB.',
         ];
     }
 }
