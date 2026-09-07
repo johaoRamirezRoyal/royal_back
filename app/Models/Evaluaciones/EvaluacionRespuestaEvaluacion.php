@@ -4,6 +4,7 @@ namespace App\Models\Evaluaciones;
 
 use App\Models\Usuarios\Usuario;
 use App\Models\Usuarios\Nivel;
+use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\Periodo;
 use Illuminate\Database\Eloquent\Model;
 
@@ -19,6 +20,7 @@ class EvaluacionRespuestaEvaluacion extends Model
         'id_evaluado',
         'id_nivel',
         'id_periodo',
+        'id_anio_escolar',
         'anonima',
         'completada_en',
     ];
@@ -29,6 +31,7 @@ class EvaluacionRespuestaEvaluacion extends Model
         'id_evaluado' => 'integer',
         'id_nivel' => 'integer',
         'id_periodo' => 'integer',
+        'id_anio_escolar' => 'integer',
         'anonima' => 'integer',
         'completada_en' => 'datetime',
     ];
@@ -60,6 +63,14 @@ class EvaluacionRespuestaEvaluacion extends Model
     public function periodo()
     {
         return $this->belongsTo(Periodo::class, 'id_periodo');
+    }
+
+    // Año escolar vigente al momento de la respuesta — resuelto aparte de `periodo` (ver
+    // migración `add_id_anio_escolar_to_evaluaciones_respuestas_evaluacion_table`), no
+    // derivado de `periodo.id_anio`.
+    public function anioEscolar()
+    {
+        return $this->belongsTo(Anio::class, 'id_anio_escolar');
     }
 
     public function respuestasPreguntas()

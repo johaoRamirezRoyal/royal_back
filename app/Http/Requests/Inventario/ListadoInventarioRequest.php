@@ -34,6 +34,7 @@ class ListadoInventarioRequest extends FormRequest
             'estado.*' => ['integer', Rule::exists('estado', 'id')],
             's' => ['nullable', 'string', 'max:100'],
             'descripcion' => ['nullable', 'string', 'max:200'],
+            'individual' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1'],
         ];
     }

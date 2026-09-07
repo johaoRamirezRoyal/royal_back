@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Evaluaciones;
 
 use App\Http\Controllers\Controller;
 use App\Services\evaluaciones\EvaluacionesServices;
+use App\Services\AnioEscolar\PeriodoServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class EvaluacionesController extends Controller
     public function __construct(
         private EvaluacionesServices $evaluacionesServices,
         private UsuariosServices $usuariosService,
+        private PeriodoServices $periodoServices,
     ) {}
 
     private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
@@ -117,10 +119,13 @@ class EvaluacionesController extends Controller
 
     // Catálogo de solo lectura (numero/fechas de periodo, año escolar) — sin gate: lo usan
     // tanto las pantallas administrativas como el autoservicio "Mis resultados" para armar
-    // sus filtros de periodo/año escolar (mismo criterio que misResultados más abajo).
-    public function listarPeriodos(): JsonResponse
+    // sus filtros de periodo/año escolar (mismo criterio que misResultados más abajo). La
+    // lógica vive en PeriodoServices (App\Services\AnioEscolar) porque `periodos` es un
+    // catálogo del dominio año académico, no algo propio de Evaluaciones — este endpoint
+    // solo expone ese servicio bajo la ruta que ya consume el frontend del módulo.
+    public function listarPeriodos(Request $request): JsonResponse
     {
-        return $this->apiResponse($this->evaluacionesServices->listarPeriodos());
+        return $this->apiResponse($this->periodoServices->listar($request->only(['activo'])));
     }
 
     public function obtenerPorId(Request $request, int $id): JsonResponse
@@ -246,13 +251,16 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->listarDisponiblesParaCoordinador($request->user()));
     }
 
+    // Lógica en PeriodoServices (App\Services\AnioEscolar) — mismo motivo que listarPeriodos
+    // más arriba: "cuál es el periodo vigente" es un concepto de año académico, no propio
+    // de Evaluaciones, aunque este módulo sea uno de sus consumidores.
     public function periodoActivo(Request $request): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_VER, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
             return $rechazo;
         }
 
-        return $this->apiResponse($this->evaluacionesServices->periodoActivo());
+        return $this->apiResponse($this->periodoServices->periodoActivo());
     }
 
     // ─── Secciones ─────────────────────────────────────────────
@@ -426,6 +434,7 @@ class EvaluacionesController extends Controller
             'anonima' => 'sometimes|integer',
             'id_evaluado' => 'nullable|integer|exists:usuarios,id_user',
             'id_nivel' => 'nullable|integer|exists:nivel,id',
+            'id_periodo' => 'required|integer|exists:periodos,id',
             'respuestas' => 'required|array|min:1',
             'respuestas.*.id_pregunta' => 'required|integer|exists:evaluaciones_preguntas,id',
             'respuestas.*.id_opcion' => 'nullable|integer|exists:evaluaciones_opciones_pregunta,id',

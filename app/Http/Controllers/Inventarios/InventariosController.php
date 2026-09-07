@@ -86,7 +86,7 @@ class InventariosController extends Controller
 
         $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
         $search = $request->input('s', null);
-        $datos = $request->only(['id_area', 'id_categoria', 'estado', 'estado_not_in', 'id_usuario']);
+        $datos = $request->only(['id_area', 'id_categoria', 'estado', 'estado_not_in', 'id_usuario', 'tipo_categoria', 'anio_descontinuado']);
         $sort = $request->input('sort'); // 'usuario' o 'cantidad'
         $dir = $request->input('dir', 'asc');
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos, $sort, $dir);
@@ -111,7 +111,7 @@ class InventariosController extends Controller
             return $rechazo;
         }
 
-        $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion']);
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
         $per_page = $request->input('per_page', 15);
 
         $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
@@ -333,7 +333,9 @@ class InventariosController extends Controller
             $data['id_reporte'],
             $data['id_resp'],
             $data['fecha_respuesta'],
-            $data['descripcion']
+            $data['descripcion'],
+            $data['id_anio'],
+            $data['id_periodo']
         );
 
         return $this->apiResponse($resultado);
@@ -418,6 +420,46 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    // POST /inventario/mantenimiento/pdf — checklist de mantenimiento preventivo (mismos
+    // equipos recién programados), sirve para Sistemas y Operativos por igual.
+    public function generarMantenimientoPdf(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            "ids" => "required|array|min:1",
+            "ids.*" => "integer|distinct|exists:inventario,id",
+            "con_solucion" => "boolean",
+            "id_log" => "required|integer|exists:usuarios,id_user",
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                "error" => true,
+                "message" => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
+        $resultado = $this->inventario_services->generarMantenimientoPdf(
+            $data['ids'],
+            $data['con_solucion'] ?? false,
+            $data['id_log']
+        );
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
     // GET /inventario/mantenimiento/indicador — % de cumplimiento por categoría (equipos
     // con mantenimiento registrado en el periodo / total de equipos activos).
     public function indicadorMantenimiento(MantenimientoIndicadorRequest $request)
@@ -429,7 +471,8 @@ class InventariosController extends Controller
         $resultado = $this->inventario_services->indicadorMantenimiento(
             $request->input('tipo_categoria'),
             $request->input('id_anio'),
-            $request->input('id_periodo')
+            $request->input('id_periodo'),
+            $request->input('id_categoria')
         );
 
         return $this->apiResponse($resultado);
@@ -444,7 +487,8 @@ class InventariosController extends Controller
 
         $resultado = $this->inventario_services->graficaMantenimientoPorMes(
             $request->input('tipo_categoria'),
-            $request->input('id_anio')
+            $request->input('id_anio'),
+            $request->input('id_categoria')
         );
 
         return $this->apiResponse($resultado);

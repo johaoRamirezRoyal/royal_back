@@ -445,7 +445,7 @@ añadida en 2026-08 al construir el flujo de "realizar evaluaciones".
 | `evaluaciones_opciones_pregunta` | `EvaluacionOpcionPregunta` | `id` | no | no |
 | `evaluaciones_nivel` | `EvaluacionNivel` (pivote `Evaluacion`↔`Nivel`) | `id` | no | no |
 | `evaluaciones_perfil` | `EvaluacionPerfil` (pivote `Evaluacion`↔`Perfil`, perfiles evaluables) | `id` | no | sí — `2026_08_26_100000_create_evaluaciones_perfil_table` |
-| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | columnas `id_evaluado`/`id_periodo` añadidas vía migración (ver abajo) |
+| `evaluaciones_respuestas_evaluacion` | `EvaluacionRespuestaEvaluacion` | `id` | sí | columnas `id_evaluado`/`id_periodo`/`id_anio_escolar` añadidas vía migración (ver abajo) |
 | `evaluaciones_respuestas_pregunta` | `EvaluacionRespuestaPregunta` | `id` | sí | no |
 
 `evaluaciones_respuestas_evaluacion` empezó sin `id_evaluado`/`id_periodo`
@@ -455,16 +455,53 @@ añadida en 2026-08 al construir el flujo de "realizar evaluaciones".
 es el mecanismo real que impide evaluar dos veces al mismo usuario en el mismo
 periodo — MySQL permite múltiples `NULL` en un unique, así que no rompe filas
 viejas sin periodo. `id_periodo` referencia `periodos` (periodo institucional
-general, **no** `periodo_academico` — eso es solo para lo académico).
+general, **no** `periodo_academico` — eso es solo para lo académico). Por eso
+la acción "Evaluar" del listado (`GET /{id}/evaluables`) queda **siempre**
+visible en el frontend, incluso para un usuario ya evaluado en el periodo
+activo — el evaluador puede registrar una evaluación de un periodo distinto
+y el unique lo permite (solo bloquea repetir el mismo evaluado+periodo). Por
+la misma razón, `evaluado`/`id_respuesta` en `obtenerEvaluables` apuntan a la
+respuesta **más reciente** (`MAX(completada_en)`) del usuario para esa
+evaluación, sin filtrar por periodo — así "Editar respuesta" en el frontend
+siempre trae la última evaluación realizada para editarla, sea cual sea el
+periodo en que se hizo, en vez de exigir que sea la del periodo activo.
 
-### Periodo institucional activo
+`id_anio_escolar` (migración
+`2026_09_02_090000_add_id_anio_escolar_to_evaluaciones_respuestas_evaluacion_table`,
+FK a `anio_escolar`) se agregó porque el año que trae `periodo.id_anio` es un
+dato del catálogo legacy `periodos` y puede no coincidir con el año escolar
+realmente vigente (`anio_escolar.activo=1`) al momento de la respuesta —
+`enviarRespuesta` lo resuelve aparte vía `AnioEscolarServices::obtenerUltimoAnioEscolar()`
+(la misma fuente que el indicador "Año escolar activo" en `Responder.tsx`) y
+lo guarda en la fila, en vez de derivarlo de `periodo.anioEscolar`. Cualquier
+lugar que muestre "el año de una evaluación ya guardada" (ej. la columna
+"Última evaluación" de `Detalle.tsx`) debe leer `respuesta.anioEscolar`
+(relación `EvaluacionRespuestaEvaluacion::anioEscolar()`), no
+`respuesta.periodo.anioEscolar`.
 
-`EvaluacionesServices::resolverPeriodoActivo()` lee `periodos` filtrando
-`en_curso = 1` (columna explícita, no derivada de `periodos.activo` ni del año
-escolar activo — puede haber varios "activos" a la vez, `en_curso` es la única
-fuente confiable de "cuál es el vigente ahora"). No hay CRUD para `periodos`
-todavía, se marca a mano en BD. Sin periodo activo, `enviarRespuesta` rechaza
-con 422 ("No hay un periodo activo configurado").
+### Periodo institucional (catálogo y activo — lógica en `PeriodoServices`)
+
+`periodos` es dato del dominio año académico, no de Evaluaciones — ver "A qué
+archivo pertenece una funcionalidad" en Convenciones de código. La lógica vive
+en `App\Services\AnioEscolar\PeriodoServices`:
+- `listar(array $filtros)` — catálogo completo (con `anioEscolar`), filtrable
+  por `activo`. Expuesto en `GET /evaluaciones/periodos`.
+- `resolverActivo(): ?Periodo` — lee `periodos` filtrando `en_curso = 1`
+  (columna explícita, no derivada de `periodos.activo` ni del año escolar
+  activo — puede haber varios "activos" a la vez, `en_curso` es la única
+  fuente confiable de "cuál es el vigente ahora"). No hay CRUD para `periodos`
+  todavía, se marca a mano en BD. Consumido por `EvaluacionesServices`
+  (inyectado) para el conteo de evaluados/evaluables de un periodo.
+- `periodoActivo(): array` — mismo `resolverActivo()` en shape de respuesta
+  API. Expuesto en `GET /evaluaciones/periodo-activo`.
+
+Desde 2026-09, el periodo de una respuesta ya **no** se resuelve
+automáticamente al enviarla — `enviarRespuesta` exige `id_periodo` explícito
+en el payload (lo elige el evaluador, ver frontend `Responder.tsx`) y rechaza
+con 422 si no es un periodo activo válido ("Selecciona un periodo activo
+válido"). `resolverActivo()`/`periodoActivo()` siguen existiendo para el
+conteo de evaluados/evaluables por periodo activo, no para fijar un valor por
+defecto en el formulario de respuesta.
 
 ### Permisos (reales, ya otorgados)
 
@@ -543,9 +580,10 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `PUT` | `/{id}` | 101 | Actualizar campos + niveles/perfiles (solo si la key existe en el payload) |
 | `DELETE` | `/{id}` | 101 | Soft delete (`Evaluacion` usa `SoftDeletes`) |
 | `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
-| `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` respecto al periodo activo |
+| `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` de la evaluación **más reciente** a ese usuario para ESTA evaluación (cualquier periodo, no solo el activo — así "Editar respuesta"/"Reenviar correo"/"Descargar PDF" en el frontend siempre operan sobre la última, y "Evaluar" queda libre para registrar una nueva en un periodo distinto), + `ultima_evaluacion` (mismo `id`, con periodo/año escolar, para la columna informativa del listado) |
 | `GET` | `/mis-evaluaciones` | 103, 101 | Evaluaciones activas disponibles para el solicitante (ver `listarDisponiblesParaCoordinador`), con `evaluables_count`/`evaluados_count` del periodo activo |
-| `GET` | `/periodo-activo` | 102, 101, 103 | Periodo institucional `en_curso=1` (con año escolar) |
+| `GET` | `/periodos` | sin gate | Catálogo de periodos institucionales (con año escolar), filtrable por `activo`; lógica en `PeriodoServices::listar()` (ver "Periodo institucional" arriba) |
+| `GET` | `/periodo-activo` | 102, 101, 103 | Periodo institucional `en_curso=1` (con año escolar); lógica en `PeriodoServices::periodoActivo()` |
 
 #### Secciones
 
@@ -575,7 +613,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `id_evaluado`, opcional `anonima`/`id_nivel`, `respuestas[]` con `id_pregunta` + (`id_opcion` y/o `valor_texto`) + `comentario` opcional. Valida perfil/nivel evaluable, scoping de Coordinador, y que no exista ya una respuesta para ese evaluado+periodo. Dispara el correo con PDF al terminar (fuera de la transacción). |
+| `POST` | `/{idEvaluacion}/responder` | 103, 101 | Enviar respuesta (transacción); `id_evaluado`, `id_periodo` (**requerido**, debe ser un periodo activo — lo elige el evaluador, no hay valor por defecto, ver "Periodo institucional" arriba), opcional `anonima`/`id_nivel`, `respuestas[]` con `id_pregunta` + (`id_opcion` y/o `valor_texto`) + `comentario` opcional. Valida perfil/nivel evaluable, scoping de Coordinador, y que no exista ya una respuesta para ese evaluado+periodo. Dispara el correo con PDF al terminar (fuera de la transacción). |
 | `PUT` | `/respuestas/{idRespuesta}` | 103, 101 | Reemplaza (`delete`+`create`) las `evaluaciones_respuestas_pregunta` de una respuesta ya guardada — solo el creador o Super Admin |
 | `GET` | `/{idEvaluacion}/respuestas` | 102, 101, 103 | Listado paginado; filtro `anonima`, `per-page`; Coordinador solo ve las suyas |
 | `GET` | `/respuestas/{idRespuesta}` | 102, 101, 103 | Detalle de respuesta con evaluacion→servicio, evaluado, nivel, periodo→año escolar, preguntas→tipo→opciones |
@@ -837,6 +875,32 @@ aceptan el OR de ambas opciones, el resto de métodos solo acepta 104.
 | Services | **lowercase** | `app/Services/inventario/` |
 | Requests | Capitalized | `app/Http/Requests/Inventario/` |
 | Routes | lowercase (excepción: `Biblioteca.php`) | `routes/api/inventario.php` |
+
+### A qué archivo pertenece una funcionalidad (ruta / controller / service)
+
+La lógica va en el service **del dominio dueño del dato**, no en el service del
+primer módulo que la necesitó. Un módulo puede *consumir* (inyectar) el
+service de otro dominio y exponerlo bajo su propia ruta/endpoint — eso es
+normal y no mueve la lógica —, pero no debe reimplementar ni copiar la
+consulta/regla que ya vive en el service dueño.
+
+Ejemplo real: `periodos` (tabla y concepto de periodo institucional/año
+académico) es dato del dominio **año académico**, aunque el módulo de
+Evaluaciones fue el primero en necesitar "listar periodos" y "cuál es el
+periodo activo". La lógica vive en `App\Services\AnioEscolar\PeriodoServices`
+(`listar()`, `resolverActivo()`, `periodoActivo()`); `EvaluacionesController`
+solo inyecta `PeriodoServices` y expone `GET /evaluaciones/periodos` y
+`GET /evaluaciones/periodo-activo` porque ahí es donde el frontend del módulo
+ya los consume — el endpoint puede quedarse en la ruta del módulo consumidor,
+la lógica no. `EvaluacionesServices` también inyecta `PeriodoServices` para
+resolver el periodo activo internamente (`obtenerEvaluables`,
+`listarDisponiblesParaCoordinador`) en vez de tener su propia copia de la
+consulta.
+
+Al agregar una funcionalidad nueva, antes de escribirla pregúntate: ¿de qué
+dominio es este dato/regla realmente? Si la respuesta es "de otro módulo que
+ya tiene su propio service", inyéctalo — no dupliques ni la dejes en el
+service del módulo que solo la consume.
 
 ### Controllers
 ```php
