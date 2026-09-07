@@ -9,11 +9,13 @@ use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\LlegadasTarde\LlegadasTarde as ModelsLlegadasTarde;
 use App\Models\Usuarios\Usuario;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use App\Services\Service;
 use App\Services\WhatsAppService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
 class LlegadasTarde extends Service
@@ -36,10 +38,11 @@ class LlegadasTarde extends Service
 
     public function __construct(
         private MailService $mailService,
-        private WhatsAppService $whatsAppService
+        private WhatsAppService $whatsAppService,
+        private CloudinaryService $cloudinaryService
     ) {}
 
-    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null): array
+    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null, ?UploadedFile $soporte = null): array
     {
         try {
             $yaRegistrada = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
@@ -62,6 +65,25 @@ class LlegadasTarde extends Service
                     'message' => "No se encontró un periodo académico disponible para registrar la llegada tarde",
                     'data' => []
                 ];
+            }
+
+            // Se sube recién acá, ya descartado el caso más común de duplicado (mismo
+            // alumno+día) — el firstOrCreate() de abajo sigue siendo la defensa real contra
+            // la carrera de dos envíos casi simultáneos, así que en ese caso raro el archivo
+            // queda subido pero huérfano (no se borra); no justifica una subida transaccional.
+            $soporteUrl = null;
+            $soportePublicId = null;
+            if ($soporte) {
+                $subida = $this->cloudinaryService->uploadFile($soporte, 'llegadas-tarde/soportes');
+                if ($subida['error']) {
+                    return [
+                        'error' => true,
+                        'message' => $subida['message'],
+                        'data' => []
+                    ];
+                }
+                $soporteUrl = $subida['data']['url'];
+                $soportePublicId = $subida['data']['public_id'];
             }
 
             // Las justificadas no cuentan para el conteo del período, igual que las revocadas.
@@ -90,6 +112,8 @@ class LlegadasTarde extends Service
                     'id_periodo_academico' => $periodo_academico->id,
                     'justificada' => $justificada,
                     'observacion' => $observacion,
+                    'soporte_url' => $soporteUrl,
+                    'soporte_public_id' => $soportePublicId,
                 ]
             );
 

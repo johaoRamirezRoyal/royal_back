@@ -7,6 +7,7 @@ use App\Http\Requests\Instituciones\InstitucionAdminRequest;
 use App\Models\Instituciones\CartaRecomendacion;
 use App\Models\Instituciones\ConfiguracionInstituciones;
 use App\Models\Instituciones\Institucion;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,8 +22,12 @@ class InstitucionAdminController extends Controller
     // 2026_08_31_190000_seed_opcion_ver_instituciones_documentos.
     private const OPCION_LECTURA = 105;
 
-    public function __construct(private UsuariosServices $usuariosService)
-    {
+    private const PERFIL_SUPER_ADMIN = 1;
+
+    public function __construct(
+        private UsuariosServices $usuariosService,
+        private CloudinaryService $cloudinaryService,
+    ) {
     }
 
     /**
@@ -207,6 +212,38 @@ class InstitucionAdminController extends Controller
             ->get(['id', 'idioma', 'datos', 'documento_url', 'created_at']);
 
         return $this->success('Documentos obtenidos', $cartas);
+    }
+
+    /**
+     * Elimina un documento (carta de recomendación) ya enviado — borra el archivo en
+     * Cloudinary y el registro. Exclusivo de Super Admin, chequeado por perfil
+     * directamente en vez de reusar sinAcceso()/OPCION_GESTION: esa opción (104) hoy
+     * coincide, por un bug de seeding ya documentado, con "Compras — Gestión de
+     * compras" y también la tiene otorgada el perfil 34 — depender de ella dejaría
+     * borrar documentos a un perfil que no debería poder.
+     */
+    public function eliminarCarta(Request $request, int $institucionId, int $cartaId)
+    {
+        if ((int) $request->user()->perfil !== self::PERFIL_SUPER_ADMIN) {
+            return $this->error('Solo el Super Admin puede eliminar documentos.', 403);
+        }
+
+        $carta = CartaRecomendacion::where('id_institucion', $institucionId)->find($cartaId);
+
+        if (! $carta) {
+            return $this->error('Documento no encontrado.', 404);
+        }
+
+        // Los PDF se suben como resource_type "image" (ver CloudinaryService::getResourceType),
+        // no "raw" (el default de deleteFile) — hay que pasarlo explícito o Cloudinary no
+        // encuentra el archivo a borrar.
+        if ($carta->documento_public_id) {
+            $this->cloudinaryService->deleteFile($carta->documento_public_id, 'image');
+        }
+
+        $carta->delete();
+
+        return $this->success('Documento eliminado', null);
     }
 
     /**

@@ -18,6 +18,8 @@ class LlegadasTarde extends Model
         'fecha',
         'hora',
         'observacion',
+        'soporte_url',
+        'soporte_public_id',
         'limite_alcanzado',
         'revocado',
         'justificada',

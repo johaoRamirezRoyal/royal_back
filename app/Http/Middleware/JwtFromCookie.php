@@ -15,8 +15,12 @@ class JwtFromCookie
     {
         $token = null;
 
-        if ($request->is('api/compartido/*')) {
+        if ($request->is('api/compartido/*') || $request->is('api/auth/logout')) {
 
+            // /api/auth/logout es compartido entre ambos sistemas (ver
+            // AuthController::logout, que ya elige la cookie a invalidar según
+            // ?system=) — necesita poder resolver auth('api')->user() con
+            // cualquiera de las dos cookies, no solo la del sistema general.
             $token = $request->cookie('admissions_token') ?? $request->cookie('token');
 
         } elseif ($request->is('api/admisiones/*')) {

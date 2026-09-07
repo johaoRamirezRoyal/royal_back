@@ -348,6 +348,77 @@ class UsuariosServices
     }
 
     /**
+     * Listado paginado de acudientes (perfil 6, auto-registrados vía el flujo público de
+     * Admisiones — ver AdmissionsController::familyRegister) para el módulo de gestión en
+     * AcudientesAdminController. A diferencia de mostrarUsuariosPaginados (que EXCLUYE
+     * perfil 6 a propósito, ver whereNotIn más arriba), acá se filtra directo a ese
+     * perfil — no se puede simplemente quitar la exclusión de aquel método porque el
+     * resto de sus consumidores (el módulo /users) sigue necesitando que se excluya.
+     */
+    public function mostrarAcudientesPaginados(int $perPage, ?string $busqueda, ?string $estado, string $sort = 'nombre', string $dir = 'asc', bool $soloAutoregistrados = false)
+    {
+        $sortable = ['nombre', 'apellido', 'documento', 'correo', 'estado', 'fechareg', 'ultima_conexion'];
+        $sort = in_array($sort, $sortable, true) ? $sort : 'nombre';
+        $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+
+        try {
+            $acudientes = Usuario::select([
+                'id_user',
+                'documento',
+                'nombre',
+                'apellido',
+                'correo',
+                'telefono',
+                'estado',
+                'fechareg',
+                'ultima_ip',
+                'ultima_conexion',
+                'fecha_editado',
+                'origen_registro',
+            ])
+                ->withCount('inscripciones')
+                ->where('perfil', 6)
+                // Marca explícita que AdmissionsController::familyRegister setea al crear
+                // la cuenta — reemplaza la heurística anterior basada en user_log (quién
+                // creó el registro), que no era confiable: hay usuarios sin el id del
+                // admin aunque tampoco vinieron de un auto-registro.
+                ->when($soloAutoregistrados, function ($query) {
+                    $query->where('origen_registro', 'admisiones');
+                })
+                ->when($busqueda, function ($query, $search) {
+                    $palabras = preg_split('/\s+/', trim($search));
+                    $query->where(function ($q) use ($palabras) {
+                        foreach ($palabras as $palabra) {
+                            $q->where(function ($sub) use ($palabra) {
+                                $sub->where('nombre', 'LIKE', "%$palabra%")
+                                    ->orWhere('apellido', 'LIKE', "%$palabra%")
+                                    ->orWhere('documento', 'LIKE', "%$palabra%")
+                                    ->orWhere('correo', 'LIKE', "%$palabra%");
+                            });
+                        }
+                    });
+                })
+                ->when($estado, function ($query, $estado) {
+                    $query->where('estado', $estado);
+                })
+                ->orderBy($sort, $dir)
+                ->paginate($perPage);
+
+            return [
+                'error' => false,
+                'message' => 'Datos obtenidos satisfactoriamente',
+                'data' => $acudientes,
+            ];
+        } catch (QueryException $e) {
+            return [
+                'error' => true,
+                'message' => 'Ha ocurrido un error inesperado',
+                'data' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Agrega foto y acudientes a cada usuario con perfil estudiante (16) de la colección.
      * No hay columna de parentesco en estudiantes_padres, por lo que ese dato siempre viaja null.
      */
@@ -526,6 +597,33 @@ class UsuariosServices
             return [
                 'error' => false,
                 'message' => 'Usuarios actualizados correctamente',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Igual que actualizarEstadoUsuarios pero con el `where('perfil', 6)` agregado — así
+     * este endpoint (pensado solo para el módulo de gestión de acudientes) no se puede
+     * usar para tocar el estado de usuarios de otro perfil aunque lleguen IDs ajenos.
+     */
+    public function actualizarEstadoAcudientes(array $id_usuarios, string $estado)
+    {
+        try {
+            Usuario::whereIn('id_user', $id_usuarios)
+                ->where('perfil', 6)
+                // fecha_editado no se escribía en ningún lado del código hasta ahora —
+                // acá queda como "última vez que un staff cambió algo de esta cuenta
+                // desde este panel" (hoy la única acción de edición que existe es esta).
+                ->update(['estado' => $estado, 'fecha_editado' => now()]);
+
+            return [
+                'error' => false,
+                'message' => 'Acudientes actualizados correctamente',
             ];
         } catch (\Exception $e) {
             return [

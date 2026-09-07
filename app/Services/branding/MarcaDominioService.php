@@ -66,6 +66,7 @@ class MarcaDominioService extends Service
             $marca = MarcaDominio::create([
                 'dominio' => $dominio,
                 'nombre' => $datos['nombre'] ?? null,
+                'descripcion' => $datos['descripcion'] ?? null,
                 'color' => empty($datos['color']) ? null : $datos['color'],
                 'logo_path' => $subido['url'],
                 'logo_public_id' => $subido['public_id'],
@@ -106,6 +107,7 @@ class MarcaDominioService extends Service
 
             $marca->dominio = $dominio;
             $marca->nombre = $datos['nombre'] ?? $marca->nombre;
+            $marca->descripcion = $datos['descripcion'] ?? $marca->descripcion;
             $marca->color = array_key_exists('color', $datos) ? (empty($datos['color']) ? null : $datos['color']) : $marca->color;
 
             if ($logo) {
@@ -181,11 +183,11 @@ class MarcaDominioService extends Service
      * {@see resolverRutaLocalPorCorreo} en su lugar — TCPDF/PhpSpreadsheet necesitan una
      * ruta de archivo local, no una URL remota.
      *
-     * @return array{url: ?string, nombre: ?string, color: ?string}
+     * @return array{url: ?string, nombre: ?string, descripcion: ?string, color: ?string}
      */
     public function resolverPorCorreo(?string $correo): array
     {
-        $sinMatch = ['url' => null, 'nombre' => null, 'color' => null];
+        $sinMatch = ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null];
 
         $dominio = $this->dominioDeCorreo($correo);
         if (!$dominio) {
@@ -198,7 +200,7 @@ class MarcaDominioService extends Service
             return $sinMatch;
         }
 
-        return ['url' => $marca->logo_path, 'nombre' => $marca->nombre, 'color' => $marca->color];
+        return ['url' => $marca->logo_path, 'nombre' => $marca->nombre, 'descripcion' => $marca->descripcion, 'color' => $marca->color];
     }
 
     /**
