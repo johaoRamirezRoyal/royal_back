@@ -18,6 +18,7 @@ class MantenimientoIndicadorRequest extends FormRequest
             'tipo_categoria' => ['nullable', 'integer', 'in:1,2'],
             'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
             'id_periodo' => ['nullable', 'integer'],
+            'id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
         ];
     }
 
@@ -28,6 +29,8 @@ class MantenimientoIndicadorRequest extends FormRequest
             'id_anio.integer' => 'El año escolar debe ser un número entero',
             'id_anio.exists' => 'El año escolar no existe',
             'id_periodo.integer' => 'El periodo debe ser un número entero',
+            'id_categoria.integer' => 'La categoría debe ser un número entero',
+            'id_categoria.exists' => 'La categoría no existe',
         ];
     }
 }

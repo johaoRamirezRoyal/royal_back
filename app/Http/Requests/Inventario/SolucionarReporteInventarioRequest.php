@@ -19,6 +19,8 @@ class SolucionarReporteInventarioRequest extends FormRequest
             'id_resp' => ['required', 'integer', Rule::exists('usuarios', 'id_user')],
             'fecha_respuesta' => ['nullable', 'date'],
             'descripcion' => ['required', 'string', 'max:500'],
+            'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
+            'id_periodo' => ['nullable', 'integer'],
         ];
     }
 
@@ -38,6 +40,11 @@ class SolucionarReporteInventarioRequest extends FormRequest
             'descripcion.required' => 'La descripción de la solución es obligatoria',
             'descripcion.string' => 'La descripción debe ser un texto',
             'descripcion.max' => 'La descripción no puede superar los 500 caracteres',
+
+            'id_anio.integer' => 'El año escolar debe ser un número entero',
+            'id_anio.exists' => 'El año escolar no existe',
+
+            'id_periodo.integer' => 'El periodo debe ser un número entero',
         ];
     }
 
@@ -48,6 +55,8 @@ class SolucionarReporteInventarioRequest extends FormRequest
             'id_resp' => $this->id_resp,
             'fecha_respuesta' => $this->fecha_respuesta,
             'descripcion' => $this->descripcion,
+            'id_anio' => $this->id_anio,
+            'id_periodo' => $this->id_periodo,
         ];
     }
 }
