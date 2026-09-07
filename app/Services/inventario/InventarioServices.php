@@ -12,6 +12,8 @@ use App\Models\Inventario\Reportes;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Usuario;
+use App\Pdf\Inventario\MantenimientoChecklistPdfService;
+use App\Services\branding\MarcaDominioService;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -31,10 +33,10 @@ class InventarioServices
         'cronograma.sistemas@royalschool.edu.co'
     ];
 
-    private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null): array
+    private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null, ?string $solucionadorCorreo = null): array
     {
         $destinatarios = $this->mailTo;
-        foreach (array_filter([$responsableCorreo, $reportadorCorreo]) as $correo) {
+        foreach (array_filter([$responsableCorreo, $reportadorCorreo, $solucionadorCorreo]) as $correo) {
             $destinatarios[] = $correo;
         }
         return array_values(array_unique($destinatarios));
@@ -73,6 +75,17 @@ class InventarioServices
         try {
             $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
 
+            // El GROUP_CONCAT de abajo arma un JSON con TODOS los ítems de cada grupo, y
+            // MySQL trunca ese texto en seco al límite de `group_concat_max_len` (1024 bytes
+            // por defecto en MySQL — algunos grupos, como el de liberados sin usuario
+            // asignado, agrupan decenas de ítems y superan eso fácil). Un GROUP_CONCAT
+            // truncado a mitad de un JSON_OBJECT rompe el JSON completo del grupo: el
+            // json_decode() de más abajo devuelve null y el 'foreach' sobre null explota
+            // como excepción, tumbando TODA la petición con "Respuesta inválida del
+            // servidor" en el frontend — se vio primero en /inventario/liberado, pero
+            // afecta a cualquier vista que use este mismo listado con grupos grandes.
+            DB::statement('SET SESSION group_concat_max_len = 1000000');
+
             // Último reporte/mantenimiento (id_reporte IS NULL) por ítem, con su solución si
             // ya la tiene. Va como LEFT JOIN a una tabla derivada -en vez de subconsulta
             // correlacionada dentro del GROUP_CONCAT- porque MariaDB (ONLY_FULL_GROUP_BY)
@@ -100,6 +113,16 @@ class InventarioServices
                 WHERE ranked.rn = 1
             ) as ur");
 
+            // Fecha en la que se descontinuó cada ítem, para el filtro por año en
+            // /inventario/descontinuado — un mismo id_inventario puede tener más de un
+            // registro en `inventario_desc` (se descontinuó, se reasignó, se volvió a
+            // descontinuar), así que se toma la más reciente por ítem.
+            $descontinuadoJoin = DB::raw("(
+                SELECT id_inventario, MAX(fechareg) as fecha_descontinuacion
+                FROM inventario_desc
+                GROUP BY id_inventario
+            ) as idesc");
+
             $listado = Inventario::select(
                 'inventario.id_user',
                 'inventario.id_area',
@@ -118,6 +141,7 @@ class InventarioServices
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
                             'fecha_compra', inventario.fecha_compra,
+                            'fecha_descontinuacion', idesc.fecha_descontinuacion,
                             'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
                                 'id', ur.id,
                                 'tipo_reporte', ur.tipo_reporte,
@@ -141,11 +165,25 @@ class InventarioServices
             )
                 ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
                 ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
+                ->leftJoin('categoria as c', 'inventario.id_categoria', '=', 'c.id')
                 ->leftJoin($ultimoReporteJoin, 'ur.id_inventario', '=', 'inventario.id')
+                ->leftJoin($descontinuadoJoin, 'idesc.id_inventario', '=', 'inventario.id')
+                // Sin este filtro, ítems lógicamente eliminados (activo=0) seguían apareciendo
+                // en el listado — es lo que hacía que /inventario/liberado mostrara 52 grupos
+                // en vez de los 2 reales (el legacy sí filtraba `activo=1`, ver reasignar.php).
+                // Excepción: al descontinuar (estado 5) `descontinuarInventario` pone
+                // `activo=0` a propósito (así se oculta de las vistas normales) — filtrar acá
+                // por activo=1 dejaría /inventario/descontinuado sin poder mostrar NINGÚN
+                // ítem descontinuado desde que existe esa lógica (confirmado: los 79 ítems
+                // descontinuados en 2026 tienen todos activo=0). Por eso el filtro se salta
+                // cuando se está pidiendo justo ese estado.
+                ->when(!in_array(5, $datos['estado'] ?? []), function ($query) {
+                    $query->where('inventario.activo', 1);
+                })
                 ->with([
                     'usuario:id_user,nombre,apellido',
                     'area:id,nombre',
-                    'categoria:id,nombre'
+                    'categoria:id,nombre,tipo_categoria'
                 ])
                 ->when($search, function ($query, $search) {
                     // El frontend usa este mismo filtro `s` tanto para la búsqueda libre por
@@ -161,12 +199,16 @@ class InventarioServices
                     $query->whereIn('inventario.id_area', $datos['id_area']);
                 })->when($datos['id_categoria'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.id_categoria', $datos['id_categoria']);
+                })->when($datos['tipo_categoria'] ?? null, function ($query) use ($datos) {
+                    $query->where('c.tipo_categoria', $datos['tipo_categoria']);
                 })->when($datos['estado'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.estado', $datos['estado']);
                 })->when($datos['estado_not_in'] ?? null, function ($query) use ($datos) {
                     $query->whereNotIn('inventario.estado', $datos['estado_not_in']);
                 })->when($datos['id_usuario'] ?? null, function ($query) use ($datos) {
                     $query->where('inventario.id_user', $datos['id_usuario']);
+                })->when($datos['anio_descontinuado'] ?? null, function ($query) use ($datos) {
+                    $query->whereYear('idesc.fecha_descontinuacion', $datos['anio_descontinuado']);
                 })
                 // u.nombre se agrega al GROUP BY solo para satisfacer ONLY_FULL_GROUP_BY: es
                 // funcionalmente dependiente de id_user (join 1:1 por PK), no cambia los grupos.
@@ -186,7 +228,7 @@ class InventarioServices
 
             // convertir string a JSON real
             $listado->transform(function ($item) {
-                $item->items = json_decode($item->items);
+                $item->items = json_decode($item->items) ?? [];
 
                 // MariaDB no anida JSON_OBJECT() dentro de JSON_OBJECT(): 'ultimo_reporte' y,
                 // dentro de este, 'solucion', llegan como strings JSON escapados en vez de
@@ -248,15 +290,18 @@ class InventarioServices
                     });
                 });
 
-            // Modo detalle: ítems sueltos de un grupo (query 2)
-            if (!empty($filtros['descripcion'])) {
+            // Modo detalle: ítems sueltos de un grupo (query 2, usado por "Inspeccionar"),
+            // o de TODOS los grupos que matcheen los filtros (query 2b, usado por la
+            // exportación a Excel — bandera 'individual', sin restringir a una descripción).
+            if (!empty($filtros['descripcion']) || !empty($filtros['individual'])) {
                 $listado = $query
-                    ->where('inventario.descripcion', $filtros['descripcion'])
+                    ->when(!empty($filtros['descripcion']), fn ($q) => $this->whereDescripcion($q, 'inventario.descripcion', $filtros['descripcion']))
                     ->select(
                         'inventario.*',
                         'e.nombre as estado_nombre',
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
-                        'a.nombre as nom_area'
+                        'a.nombre as nom_area',
+                        'c.nombre as categoria_nombre'
                     )
                     ->orderByDesc('inventario.id')
                     ->paginate($perPage);
@@ -302,11 +347,29 @@ class InventarioServices
     }
 
     /**
+     * Compara una columna de descripción ignorando espacios/tabs/saltos de línea sueltos
+     * al inicio o fin. Los datos migrados del sistema legacy traen descripciones sucias
+     * (algunas con \r\n de Windows al final — ver p.ej. los "Aire acondicionado #S..."),
+     * y ni un '=' estricto ni el TRIM() de MySQL (que solo recorta espacios, no \r\n\t)
+     * las matcheaban contra el valor ya limpio que llega en la petición (TrimStrings,
+     * el middleware global de Laravel, sí recorta \r\n\t con el trim() de PHP). Esto hacía
+     * que "Inspeccionar" y las acciones de grupo (editar descripción, incrementar/disminuir
+     * cantidad) no encontraran ningún ítem para esos grupos.
+     */
+    private function whereDescripcion($query, string $columna, string $descripcion)
+    {
+        $normalizarSql = "TRIM(REPLACE(REPLACE(REPLACE({$columna}, '\\r', ''), '\\n', ''), '\\t', ''))";
+        $normalizado = trim(str_replace(["\r", "\n", "\t"], '', $descripcion));
+
+        return $query->whereRaw("{$normalizarSql} = ?", [$normalizado]);
+    }
+
+    /**
      * Items visibles de un grupo del listado consolidado (activo + estado válido).
      */
     private function itemsDeGrupo(string $descripcion, int $idArea, int $idUsuario)
     {
-        return Inventario::where('descripcion', $descripcion)
+        return $this->whereDescripcion(Inventario::query(), 'descripcion', $descripcion)
             ->where('id_area', $idArea)
             ->where('id_user', $idUsuario)
             ->where('activo', 1)
@@ -1013,7 +1076,7 @@ class InventarioServices
                                 ->whereColumn('rpe.id_reporte', 'rp.id')
                                 ->where('rpe.estado', 3);
                         });
-                }, function ($q) use ($estado) {
+                }, function ($q) use ($estado, $tipo_reporte) {
                     // El estado real (2 para reportado, 6 para mantenimiento) lo aporta el
                     // filtro `estado` del caller — cuando viene, replicamos el comportamiento
                     // legacy de exigir iv.estado = rp.estado (antes se relajó a un simple
@@ -1021,7 +1084,18 @@ class InventarioServices
                     // cambiado por otra vía pero conservaba un reporte sin resolver, algo que
                     // el listado viejo nunca mostraba). Sin `estado` explícito (ej. la pestaña
                     // general "Reportes") se mantiene el filtro amplio.
-                    $q->when($estado, function ($q) use ($estado) {
+                    //
+                    // Excepción: mantenimiento (tipo_reporte 2). A diferencia de "reportado",
+                    // inventario.estado NO se mantiene confiablemente en 6 mientras el
+                    // mantenimiento sigue pendiente — datos reales: de 230 mantenimientos
+                    // realmente abiertos (sin solución) hoy, 0 conservan iv.estado=6 (otras
+                    // acciones sobre el ítem cambian su estado sin pasar por
+                    // solucionarReporteInventario). Exigir esa igualdad dejaba
+                    // /inventario/mantenimiento sin NINGÚN pendiente. Para mantenimiento
+                    // basta con que el ítem siga vivo (no liberado/descontinuado); el filtro
+                    // de abajo (`rp.estado = $estado`, más adelante en la query) ya garantiza
+                    // que sigue siendo justo ese tipo de reporte sin resolver.
+                    $q->when($estado && $tipo_reporte !== 2, function ($q) use ($estado) {
                         $q->where('iv.estado', $estado);
                     }, function ($q) {
                         $q->whereNotIn('iv.estado', [4, 5]);
@@ -1036,11 +1110,29 @@ class InventarioServices
                 })
                 ->select(
                     'iv.*',
+                    // Sobrescribe columnas de iv.* que colisionan de nombre con las que
+                    // realmente importan del reporte (`rp`) — sin estos overrides explícitos
+                    // (evaluados después de 'iv.*' en la lista de SELECT) el frontend recibía
+                    // datos del ÍTEM en vez del REPORTE/mantenimiento puntual de cada fila:
+                    // la misma fecha de creación y la misma descripción en todo el historial
+                    // de un ítem, sin importar cuándo se programó/realizó cada mantenimiento.
+                    'rp.fechareg as fechareg',
+                    'rp.descripcion as descripcion',
+                    'rp.periodo as periodo',
+                    'rp.id_anio as id_anio',
+                    // Nombre propio del ítem (antes de que 'descripcion' se sobrescribiera con
+                    // la del reporte) — lo necesita la columna "Artículo"/"Inventario".
+                    'iv.descripcion as inventario_descripcion',
                     DB::raw("(SELECT e.nombre FROM estado e WHERE e.id = iv.estado) AS nom_estado"),
                     DB::raw("(SELECT a.nombre FROM areas a WHERE a.id = iv.id_area) AS AREA"),
                     DB::raw("(SELECT CONCAT(u2.nombre, ' ', u2.apellido) FROM usuarios u2 WHERE u2.id_user = rp.id_user) AS usuario"),
                     DB::raw("(SELECT r.fechareg FROM reportes r WHERE r.id_inventario = iv.id AND r.estado = 2 ORDER BY r.id DESC LIMIT 1) AS fecha_reporte"),
                     DB::raw("(SELECT r.id FROM reportes r WHERE r.id_inventario = iv.id ORDER BY r.id DESC LIMIT 1) AS id_reporte"),
+                    // Descripción de la SOLUCIÓN (la fila con id_reporte = rp.id y estado 3),
+                    // no la del reporte original — para la columna "Respuesta" del historial.
+                    // COALESCE con observacion: soluciones migradas del legacy no siempre
+                    // traen descripcion, pero sí observacion con el mismo texto.
+                    DB::raw("(SELECT COALESCE(s.descripcion, s.observacion) FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3 ORDER BY s.id DESC LIMIT 1) AS respuesta"),
                     DB::raw("CONCAT(u.nombre, ' ', u.apellido) AS nom_usuario"),
                     DB::raw("CONCAT(ae.anio_inicio, ' - ', ae.anio_fin) AS anio_escolar"),
                     'c.tipo_categoria',
@@ -1084,7 +1176,11 @@ class InventarioServices
                             ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$search}%"]);
                     });
                 })
-                ->orderByDesc('fecha_reporte');
+                // rp.fechareg (fecha real del reporte que ya matchea todos los filtros de
+                // arriba) en vez de fecha_reporte — esa subconsulta está hardcodeada a
+                // estado=2 (reportes de daño) y para mantenimiento (estado 6) siempre da
+                // NULL, dejando el orden del historial de mantenimiento indefinido.
+                ->orderByDesc('rp.fechareg');
 
             $reportes = $per_page
                 ? $query->paginate($per_page)
@@ -1117,10 +1213,12 @@ class InventarioServices
         int $id_reporte,
         int $id_resp,
         ?string $fecha_respuesta,
-        string $descripcion
+        string $descripcion,
+        ?int $id_anio = null,
+        ?int $id_periodo = null
     ): array {
         try {
-            $resultado = DB::transaction(function () use ($id_reporte, $id_resp, $fecha_respuesta, $descripcion) {
+            $resultado = DB::transaction(function () use ($id_reporte, $id_resp, $fecha_respuesta, $descripcion, $id_anio, $id_periodo) {
 
                 $reporte = Reportes::with('inventario')->find($id_reporte);
 
@@ -1143,7 +1241,7 @@ class InventarioServices
                     ];
                 }
 
-                $solucion = Reportes::create([
+                $datosSolucion = [
                     'id_reporte'        => $reporte->id,
                     'id_inventario'     => $reporte->id_inventario,
                     'id_area'           => $reporte->id_area,
@@ -1153,9 +1251,27 @@ class InventarioServices
                     'fecha_respuesta'   => $fecha_respuesta ?? now(),
                     'descripcion'       => $descripcion,
                     'estado'            => 3, // Solucionado
-                    'periodo'        => $reporte->periodo,
-                    'id_anio'           => $reporte->id_anio,
-                ]);
+                    // Sin esto la solución quedaba con tipo_reporte NULL — debe conservar el
+                    // mismo tipo del reporte original (2 = mantenimiento preventivo, 1 = daño).
+                    'tipo_reporte'      => $reporte->tipo_reporte,
+                    // Muchos reportes correctivos originales son data migrada sin año/periodo
+                    // (id_anio/periodo null) — permitir que quien soluciona los indique acá
+                    // en vez de heredar un null del reporte original.
+                    'periodo'        => $id_periodo ?? $reporte->periodo,
+                    'id_anio'           => $id_anio ?? $reporte->id_anio,
+                ];
+
+                // Mantenimiento preventivo (tipo_reporte 2) solucionado sin fecha explícita
+                // (así llega desde la tabla de mantenimientos pendientes): la fecha de la
+                // solución es la fecha PROGRAMADA del mantenimiento (fechareg del reporte
+                // original), no "ahora" — el mantenimiento ya ocurrió en esa fecha, el
+                // técnico solo lo está registrando/confirmando después.
+                if ($reporte->tipo_reporte === 2 && $fecha_respuesta === null) {
+                    $datosSolucion['fecha_respuesta'] = $reporte->fechareg;
+                    $datosSolucion['fechareg'] = $reporte->fechareg;
+                }
+
+                $solucion = Reportes::create($datosSolucion);
 
                 // Verificar si quedan otros reportes pendientes para el inventario
                 $tienePendientes = Reportes::where('id_inventario', $reporte->id_inventario)
@@ -1182,12 +1298,33 @@ class InventarioServices
             });
 
             if (!$resultado['error']) {
-                $reporteFresco = Reportes::with('inventario.usuario')->find($id_reporte);
-                $responsable = $reporteFresco?->inventario?->usuario?->correo;
+                // Correo con el mismo contenido/destinatarios que el legacy
+                // (ControlReportes::solucionarReporteControl): a quien reportó, al
+                // responsable actual del ítem y a quien solucionó — más el correo fijo de
+                // sistemas (ya incluido por defecto en $this->mailTo).
+                $reporteFresco = Reportes::with('inventario.usuario', 'inventario.area')->find($id_reporte);
+                $inventario = $reporteFresco?->inventario;
+                $responsable = $inventario?->usuario?->correo;
                 $reportador = Usuario::find($reporteFresco?->id_user)?->correo;
+                $solucionador = Usuario::find($id_resp)?->correo;
+                $fechaRespuesta = $resultado['data']->fecha_respuesta ?? null;
+                $fechaRespuestaTexto = $fechaRespuesta instanceof \Carbon\Carbon
+                    ? $fechaRespuesta->format('Y-m-d H:i:s')
+                    : (string) $fechaRespuesta;
+
                 $titulo = "Notificación | Reporte Solucionado";
-                $contenido = "Se ha solucionado el reporte #{$id_reporte} del inventario \"{$reporteFresco?->inventario?->descripcion}\" (Código: {$reporteFresco?->inventario?->codigo}).\n\nSolución: {$descripcion}\n\nEn caso de no recibir nuevamente el reporte de este inventario se tomará como satisfecha la solución al reporte.";
-                $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador), $titulo, $contenido);
+                $contenido = "Se ha solucionado el reporte #{$id_reporte} del siguiente artículo:\n\n"
+                    . "Descripción: {$inventario?->descripcion}\n"
+                    . "Marca: {$inventario?->marca}\n"
+                    . "Código: {$inventario?->codigo}\n"
+                    . "Estado del artículo: Arreglado\n"
+                    . "Área/Oficina: {$inventario?->area?->nombre}\n"
+                    . "Responsable: {$inventario?->usuario?->nombre} {$inventario?->usuario?->apellido}\n"
+                    . "Fecha de respuesta: {$fechaRespuestaTexto}\n"
+                    . "Observación: {$descripcion}\n\n"
+                    . "En caso de no recibir nuevamente el reporte de este inventario se tomará como satisfecha la solución al reporte.";
+
+                $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador, $solucionador), $titulo, $contenido);
             }
 
             return $resultado;
@@ -1320,6 +1457,34 @@ class InventarioServices
                 $idAnio = $ultimoAnioEscolar->id;
             }
 
+            // Evita duplicar: un mismo equipo no debería terminar con más de un
+            // mantenimiento preventivo (pendiente o ya solucionado) por año+periodo — sin
+            // este filtro se podía volver a programar un equipo que ya tuvo su
+            // mantenimiento en ese periodo (su estado ya había cambiado a otra cosa desde
+            // entonces), inflando el conteo de "realizados" por encima del total de
+            // equipos en el indicador.
+            if ($periodo) {
+                $idsConMantenimiento = DB::table('reportes')
+                    ->whereIn('id_inventario', $inventarios->pluck('id'))
+                    ->where('tipo_reporte', 2)
+                    ->whereNull('id_reporte')
+                    ->where('id_anio', $idAnio)
+                    ->where('periodo', $periodo)
+                    ->pluck('id_inventario');
+
+                $inventarios = $inventarios->reject(
+                    fn ($inventario) => $idsConMantenimiento->contains($inventario->id)
+                )->values();
+            }
+
+            if ($inventarios->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'Los equipos seleccionados ya tienen un mantenimiento preventivo registrado para ese año y periodo.',
+                    'data' => []
+                ];
+            }
+
             $creados = [];
 
             DB::transaction(function () use (
@@ -1400,6 +1565,68 @@ class InventarioServices
     }
 
     /**
+     * PDF de checklist de mantenimiento preventivo — recreación del legacy
+     * (imprimir/mantenimientosSistemas/mantenimientosEquipos.php), sirve tanto para
+     * Sistemas como Operativos (la única variación real es el checklist de columnas,
+     * que depende de si la categoría es "Computadores" o no — ver
+     * MantenimientoChecklistPdfService).
+     *
+     * @param int[] $ids IDs de inventario a incluir (todos de la misma categoría —
+     *                   el checklist de columnas se decide por la categoría del primero).
+     */
+    public function generarMantenimientoPdf(array $ids, bool $conSolucion, int $idLog): array
+    {
+        try {
+            $equipos = Inventario::whereIn('id', $ids)->with(['area', 'categoria'])->get();
+
+            if ($equipos->isEmpty()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se encontraron equipos para generar el PDF.',
+                    'data' => [],
+                ];
+            }
+
+            $categoria = $equipos->first()->categoria;
+            $tipoCategoriaLabel = $categoria?->tipo_categoria === 2 ? 'Operativos' : 'Sistemas';
+            $esComputadores = $categoria && str_contains(strtolower($categoria->nombre ?? ''), 'computador');
+
+            $responsable = Usuario::find($idLog);
+            $responsableNombre = trim(($responsable->nombre ?? '') . ' ' . ($responsable->apellido ?? '')) ?: 'N/A';
+            $logoPath = app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($responsable?->correo);
+
+            $contenido = app(MantenimientoChecklistPdfService::class)->generate([
+                'logo_path' => $logoPath,
+                'tipo_categoria_label' => $tipoCategoriaLabel,
+                'categoria_nombre' => $categoria?->nombre ?? 'Inventario',
+                'es_computadores' => $esComputadores,
+                'responsable_nombre' => $responsableNombre,
+                'con_solucion' => $conSolucion,
+                'equipos' => $equipos->map(fn ($e) => [
+                    'id' => $e->id,
+                    'descripcion' => $e->descripcion ?? '',
+                    'area' => $e->area?->nombre ?? '',
+                ])->all(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'PDF generado correctamente',
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => 'mantenimiento_' . now()->format('Y-m-d_H-i-s') . '.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
      * Un correo por responsable (no uno por equipo) resumiendo cuántos mantenimientos se le
      * programaron en este lote — evita spam cuando se programan muchos equipos a la vez.
      * Falla en silencio (no revierte la programación) si el envío da error.
@@ -1437,10 +1664,11 @@ class InventarioServices
      * legado (historial_mantenimiento.php / historialMantAires.php), agregado también por
      * categoría en vez de un único porcentaje global.
      */
-    public function indicadorMantenimiento(?int $tipoCategoria, ?int $idAnio, ?int $idPeriodo): array
+    public function indicadorMantenimiento(?int $tipoCategoria, ?int $idAnio, ?int $idPeriodo, ?int $idCategoria = null): array
     {
         try {
             $categorias = Categoria::when($tipoCategoria, fn ($q) => $q->where('tipo_categoria', $tipoCategoria))
+                ->when($idCategoria, fn ($q) => $q->where('id', $idCategoria))
                 ->orderBy('nombre')
                 ->get();
 
@@ -1450,15 +1678,35 @@ class InventarioServices
                     ->where('estado', '!=', 5)
                     ->count();
 
+                // "Realizados" = tienen una solución vinculada (estado 3), no solo
+                // programados — antes contaba cualquier reporte original sin importar si
+                // seguía pendiente, inflando la cifra que la tarjeta llama "realizados".
+                // También se exige que el ÍTEM siga activo y no descontinuado (mismo
+                // filtro que total_equipos): sin esto, un equipo con mantenimiento
+                // realizado que luego fue descontinuado/desactivado se seguía contando acá
+                // pero ya no en el denominador, pudiendo superar el 100%.
                 $totalMantenimientos = DB::table('reportes as r')
                     ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
                     ->where('i.id_categoria', $categoria->id)
+                    ->where('i.activo', 1)
+                    ->where('i.estado', '!=', 5)
                     ->where('r.tipo_reporte', 2)
                     ->whereNull('r.id_reporte')
+                    ->whereExists(function ($q) {
+                        $q->select(DB::raw(1))
+                            ->from('reportes as s')
+                            ->whereColumn('s.id_reporte', 'r.id')
+                            ->where('s.estado', 3);
+                    })
                     ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
                     ->when($idPeriodo, fn ($q) => $q->where('r.periodo', $idPeriodo))
                     ->distinct()
                     ->count('r.id_inventario');
+
+                // Salvaguarda de visualización: "realizados" nunca debe superar el total de
+                // equipos de la categoría — no cambia lo que se cuenta arriba, solo evita
+                // que un caso no previsto muestre un porcentaje incoherente (>100%).
+                $totalMantenimientos = min($totalMantenimientos, $totalEquipos);
 
                 return [
                     'id_categoria' => $categoria->id,
@@ -1496,7 +1744,7 @@ class InventarioServices
      * "gráfica de comportamiento del indicador" que el legado solo insinuaba (tabla
      * `indicadores_gestion` fuera de este módulo) sin implementarla realmente acá.
      */
-    public function graficaMantenimientoPorMes(?int $tipoCategoria, ?int $idAnio): array
+    public function graficaMantenimientoPorMes(?int $tipoCategoria, ?int $idAnio, ?int $idCategoria = null): array
     {
         try {
             $porMes = DB::table('reportes as r')
@@ -1505,6 +1753,7 @@ class InventarioServices
                 ->where('r.tipo_reporte', 2)
                 ->whereNull('r.id_reporte')
                 ->when($tipoCategoria, fn ($q) => $q->where('c.tipo_categoria', $tipoCategoria))
+                ->when($idCategoria, fn ($q) => $q->where('i.id_categoria', $idCategoria))
                 ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
                 ->select(
                     DB::raw('MONTH(r.fechareg) as mes'),

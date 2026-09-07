@@ -102,11 +102,14 @@ class PrestamosService extends Service
 
                 $prestamo->update($data);
 
-                // Si se está registrando la devolución
+                // Si se está registrando la devolución: el inventario vuelve a estado
+                // 1 (Asignado) y se reasigna a quien lo entregó originalmente (el
+                // responsable), no se queda a nombre de quien lo tenía prestado.
                 if (isset($data['id_user_recibe'])) {
 
                     $prestamo->inventario->update([
-                        'estado'  => 1, // Disponible
+                        'estado'  => 1,
+                        'id_user' => $prestamo->id_user_entrega,
                     ]);
                 }
 
