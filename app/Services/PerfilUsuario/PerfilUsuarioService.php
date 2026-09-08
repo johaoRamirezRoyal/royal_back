@@ -26,7 +26,15 @@ class PerfilUsuarioService extends Service {
                 'tipoDocumento:id,nombre',
                 'usuario.perfilRelacion:id_perfil,nombre',
                 'usuario.nivelRelacion:id,nombre',
-                'usuario.fotoPerfil:id,id_user,nombre_foto',
+                // `fotoPerfil` (hasMany, sin filtro propio) trae TODO el historial de fotos
+                // de un usuario, no solo la vigente — un usuario que ya renovó su foto
+                // varias veces puede tener decenas de filas viejas con `activo=0`. El
+                // frontend toma `foto_perfil?.[0]`, y sin `activas()->latest('id')` acá
+                // (mismo patrón que EvaluacionesServices::obtenerUsuarioEvaluado) ese índice
+                // 0 caía en la fila más antigua (la de menor id, la primera insertada) en
+                // vez de la foto realmente activa — el usuario veía siempre su primera foto
+                // de 2020 sin importar cuántas veces la hubiera actualizado después.
+                'usuario.fotoPerfil' => fn ($q) => $q->activas()->latest('id')->select('id', 'id_user', 'nombre_foto'),
             ])
                 ->where('id_user', $id_usuario)
                 ->first();
@@ -845,7 +853,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Foto de perfil agregada correctamente.',
-                'data' => $this->adjuntarUrlFoto($foto->toArray())
+                'data' => $foto->toArray()
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al agregar la foto de perfil.');
@@ -881,7 +889,7 @@ class PerfilUsuarioService extends Service {
             return [
                 'error' => false,
                 'message' => 'Foto de perfil actualizada correctamente.',
-                'data' => $this->adjuntarUrlFoto($foto->fresh()->toArray())
+                'data' => $foto->fresh()->toArray()
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar la foto de perfil.');
@@ -924,15 +932,6 @@ class PerfilUsuarioService extends Service {
                 'data' => []
             ];
         }
-    }
-
-    private function adjuntarUrlFoto(array $foto): array
-    {
-        if (!empty($foto['nombre_foto'])) {
-            $foto['url_foto'] = Storage::disk(config('filesystems.uploads_disk', 'public'))->url($foto['nombre_foto']);
-        }
-
-        return $foto;
     }
 
     /**
