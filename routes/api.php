@@ -240,6 +240,17 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/recursos.php';
     });
 
+    // TRÁMITES Y SERVICIOS (Gestión Humana)
+    Route::prefix('/tramites')->group(function () {
+        require __DIR__ . '/api/tramites.php';
+    });
+
+    // PERMISOS Y LICENCIAS INSTITUCIONALES (Gestión Humana) — no confundir con
+    // /permisos, el módulo de administración de cron_opciones/cron_permisos.
+    Route::prefix('/permisos-licencias')->group(function () {
+        require __DIR__ . '/api/permisosLicencias.php';
+    });
+
     // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la
     // autenticación NIT de las propias instituciones)
     Route::prefix('/instituciones-admin')->group(function () {

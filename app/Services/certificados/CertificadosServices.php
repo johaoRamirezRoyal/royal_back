@@ -147,7 +147,7 @@ class CertificadosServices
         $contenido = "Se generó la solicitud de certificado #{$solicitud->id} ({$tipo}) para {$nombreCompleto}.";
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
-            config('certificados.correo_gestion_humana', []),
+            config('gestionHumana.correo_notificacion', []),
             [$solicitante->correo]
         ))));
 
