@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models\ProcesoCompra\Solicitudes;
+namespace App\Models\Certificados;
 
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
@@ -41,4 +41,13 @@ class SolCertificado extends Model
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
     }
 
+    /**
+     * Último documento subido para esta solicitud (tabla `documentos`, ver
+     * DocumentoCertificado) — una solicitud solo debería tener uno, pero
+     * `latestOfMany` cubre el caso defensivo de que alguna vez queden varios.
+     */
+    public function documento()
+    {
+        return $this->hasOne(DocumentoCertificado::class, 'id_sol', 'id')->latestOfMany('id');
+    }
 }
