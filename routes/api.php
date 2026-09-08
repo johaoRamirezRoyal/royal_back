@@ -230,6 +230,16 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/enfermeria.php';
     });
 
+    // CERTIFICADOS (Gestión Humana)
+    Route::prefix('/certificados')->group(function () {
+        require __DIR__ . '/api/certificados.php';
+    });
+
+    // RECURSOS — Listado Maestro de documentos (Gestión Humana)
+    Route::prefix('/recursos')->group(function () {
+        require __DIR__ . '/api/recursos.php';
+    });
+
     // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la
     // autenticación NIT de las propias instituciones)
     Route::prefix('/instituciones-admin')->group(function () {
