@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /** Tabla transversal en `admin_management` — ver create_banner_informativo_table. */
+    protected $connection = 'admin_management';
+
     public function up(): void
     {
         Schema::table('banner_informativo', function (Blueprint $table) {
