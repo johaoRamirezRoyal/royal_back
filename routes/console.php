@@ -37,6 +37,12 @@ Schedule::command('anio-escolar:cerrar-abrir')->daily();
 // entre fin/inicio de mes). Misma nota operativa que los jobs de arriba.
 Schedule::command('logs-actividad:purgar-antiguos')->cron('0 2 */3 * *');
 
+// Purga logs_dominio (base admin_management) con más de 90 días (ver
+// LogDominioService::purgarLogsAntiguos) — mismo criterio y misma cadencia que
+// logs-actividad:purgar-antiguos arriba, corrido 15 min después para no competir por
+// conexión con la otra purga. Misma nota operativa que los jobs de arriba.
+Schedule::command('logs-dominio:purgar-antiguos')->cron('15 2 */3 * *');
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
