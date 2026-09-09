@@ -4,7 +4,9 @@ namespace App\Services\AnioEscolar;
 
 use App\Models\AnioEscolar\Periodo;
 use App\Services\Service;
+use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Catálogo de periodos institucionales (tabla `periodos`, con año escolar y las banderas
@@ -28,6 +30,10 @@ class PeriodoServices extends Service
                 $query->where('activo', (bool) $filtros['activo']);
             }
 
+            if (!empty($filtros['id_anio'])) {
+                $query->where('id_anio', $filtros['id_anio']);
+            }
+
             return [
                 'error' => false,
                 'message' => 'ok',
@@ -39,6 +45,109 @@ class PeriodoServices extends Service
                 'error' => true,
                 'message' => 'Error en el servidor al obtener los periodos',
                 'data' => [],
+            ];
+        }
+    }
+
+    /** CRUD administrativo del catálogo (módulo "Año escolar y Periodos", ver AGENTS.md). */
+    public function crear(array $datos): array
+    {
+        try {
+            $periodo = Periodo::create([
+                'numero' => $datos['numero'],
+                'id_anio' => $datos['id_anio'],
+                'fecha_inicio' => $datos['fecha_inicio'],
+                'fecha_fin' => $datos['fecha_fin'],
+                'activo' => $datos['activo'] ?? true,
+                'en_curso' => false,
+                'fechareg' => Carbon::now(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Periodo creado exitosamente',
+                'data' => $periodo->load('anioEscolar'),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear el periodo');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al crear el periodo',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function actualizar(int $id, array $datos): array
+    {
+        try {
+            $periodo = Periodo::findOrFail($id);
+            $periodo->update(array_intersect_key($datos, array_flip(['numero', 'id_anio', 'fecha_inicio', 'fecha_fin'])));
+
+            return [
+                'error' => false,
+                'message' => 'Periodo actualizado exitosamente',
+                'data' => $periodo->load('anioEscolar'),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar el periodo');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar el periodo',
+                'data' => null,
+            ];
+        }
+    }
+
+    public function actualizarEstado(int $id, bool $activo): array
+    {
+        try {
+            $periodo = Periodo::findOrFail($id);
+            $periodo->update(['activo' => $activo]);
+
+            return [
+                'error' => false,
+                'message' => $activo ? 'Periodo habilitado' : 'Periodo deshabilitado',
+                'data' => $periodo,
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar el estado del periodo');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar el estado del periodo',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Marca este periodo como "en curso" (el vigente ahora, ver resolverActivo() arriba) y
+     * desmarca cualquier otro — es una bandera global única, no por año escolar, así que
+     * hay que garantizar la unicidad en una transacción en vez de dejarlo a mano.
+     */
+    public function marcarEnCurso(int $id): array
+    {
+        try {
+            $periodo = DB::transaction(function () use ($id) {
+                Periodo::where('en_curso', 1)->update(['en_curso' => false]);
+
+                $periodo = Periodo::findOrFail($id);
+                $periodo->update(['en_curso' => true]);
+
+                return $periodo;
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Periodo marcado como en curso',
+                'data' => $periodo->load('anioEscolar'),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al marcar el periodo en curso');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al marcar el periodo en curso',
+                'data' => null,
             ];
         }
     }
