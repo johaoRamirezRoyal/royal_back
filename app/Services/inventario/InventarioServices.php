@@ -191,9 +191,16 @@ class InventarioServices
                     // ingreso manual del código físico del ítem) — sin el OR sobre
                     // `inventario.codigo`, un código válido nunca hace match (la descripción
                     // no lo contiene) y siempre responde "no se encontró", aunque el ítem exista.
+                    // También sobre `inventario.id`: el "código" que ve el usuario en la UI
+                    // (columna "Código" de Mis Inventarios, buscador de hoja de vida) es el
+                    // id del ítem cuando no tiene código físico impreso — igual que en el
+                    // legado (`historial.php`: `$codigo = $datos_articulo['id']` cuando el
+                    // artículo no tiene código propio) — así que buscar por ese id debe
+                    // encontrar el grupo, no solo por descripción/código físico.
                     $query->where(function ($q) use ($search) {
                         $q->where('inventario.descripcion', 'like', "%{$search}%")
-                            ->orWhere('inventario.codigo', 'like', "%{$search}%");
+                            ->orWhere('inventario.codigo', 'like', "%{$search}%")
+                            ->orWhereRaw('CAST(inventario.id AS CHAR) LIKE ?', ["%{$search}%"]);
                     });
                 })->when($datos['id_area'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.id_area', $datos['id_area']);
@@ -281,8 +288,16 @@ class InventarioServices
                 ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
                 ->when($filtros['s'] ?? null, function ($q, $s) {
+                    // El "código" que ve el usuario (columna "Código" de Mis Inventarios,
+                    // buscador de hoja de vida) es el id del ítem cuando no tiene código
+                    // físico impreso — igual que el legado (`historial.php`:
+                    // `$codigo = $datos_articulo['id']`) — así que este buscador general
+                    // también debe encontrar el grupo por código físico o por id, no solo
+                    // por descripción/usuario/categoría/área.
                     $q->where(function ($q) use ($s) {
                         $q->where('inventario.descripcion', 'like', "%{$s}%")
+                            ->orWhere('inventario.codigo', 'like', "%{$s}%")
+                            ->orWhereRaw('CAST(inventario.id AS CHAR) LIKE ?', ["%{$s}%"])
                             ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$s}%"])
                             ->orWhere('u.documento', 'like', "%{$s}%")
                             ->orWhere('c.nombre', 'like', "%{$s}%")
@@ -1140,7 +1155,13 @@ class InventarioServices
                     'ar.nombre as nom_area',
                     'rp.id as reporte_id'
                 )
-                ->distinct()
+                // Sin distinct(): cada fila ya es única por rp.id (PK de `reportes`), y todos
+                // los leftJoin de arriba (usuarios/areas/categoria/anio_escolar) son sobre
+                // columnas únicas, así que no pueden generar filas repetidas. distinct() sobre
+                // un SELECT con subconsultas correlacionadas (fecha_reporte/id_reporte/respuesta)
+                // fuerza a MySQL a materializar TODO el resultado antes de poder aplicar
+                // LIMIT/OFFSET — anulaba la paginación real y era la causa de la lentitud del
+                // historial de mantenimiento.
                 ->when(!empty($id_inventario), function ($q) use ($id_inventario) {
                     $q->whereIn('iv.id', $id_inventario);
                 })

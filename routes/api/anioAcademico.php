@@ -2,10 +2,21 @@
 
 use App\Http\Controllers\AnioAcademico\AnioAcademico;
 use App\Http\Controllers\AnioAcademico\PeriodoAcademicoController;
+use App\Http\Controllers\AnioAcademico\PeriodoInstitucionalController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/todos', [AnioAcademico::class, 'obtenerAniosAcademicos']);
 Route::get('/ultimo', [AnioAcademico::class, 'obtenerUltimoAnioAcademico']);
+
+/**
+ * Catálogo institucional de `periodos` (tabla nueva con `en_curso`, no confundir con
+ * `periodo-academico` de arriba) — solo lectura, sin gate de opción. El CRUD real vive en
+ * /administrativo/periodos (opción 107).
+ * GET /periodo/todos?id_anio=&activo=
+ * GET /periodo/en-curso
+ */
+Route::get('/periodo/todos', [PeriodoInstitucionalController::class, 'listar']);
+Route::get('/periodo/en-curso', [PeriodoInstitucionalController::class, 'enCurso']);
 
 /**
  * GET /periodo-academico/todos
