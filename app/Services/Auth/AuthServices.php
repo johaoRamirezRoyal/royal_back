@@ -5,7 +5,9 @@ namespace App\Services\Auth;
 use App\Models\Usuarios\DispositivoConfiable;
 use App\Models\Usuarios\Usuario;
 use App\Services\AdminManagement\BasesDatosService;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AuthServices
@@ -28,9 +30,17 @@ class AuthServices
     public function resolverUsuarioMultiTenant(string $identificador, string $password): ?array
     {
         foreach (BasesDatosService::connectionsConUsuarios() as $connection) {
-            $usuario = Usuario::on($connection)
-                ->where('correo', $identificador)
-                ->first();
+            try {
+                $usuario = Usuario::on($connection)
+                    ->where('correo', $identificador)
+                    ->first();
+            } catch (QueryException $e) {
+                // Una connection mal configurada (credenciales sin permiso sobre esa base,
+                // servidor caído, etc.) no debe tumbar el login para el resto de tenants —
+                // se registra y se sigue probando en las demás connections.
+                Log::error("Login: fallo al consultar la connection '{$connection}': {$e->getMessage()}");
+                continue;
+            }
 
             if (!$usuario) {
                 continue;
