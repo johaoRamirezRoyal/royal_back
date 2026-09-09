@@ -23,6 +23,7 @@ class BannerInformativoController extends Controller
         return $this->success('Banner informativo obtenido correctamente', $banner->activo ? [
             'mensaje' => $banner->mensaje,
             'variante' => $banner->variante,
+            'tamano' => $banner->tamano,
         ] : null);
     }
 }

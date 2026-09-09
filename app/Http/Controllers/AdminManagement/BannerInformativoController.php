@@ -34,6 +34,7 @@ class BannerInformativoController extends Controller
         $request->validate([
             'mensaje' => 'nullable|string|max:500',
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),
+            'tamano' => 'required|string|in:' . implode(',', BannerInformativo::TAMANOS),
             'activo' => 'required|boolean',
         ]);
 
@@ -44,6 +45,7 @@ class BannerInformativoController extends Controller
         $banner = $this->service->actualizar(
             $request->input('mensaje'),
             $request->input('variante'),
+            $request->input('tamano'),
             $request->boolean('activo'),
             $request->user()->id_user,
         );

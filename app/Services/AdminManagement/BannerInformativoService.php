@@ -11,13 +11,14 @@ class BannerInformativoService
         return BannerInformativo::actual();
     }
 
-    public function actualizar(?string $mensaje, string $variante, bool $activo, int $idUser): BannerInformativo
+    public function actualizar(?string $mensaje, string $variante, string $tamano, bool $activo, int $idUser): BannerInformativo
     {
         $banner = BannerInformativo::actual();
 
         $banner->update([
             'mensaje' => $mensaje,
             'variante' => $variante,
+            'tamano' => $tamano,
             'activo' => $activo,
             'actualizado_por' => $idUser,
         ]);

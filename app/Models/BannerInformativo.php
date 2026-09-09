@@ -10,6 +10,8 @@ class BannerInformativo extends Model
 
     public const VARIANTES = ['info', 'warning', 'success', 'danger'];
 
+    public const TAMANOS = ['sm', 'md', 'lg', 'xl'];
+
     protected $table = 'banner_informativo';
 
     public $timestamps = false;
@@ -17,6 +19,7 @@ class BannerInformativo extends Model
     protected $fillable = [
         'mensaje',
         'variante',
+        'tamano',
         'activo',
         'actualizado_por',
     ];
