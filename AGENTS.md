@@ -704,6 +704,76 @@ pantalla aún.
   compatibilidad con código viejo, pero solo `tipo` viene poblado en
   respuestas reales del API.
 
+## Login: verificación de dispositivo por OTP y llave maestra de recuperación
+
+Dos mecanismos nuevos alrededor de `AuthController::login` (sistema general, no toca el
+login de admisiones ni el de instituciones — cada uno ya tenía su propio patrón de
+OTP-por-correo, ver secciones de Admisiones/Instituciones):
+
+### Verificación de equipo nuevo (`dispositivos_confiables`)
+
+`login()` ya no otorga la cookie `token` directo tras validar la contraseña: revisa la
+cookie `device_token` del request contra `AuthServices::dispositivoEsConfiable`
+(hash sha256 del token vs. `(id_user, token_hash)` en `dispositivos_confiables`, tabla
+del tenant). Con match, sigue el flujo de siempre (incluye el intento de SSO silencioso
+en SAMI, que sí tiene la contraseña en claro de esta petición). Sin match (cookie ausente,
+de otro usuario, o el registro fue borrado), cae a
+`iniciarVerificacionLoginGeneral`: genera un `token` de pausa (15 min,
+`auth_login_pending_{token}` → `{id, connection}`) y un código de 5 dígitos aparte
+(5 min, `auth_login_otp_{token}`), envía el correo (`emails/sendDeviceLoginOtp.blade.php`,
+con dispositivo/IP vía `AuthServices::nombreDispositivoDesdeUserAgent`) y responde 200
+(no 401) con `data.requires_otp = true` — el frontend distingue este caso de un error real
+mirando ese campo, no el código HTTP (ver `LoginResponse` en el frontend).
+
+- `POST /api/auth/login/verify-otp` (`token`, `code`) — valida contra `auth_login_otp_{token}`
+  (máx. 5 intentos, `auth_login_otp_attempts_{token}`), y de pasar, contra
+  `auth_login_pending_{token}` para resolver `id`+`connection`. Solo entonces
+  `AuthServices::registrarDispositivoConfiable` genera un token crudo, lo guarda hasheado en
+  `dispositivos_confiables`, y `HasAuthCookie::makeCookie` lo setea como `device_token` con
+  TTL de **90 días** (`60 * 24 * 90` minutos — nuevo segundo parámetro `$minutes` en
+  `makeCookie`, antes fijo a 1 día). No repite el SSO silencioso a SAMI: la contraseña en
+  claro solo viajó en la petición de `login()` original, no en esta.
+- `POST /api/auth/login/resend-otp` (`token`) — mismo rate limit por usuario
+  (`auth_login_otp_send_{id_user}`, máx. 3 en 5 min) que el envío inicial, reescribe
+  `auth_login_otp_{token}` con un código nuevo.
+- Ambos endpoints son públicos (grupo sin `auth:api` en `routes/api/auth.php`) — a
+  propósito, todavía no hay sesión en este punto del flujo.
+
+### Llave maestra (`llaves_maestras`, connection `admin_management`)
+
+Acceso de soporte: un Super Admin (perfil `1`) genera desde el módulo Usuarios una llave
+de un solo uso para "entrar como" otro usuario sin conocer su contraseña, pensada para
+alguien en un equipo sin sesión previa (soporte técnico, otro admin).
+`LlaveMaestraService` (`generar`/`redimir`/`listar`/`revocar`) vive en
+`admin_management` — transversal a tenants, igual que `admin_conexion_activa` — porque el
+usuario destino puede estar en cualquier tenant; por eso `llaves_maestras` **no tiene FK**
+a `usuarios` y guarda `connection_objetivo` en texto plano para saber dónde buscarlo al
+canjear. Solo el hash de la llave (sha256) persiste, igual que `dispositivos_confiables`.
+
+- `LlaveMaestraController` (`/api/admin-management/llaves-maestras`, dentro del grupo
+  autenticado de `adminManagement.php`) — `index`/`generar`/`revocar`, gateado en el
+  constructor a `perfil === 1` únicamente. **No** aplica el segundo filtro de allowlist de
+  correo (`adminManagementEmails`) que sí usan otros módulos de "Administración del
+  sistema" (Bases de datos, Logs por dominio) y que el frontend sí replica para decidir si
+  mostrar la acción "Generar llave maestra" en Usuarios — cualquier perfil 1 puede pegarle
+  directo al endpoint aunque el frontend se lo oculte. Si se decide exigir la allowlist acá
+  también, el patrón a copiar es el de `BasesDatosController`/`LogDominioController`.
+- `POST /api/auth/master-key/redeem` (`key`) — **público**, fuera de `auth:api` (quien
+  canjea no tiene sesión todavía). Rate limit por IP (`master_key_redeem_{ip}`, máx. 10 en
+  10 min). A propósito no reutiliza nada del flujo de `login()`/`verifyLoginOtp` para el
+  equipo: no lee ni setea `device_token`, no llama a `registrarDispositivoConfiable`, no
+  intenta el SSO de SAMI (sin contraseña en claro) — la llave ya es el segundo factor, no
+  debe además "recordar" el equipo. El JWT resultante lleva `via_llave_maestra: true` y
+  `generado_por` como claims extra (`JwtService::generateToken` ahora acepta un tercer
+  parámetro `$extraClaims`, mergeado en el payload).
+- `AuthController::check()` decodifica el payload del token (`masterKeyClaims`,
+  best-effort — un fallo no tumba `/check`) y devuelve `via_llave_maestra`/`generado_por`
+  junto al resto de la respuesta cuando aplica, para que el frontend pinte el banner
+  persistente sin decodificar el JWT él mismo (ver `MasterKeySessionBanner` en el frontend).
+- `revocar()` no borra la fila — pone `expira_en = now()`, para que quede en el historial
+  como "revocada" en vez de desaparecer (mismo principio que `usado_en`: append-only,
+  auditoría antes que limpieza).
+
 ## Instituciones (jardines asociados — `/api/institucion` público + `/api/instituciones-admin`)
 
 Portal de login para **jardines infantiles asociados** (no son `usuarios` — no tienen
@@ -1156,5 +1226,8 @@ php artisan queue:listen --tries=1 --queue=emails,default
 - Muchos controllers NO usan `$this->apiResponse()` — usan `response()->json()` inline. Al crear nuevo código, usa los helpers del base Controller. Si modificas existente, respeta el patrón local.
 - Servicios NO siempre extienden `Service.php` — es optativo.
 - `config/cloudinary.php` — PDFs se suben como `image`, no `raw` (el service actual usa `image` para PDFs).
-- No hay `app/Services/Auth/AuthServices.php` — la lógica de auth vive en `AuthController` y `JwtService`.
+- `app/Services/Auth/AuthServices.php` existe pero es delgado — hoy solo cubre
+  registro y dispositivos confiables (ver sección "Login: verificación de dispositivo por
+  OTP y llave maestra"); el resto de la lógica de auth (login, check, tokens) sigue en
+  `AuthController`/`JwtService`, no está centralizada ahí.
 - `Authenticatable` vs `Model`: Usuario usa `Authenticatable` + `JWTSubject`; demás modelos usan `Model`.
