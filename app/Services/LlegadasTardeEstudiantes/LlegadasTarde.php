@@ -162,15 +162,25 @@ class LlegadasTarde extends Service
         }
     }
 
-    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null): array
+    /**
+     * `idsAlumnos` — historial de VARIOS alumnos puntuales a la vez (autoservicio de un
+     * Acudiente con más de un hijo, ver LlegadasTardeController::obtenerLlegadasTarde) —
+     * mismo tratamiento que id_alumno (historial completo, sin colapsar), pero con
+     * whereIn en vez de where. Si se mandan ambos, id_alumno gana (no debería pasar, el
+     * controller nunca los combina).
+     */
+    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null, ?array $idsAlumnos = null): array
     {
         try {
+            $alumnoPuntual = $id_alumno !== null || $idsAlumnos !== null;
+
             // El período vigente solo se fuerza en el listado general (sin alumno
             // puntual): ahí sí hace falta acotar a un período porque se colapsa a una
-            // fila por alumno más abajo. Pidiendo un alumno puntual (historial/drill-down)
-            // y sin período explícito, se listan TODOS sus períodos — el filtro de
-            // período en ese caso lo aplica el cliente sobre la respuesta completa.
-            if ($id_periodo_academico === null && $id_alumno === null) {
+            // fila por alumno más abajo. Pidiendo uno o varios alumnos puntuales
+            // (historial/drill-down) y sin período explícito, se listan TODOS sus
+            // períodos — el filtro de período en ese caso lo aplica el cliente sobre la
+            // respuesta completa.
+            if ($id_periodo_academico === null && !$alumnoPuntual) {
                 $periodo = $this->periodoVigente();
 
                 if (!$periodo) {
@@ -195,6 +205,9 @@ class LlegadasTarde extends Service
                 })
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
+                })
+                ->when($id_alumno === null && $idsAlumnos !== null, function ($query) use ($idsAlumnos) {
+                    $query->whereIn('id_alumno', $idsAlumnos);
                 })
                 ->when($fecha !== null, function ($query) use ($fecha) {
                     $query->where('fecha', $fecha);
@@ -222,6 +235,9 @@ class LlegadasTarde extends Service
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
                 })
+                ->when($id_alumno === null && $idsAlumnos !== null, function ($query) use ($idsAlumnos) {
+                    $query->whereIn('id_alumno', $idsAlumnos);
+                })
                 ->where('revocado', false)
                 ->where('justificada', false)
                 ->selectRaw('id_alumno, id_periodo_academico, count(*) as total')
@@ -234,15 +250,15 @@ class LlegadasTarde extends Service
                 $registro->total_llegadas_tarde_periodo = $conteoPorAlumnoPeriodo[$clave]->total ?? 0;
             });
 
-            // Listado del período completo (sin id_alumno puntual): una sola fila por
+            // Listado del período completo (sin alumno puntual): una sola fila por
             // alumno, la más reciente — el resto de sus llegadas tarde ya están contadas
             // en total_llegadas_tarde_periodo, no hace falta listarlas todas para saber que
-            // el alumno reincide. Pidiendo id_alumno explícito sí se devuelve su historial
-            // completo (p. ej. para una futura vista de detalle por alumno).
-            // La consulta ya viene ordenada desc (fecha, hora), así que unique() -que
-            // conserva la primera ocurrencia- se queda justo con la más reciente de cada
-            // alumno, y el orden desc de la respuesta se conserva sin reordenar de nuevo.
-            if ($id_alumno === null) {
+            // el alumno reincide. Pidiendo alumno(s) puntual(es) sí se devuelve su
+            // historial completo. La consulta ya viene ordenada desc (fecha, hora), así
+            // que unique() -que conserva la primera ocurrencia- se queda justo con la más
+            // reciente de cada alumno, y el orden desc de la respuesta se conserva sin
+            // reordenar de nuevo.
+            if (!$alumnoPuntual) {
                 $llegadas_tarde = $llegadas_tarde->unique('id_alumno')->values();
             }
 
