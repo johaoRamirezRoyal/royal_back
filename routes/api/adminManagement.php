@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminManagement\BasesDatosController;
+use App\Http\Controllers\AdminManagement\LlaveMaestraController;
 use App\Http\Controllers\AdminManagement\LogDominioController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,4 +20,10 @@ Route::prefix('bases-datos')->group(function () {
 Route::prefix('logs-dominio')->group(function () {
     Route::get('/', [LogDominioController::class, 'index']);
     Route::get('/dominios', [LogDominioController::class, 'dominios']);
+});
+
+Route::prefix('llaves-maestras')->group(function () {
+    Route::get('/', [LlaveMaestraController::class, 'index']);
+    Route::post('/', [LlaveMaestraController::class, 'generar']);
+    Route::delete('/{id}', [LlaveMaestraController::class, 'revocar']);
 });

@@ -12,6 +12,9 @@ Route::prefix('admissions')->group(function () {
 });
 
 Route::post('login', [AuthController::class, 'login']);
+Route::post('login/verify-otp', [AuthController::class, 'verifyLoginOtp']);
+Route::post('login/resend-otp', [AuthController::class, 'resendLoginOtp']);
+Route::post('master-key/redeem', [AuthController::class, 'redeemMasterKey']);
 Route::post('register', [AuthController::class, 'register']);
 Route::get('/check', [AuthController::class, 'check']);
 Route::get('branding-preview', [AuthController::class, 'brandingPreview']);
