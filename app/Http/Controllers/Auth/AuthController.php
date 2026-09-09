@@ -104,7 +104,7 @@ class AuthController extends Controller
             /** @var GoogleProvider $provider */
             $provider = Socialite::driver('google');
             $googleUser = $provider->stateless()->user();
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            $frontendUrl = config('app.frontend_url');
 
             // Validar dominio institucional
             if (! str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')) {
@@ -150,7 +150,7 @@ class AuthController extends Controller
             return redirect("{$frontendUrl}/home")->withCookie("token", $this->jwt->generateToken($userModel));
 
         } catch (\Exception $e) {
-            $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173');
+            $frontendUrl = config('app.frontend_url');
 
             return redirect("{$frontendUrl}/?error=google_auth_failed");
         }

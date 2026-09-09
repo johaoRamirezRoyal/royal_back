@@ -59,6 +59,32 @@ class LogDominioService extends Service
     }
 
     /**
+     * Borra los logs por dominio más viejos que el número de días de retención indicado
+     * — mismo criterio que LogsActividadService::purgarLogsAntiguos, pero sobre
+     * `logs_dominio` (conexión `admin_management`, ver LogDominio::$connection).
+     */
+    public function purgarLogsAntiguos(int $diasRetencion = 90): array
+    {
+        try {
+            $eliminados = LogDominio::where('fechareg', '<', now()->subDays($diasRetencion))->delete();
+
+            return [
+                'error' => false,
+                'message' => "Se eliminaron {$eliminados} log(s) por dominio con más de {$diasRetencion} días",
+                'data' => ['eliminados' => $eliminados],
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al purgar los logs por dominio antiguos');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al purgar los logs por dominio antiguos',
+                'data' => [],
+            ];
+        }
+    }
+
+    /**
      * Dominios distintos que aparecen en el log — para poblar un select de filtro en vez
      * de un texto libre. A propósito no se saca de `marcas_dominio`: acá se registra el
      * dominio de CUALQUIER usuario autenticado, tenga o no una marca configurada.
