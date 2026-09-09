@@ -210,7 +210,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user' => 'required|string',
+            'user' => 'required|string|email',
             'pass' => 'required|string',
         ]);
 
@@ -221,9 +221,10 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // El identificador acepta usuario, correo o documento — busca entre todas las bases
-        // con tabla `usuarios` (ver BasesDatosService::connectionsConUsuarios). El estado
-        // 'activo' ya se valida ahí mismo (no hay una comprobación aparte después).
+        // El identificador es el correo — busca entre todas las bases con tabla `usuarios`
+        // (ver BasesDatosService::connectionsConUsuarios). El estado 'activo' ya se valida
+        // ahí mismo (no hay una comprobación aparte después). Login por username fue
+        // deshabilitado a propósito, ver AuthServices::resolverUsuarioMultiTenant.
         $resultado = $this->service_auth->resolverUsuarioMultiTenant($request->user, $request->pass);
 
         if (! $resultado) {
