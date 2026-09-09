@@ -277,6 +277,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/evaluaciones.php';
     });
 
+    // AÑO ESCOLAR Y PERIODOS (módulo administrativo — opción propia, ver
+    // 2026_09_09_130000_seed_opcion_anio_escolar_periodos)
+    Route::prefix('/administrativo')->group(function () {
+        require __DIR__ . '/api/administrativo.php';
+    });
+
     // BRANDING (logo por dominio de correo — Super Admin únicamente, y solo accesible para
     // los correos de la allowlist de administración, ver RestrictToAdminEmails)
     Route::prefix('/branding')->middleware('admin.access')->group(function () {
