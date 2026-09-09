@@ -37,6 +37,7 @@ class BannerInformativoController extends Controller
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),
             'tamano' => 'required|string|in:' . implode(',', BannerInformativo::TAMANOS),
             'activo' => 'required|boolean',
+            'expira_en' => 'nullable|date',
         ]);
 
         if ($request->boolean('activo') && !trim((string) $request->input('mensaje'))) {
@@ -56,6 +57,7 @@ class BannerInformativoController extends Controller
             $request->input('variante'),
             $request->input('tamano'),
             $request->boolean('activo'),
+            $request->input('expira_en'),
             $request->user()->id_user,
         );
 

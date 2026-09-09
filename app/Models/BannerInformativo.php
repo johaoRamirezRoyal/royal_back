@@ -22,11 +22,13 @@ class BannerInformativo extends Model
         'variante',
         'tamano',
         'activo',
+        'expira_en',
         'actualizado_por',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'expira_en' => 'datetime',
     ];
 
     public static function actual(): self

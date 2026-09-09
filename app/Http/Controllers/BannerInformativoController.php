@@ -35,6 +35,10 @@ class BannerInformativoController extends Controller
             return $this->success('Banner informativo obtenido correctamente', null);
         }
 
+        if ($banner->expira_en && $banner->expira_en->isPast()) {
+            return $this->success('Banner informativo obtenido correctamente', null);
+        }
+
         if ($banner->dominio) {
             $dominioVisitante = $this->marcaDominioService->dominioDeCorreo($request->query('correo'));
 
@@ -47,6 +51,7 @@ class BannerInformativoController extends Controller
             'mensaje' => $banner->mensaje,
             'variante' => $banner->variante,
             'tamano' => $banner->tamano,
+            'expira_en' => $banner->expira_en,
         ]);
     }
 }
