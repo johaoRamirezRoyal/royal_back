@@ -24,6 +24,10 @@ Route::group(['prefix' => 'auth'], function () {
     require __DIR__.'/api/auth.php';
 });
 
+// Banner informativo público (sin token — se lee desde el login y desde el sistema
+// general ya autenticado, ver App\Http\Controllers\BannerInformativoController).
+Route::get('/banner-informativo', [App\Http\Controllers\BannerInformativoController::class, 'obtener']);
+
 // Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
 Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '.+');

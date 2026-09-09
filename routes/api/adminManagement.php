@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminManagement\BannerInformativoController;
 use App\Http\Controllers\AdminManagement\BasesDatosController;
 use App\Http\Controllers\AdminManagement\LlaveMaestraController;
 use App\Http\Controllers\AdminManagement\LogDominioController;
@@ -26,4 +27,9 @@ Route::prefix('llaves-maestras')->group(function () {
     Route::get('/', [LlaveMaestraController::class, 'index']);
     Route::post('/', [LlaveMaestraController::class, 'generar']);
     Route::delete('/{id}', [LlaveMaestraController::class, 'revocar']);
+});
+
+Route::prefix('banner-informativo')->group(function () {
+    Route::get('/', [BannerInformativoController::class, 'obtener']);
+    Route::put('/', [BannerInformativoController::class, 'actualizar']);
 });
