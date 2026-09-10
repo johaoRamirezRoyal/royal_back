@@ -2,6 +2,7 @@
 namespace App\Models\Inventario;
 
 use App\Models\Areas\Areas;
+use App\Models\Areas\Bloque;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +25,7 @@ class Inventario extends Model
         'observacion',
         'id_user',
         'id_area',
+        'id_bloque',
         'id_categoria',
         'user_log',
         'confirmado',
@@ -48,6 +50,10 @@ class Inventario extends Model
 
     public function area(){
         return $this->belongsTo(Areas::class, 'id_area', 'id');
+    }
+
+    public function bloque(){
+        return $this->belongsTo(Bloque::class, 'id_bloque', 'id');
     }
 
     public function categoria(){

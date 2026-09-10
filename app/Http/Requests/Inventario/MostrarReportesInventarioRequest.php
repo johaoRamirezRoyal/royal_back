@@ -24,7 +24,7 @@ class MostrarReportesInventarioRequest extends FormRequest
             'estado_solucion' => ['nullable', 'string', 'in:pendiente,solucionado'],
             'search' => ['nullable', 'string', 'max:100'],
             'estado' => ['nullable', 'integer'],
-            'tipo_categoria' => ['nullable', 'integer', 'in:1,2'],
+            'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],
             'tipo_reporte' => ['nullable', 'integer'],
             'sin_solucion' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1'],

@@ -499,7 +499,10 @@ class UsuariosServices
                     'nombre',
                     'apellido',
                     'documento',
-                    'perfil'
+                    'perfil',
+                    // Áreas Comunes: para preseleccionar como responsable a la
+                    // asistente de nivel (perfil 11) del mismo nivel del bloque.
+                    'id_nivel'
                 )
                 ->orderBy('nombre')
                 ->get();

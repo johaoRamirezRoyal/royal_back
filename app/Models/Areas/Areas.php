@@ -15,6 +15,7 @@ class Areas extends Model
 
     protected $fillable = [
         'nombre',
+        'id_bloque',
         'user_log',
         'activo',
         'fechareg'
@@ -31,5 +32,9 @@ class Areas extends Model
 
     public function reportes(){
         return $this->hasMany(Reportes::class, 'id_area');
+    }
+
+    public function bloque(){
+        return $this->belongsTo(Bloque::class, 'id_bloque', 'id');
     }
 }

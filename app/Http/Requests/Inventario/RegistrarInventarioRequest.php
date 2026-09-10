@@ -53,10 +53,21 @@ class RegistrarInventarioRequest extends FormRequest
                 'nullable'
             ],
 
+            // Normalmente un ítem requiere un área; para inventario de "Área Común"
+            // asignado directo a un bloque (sin salón puntual), id_bloque cubre el hueco
+            // — se exige al menos uno de los dos (required_without simétrico).
             "id_area" => [
-                'required',
+                'required_without:id_bloque',
+                'nullable',
                 'integer',
                 Rule::exists("areas", "id")->where('activo', 1),
+            ],
+
+            "id_bloque" => [
+                'required_without:id_area',
+                'nullable',
+                'integer',
+                Rule::exists('bloques', 'id')->where('activo', 1),
             ],
 
             "id_categoria" => [
@@ -116,9 +127,14 @@ class RegistrarInventarioRequest extends FormRequest
             'fecha_compra.date' => 'La fecha de compra debe ser una fecha válida',
 
             // id_area
-            'id_area.required' => 'El área es obligatoria',
+            'id_area.required_without' => 'Debes indicar un área o un bloque',
             'id_area.integer' => 'El área debe ser un número válido',
             'id_area.exists' => 'El área no existe o no está activa',
+
+            // id_bloque
+            'id_bloque.required_without' => 'Debes indicar un área o un bloque',
+            'id_bloque.integer' => 'El bloque debe ser un número válido',
+            'id_bloque.exists' => 'El bloque no existe o no está activo',
 
             // id_categoria
             'id_categoria.required' => 'La categoría es obligatoria',
@@ -163,6 +179,7 @@ class RegistrarInventarioRequest extends FormRequest
             'activo' => $this->activo,
             'fecha_compra' => $this->fecha_compra,
             'id_area' => $this->id_area,
+            'id_bloque' => $this->id_bloque,
             'id_categoria' => $this->id_categoria,
             'id_compra' => $this->id_compra,
             'codigo' => $this->codigo,

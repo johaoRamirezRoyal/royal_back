@@ -15,7 +15,7 @@ class MantenimientoIndicadorRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tipo_categoria' => ['nullable', 'integer', 'in:1,2'],
+            'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],
             'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
             'id_periodo' => ['nullable', 'integer'],
             'id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
@@ -25,7 +25,7 @@ class MantenimientoIndicadorRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'tipo_categoria.in' => 'El tipo de categoría debe ser 1 (Sistemas) o 2 (Operativos)',
+            'tipo_categoria.exists' => 'El tipo de categoría no existe',
             'id_anio.integer' => 'El año escolar debe ser un número entero',
             'id_anio.exists' => 'El año escolar no existe',
             'id_periodo.integer' => 'El periodo debe ser un número entero',
