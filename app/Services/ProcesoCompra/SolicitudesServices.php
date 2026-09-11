@@ -559,7 +559,7 @@ class SolicitudesServices
                         'id_user' => $inicial->id_user,
                         'id_area' => $inicial->id_area,
                         'fecha_solicitud' => $fechaSolicitud,
-                        'justificacion' => $inicial->justificacion,
+                        'justificacion' => $datos['justificacion'] ?? $inicial->justificacion,
                         'id_log' => $idLog,
                         'estado' => $estadoFinal,
                         'observacion' => $observacion,
