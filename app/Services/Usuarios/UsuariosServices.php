@@ -2,10 +2,12 @@
 
 namespace App\Services\Usuarios;
 
+use App\Mail\NuevoUsuarioMail;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
+use App\Services\MailService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -15,7 +17,8 @@ use Illuminate\Support\Facades\Log;
 class UsuariosServices
 {
     public function __construct(
-        private CloudinaryService $cloudinaryService
+        private CloudinaryService $cloudinaryService,
+        private MailService $mailService
     ) {}
 
     public function userExistWhitEmail(string $email)
@@ -544,7 +547,12 @@ class UsuariosServices
     public function agregarUsuario(array $data)
     {
         try {
+            $passPlano = $data['pass'] ?? null;
             $usuario = Usuario::create($data);
+
+            if ($passPlano) {
+                $this->mailService->send($usuario->correo, new NuevoUsuarioMail($usuario, $passPlano));
+            }
 
             return [
                 'error' => false,
