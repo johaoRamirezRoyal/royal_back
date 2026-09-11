@@ -140,15 +140,17 @@ class DocenteHorarioService extends Service
 
         $ids = [$nivel->id_nivel_academico];
 
-        // "Bachillerato" en `nivel` era el bucket único de 6°-11° antes del split de la
-        // migración de arriba — puentea 1:1 a nivel_academico Media, pero un docente
-        // clasificado así históricamente pudo enseñar en cualquiera de los dos niveles
-        // académicos reales (Secundaria O Media), no solo el que la FK 1:1 elige por
-        // defecto. `nivel` a propósito no tiene fila propia para Secundaria (ver
-        // conversación de diseño), así que no hay otro nivel.id_nivel_academico posible
-        // para representarlo — se agrega Secundaria (nivel_academico id 3) a mano solo en
-        // este caso puntual.
-        if ($nivel->nombre === 'Bachillerato') {
+        // "Bachillerato"/"Secundaria" en `nivel` (el nombre varía según si a esta BD se le
+        // hizo o no el rename manual que 2026_08_25_020000_add_id_nivel_academico_to_nivel_table
+        // anticipaba — ver 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria)
+        // era el bucket único de 6°-11° antes del split de esas migraciones — puentea 1:1
+        // a nivel_academico Media, pero un docente clasificado así históricamente pudo
+        // enseñar en cualquiera de los dos niveles académicos reales (Secundaria O Media),
+        // no solo el que la FK 1:1 elige por defecto. `nivel` a propósito no tiene fila
+        // propia para Secundaria (ver conversación de diseño), así que no hay otro
+        // nivel.id_nivel_academico posible para representarlo — se agrega Secundaria
+        // (nivel_academico id 3) a mano solo en este caso puntual.
+        if ($nivel->nombre === 'Bachillerato' || $nivel->nombre === 'Secundaria') {
             $ids[] = 3;
         }
 

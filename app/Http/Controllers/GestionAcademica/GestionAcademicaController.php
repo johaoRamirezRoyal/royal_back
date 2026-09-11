@@ -33,8 +33,11 @@ class GestionAcademicaController extends Controller
     // resto del controller (ver migración 2026_08_19_100000_seed_opcion_metricas_asistencia_academica).
     private const OPCION_METRICAS_ASISTENCIA = 102;
 
-    // Perfil "Docente" en la tabla perfiles.
-    private const PERFIL_DOCENTE = 3;
+    // Perfiles con autoservicio de docente en la tabla perfiles: "Docente" (3) y
+    // "Docente ICT" (14) — este último es un perfil aparte para los profesores del
+    // programa ICT, pero necesita exactamente el mismo autoservicio (asistencia/horario/
+    // métricas de sus propias clases) que un Docente normal.
+    private const PERFILES_DOCENTE = [3, 14];
 
     // Acceso propio del docente (autoservicio, sin pasar por /permisos): tomar asistencia
     // de SUS clases, gestionar SU horario, y ver métricas (verMetricasAsistencia se
@@ -70,7 +73,7 @@ class GestionAcademicaController extends Controller
 
         $metodo = $request->route()?->getActionMethod();
 
-        $esDocenteEnMetodoPropio = $request->user()->perfil === self::PERFIL_DOCENTE
+        $esDocenteEnMetodoPropio = in_array($request->user()->perfil, self::PERFILES_DOCENTE, true)
             && in_array($metodo, self::METODOS_DOCENTE, true);
 
         if ($esDocenteEnMetodoPropio) {
@@ -502,7 +505,7 @@ class GestionAcademicaController extends Controller
         // id_curso directo contra la API.
         $tieneAccesoCompleto = $this->usuariosService
             ->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
-        $idDocenteScope = (!$tieneAccesoCompleto && $request->user()->perfil === self::PERFIL_DOCENTE)
+        $idDocenteScope = (!$tieneAccesoCompleto && in_array($request->user()->perfil, self::PERFILES_DOCENTE, true))
             ? $request->user()->id_user
             : null;
 
