@@ -250,6 +250,7 @@ class UsuariosServices
                 'user',
                 'perfil',
                 'id_nivel',
+                'id_nivel_2',
                 'id_curso',
                 'id_grupo',
                 'estado',
@@ -257,6 +258,7 @@ class UsuariosServices
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
                     'nivelRelacion:id,nombre',
+                    'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
                 ])
                 ->orderBy('nombre')
@@ -295,6 +297,7 @@ class UsuariosServices
                 'perfil',
                 'user',
                 'id_nivel',
+                'id_nivel_2',
                 'id_curso',
                 'id_grupo',
                 'estado',
@@ -303,6 +306,7 @@ class UsuariosServices
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
                     'nivelRelacion:id,nombre',
+                    'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
                 ])
                 ->when($perfil_filtro, function ($query, $perfiles) {
@@ -468,10 +472,11 @@ class UsuariosServices
                 'user',
                 'perfil',
                 'id_nivel',
+                'id_nivel_2',
                 'id_grupo',
                 'estado',
             ])
-                ->with('perfilRelacion')
+                ->with(['perfilRelacion', 'nivelRelacion:id,nombre', 'nivel2Relacion:id,nombre'])
                 ->whereNotIn('perfil', [17, 16, 6])
                 ->get();
 

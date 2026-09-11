@@ -67,6 +67,10 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->belongsTo(Nivel::class, 'id_nivel', 'id');
     }
 
+    public function nivel2Relacion(){
+        return $this->belongsTo(Nivel::class, 'id_nivel_2', 'id');
+    }
+
     public function cursoRelacion(){
         return $this->belongsTo(Cursos::class, 'id_curso', 'id');
     }
@@ -117,6 +121,7 @@ class Usuario extends Authenticatable implements JWTSubject
         'origen_registro',
         'estado',
         'id_nivel',
+        'id_nivel_2',
         'id_curso',
         'id_grupo',
         'foto_carnet',
@@ -140,6 +145,7 @@ class Usuario extends Authenticatable implements JWTSubject
         'id_super_empresa' => 'integer',
         'user_log' => 'integer',
         'id_nivel' => 'integer',
+        'id_nivel_2' => 'integer',
         'id_curso' => 'integer',
         'id_grupo' => 'integer',
         'terminos' => 'integer',
