@@ -20,6 +20,7 @@ class DocenteAsignatura extends Service
         try {
             $docentes = Usuario::query()
                 ->whereIn('perfil', self::PERFILES_ASIGNABLES)
+                ->where('estado', 'activo')
                 ->when($usuario, function ($query) use ($usuario) {
                     $query->where('id_user', $usuario);
                 })
