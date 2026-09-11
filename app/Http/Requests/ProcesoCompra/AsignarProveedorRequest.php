@@ -35,6 +35,7 @@ class AsignarProveedorRequest extends FormRequest
             'fecha_solicitado' => ['nullable', 'date'],
             'fecha_aplazado' => ['nullable', 'date'],
             'observaciones' => ['nullable', 'string', 'max:1300'],
+            'justificacion' => ['nullable', 'string', 'max:1000'],
             // Precios e IVA por producto
             'productos' => ['nullable', 'array'],
             'productos.*.id' => ['required', 'integer', Rule::exists('solicitud_productos', 'id')],

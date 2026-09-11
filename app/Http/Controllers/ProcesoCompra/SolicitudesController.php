@@ -33,6 +33,11 @@ class SolicitudesController extends Controller
     // pertenecen a otro módulo ("Uso areas comunes") y no existen respectivamente.
     private const OPCION_COMPRAS_GESTION = 104;
     private const OPCION_COMPRAS_VENTAS = 105;
+    // "Compras — Generar solicitudes" (114): quién puede crear una solicitud de compra
+    // (POST /solicitudes) — antes abierto a cualquier empleado autenticado. Ver migración
+    // 2026_09_11_110000_seed_opcion_generar_solicitudes_compra. "Mis solicitudes"
+    // (ver/cancelar las propias) NO usa esta opción, sigue sin gate.
+    private const OPCION_GENERAR_SOLICITUDES = 114;
     // Mismo perfil Coordinador (26) que EvaluacionesServices — aprueba/rechaza las
     // solicitudes de usuarios de su propio id_nivel. Super Admin(1)/Administrador(2)
     // también pueden ver y decidir la bandeja de aprobaciones, sin recorte de nivel.
@@ -69,9 +74,13 @@ class SolicitudesController extends Controller
         return $this->error('No tienes permiso para gestionar estas solicitudes', 403);
     }
 
-    // POST /solicitudes — cualquier empleado autenticado
+    // POST /solicitudes — opción 114 (Compras — Generar solicitudes)
     public function crear(SolicitudInicialRequest $request)
     {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GENERAR_SOLICITUDES)) {
+            return $rechazo;
+        }
+
         $response = $this->solicitudesServices->crear(
             $request->toSolicitudData(),
             $request->toProductosData(),
