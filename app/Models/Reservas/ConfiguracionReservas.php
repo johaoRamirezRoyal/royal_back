@@ -13,7 +13,6 @@ class ConfiguracionReservas extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'correo_notificacion',
         'dias_min_anticipacion',
         'dias_max_anticipacion',
     ];
@@ -26,20 +25,5 @@ class ConfiguracionReservas extends Model
     public static function actual(): self
     {
         return self::findOrFail(self::ID_CONFIG);
-    }
-
-    /**
-     * Correos que reciben SIEMPRE una notificación al reservar cualquier salón (separados
-     * por coma) — mismo formato que Salones::correosNotificacion() y
-     * ConfiguracionInstituciones::correosNotificacion().
-     */
-    public function correosNotificacion(): array
-    {
-        if (! $this->correo_notificacion) return [];
-
-        return array_filter(array_map(
-            fn ($correo) => mb_strtolower(trim($correo)),
-            explode(',', $this->correo_notificacion)
-        ));
     }
 }

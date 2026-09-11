@@ -3,7 +3,6 @@
 namespace Tests\Unit\Reservas;
 
 use App\Models\Reservas\ConfiguracionReservas;
-use App\Services\MailService;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Reservas\ReservasServices;
 use Carbon\Carbon;
@@ -30,7 +29,6 @@ class ReservasServicesTest extends TestCase
     {
         $service = new ReservasServices(
             $this->createMock(PrestamosService::class),
-            $this->createMock(MailService::class),
         );
         $method = new ReflectionMethod(ReservasServices::class, 'validarFechaReserva');
         $method->setAccessible(true);

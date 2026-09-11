@@ -39,7 +39,7 @@ class SalonesController extends Controller
         return $this->apiResponse([
             'error' => false,
             'message' => 'Salones obtenidos correctamente.',
-            'data' => Salones::activo()->get(['id', 'nombre', 'portatil', 'sonido', 'correo_notificacion'])
+            'data' => Salones::activo()->get(['id', 'nombre', 'portatil', 'sonido'])
         ]);
     }
 
@@ -121,9 +121,8 @@ class SalonesController extends Controller
     }
 
     /**
-     * Correo(s) que reciben SIEMPRE una notificación al reservar cualquier salón —
-     * editable acá para no tocar el servidor, mismo patrón que
-     * InstitucionAdminController::configuracion()/actualizarConfiguracion().
+     * Ventana de anticipación (días) para poder reservar — editable acá para no tocar el
+     * servidor, mismo patrón que InstitucionAdminController::configuracion()/actualizarConfiguracion().
      */
     public function configuracion(Request $request)
     {
@@ -146,12 +145,10 @@ class SalonesController extends Controller
 
         $request->validate(
             [
-                'correo_notificacion' => 'sometimes|nullable|string|max:500',
                 'dias_min_anticipacion' => 'sometimes|integer|min:1|max:365',
                 'dias_max_anticipacion' => 'sometimes|integer|min:1|max:365',
             ],
             [
-                'correo_notificacion.max' => 'El campo de correos no puede superar los 500 caracteres.',
                 'dias_min_anticipacion.integer' => 'Los días mínimos de anticipación deben ser un número entero.',
                 'dias_min_anticipacion.min' => 'Los días mínimos de anticipación deben ser al menos 1 (no se permite reservar el mismo día).',
                 'dias_max_anticipacion.integer' => 'Los días máximos de anticipación deben ser un número entero.',
@@ -160,7 +157,7 @@ class SalonesController extends Controller
         );
 
         $config = ConfiguracionReservas::actual();
-        $datos = $request->only(['correo_notificacion', 'dias_min_anticipacion', 'dias_max_anticipacion']);
+        $datos = $request->only(['dias_min_anticipacion', 'dias_max_anticipacion']);
 
         $diasMin = $datos['dias_min_anticipacion'] ?? $config->dias_min_anticipacion;
         $diasMax = $datos['dias_max_anticipacion'] ?? $config->dias_max_anticipacion;

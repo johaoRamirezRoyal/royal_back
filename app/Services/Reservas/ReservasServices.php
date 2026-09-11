@@ -9,12 +9,10 @@ use App\Models\Reservas\Horas;
 use App\Models\Reservas\Reservas;
 use App\Models\Reservas\Salones;
 use App\Models\Usuarios\Usuario;
-use App\Services\MailService;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +20,6 @@ class ReservasServices extends Service
 {
     public function __construct(
         protected PrestamosService $prestamosService,
-        protected MailService $mailService,
     ) {}
 
     /**
@@ -199,8 +196,6 @@ class ReservasServices extends Service
 
             $total = count($reservas);
 
-            $this->notificarReservaCreada($salon, $usuario, $combos, $configReservas);
-
             return [
                 'error' => false,
                 'message' => $total === 1
@@ -258,38 +253,6 @@ class ReservasServices extends Service
         }
 
         return null;
-    }
-
-    /**
-     * Correos que reciben la notificación de esta reserva: los globales de
-     * ConfiguracionReservas (siempre) + los propios del salón (el encargado de esa área en
-     * particular). No bloqueante a propósito: un correo caído no debe impedir crear la
-     * reserva — MailService::sendGeneric ya nunca lanza excepción por su cuenta.
-     */
-    private function notificarReservaCreada(Salones $salon, Usuario $usuario, Collection $combos, ConfiguracionReservas $config): void
-    {
-        $correos = array_values(array_unique(array_merge(
-            $config->correosNotificacion(),
-            $salon->correosNotificacion(),
-        )));
-
-        if (empty($correos)) {
-            return;
-        }
-
-        $horasPorId = Horas::whereIn('id', $combos->pluck('hora')->unique())->pluck('horas', 'id');
-
-        $detalle = $combos
-            ->map(fn ($c) => "{$c['fecha']} — " . ($horasPorId[$c['hora']] ?? "hora #{$c['hora']}"))
-            ->implode("\n");
-
-        $nombreUsuario = trim("{$usuario->nombre} {$usuario->apellido}");
-
-        $this->mailService->sendGeneric(
-            $correos,
-            "Nueva reserva de salón: {$salon->nombre}",
-            "{$nombreUsuario} reservó el salón \"{$salon->nombre}\".\n\nHorario(s):\n{$detalle}",
-        );
     }
 
     public function actualizarReserva(array $data): array
