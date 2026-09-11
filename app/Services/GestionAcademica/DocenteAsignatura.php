@@ -89,7 +89,7 @@ class DocenteAsignatura extends Service
             }
 
             $docente = Usuario::where('id_user', $id_user)
-                ->where('perfil', 3)
+                ->whereIn('perfil', self::PERFILES_ASIGNABLES)
                 ->first();
 
             if (!$docente) {
