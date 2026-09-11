@@ -26,14 +26,12 @@ class RegistrarUsuarioRequest extends FormRequest
 
     public function rules(): array
     {
-        $usuarioId = $this->route('id'); // para update
-
         return [
             "documento" => [
                 'required',
                 'numeric',
                 'digits_between:5,16',
-                Rule::unique('usuarios', 'documento')->ignore($usuarioId, 'id'),
+                Rule::unique('usuarios', 'documento'),
             ],
 
             "nombre" => [
@@ -58,11 +56,11 @@ class RegistrarUsuarioRequest extends FormRequest
                 'required',
                 'email',
                 'ends_with:@royalschool.edu.co',
-                Rule::unique('usuarios', 'correo')->ignore($usuarioId, 'id'),
+                Rule::unique('usuarios', 'correo'),
             ],
 
             "pass" => [
-                $usuarioId ? 'nullable' : 'required', // requerido solo en create
+                'required',
                 'string',
                 'min:6'
             ],
