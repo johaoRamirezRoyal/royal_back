@@ -2,10 +2,12 @@
 
 namespace App\Services\Usuarios;
 
+use App\Mail\NuevoUsuarioMail;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
+use App\Services\MailService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -15,7 +17,8 @@ use Illuminate\Support\Facades\Log;
 class UsuariosServices
 {
     public function __construct(
-        private CloudinaryService $cloudinaryService
+        private CloudinaryService $cloudinaryService,
+        private MailService $mailService
     ) {}
 
     public function userExistWhitEmail(string $email)
@@ -247,6 +250,7 @@ class UsuariosServices
                 'user',
                 'perfil',
                 'id_nivel',
+                'id_nivel_2',
                 'id_curso',
                 'id_grupo',
                 'estado',
@@ -254,6 +258,7 @@ class UsuariosServices
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
                     'nivelRelacion:id,nombre',
+                    'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
                 ])
                 ->orderBy('nombre')
@@ -292,6 +297,7 @@ class UsuariosServices
                 'perfil',
                 'user',
                 'id_nivel',
+                'id_nivel_2',
                 'id_curso',
                 'id_grupo',
                 'estado',
@@ -300,6 +306,7 @@ class UsuariosServices
                 ->with([
                     'perfilRelacion:id_perfil,nombre',
                     'nivelRelacion:id,nombre',
+                    'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
                 ])
                 ->when($perfil_filtro, function ($query, $perfiles) {
@@ -465,10 +472,11 @@ class UsuariosServices
                 'user',
                 'perfil',
                 'id_nivel',
+                'id_nivel_2',
                 'id_grupo',
                 'estado',
             ])
-                ->with('perfilRelacion')
+                ->with(['perfilRelacion', 'nivelRelacion:id,nombre', 'nivel2Relacion:id,nombre'])
                 ->whereNotIn('perfil', [17, 16, 6])
                 ->get();
 
@@ -499,7 +507,10 @@ class UsuariosServices
                     'nombre',
                     'apellido',
                     'documento',
-                    'perfil'
+                    'perfil',
+                    // Áreas Comunes: para preseleccionar como responsable a la
+                    // asistente de nivel (perfil 11) del mismo nivel del bloque.
+                    'id_nivel'
                 )
                 ->orderBy('nombre')
                 ->get();
@@ -544,7 +555,12 @@ class UsuariosServices
     public function agregarUsuario(array $data)
     {
         try {
+            $passPlano = $data['pass'] ?? null;
             $usuario = Usuario::create($data);
+
+            if ($passPlano) {
+                $this->mailService->send($usuario->correo, new NuevoUsuarioMail($usuario, $passPlano));
+            }
 
             return [
                 'error' => false,

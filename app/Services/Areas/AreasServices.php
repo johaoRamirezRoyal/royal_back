@@ -76,6 +76,52 @@ class AreasServices extends Service
         }
     }
 
+    /**
+     * Asigna un bloque a varias áreas de una sola vez — sync completo: las áreas
+     * que ya tenían este bloque y no vienen en $ids quedan sin bloque.
+     */
+    public function asignarAreasBloque(int $idBloque, array $ids)
+    {
+        try {
+            DB::transaction(function () use ($idBloque, $ids) {
+                Areas::where('id_bloque', $idBloque)
+                    ->whereNotIn('id', $ids)
+                    ->update(['id_bloque' => null]);
+
+                if (!empty($ids)) {
+                    Areas::whereIn('id', $ids)->update(['id_bloque' => $idBloque]);
+                }
+            });
+
+            return [
+                'error' => false,
+                'message' => 'Áreas asignadas correctamente',
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    public function obtenerAreasPorBloque(int $idBloque)
+    {
+        try {
+            $areas = Areas::where('id_bloque', $idBloque)->get();
+
+            return [
+                'error' => false,
+                'data' => $areas,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
     public function filtrarAreas($filtro){
         try{
             $areas = Areas::where('nombre', 'like', '%' . $filtro . '%')
@@ -199,7 +245,7 @@ class AreasServices extends Service
                             ->get()
                             ->groupBy('id_area')
                             ->map(function ($items) {
-                                return $items->pluck('usuario')->filter()->unique('id_user')->values();
+                                return $items->pluck('usuario')->filter()->first();
                             });
 
             return [

@@ -20,6 +20,7 @@ class RegistrarUsuarioRequest extends FormRequest
             'apellido' => $this->apellido ? trim($this->apellido) : null,
             'telefono' => $this->telefono ? trim($this->telefono) : null,
             'id_curso' => $this->id_curso ?: ($this->curso > 0 ? $this->curso : null),
+            'id_nivel_2' => $this->id_nivel_2 ?: null,
         ]);
     }
 
@@ -78,6 +79,13 @@ class RegistrarUsuarioRequest extends FormRequest
                 Rule::exists('nivel', 'id'),
             ],
 
+            'id_nivel_2' => [
+                'nullable',
+                'integer',
+                'different:id_nivel',
+                Rule::exists('nivel', 'id'),
+            ],
+
             'telefono' => [
                 'nullable',
                 'string',
@@ -128,6 +136,9 @@ class RegistrarUsuarioRequest extends FormRequest
             'id_nivel.required' => 'El nivel es obligatorio',
             'id_nivel.exists' => 'El nivel seleccionado no existe',
 
+            'id_nivel_2.different' => 'El segundo nivel debe ser distinto al nivel principal',
+            'id_nivel_2.exists' => 'El segundo nivel seleccionado no existe',
+
             'id_curso.exists' => 'El curso seleccionado no existe',
         ];
     }
@@ -168,6 +179,7 @@ class RegistrarUsuarioRequest extends FormRequest
         if ($this->filled('pass')) $data['pass'] = $this->pass;
         if ($this->has('perfil')) $data['perfil'] = $this->perfil;
         if ($this->has('id_nivel')) $data['id_nivel'] = $this->id_nivel;
+        if ($this->has('id_nivel_2')) $data['id_nivel_2'] = $this->id_nivel_2;
 
         // El frontend envía "curso" en vez de "id_curso"
         if ($this->has('id_curso')) {

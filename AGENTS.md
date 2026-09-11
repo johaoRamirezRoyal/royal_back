@@ -11,6 +11,40 @@ composer run test         # config:clear + php artisan test
 php artisan serve         # dev server on localhost:8000
 ```
 
+## Registro manual de SQL de migraciones (`migraciones_sql.sql`)
+
+**Regla fija para cualquier sesión que cree una migración nueva en este repo**:
+después de escribir el archivo en `database/migrations/`, anexar al final de
+`migraciones_sql.sql` (raíz del repo) el SQL plano equivalente a su `up()`,
+con un encabezado `-- ---` que indique el nombre exacto del archivo de
+migración y un comentario breve de qué hace y por qué (mismo criterio que los
+comentarios ya presentes ahí). No hace falta tocar `down()`.
+
+- El SQL debe ser el que realmente ejecuta Laravel, no una aproximación —
+  para obtenerlo sin aplicar la migración dos veces, usar `pretend()`:
+  ```bash
+  php artisan tinker --execute="
+  \$m = require database_path('migrations/NOMBRE_DEL_ARCHIVO.php');
+  \$queries = DB::connection()->pretend(function() use (\$m) { \$m->up(); });
+  foreach (\$queries as \$q) { echo \$q['query'] . ';' . PHP_EOL; }
+  "
+  ```
+  Si la migración usa `insertGetId()` (como el patrón de seed de
+  `cron_opciones`/`cron_permisos`, ver más abajo), `pretend()` no puede
+  resolver el id generado — reescribir esa parte a mano con
+  `SET @variable = LAST_INSERT_ID();` para que el SQL quede ejecutable de
+  verdad, y anotar los ids reales que terminó asignando el autoincrement
+  (correr la migración de verdad y consultar la tabla) en un comentario final.
+- `migraciones_sql.sql` es solo documentación/histórico — nunca se ejecuta
+  contra la BD como script, y no reemplaza correr `php artisan migrate`.
+  Sirve para poder auditar el DDL acumulado sin abrir cada archivo PHP, y
+  como referencia para aplicar los mismos cambios a mano en otro entorno si
+  hiciera falta.
+- Motivo de esta práctica: la BD real es externa/compartida entre varios
+  entornos (ver "DB externa" más abajo) — tener el SQL crudo centralizado
+  facilita revisar o portar cambios de esquema sin depender de correr
+  Laravel.
+
 ## Arquitectura general
 
 - **Lenguaje**: Español — comentarios, mensajes de error, commits, docs.

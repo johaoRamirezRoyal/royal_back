@@ -3,6 +3,7 @@
 namespace App\Services\LlegadasTardeEstudiantes;
 
 use App\Mail\LlegadaTardeAvisoInternoMail;
+use App\Mail\LlegadaTardeEstadoMail;
 use App\Mail\LlegadaTardeMail;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Estudiantes\EstudiantesPadre;
@@ -126,9 +127,12 @@ class LlegadasTarde extends Service
             }
 
             // Justificada: queda registrada para el historial, pero no cuenta para el límite
-            // del alumno ni dispara las notificaciones automáticas (no hace falta avisar de
-            // una tardanza ya excusada).
+            // del alumno ni dispara las notificaciones automáticas de llegada tarde (no hace
+            // falta avisar de una tardanza ya excusada) — sí se manda un aviso informativo al
+            // acudiente de que quedó justificada.
             if ($justificada) {
+                $this->enviarAvisoEstadoLlegadaTarde($llegadaTarde, 'justificada', $observacion);
+
                 return [
                     'error' => false,
                     'message' => "Llegada tarde justificada registrada correctamente",
@@ -162,7 +166,17 @@ class LlegadasTarde extends Service
         }
     }
 
-    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null): array
+    /**
+     * `idsAlumnos` — scope adicional por un conjunto de alumnos (autoservicio de
+     * Acudiente/Docente, ver LlegadasTardeController::obtenerLlegadasTarde): un simple
+     * whereIn superpuesto al resto del comportamiento normal (período vigente, colapsado
+     * a una fila por alumno) — a propósito NO se trata como id_alumno (historial puntual
+     * sin colapsar): con varios alumnos a la vez (varios hijos, o todo un curso) esa
+     * vista se volvería una lista larga y menos legible que ver, para cada alumno, su fila
+     * más reciente con el conteo del período — el mismo criterio con el que cualquier
+     * otro usuario ve esta pantalla, solo que acotado a un subconjunto de alumnos.
+     */
+    public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null, ?array $idsAlumnos = null): array
     {
         try {
             // El período vigente solo se fuerza en el listado general (sin alumno
@@ -196,6 +210,9 @@ class LlegadasTarde extends Service
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
                 })
+                ->when($idsAlumnos !== null, function ($query) use ($idsAlumnos) {
+                    $query->whereIn('id_alumno', $idsAlumnos);
+                })
                 ->when($fecha !== null, function ($query) use ($fecha) {
                     $query->where('fecha', $fecha);
                 })
@@ -222,6 +239,9 @@ class LlegadasTarde extends Service
                 ->when($id_alumno !== null, function ($query) use ($id_alumno) {
                     $query->where('id_alumno', $id_alumno);
                 })
+                ->when($idsAlumnos !== null, function ($query) use ($idsAlumnos) {
+                    $query->whereIn('id_alumno', $idsAlumnos);
+                })
                 ->where('revocado', false)
                 ->where('justificada', false)
                 ->selectRaw('id_alumno, id_periodo_academico, count(*) as total')
@@ -238,7 +258,8 @@ class LlegadasTarde extends Service
             // alumno, la más reciente — el resto de sus llegadas tarde ya están contadas
             // en total_llegadas_tarde_periodo, no hace falta listarlas todas para saber que
             // el alumno reincide. Pidiendo id_alumno explícito sí se devuelve su historial
-            // completo (p. ej. para una futura vista de detalle por alumno).
+            // completo (p. ej. para una futura vista de detalle por alumno). idsAlumnos NO
+            // activa este modo (ver docblock del método).
             // La consulta ya viene ordenada desc (fecha, hora), así que unique() -que
             // conserva la primera ocurrencia- se queda justo con la más reciente de cada
             // alumno, y el orden desc de la respuesta se conserva sin reordenar de nuevo.
@@ -461,6 +482,8 @@ class LlegadasTarde extends Service
                 $observacion !== null ? ['observacion' => $observacion] : []
             ));
 
+            $this->enviarAvisoEstadoLlegadaTarde($llegadaTarde, 'revocada', $observacion);
+
             return [
                 'error' => false,
                 'message' => 'Llegada tarde revocada correctamente',
@@ -585,6 +608,52 @@ class LlegadasTarde extends Service
     }
 
     /**
+     * Correos de los acudientes activos (`estudiantes_padres.activo`) de un alumno, con
+     * usuario en estado activo y correo registrado — usado tanto para la carta de
+     * llegada tarde como para el aviso de justificación/revocación.
+     */
+    private function correosAcudientes(int $idAlumno): array
+    {
+        return Usuario::whereIn(
+            'id_user',
+            EstudiantesPadre::where('id_estudiante', $idAlumno)->where('activo', 1)->pluck('id_acudiente')
+        )
+            ->where('estado', 'activo')
+            ->whereNotNull('correo')
+            ->pluck('correo')
+            ->filter()
+            ->all();
+    }
+
+    /**
+     * Aviso informativo al acudiente cuando una llegada tarde ya registrada queda
+     * justificada o se revoca — no afecta `enviado` (ese campo solo trackea la carta
+     * principal de la llegada tarde) ni WhatsApp, es solo un correo de cortesía.
+     */
+    private function enviarAvisoEstadoLlegadaTarde(ModelsLlegadasTarde $llegadaTarde, string $tipo, ?string $observacion): void
+    {
+        $correos = $this->correosAcudientes($llegadaTarde->id_alumno);
+
+        if (empty($correos)) {
+            return;
+        }
+
+        $estudiante = Usuario::with('cursoRelacion')->find($llegadaTarde->id_alumno);
+
+        if (!$estudiante) {
+            return;
+        }
+
+        $this->mailService->send($correos, new LlegadaTardeEstadoMail(
+            tipo: $tipo,
+            nombreEstudiante: trim("{$estudiante->nombre} {$estudiante->apellido}"),
+            grado: $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado',
+            fecha: Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y'),
+            observacion: $observacion,
+        ));
+    }
+
+    /**
      * "Primer periodo" → "1", "Segundo periodo" → "2", etc. (ver ORDINALES_PERIODO) —
      * en los correos el periodo se muestra como número ("Periodo 1"), no con el nombre
      * completo tal cual está en `periodo_academico.nombre`. Si el nombre no matchea
@@ -639,15 +708,7 @@ class LlegadasTarde extends Service
             ? [$estudiante->correo]
             : [];
 
-        $correosAcudientes = Usuario::whereIn(
-            'id_user',
-            EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)->where('activo', 1)->pluck('id_acudiente')
-        )
-            ->where('estado', 'activo')
-            ->whereNotNull('correo')
-            ->pluck('correo')
-            ->filter()
-            ->all();
+        $correosAcudientes = $this->correosAcudientes($llegadaTarde->id_alumno);
 
         $telefonosAcudientes = EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)
             ->where('activo', 1)

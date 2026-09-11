@@ -17,6 +17,18 @@ class ActualizarUsuarioRequest extends FormRequest
     }
 
     /**
+     * Solo normaliza si el campo viene en el request: esta actualización es parcial
+     * (el frontend solo manda los campos que realmente cambió), así que no se puede
+     * inyectar la llave si no vino — eso la haría "cambiada" para toUsuarioData().
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('id_nivel_2') && ! $this->id_nivel_2) {
+            $this->merge(['id_nivel_2' => null]);
+        }
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -61,6 +73,13 @@ class ActualizarUsuarioRequest extends FormRequest
                 Rule::exists('nivel', 'id'),
             ],
 
+            'id_nivel_2' => [
+                'nullable',
+                'integer',
+                'different:id_nivel',
+                Rule::exists('nivel', 'id'),
+            ],
+
             'telefono' => [
                 'nullable',
                 'string',
@@ -80,6 +99,8 @@ class ActualizarUsuarioRequest extends FormRequest
         return [
             'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
             'documento.unique' => 'El documento ya está registrado a un usuario',
+            'id_nivel_2.different' => 'El segundo nivel debe ser distinto al nivel principal',
+            'id_nivel_2.exists' => 'El segundo nivel seleccionado no existe',
         ];
     }
 
@@ -97,6 +118,7 @@ class ActualizarUsuarioRequest extends FormRequest
             'correo',
             'perfil',
             'id_nivel',
+            'id_nivel_2',
             'id_curso',
             'telefono',
         ]);

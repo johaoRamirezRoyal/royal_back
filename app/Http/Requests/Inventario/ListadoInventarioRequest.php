@@ -14,7 +14,7 @@ class ListadoInventarioRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['id_area', 'id_categoria', 'estado'] as $key) {
+        foreach (['id_area', 'id_bloque', 'id_categoria', 'estado'] as $key) {
             if ($this->has($key) && !is_array($this->input($key))) {
                 $this->merge([$key => [$this->input($key)]]);
             }
@@ -27,9 +27,11 @@ class ListadoInventarioRequest extends FormRequest
             'id_usuario' => ['nullable', 'integer', Rule::exists('usuarios', 'id_user')],
             'id_area' => ['nullable', 'array'],
             'id_area.*' => ['integer', Rule::exists('areas', 'id')],
+            'id_bloque' => ['nullable', 'array'],
+            'id_bloque.*' => ['integer', Rule::exists('bloques', 'id')],
             'id_categoria' => ['nullable', 'array'],
             'id_categoria.*' => ['integer', Rule::exists('categoria', 'id')],
-            'tipo_categoria' => ['nullable', 'integer', 'in:1,2'],
+            'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],
             'estado' => ['nullable', 'array'],
             'estado.*' => ['integer', Rule::exists('estado', 'id')],
             's' => ['nullable', 'string', 'max:100'],
@@ -49,12 +51,16 @@ class ListadoInventarioRequest extends FormRequest
             'id_area.*.integer' => 'Cada área debe ser un número entero',
             'id_area.*.exists' => 'Una o más áreas no existen',
 
+            'id_bloque.array' => 'Los bloques deben ser un arreglo',
+            'id_bloque.*.integer' => 'Cada bloque debe ser un número entero',
+            'id_bloque.*.exists' => 'Uno o más bloques no existen',
+
             'id_categoria.array' => 'Las categorías deben ser un arreglo',
             'id_categoria.*.integer' => 'Cada categoría debe ser un número entero',
             'id_categoria.*.exists' => 'Una o más categorías no existen',
 
             'tipo_categoria.integer' => 'La subcategoría debe ser un número entero',
-            'tipo_categoria.in' => 'La subcategoría solo puede ser 1 o 2',
+            'tipo_categoria.exists' => 'La subcategoría no existe',
 
             'estado.array' => 'Los estados deben ser un arreglo',
             'estado.*.integer' => 'Cada estado debe ser un número entero',

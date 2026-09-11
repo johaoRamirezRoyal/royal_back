@@ -63,7 +63,7 @@ class CategoriasController extends Controller{
 
         $validator = Validator::make($datos,[
             "nombre" => "required|string",
-            "tipo_categoria" => "required|numeric",
+            "tipo_categoria" => "required|integer|exists:subcategoria_inventario,id",
             "activo" => "numeric",
         ]);
 
@@ -98,7 +98,7 @@ class CategoriasController extends Controller{
             "ids.*" => "integer|distinct|exists:categoria,id",
 
             "nombre" => "sometimes|string",
-            "tipo_categoria" => "sometimes|numeric",
+            "tipo_categoria" => "sometimes|integer|exists:subcategoria_inventario,id",
             "activo" => "sometimes|numeric",
         ]);
 
