@@ -29,6 +29,12 @@ class InventariosController extends Controller
     private const OPCION_INVENTARIO = 12;
     private const OPCION_MIS_INVENTARIOS = 16;
     private const OPCION_PRESTAMOS = 17;
+    // cron_opciones bajo id_modulo=6 (Zonas) — Áreas Comunes tiene su propio par de
+    // permisos, separado de OPCION_INVENTARIO; historialInventario() los acepta también
+    // porque "Ver hoja de vida" ya se ofrece como acción de fila en Listado de Áreas
+    // Comunes (ver AGENTS.md "Áreas Comunes").
+    private const OPCION_ADMIN_AREAS_COMUNES = 108;
+    private const OPCION_USO_AREAS_COMUNES = 109;
 
     protected $inventario_services;
 
@@ -86,7 +92,7 @@ class InventariosController extends Controller
 
         $per_page = $request->input('per-page', 10); // Número de elementos por página, por defecto 10
         $search = $request->input('s', null);
-        $datos = $request->only(['id_area', 'id_categoria', 'estado', 'estado_not_in', 'id_usuario', 'tipo_categoria', 'anio_descontinuado']);
+        $datos = $request->only(['id_area', 'id_bloque', 'id_categoria', 'estado', 'estado_not_in', 'id_usuario', 'tipo_categoria', 'anio_descontinuado']);
         $sort = $request->input('sort'); // 'usuario' o 'cantidad'
         $dir = $request->input('dir', 'asc');
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos, $sort, $dir);
@@ -111,7 +117,7 @@ class InventariosController extends Controller
             return $rechazo;
         }
 
-        $filtros = $request->only(['id_usuario', 'id_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
         $per_page = $request->input('per_page', 15);
 
         $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
@@ -188,7 +194,7 @@ class InventariosController extends Controller
     }
 
     public function historialInventario(Request $request, int $id){
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 

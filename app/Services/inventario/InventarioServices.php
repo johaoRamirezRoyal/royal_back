@@ -5,6 +5,7 @@ namespace App\Services\inventario;
 use App\Models\AnioEscolar\Anio;
 use App\Models\Inventario\Categoria;
 use App\Models\Inventario\Inventario;
+use App\Models\Inventario\InventarioCheck;
 use App\Models\Inventario\InventarioDescontinuado;
 use App\Models\Inventario\InventarioLiberado;
 use App\Models\Inventario\InventarioLog;
@@ -22,7 +23,8 @@ use Illuminate\Support\Facades\Log;
 class InventarioServices
 {
     public function __construct(
-        private MailService $mailService
+        private MailService $mailService,
+        private \App\Services\AnioEscolar\PeriodoServices $periodoServices,
     ) {}
 
     /**
@@ -126,6 +128,7 @@ class InventarioServices
             $listado = Inventario::select(
                 'inventario.id_user',
                 'inventario.id_area',
+                'inventario.id_bloque',
                 'inventario.descripcion',
                 'inventario.id_categoria',
                 DB::raw("
@@ -183,6 +186,7 @@ class InventarioServices
                 ->with([
                     'usuario:id_user,nombre,apellido',
                     'area:id,nombre',
+                    'bloque:id,nombre',
                     'categoria:id,nombre,tipo_categoria'
                 ])
                 ->when($search, function ($query, $search) {
@@ -202,8 +206,21 @@ class InventarioServices
                             ->orWhere('inventario.codigo', 'like', "%{$search}%")
                             ->orWhereRaw('CAST(inventario.id AS CHAR) LIKE ?', ["%{$search}%"]);
                     });
-                })->when($datos['id_area'] ?? null, function ($query) use ($datos) {
+                })
+                // Áreas Comunes: al filtrar por bloque (sin área puntual elegida), el
+                // frontend manda id_area = áreas de ese bloque + id_bloque = [ese bloque],
+                // para traer tanto lo asignado a un área del bloque como lo asignado
+                // directo al bloque (id_area NULL) — de ahí el OR en vez de dos `when`
+                // independientes, que se combinarían con AND.
+                ->when(($datos['id_area'] ?? null) && ($datos['id_bloque'] ?? null), function ($query) use ($datos) {
+                    $query->where(function ($q) use ($datos) {
+                        $q->whereIn('inventario.id_area', $datos['id_area'])
+                            ->orWhereIn('inventario.id_bloque', $datos['id_bloque']);
+                    });
+                })->when(($datos['id_area'] ?? null) && !($datos['id_bloque'] ?? null), function ($query) use ($datos) {
                     $query->whereIn('inventario.id_area', $datos['id_area']);
+                })->when(!($datos['id_area'] ?? null) && ($datos['id_bloque'] ?? null), function ($query) use ($datos) {
+                    $query->whereIn('inventario.id_bloque', $datos['id_bloque']);
                 })->when($datos['id_categoria'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.id_categoria', $datos['id_categoria']);
                 })->when($datos['tipo_categoria'] ?? null, function ($query) use ($datos) {
@@ -219,7 +236,7 @@ class InventarioServices
                 })
                 // u.nombre se agrega al GROUP BY solo para satisfacer ONLY_FULL_GROUP_BY: es
                 // funcionalmente dependiente de id_user (join 1:1 por PK), no cambia los grupos.
-                ->groupBy('inventario.id_user', 'inventario.id_area', 'inventario.descripcion', 'inventario.id_categoria', 'u.nombre')
+                ->groupBy('inventario.id_user', 'inventario.id_area', 'inventario.id_bloque', 'inventario.descripcion', 'inventario.id_categoria', 'u.nombre')
                 ->when($sort === 'usuario', function ($query) use ($dir) {
                     $query->orderBy('u.nombre', $dir);
                 })
@@ -279,11 +296,22 @@ class InventarioServices
                 ->leftJoin('estado as e', 'inventario.estado', '=', 'e.id')
                 ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
                 ->leftJoin('areas as a', 'inventario.id_area', '=', 'a.id')
+                ->leftJoin('bloques as b', 'inventario.id_bloque', '=', 'b.id')
                 ->leftJoin('categoria as c', 'inventario.id_categoria', '=', 'c.id')
                 ->where('inventario.activo', 1)
                 ->whereNotIn('inventario.estado', [4, 5])
                 ->when($filtros['id_usuario'] ?? null, fn ($q, $v) => $q->where('inventario.id_user', $v))
-                ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_area', $v))
+                // Áreas Comunes: id_bloque junto con id_area trae también lo asignado
+                // directo al bloque (id_area NULL) — ver mismo patrón/comentario en
+                // obtenerListadoInventario más arriba.
+                ->when(($filtros['id_area'] ?? null) && ($filtros['id_bloque'] ?? null), function ($q) use ($filtros) {
+                    $q->where(function ($q2) use ($filtros) {
+                        $q2->whereIn('inventario.id_area', $filtros['id_area'])
+                            ->orWhereIn('inventario.id_bloque', $filtros['id_bloque']);
+                    });
+                })
+                ->when(($filtros['id_area'] ?? null) && !($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_area', $filtros['id_area']))
+                ->when(!($filtros['id_area'] ?? null) && ($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_bloque', $filtros['id_bloque']))
                 ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
                 ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
@@ -316,7 +344,12 @@ class InventarioServices
                         'e.nombre as estado_nombre',
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
-                        'c.nombre as categoria_nombre'
+                        'b.nombre as nom_bloque',
+                        'c.nombre as categoria_nombre',
+                        // Áreas Comunes: último check semestral registrado (migración de
+                        // chek_zonas) — ver InventarioServices::registrarCheckInventario.
+                        DB::raw("(SELECT fechareg FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check"),
+                        DB::raw("(SELECT periodo FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check_periodo")
                     )
                     ->orderByDesc('inventario.id')
                     ->paginate($perPage);
@@ -327,21 +360,25 @@ class InventarioServices
                     ->select(
                         'inventario.id_user',
                         'inventario.id_area',
+                        'inventario.id_bloque',
                         'inventario.descripcion',
                         DB::raw("CAST(SUBSTRING_INDEX(GROUP_CONCAT(inventario.id_categoria ORDER BY inventario.id DESC), ',', 1) AS UNSIGNED) as id_categoria"),
                         DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(c.nombre ORDER BY inventario.id DESC), ',', 1) as categoria_nombre"),
                         DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(e.nombre ORDER BY inventario.id DESC), ',', 1) as estado_nombre"),
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
+                        'b.nombre as nom_bloque',
                         DB::raw('COUNT(inventario.id) as cantidad')
                     )
                     ->groupBy(
                         'inventario.id_user',
                         'inventario.id_area',
+                        'inventario.id_bloque',
                         'inventario.descripcion',
                         'u.nombre',
                         'u.apellido',
-                        'a.nombre'
+                        'a.nombre',
+                        'b.nombre'
                     )
                     ->orderBy('inventario.descripcion')
                     ->paginate($perPage);
@@ -596,12 +633,21 @@ class InventarioServices
                 ->orderByDesc('fechareg')
                 ->get();
 
+            $checks = InventarioCheck::where('id_inventario', $idInventario)
+                ->with([
+                    'anioEscolar:id,anio_inicio,anio_fin',
+                    'responsable:id_user,nombre,apellido',
+                ])
+                ->orderByDesc('id')
+                ->get();
+
             return [
                 'error' => false,
                 'data' => [
                     'item' => $item,
                     'reportes' => $query(1),
                     'mantenimientos' => $query(2),
+                    'checks' => $checks,
                 ],
                 'message' => 'Historial obtenido correctamente.',
             ];
@@ -761,6 +807,185 @@ class InventarioServices
                 'message' => $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Áreas Comunes: reclasifica ítems de inventario YA EXISTENTES hacia una
+     * categoría de tipo_categoria=3 (Área Común). Solo cambia la categoría —
+     * el frontend encuentra los ítems filtrando por bloque/área (igual que
+     * `/inventario/listado`), así que cada ítem ya está en el área/bloque
+     * correcto; no hace falta (ni conviene) reasignarlos todos a un único
+     * destino, cada uno conserva su id_area/id_bloque actual.
+     */
+    public function reclasificarAreaComun(array $ids, int $idCategoria, int $idLog)
+    {
+        try {
+            $categoria = Categoria::find($idCategoria);
+
+            if (!$categoria || (int) $categoria->tipo_categoria !== 3) {
+                return [
+                    'error' => true,
+                    'message' => 'La categoría seleccionada no es de Área Común',
+                ];
+            }
+
+            $actualizados = Inventario::whereIn('id', $ids)->update([
+                'id_categoria' => $idCategoria,
+                'user_log' => $idLog,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => "{$actualizados} ítem(s) reclasificado(s) como Área Común",
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Áreas Comunes: migración del "check" semestral de zonas del SAMI legacy
+     * (chek_zonas) — certifica que un ítem fue revisado en un periodo
+     * institucional. Se omite (no bloquea el resto del lote) cuando el ítem
+     * tiene un reporte o mantenimiento preventivo GENUINAMENTE pendiente
+     * (reportes.estado IN [2,6] SIN una solución ya vinculada — al
+     * solucionar, `solucionarReporteInventario` no muta el estado del
+     * reporte original, crea una fila nueva con `id_reporte` apuntando de
+     * vuelta; el original se queda en estado 2/6 para siempre, así que hay
+     * que descartar los que ya tienen esa fila de solución, mismo criterio
+     * que ya usa `mostrarReportesDeInventario`), cuando ya se registró un
+     * check para ese mismo periodo, o cuando el ítem ya tiene el check del
+     * periodo actual hecho y el que se pide ahora NO es de un año anterior
+     * (una vez al día certificado el periodo vigente, solo se permite
+     * ponerse al día con años pasados, no repetir el actual ni adelantarse).
+     */
+    public function registrarCheckInventario(array $ids, ?int $idAnio, ?int $periodo, int $idResponsable): array
+    {
+        try {
+            $items = Inventario::whereIn('id', $ids)->get(['id', 'descripcion']);
+            $marcados = [];
+            $omitidos = [];
+
+            $idsConPendiente = Reportes::whereIn('id_inventario', $ids)
+                ->whereIn('estado', [2, 6])
+                ->whereNull('id_reporte')
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('reportes as sol')
+                        ->whereColumn('sol.id_reporte', 'reportes.id')
+                        ->where('sol.estado', 3);
+                })
+                ->pluck('id_inventario')
+                ->unique()
+                ->all();
+
+            // Periodo institucional vigente — para saber si lo que se está pidiendo
+            // ahora es "el periodo actual" (ya cubierto abajo) o un año anterior.
+            $periodoActivo = $this->periodoServices->resolverActivo();
+            $idAnioActivo = $periodoActivo?->id_anio;
+            $periodoActivoOrdinal = $periodoActivo ? $this->ordinalDePeriodo($periodoActivo->numero) : null;
+
+            $esAnioPasado = false;
+            if ($idAnio && $idAnioActivo && $idAnio !== $idAnioActivo) {
+                $anioInicioSolicitado = Anio::find($idAnio)?->anio_inicio;
+                $anioInicioActivo = Anio::find($idAnioActivo)?->anio_inicio;
+                $esAnioPasado = $anioInicioSolicitado !== null && $anioInicioActivo !== null
+                    && $anioInicioSolicitado < $anioInicioActivo;
+            }
+
+            $idsYaAlDiaPeriodoActual = [];
+            if ($idAnioActivo && $periodoActivoOrdinal && !$esAnioPasado) {
+                $idsYaAlDiaPeriodoActual = InventarioCheck::whereIn('id_inventario', $ids)
+                    ->where('id_anio', $idAnioActivo)
+                    ->where('periodo', $periodoActivoOrdinal)
+                    ->pluck('id_inventario')
+                    ->unique()
+                    ->all();
+            }
+
+            foreach ($items as $item) {
+                if (in_array($item->id, $idsConPendiente)) {
+                    $omitidos[] = [
+                        'id' => $item->id,
+                        'descripcion' => $item->descripcion,
+                        'motivo' => 'Tiene un reporte o mantenimiento pendiente',
+                    ];
+                    continue;
+                }
+
+                $yaChequeado = InventarioCheck::where('id_inventario', $item->id)
+                    ->when($idAnio, fn ($q) => $q->where('id_anio', $idAnio))
+                    ->when($periodo, fn ($q) => $q->where('periodo', $periodo))
+                    ->exists();
+
+                if ($yaChequeado) {
+                    $omitidos[] = [
+                        'id' => $item->id,
+                        'descripcion' => $item->descripcion,
+                        'motivo' => 'Ya se registró un check en este periodo',
+                    ];
+                    continue;
+                }
+
+                if (!$esAnioPasado && in_array($item->id, $idsYaAlDiaPeriodoActual)) {
+                    $omitidos[] = [
+                        'id' => $item->id,
+                        'descripcion' => $item->descripcion,
+                        'motivo' => 'Ya tiene el check del periodo actual — solo se permiten checks de años pasados',
+                    ];
+                    continue;
+                }
+
+                InventarioCheck::create([
+                    'id_inventario' => $item->id,
+                    'id_anio' => $idAnio,
+                    'periodo' => $periodo,
+                    'id_user' => $idResponsable,
+                    'fechareg' => now(),
+                ]);
+                $marcados[] = $item->id;
+            }
+
+            return [
+                'error' => false,
+                'data' => [
+                    'marcados' => $marcados,
+                    'omitidos' => $omitidos,
+                ],
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Espejo en PHP de `periodoOrdinal` (src/utils/labelPeriodo.ts en el frontend) —
+     * `periodos.numero` es texto libre, normalmente un romano ("I", "II"...), a veces
+     * ya un entero. Solo existe acá porque `registrarCheckInventario` necesita
+     * comparar contra el periodo vigente en el mismo formato ordinal que ya usa
+     * `inventario_check.periodo`/`reportes.periodo`.
+     */
+    private function ordinalDePeriodo(?string $numero): ?int
+    {
+        if ($numero === null) {
+            return null;
+        }
+
+        $romanos = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+        $trimmed = trim($numero);
+
+        if (ctype_digit($trimmed) && (int) $trimmed >= 1) {
+            return (int) $trimmed;
+        }
+
+        $idx = array_search(strtoupper($trimmed), $romanos, true);
+        return $idx !== false && $idx > 0 ? $idx : null;
     }
 
     /**
@@ -1140,6 +1365,11 @@ class InventarioServices
                     'iv.descripcion as inventario_descripcion',
                     DB::raw("(SELECT e.nombre FROM estado e WHERE e.id = iv.estado) AS nom_estado"),
                     DB::raw("(SELECT a.nombre FROM areas a WHERE a.id = iv.id_area) AS AREA"),
+                    // Áreas Comunes: bloque actual del ítem — directo (iv.id_bloque) si no
+                    // tiene área puntual, o el bloque de su propia área (la mayoría de los
+                    // ítems reclasificados conservan su área y nunca llegan a tener
+                    // iv.id_bloque propio — ver InventarioServices::reclasificarAreaComun).
+                    DB::raw("(SELECT b.nombre FROM bloques b WHERE b.id = COALESCE(iv.id_bloque, (SELECT a2.id_bloque FROM areas a2 WHERE a2.id = iv.id_area))) AS nom_bloque"),
                     DB::raw("(SELECT CONCAT(u2.nombre, ' ', u2.apellido) FROM usuarios u2 WHERE u2.id_user = rp.id_user) AS usuario"),
                     DB::raw("(SELECT r.fechareg FROM reportes r WHERE r.id_inventario = iv.id AND r.estado = 2 ORDER BY r.id DESC LIMIT 1) AS fecha_reporte"),
                     DB::raw("(SELECT r.id FROM reportes r WHERE r.id_inventario = iv.id ORDER BY r.id DESC LIMIT 1) AS id_reporte"),

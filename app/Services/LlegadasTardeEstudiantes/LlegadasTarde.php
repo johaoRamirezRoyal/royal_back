@@ -3,6 +3,7 @@
 namespace App\Services\LlegadasTardeEstudiantes;
 
 use App\Mail\LlegadaTardeAvisoInternoMail;
+use App\Mail\LlegadaTardeEstadoMail;
 use App\Mail\LlegadaTardeMail;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Estudiantes\EstudiantesPadre;
@@ -126,9 +127,12 @@ class LlegadasTarde extends Service
             }
 
             // Justificada: queda registrada para el historial, pero no cuenta para el límite
-            // del alumno ni dispara las notificaciones automáticas (no hace falta avisar de
-            // una tardanza ya excusada).
+            // del alumno ni dispara las notificaciones automáticas de llegada tarde (no hace
+            // falta avisar de una tardanza ya excusada) — sí se manda un aviso informativo al
+            // acudiente de que quedó justificada.
             if ($justificada) {
+                $this->enviarAvisoEstadoLlegadaTarde($llegadaTarde, 'justificada', $observacion);
+
                 return [
                     'error' => false,
                     'message' => "Llegada tarde justificada registrada correctamente",
@@ -478,6 +482,8 @@ class LlegadasTarde extends Service
                 $observacion !== null ? ['observacion' => $observacion] : []
             ));
 
+            $this->enviarAvisoEstadoLlegadaTarde($llegadaTarde, 'revocada', $observacion);
+
             return [
                 'error' => false,
                 'message' => 'Llegada tarde revocada correctamente',
@@ -602,6 +608,52 @@ class LlegadasTarde extends Service
     }
 
     /**
+     * Correos de los acudientes activos (`estudiantes_padres.activo`) de un alumno, con
+     * usuario en estado activo y correo registrado — usado tanto para la carta de
+     * llegada tarde como para el aviso de justificación/revocación.
+     */
+    private function correosAcudientes(int $idAlumno): array
+    {
+        return Usuario::whereIn(
+            'id_user',
+            EstudiantesPadre::where('id_estudiante', $idAlumno)->where('activo', 1)->pluck('id_acudiente')
+        )
+            ->where('estado', 'activo')
+            ->whereNotNull('correo')
+            ->pluck('correo')
+            ->filter()
+            ->all();
+    }
+
+    /**
+     * Aviso informativo al acudiente cuando una llegada tarde ya registrada queda
+     * justificada o se revoca — no afecta `enviado` (ese campo solo trackea la carta
+     * principal de la llegada tarde) ni WhatsApp, es solo un correo de cortesía.
+     */
+    private function enviarAvisoEstadoLlegadaTarde(ModelsLlegadasTarde $llegadaTarde, string $tipo, ?string $observacion): void
+    {
+        $correos = $this->correosAcudientes($llegadaTarde->id_alumno);
+
+        if (empty($correos)) {
+            return;
+        }
+
+        $estudiante = Usuario::with('cursoRelacion')->find($llegadaTarde->id_alumno);
+
+        if (!$estudiante) {
+            return;
+        }
+
+        $this->mailService->send($correos, new LlegadaTardeEstadoMail(
+            tipo: $tipo,
+            nombreEstudiante: trim("{$estudiante->nombre} {$estudiante->apellido}"),
+            grado: $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado',
+            fecha: Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y'),
+            observacion: $observacion,
+        ));
+    }
+
+    /**
      * "Primer periodo" → "1", "Segundo periodo" → "2", etc. (ver ORDINALES_PERIODO) —
      * en los correos el periodo se muestra como número ("Periodo 1"), no con el nombre
      * completo tal cual está en `periodo_academico.nombre`. Si el nombre no matchea
@@ -656,15 +708,7 @@ class LlegadasTarde extends Service
             ? [$estudiante->correo]
             : [];
 
-        $correosAcudientes = Usuario::whereIn(
-            'id_user',
-            EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)->where('activo', 1)->pluck('id_acudiente')
-        )
-            ->where('estado', 'activo')
-            ->whereNotNull('correo')
-            ->pluck('correo')
-            ->filter()
-            ->all();
+        $correosAcudientes = $this->correosAcudientes($llegadaTarde->id_alumno);
 
         $telefonosAcudientes = EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)
             ->where('activo', 1)

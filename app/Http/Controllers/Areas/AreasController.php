@@ -51,6 +51,22 @@ class AreasController extends Controller
         ]);
     }
 
+    public function areasPorBloque(int $id_bloque){
+        $areas = $this->service_areas->obtenerAreasPorBloque($id_bloque);
+
+        if($areas['error']){
+            return response()->json([
+                'error' => true,
+                'message' => $areas['message']
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $areas['data']
+        ]);
+    }
+
     public function filtrarAreas(Request $request){
         $filtro = $request->input('filtro');
 

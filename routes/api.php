@@ -154,6 +154,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/areas.php';
     });
 
+    // BLOQUES (Áreas Comunes)
+    Route::prefix('bloques')->group(function () {
+        require __DIR__.'/api/bloques.php';
+    });
+
     // INVENTARIO
     Route::prefix('inventario')->group(function () {
         require __DIR__.'/api/inventario.php';
