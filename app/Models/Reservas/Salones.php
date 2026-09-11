@@ -22,6 +22,7 @@ class Salones extends Model
         'nombre',
         'portatil',
         'sonido',
+        'correo_notificacion',
         'id_user',
         'activo',
         'fechareg'
@@ -43,5 +44,19 @@ class Salones extends Model
     public function scopeActivo(Builder $query): Builder
     {
         return $query->where('activo', 1);
+    }
+
+    /**
+     * Correo(s) del encargado de este salón (separados por coma) — se suman a los
+     * correos globales de ConfiguracionReservas al notificar una reserva nueva.
+     */
+    public function correosNotificacion(): array
+    {
+        if (! $this->correo_notificacion) return [];
+
+        return array_filter(array_map(
+            fn ($correo) => mb_strtolower(trim($correo)),
+            explode(',', $this->correo_notificacion)
+        ));
     }
 }

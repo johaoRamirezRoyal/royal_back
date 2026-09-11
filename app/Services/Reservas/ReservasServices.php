@@ -4,21 +4,25 @@ namespace App\Services\Reservas;
 
 use App\Models\Inventario\Inventario;
 use App\Models\Prestamos\PrestamosInventario;
+use App\Models\Reservas\ConfiguracionReservas;
 use App\Models\Reservas\Horas;
 use App\Models\Reservas\Reservas;
 use App\Models\Reservas\Salones;
 use App\Models\Usuarios\Usuario;
+use App\Services\MailService;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class ReservasServices extends Service
 {
     public function __construct(
-        protected PrestamosService $prestamosService
+        protected PrestamosService $prestamosService,
+        protected MailService $mailService,
     ) {}
 
     /**
@@ -99,6 +103,8 @@ class ReservasServices extends Service
             ];
         }
 
+        $configReservas = ConfiguracionReservas::actual();
+
         foreach ($combos as $combo) {
             if (!strtotime($combo['fecha'])) {
                 return [
@@ -109,28 +115,9 @@ class ReservasServices extends Service
             }
 
             $fechaReserva = Carbon::parse($combo['fecha'])->startOfDay();
-            $hoy = Carbon::today();
 
-            if ($fechaReserva->lt($hoy)) {
-                return [
-                    'error' => true,
-                    'message' => "La fecha de la reserva no puede ser anterior a hoy.",
-                    'data' => []
-                ];
-            }
-
-            // "El día siguiente" es el próximo día hábil, no el próximo día calendario:
-            // un viernes después de las 12:00, el lunes cuenta como "el día siguiente" a
-            // efectos de este cutoff (isTomorrow() se saltaba esta regla el viernes,
-            // porque el lunes no es el día calendario siguiente).
-            $proximoDiaHabil = $hoy->copy()->addWeekday();
-
-            if ($fechaReserva->equalTo($proximoDiaHabil) && now()->gte($hoy->copy()->setTime(12, 0, 0))) {
-                return [
-                    'error' => true,
-                    'message' => "La reserva para el día siguiente ({$combo['fecha']}) debe hacerse antes de las 12:00 del mediodía.",
-                    'data' => []
-                ];
+            if ($error = $this->validarFechaReserva($fechaReserva, Carbon::today(), now(), $configReservas)) {
+                return ['error' => true, 'message' => $error, 'data' => []];
             }
 
             $hora = Horas::find($combo['hora']);
@@ -212,6 +199,8 @@ class ReservasServices extends Service
 
             $total = count($reservas);
 
+            $this->notificarReservaCreada($salon, $usuario, $combos, $configReservas);
+
             return [
                 'error' => false,
                 'message' => $total === 1
@@ -228,6 +217,79 @@ class ReservasServices extends Service
                 'data' => []
             ];
         }
+    }
+
+    /**
+     * Valida que $fechaReserva caiga dentro de la ventana de anticipación configurada
+     * (ConfiguracionReservas::dias_min_anticipacion/dias_max_anticipacion, en días
+     * calendario — incluye fines de semana), relativa a $hoy/$ahora. Null si es válida,
+     * mensaje de error si no. Aislado de crearReserva() (que además necesita BD para
+     * salón/usuario) para poder testear esta regla de negocio sin fixtures.
+     */
+    private function validarFechaReserva(Carbon $fechaReserva, Carbon $hoy, Carbon $ahora, ConfiguracionReservas $config): ?string
+    {
+        if ($fechaReserva->lt($hoy)) {
+            return 'La fecha de la reserva no puede ser anterior a hoy.';
+        }
+
+        if ($fechaReserva->equalTo($hoy)) {
+            return 'No se puede reservar para el día de hoy: debes reservar con anticipación.';
+        }
+
+        $diasMin = $config->dias_min_anticipacion;
+        $diasMax = $config->dias_max_anticipacion;
+
+        // Después de las 12:00 m. de hoy, la ventana completa se corre un día más — mismo
+        // cutoff que existía antes de generalizar esto a una ventana mín/máx configurable.
+        if ($ahora->gte($hoy->copy()->setTime(12, 0, 0))) {
+            $diasMin++;
+            $diasMax++;
+        }
+
+        $fechaMin = $hoy->copy()->addDays($diasMin);
+        $fechaMax = $hoy->copy()->addDays($diasMax);
+
+        if ($fechaReserva->lt($fechaMin)) {
+            return "Debes reservar con al menos {$diasMin} día(s) de anticipación — la fecha más próxima disponible es {$fechaMin->toDateString()}.";
+        }
+
+        if ($fechaReserva->gt($fechaMax)) {
+            return "No se puede reservar con más de {$diasMax} día(s) de anticipación (hasta el {$fechaMax->toDateString()}).";
+        }
+
+        return null;
+    }
+
+    /**
+     * Correos que reciben la notificación de esta reserva: los globales de
+     * ConfiguracionReservas (siempre) + los propios del salón (el encargado de esa área en
+     * particular). No bloqueante a propósito: un correo caído no debe impedir crear la
+     * reserva — MailService::sendGeneric ya nunca lanza excepción por su cuenta.
+     */
+    private function notificarReservaCreada(Salones $salon, Usuario $usuario, Collection $combos, ConfiguracionReservas $config): void
+    {
+        $correos = array_values(array_unique(array_merge(
+            $config->correosNotificacion(),
+            $salon->correosNotificacion(),
+        )));
+
+        if (empty($correos)) {
+            return;
+        }
+
+        $horasPorId = Horas::whereIn('id', $combos->pluck('hora')->unique())->pluck('horas', 'id');
+
+        $detalle = $combos
+            ->map(fn ($c) => "{$c['fecha']} — " . ($horasPorId[$c['hora']] ?? "hora #{$c['hora']}"))
+            ->implode("\n");
+
+        $nombreUsuario = trim("{$usuario->nombre} {$usuario->apellido}");
+
+        $this->mailService->sendGeneric(
+            $correos,
+            "Nueva reserva de salón: {$salon->nombre}",
+            "{$nombreUsuario} reservó el salón \"{$salon->nombre}\".\n\nHorario(s):\n{$detalle}",
+        );
     }
 
     public function actualizarReserva(array $data): array
@@ -515,6 +577,105 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar el salón.',
+                'data' => []
+            ];
+        }
+    }
+
+    /*
+    -------------------------------------------------
+    |
+    |             HORAS
+    |
+    -------------------------------------------------
+    */
+
+    public function crearHora(array $datos): array
+    {
+        try {
+            $hora = Horas::create([
+                ...$datos,
+                'id_user' => Auth::id(),
+                'activo' => 1,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'Franja horaria creada correctamente.',
+                'data' => $hora->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear la franja horaria');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al crear la franja horaria.',
+                'data' => []
+            ];
+        }
+    }
+
+    public function actualizarHora(array $datos, int $id): array
+    {
+        try {
+            $hora = Horas::where('activo', 1)->find($id);
+
+            if (!$hora) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró la franja horaria con id: {$id}.",
+                    'data' => []
+                ];
+            }
+
+            $hora->update($datos);
+
+            return [
+                'error' => false,
+                'message' => 'Franja horaria actualizada correctamente.',
+                'data' => $hora->fresh()->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al actualizar la franja horaria');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al actualizar la franja horaria.',
+                'data' => []
+            ];
+        }
+    }
+
+    /**
+     * Baja lógica (activo=0): un hard delete dejaría huérfanas las reservas
+     * históricas que apuntan a hora_reserva (no hay FK en BD para esa columna).
+     */
+    public function eliminarHora(int $id): array
+    {
+        try {
+            $hora = Horas::where('activo', 1)->find($id);
+
+            if (!$hora) {
+                return [
+                    'error' => true,
+                    'message' => "No se encontró la franja horaria con id: {$id}.",
+                    'data' => []
+                ];
+            }
+
+            $hora->update(['activo' => 0]);
+
+            return [
+                'error' => false,
+                'message' => 'Franja horaria eliminada correctamente.',
+                'data' => []
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al eliminar la franja horaria');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al eliminar la franja horaria.',
                 'data' => []
             ];
         }

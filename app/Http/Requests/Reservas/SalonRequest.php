@@ -35,6 +35,12 @@ class SalonRequest extends FormRequest
                 'string',
                 'in:si,no',
             ],
+            'correo_notificacion' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:500',
+            ],
         ];
     }
 
@@ -51,6 +57,8 @@ class SalonRequest extends FormRequest
 
             'sonido.string' => 'El campo sonido debe ser una cadena de texto',
             'sonido.in' => 'El campo sonido debe ser "si" o "no"',
+
+            'correo_notificacion.max' => 'El campo de correo no puede superar los 500 caracteres',
         ];
     }
 }
