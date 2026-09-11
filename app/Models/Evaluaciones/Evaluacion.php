@@ -23,6 +23,7 @@ class Evaluacion extends Model
         'id_servicio',
         'id_user',
         'activo',
+        'es_satisfaccion',
         'fecha_inicio',
         'fecha_fin',
     ];
@@ -31,6 +32,7 @@ class Evaluacion extends Model
         'id_servicio' => 'integer',
         'id_user' => 'integer',
         'activo' => 'integer',
+        'es_satisfaccion' => 'boolean',
         'fecha_inicio' => 'date',
         'fecha_fin' => 'date',
     ];

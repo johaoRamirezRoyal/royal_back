@@ -25,12 +25,14 @@ class SolicitudesController extends Controller
     // sigue gateando los endpoints que no forman parte del rediseño (ver/verificar/
     // aplazar/rechazar sobre la solicitud final, agregar a inventario).
     private const OPCION_SOLICITUDES = 60;
-    // "Compras — Gestión de compras" (109): seguimiento, confirmar/asignar proveedor,
-    // disponible en stock, anular. "Compras — Ventas" (110): cambiar estado tras la
+    // "Compras — Gestión de compras" (104): seguimiento, confirmar/asignar proveedor,
+    // disponible en stock, anular. "Compras — Ventas" (105): cambiar estado tras la
     // entrega. Ventas tiene ambas (ver migración eliminar_perfil_compras...) — no existe
-    // un perfil "Compras" separado, resultó innecesario.
-    private const OPCION_COMPRAS_GESTION = 109;
-    private const OPCION_COMPRAS_VENTAS = 110;
+    // un perfil "Compras" separado, resultó innecesario. IDs confirmados contra
+    // `cron_opciones` en BD (creadas 2026-08-31) — no confundir con 109/110, que
+    // pertenecen a otro módulo ("Uso areas comunes") y no existen respectivamente.
+    private const OPCION_COMPRAS_GESTION = 104;
+    private const OPCION_COMPRAS_VENTAS = 105;
     // Mismo perfil Coordinador (26) que EvaluacionesServices — aprueba/rechaza las
     // solicitudes de usuarios de su propio id_nivel. Super Admin(1)/Administrador(2)
     // también pueden ver y decidir la bandeja de aprobaciones, sin recorte de nivel.
@@ -100,7 +102,7 @@ class SolicitudesController extends Controller
     }
 
     // GET /solicitudes/seguimiento?fecha_desde=&fecha_hasta=&id_user=&s=&id_nivel=&perfil=
-    // — opción 109 (Ventas + Super Admin/Administrador). id_nivel/perfil solo se honran si el perfil es Super
+    // — opción 104 (Compras — Gestión de compras). id_nivel/perfil solo se honran si el perfil es Super
     // Admin(1)/Administrador(2); para cualquier otro perfil con la opción, se ignoran —
     // Se ven todas las aprobadas sin recorte por nivel.
     public function seguimiento(Request $request)
@@ -123,7 +125,7 @@ class SolicitudesController extends Controller
         return $this->apiResponse($this->solicitudesServices->listarSeguimiento($filtros));
     }
 
-    // POST /solicitudes/{id}/anular — opción 109 (Ventas + Super Admin/Administrador)
+    // POST /solicitudes/{id}/anular — opción 104 (Compras — Gestión de compras)
     // Anula la solicitud para ocultarla del seguimiento.
     public function anular(Request $request, int $id)
     {
@@ -216,7 +218,7 @@ class SolicitudesController extends Controller
         ));
     }
 
-    // POST /solicitudes/{id}/disponible-stock — opción 109 (Ventas + Super Admin/Administrador). Alternativa a
+    // POST /solicitudes/{id}/disponible-stock — opción 104 (Compras — Gestión de compras). Alternativa a
     // asignar-proveedor: no se inicia compra, se resuelve con stock existente.
     public function disponibleStock(Request $request, int $id)
     {
@@ -251,7 +253,7 @@ class SolicitudesController extends Controller
         ));
     }
 
-    // POST /solicitudes/{id}/asignar-proveedor — opción 109 (Ventas + Super Admin/Administrador, multipart: id_proveedor, iva, cotizacion_doc)
+    // POST /solicitudes/{id}/asignar-proveedor — opción 104 (Compras — Gestión de compras, multipart: id_proveedor, iva, cotizacion_doc)
     public function asignarProveedor(AsignarProveedorRequest $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_GESTION)) {
@@ -294,7 +296,7 @@ class SolicitudesController extends Controller
         ));
     }
 
-    // POST /solicitudes/{id}/verificar-entrega — opción 110 (Ventas, multipart: rubros + factura_doc + decision)
+    // POST /solicitudes/{id}/verificar-entrega — opción 105 (Compras — Ventas, multipart: rubros + factura_doc + decision)
     public function verificarEntrega(VerificarEntregaRequest $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_VENTAS)) {

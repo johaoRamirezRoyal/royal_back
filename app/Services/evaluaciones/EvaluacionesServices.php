@@ -43,6 +43,11 @@ class EvaluacionesServices
     // configuración de evaluaciones (ve todos los niveles, sin restricción).
     private const PERFIL_ADMIN = 2;
 
+    // Gestión Humana (perfil "Recursos humanos" en BD, id_perfil 8) — a pedido,
+    // resuelve/ve/edita cualquier evaluación igual que Super Admin, sin restricción
+    // de nivel/propiedad.
+    private const PERFIL_GESTION_HUMANA = 8;
+
     // Perfiles cuyos usuarios no tienen un nivel institucional real (usuarios.id_nivel
     // queda en NULL/0 para todos ellos) — Proveedor (17) son empresas externas, no
     // personal asignado a un nivel académico/administrativo. Si una evaluación con uno
@@ -54,7 +59,7 @@ class EvaluacionesServices
     /** Acceso administrativo pleno al módulo: ve/edita cualquier respuesta sin restricción de nivel/propiedad. */
     private function esAdminEvaluaciones(Usuario $u): bool
     {
-        return in_array((int) $u->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true);
+        return in_array((int) $u->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN, self::PERFIL_GESTION_HUMANA], true);
     }
 
     /**
@@ -252,10 +257,13 @@ class EvaluacionesServices
     public function listarDisponiblesParaCoordinador(Usuario $solicitante): array
     {
         try {
+            // Las encuestas de satisfacción no se "realizan" sobre un tercero — viven
+            // aparte en misEncuestasSatisfaccion(), autoservicio sin listado de evaluables.
             $query = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
-                ->where('activo', 1);
+                ->where('activo', 1)
+                ->where('es_satisfaccion', false);
 
-            if ((int) $solicitante->perfil !== self::PERFIL_SUPER_ADMIN) {
+            if (!in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_GESTION_HUMANA], true)) {
                 $idNivel = $solicitante->id_nivel;
                 $query->where(function ($q) use ($solicitante, $idNivel) {
                     $q->where('id_user', $solicitante->id_user)
@@ -283,6 +291,53 @@ class EvaluacionesServices
 
                 $evaluacion->setAttribute('evaluables_count', $evaluablesCount);
                 $evaluacion->setAttribute('evaluados_count', $evaluadosCount);
+
+                return $evaluacion;
+            });
+
+            return ['error' => false, 'message' => 'ok', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Encuestas de satisfacción activas donde el propio solicitante (por su perfil+nivel)
+     * puede autoresponder — mismo criterio perfil+nivel que usuariosEvaluablesQuery, pero
+     * evaluado contra un único usuario en vez de producir un listado.
+     */
+    public function misEncuestasSatisfaccion(Usuario $solicitante): array
+    {
+        try {
+            $evaluaciones = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
+                ->where('activo', 1)
+                ->where('es_satisfaccion', true)
+                ->get()
+                ->filter(function (Evaluacion $evaluacion) use ($solicitante) {
+                    $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
+                    if ($perfilesEvaluables->isEmpty() || !$perfilesEvaluables->contains((int) $solicitante->perfil)) {
+                        return false;
+                    }
+
+                    $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
+                    if ($nivelesEvaluacion->isEmpty()) return true;
+                    if (in_array((int) $solicitante->perfil, self::PERFILES_SIN_NIVEL, true)) return true;
+
+                    return $nivelesEvaluacion->contains((int) $solicitante->id_nivel);
+                })
+                ->values();
+
+            $periodo = $this->periodoServices->resolverActivo();
+
+            $data = $evaluaciones->map(function (Evaluacion $evaluacion) use ($periodo, $solicitante) {
+                $yaRespondida = $periodo
+                    ? EvaluacionRespuestaEvaluacion::where('id_evaluacion', $evaluacion->id)
+                        ->where('id_evaluado', $solicitante->id_user)
+                        ->where('id_periodo', $periodo->id)
+                        ->exists()
+                    : false;
+
+                $evaluacion->setAttribute('ya_respondida', $yaRespondida);
 
                 return $evaluacion;
             });
@@ -322,6 +377,7 @@ class EvaluacionesServices
                     'id_servicio' => $datos['id_servicio'],
                     'id_user' => $datos['id_user'],
                     'activo' => $datos['activo'] ?? 1,
+                    'es_satisfaccion' => $datos['es_satisfaccion'] ?? false,
                     'fecha_inicio' => $datos['fecha_inicio'] ?? null,
                     'fecha_fin' => $datos['fecha_fin'] ?? null,
                 ]);
@@ -387,6 +443,7 @@ class EvaluacionesServices
                     'descripcion' => $datos['descripcion'] ?? $evaluacion->descripcion,
                     'id_servicio' => $datos['id_servicio'] ?? $evaluacion->id_servicio,
                     'activo' => $datos['activo'] ?? $evaluacion->activo,
+                    'es_satisfaccion' => $datos['es_satisfaccion'] ?? $evaluacion->es_satisfaccion,
                     'fecha_inicio' => $datos['fecha_inicio'] ?? $evaluacion->fecha_inicio,
                     'fecha_fin' => $datos['fecha_fin'] ?? $evaluacion->fecha_fin,
                 ]);
@@ -444,6 +501,12 @@ class EvaluacionesServices
         try {
             $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
+
+            // Encuesta de satisfacción: perfiles/niveles significan "quién puede
+            // autoresponder", no "a quién evaluar" — no hay listado de evaluables.
+            if ($evaluacion->es_satisfaccion) {
+                return ['error' => false, 'message' => 'ok', 'data' => []];
+            }
 
             $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
             if ($perfilesEvaluables->isEmpty()) {
@@ -682,6 +745,13 @@ class EvaluacionesServices
                 if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
                 if (!$evaluacion->activo) return ['error' => true, 'message' => 'La evaluación no está activa', 'status' => 422];
 
+                // Encuesta de satisfacción: no hay evaluador eligiendo a un tercero, el
+                // usuario siempre autoresponde sobre sí mismo — se ignora cualquier
+                // id_evaluado que venga en el payload.
+                if ($evaluacion->es_satisfaccion) {
+                    $datos['id_evaluado'] = $solicitante->id_user;
+                }
+
                 $perfilesEvaluables = $evaluacion->perfiles->pluck('id_perfil');
                 $evaluado = null;
                 if ($perfilesEvaluables->isNotEmpty()) {
@@ -699,7 +769,7 @@ class EvaluacionesServices
                         return ['error' => true, 'message' => 'El usuario seleccionado no pertenece a un nivel evaluable en esta evaluación', 'status' => 422];
                     }
 
-                    if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR && !$evaluadoSinNivel) {
+                    if (!$evaluacion->es_satisfaccion && (int) $solicitante->perfil === self::PERFIL_COORDINADOR && !$evaluadoSinNivel) {
                         if ((int) $evaluado->id_nivel !== (int) $solicitante->id_nivel) {
                             return ['error' => true, 'message' => 'Solo puedes evaluar usuarios de tu propio nivel', 'status' => 422];
                         }
