@@ -10,11 +10,16 @@ use Illuminate\Support\Facades\DB;
 
 class DocenteAsignatura extends Service
 {
+    // Docente (3) + psicóloga por nivel (21 Preescolar, 24 Primaria, 25 Secundaria/Bachillerato
+    // — mismos ids que AdmisionesServices::NIVELES_PSICOLOGAS): las psicólogas también dictan
+    // asignaturas y necesitan poder asignárselas desde este tab.
+    private const PERFILES_ASIGNABLES = [3, 21, 24, 25];
+
     public function listarDocentesAsignaturas(?int $usuario, ?int $asignatura, ?string $search, int $perpage = 10): array
     {
         try {
             $docentes = Usuario::query()
-                ->where('perfil', 3)
+                ->whereIn('perfil', self::PERFILES_ASIGNABLES)
                 ->when($usuario, function ($query) use ($usuario) {
                     $query->where('id_user', $usuario);
                 })
@@ -35,6 +40,7 @@ class DocenteAsignatura extends Service
                     'id_user',
                     'nombre',
                     'apellido',
+                    'documento',
                     'id_nivel'
                 )
                 ->with([
