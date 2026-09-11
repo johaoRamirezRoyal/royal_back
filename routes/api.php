@@ -159,6 +159,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__.'/api/bloques.php';
     });
 
+    // NOTICIAS (Gestión Humana)
+    Route::prefix('noticias')->group(function () {
+        require __DIR__.'/api/noticias.php';
+    });
+
     // INVENTARIO
     Route::prefix('inventario')->group(function () {
         require __DIR__.'/api/inventario.php';
