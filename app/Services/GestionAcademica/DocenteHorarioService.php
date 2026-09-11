@@ -35,28 +35,21 @@ class DocenteHorarioService extends Service
                 ->filter(fn ($da) => $da->asignatura?->activo)
                 ->values();
 
-            // Cursos del propio nivel académico del docente. usuarios.id_nivel vive en
-            // `nivel` (clasificación general del usuario), pero curso.id_nivel apunta a
-            // nivel_academico desde
-            // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay
-            // que puentear por nivel.id_nivel_academico para comparar en la misma
-            // numeración. Sin nivel asignado (id_nivel=0 en usuarios) o sin
-            // id_nivel_academico vinculado se trata igual que "sin cursos", no como "todos
-            // los niveles" — fail-closed igual que el resto del autoservicio.
-            $nivelDocente = Usuario::find($id_docente)?->nivelRelacion;
-            $idsNivelAcademico = $nivelDocente?->id_nivel_academico ? [$nivelDocente->id_nivel_academico] : [];
-
-            // "Bachillerato" en `nivel` era el bucket único de 6°-11° antes del split de la
-            // migración de arriba — puentea 1:1 a nivel_academico Media, pero un docente
-            // clasificado así históricamente pudo enseñar en cualquiera de los dos niveles
-            // académicos reales (Secundaria O Media), no solo el que la FK 1:1 elige por
-            // defecto. `nivel` a propósito no tiene fila propia para Secundaria (ver
-            // conversación de diseño), así que no hay otro nivel.id_nivel_academico posible
-            // para representarlo — se agrega Secundaria (nivel_academico id 3) a mano solo
-            // en este caso puntual.
-            if ($nivelDocente?->nombre === 'Bachillerato') {
-                $idsNivelAcademico[] = 3;
-            }
+            // Cursos del/los nivel(es) académico(s) del docente. usuarios.id_nivel/id_nivel_2
+            // viven en `nivel` (clasificación general del usuario), pero curso.id_nivel apunta
+            // a nivel_academico desde
+            // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay que
+            // puentear por nivel.id_nivel_academico para comparar en la misma numeración. Sin
+            // nivel asignado (id_nivel=0 en usuarios) o sin id_nivel_academico vinculado se
+            // trata igual que "sin cursos", no como "todos los niveles" — fail-closed igual que
+            // el resto del autoservicio. Un docente con `id_nivel_2` (ej. Primaria +
+            // Bachillerato) ve los cursos de ambos, no solo el nivel principal.
+            $docente = Usuario::with(['nivelRelacion', 'nivel2Relacion'])->find($id_docente);
+            $idsNivelAcademico = collect([$docente?->nivelRelacion, $docente?->nivel2Relacion])
+                ->flatMap(fn ($nivel) => $this->idsNivelAcademicoParaNivel($nivel))
+                ->unique()
+                ->values()
+                ->all();
 
             if ($asignaturasDocente->isEmpty() || empty($idsNivelAcademico)) {
                 return [
@@ -136,6 +129,30 @@ class DocenteHorarioService extends Service
                 'data' => [],
             ];
         }
+    }
+
+    /** @return array<int, int> */
+    private function idsNivelAcademicoParaNivel(?\App\Models\Usuarios\Nivel $nivel): array
+    {
+        if (!$nivel?->id_nivel_academico) {
+            return [];
+        }
+
+        $ids = [$nivel->id_nivel_academico];
+
+        // "Bachillerato" en `nivel` era el bucket único de 6°-11° antes del split de la
+        // migración de arriba — puentea 1:1 a nivel_academico Media, pero un docente
+        // clasificado así históricamente pudo enseñar en cualquiera de los dos niveles
+        // académicos reales (Secundaria O Media), no solo el que la FK 1:1 elige por
+        // defecto. `nivel` a propósito no tiene fila propia para Secundaria (ver
+        // conversación de diseño), así que no hay otro nivel.id_nivel_academico posible
+        // para representarlo — se agrega Secundaria (nivel_academico id 3) a mano solo en
+        // este caso puntual.
+        if ($nivel->nombre === 'Bachillerato') {
+            $ids[] = 3;
+        }
+
+        return $ids;
     }
 
     public function reservar(int $id_docente, int $id_curso, int $id_asignatura, int $id_franja_horaria, int $id_anio_escolar, ?string $descripcion = null): array
