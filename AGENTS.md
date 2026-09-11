@@ -320,10 +320,23 @@ resolver un `Usuario` por nombre "limpio" contra datos reales sucios.
 
 ## Proceso de compra (`/proveedores` + `/solicitudes`)
 
-Módulo de compras en dos tablas paralelas: la solicitud inicial (`solicitudes_inicial`)
-y la formalizada (`solicitudes`). Opciones del módulo 9 "Proceso de compra" en
-`cron_opciones`: **59 Cotizaciones, 60 Listado de solicitudes, 61 Proveedores**.
-La 61 y la 60 la tienen: Super Admin, Administrador, Tesorera, Asistente Contable.
+Módulo de compras en dos tablas paralelas: la solicitud inicial (`solicitudes_inicial`,
+modelo `SolicitudInicial`, la pide el empleado y la decide su Coordinador) y la
+formalizada (`solicitudes`, modelo `Solicitud`, la gestiona Compras hasta cerrarla).
+Cada tabla tiene su propia columna `estado` — no es el mismo campo ni el mismo
+significado en ambas, aunque los números se parezcan.
+
+Opciones del módulo 9 "Proceso de compra" en `cron_opciones`: **59 Cotizaciones, 60
+Listado de solicitudes** (legada — sigue gateando ver/verificar/aplazar/rechazar sobre
+la solicitud final y agregar-inventario), **61 Proveedores**, **104 Compras — Gestión de
+compras** (seguimiento, asignar proveedor, disponible en stock, anular), **105 Compras —
+Ventas** (verificar-entrega). Estas dos últimas se crearon 2026-08-31 — no confundir con
+los ids `109`/`110` (pertenecen a otro módulo, "Uso areas comunes"; `110` ni siquiera
+existe todavía — un bug real de config tuvo esos ids hardcodeados en
+`SolicitudesController` hasta que se corrigió). La bandeja de aprobación
+(`listar`/`aprobar`/`rechazarInicial`) no usa un `id_opcion` en absoluto: gatea por
+perfil (`noPuedeGestionarAprobaciones()`) — solo Coordinador (26, acotado a su propio
+`id_nivel`) o Super Admin(1)/Administrador(2) (sin recorte).
 
 ### Proveedores
 
@@ -343,30 +356,77 @@ Un proveedor es un `Usuario` con `perfil=17`; `proveedor_detalle.id_proveedor` =
 
 ### Solicitudes — flujo y estados
 
-| Estado | `solicitudes_inicial` | `solicitudes` (final) |
-|--------|------------------------|------------------------|
-| pendiente / formalizada | 0 | 1 (`estado`) |
-| aprobada / cerrada | 1 | 2 (`estado`) |
-| devuelta / devolución | 2 | 3 (`estado`) |
-| rechazada | 3 | — |
-| convertida | 4 | — |
-| aplazada / rechazada (final) | — | `activo` 10 / 0 |
+`SolicitudesServices` expone el flujo completo por constantes propias, distintas para
+cada tabla:
 
-Flujo: `crear` (0) → `verificar` (aprobar 1 / devolver 2 / rechazar 3) →
-`asignar-proveedor` (marca la inicial 4 y crea la `solicitudes` final estado 1) →
-`aplazar`/`rechazar` (activo 10/0) → `verificar-entrega` (cerrada 2 / devolución 3).
+| `solicitudes_inicial.estado` | Significado |
+|---|---|
+| 0 `ESTADO_PENDIENTE` | Recién creada, esperando decisión del Coordinador |
+| 1 `ESTADO_APROBADA` | Aprobada por `verificar` (decision `aprobar`) — no confundir con `aprobar()`, ver abajo |
+| 2 `ESTADO_DEVUELTA` | Devuelta por `verificar` (decision `devolver`) |
+| 3 `ESTADO_RECHAZADA` | Rechazada (por `verificar` o por `rechazar-inicial`) |
+| 4 `ESTADO_CONVERTIDA` | Ya tiene fila espejo en `solicitudes` (la creó `aprobar()` o `asignar-proveedor`) |
+| 5 `ESTADO_CANCELADA` | El propio solicitante la canceló (`cancelar`, solo mientras seguía en 0) |
+
+| `solicitudes.estado` | Significado |
+|---|---|
+| 0 `ESTADO_PENDIENTE_GESTION` | Recién aprobada por el Coordinador, esperando que Compras la gestione |
+| 1 `ESTADO_FORMALIZADA` | Proveedor asignado (`asignar-proveedor`) |
+| 2 `ESTADO_CERRADA` | Entrega verificada y conforme (`verificar-entrega`, decision `cerrar`) |
+| 3 `ESTADO_DEVOLUCION` | Entrega verificada con devolución (`verificar-entrega`, decision `devolucion`) |
+| 4 `ESTADO_DISPONIBLE_STOCK` | Resuelta con stock propio, sin iniciar compra (`disponible-stock`) |
+
+`solicitudes` tiene además dos columnas de sub-estado independientes de `estado`:
+- `activo` — sub-estado del trámite con el proveedor, solo relevante tras
+  `asignar-proveedor`: `1` normal, `10` aplazada (`PUT .../aplazar`, con
+  `fecha_aplazado`), `0` rechazada (`PUT .../rechazar`, con `motivo`). Convención
+  heredada del legacy, no un enum propio.
+- `anulada` — `0`/`1`, oculta la solicitud del seguimiento (`POST .../anular`) sin
+  borrar sus datos.
+
+Flujo completo:
+
+```
+solicitudes_inicial (creada por el empleado)
+  crear → estado 0
+    ├─ aprobar (Coordinador de su nivel, o Admin) → estado 1
+    │     └─ crea la fila espejo en `solicitudes`, estado 0 (ESTADO_PENDIENTE_GESTION)
+    │           ├─ disponible-stock → estado 4, fin
+    │           └─ asignar-proveedor → estado 1 (FORMALIZADA)
+    │                 ├─ aplazar → activo 10        (reversible, sigue en curso)
+    │                 ├─ rechazar → activo 0          (fin)
+    │                 ├─ anular → anulada 1            (oculta, no borra)
+    │                 └─ verificar-entrega
+    │                       ├─ decision cerrar → estado 2 (CERRADA)
+    │                       │     └─ agregar-inventario (no cambia estado, crea filas en `inventario`)
+    │                       └─ decision devolucion → estado 3 (DEVOLUCION)
+    ├─ rechazar-inicial (Coordinador/Admin) → estado 3, fin (nunca se crea fila final)
+    └─ cancelar (el propio solicitante, solo si seguía en 0) → estado 5, fin
+
+Variante legada — `verificar` (decision aprobar|devolver|rechazar) hace lo mismo que
+aprobar/rechazar-inicial pero registra además un checklist en
+`solicitud_verificacion_inicial`; su `aprobar` interno NO crea la fila final por sí solo
+— `asignar-proveedor` la crea igual si todavía no existe (`crearSolicitudFinalDesdeInicial`).
+```
 
 | Endpoint | Gate | Uso |
 |----------|------|-----|
-| `POST /solicitudes` | No | Crea la inicial + productos (cualquier empleado) |
-| `GET /solicitudes` | 60 | Paginado; filtros `per-page`, `id_user`, `id_area`, `estado`, `fecha_desde`/`fecha_hasta`, `s` (nombre/documento de usuario, ids, nombre de producto) |
+| `POST /solicitudes` | No | Crea la inicial + productos (cualquier empleado autenticado) |
+| `GET /solicitudes/mias` | No | "Mis solicitudes" del propio usuario (`id_user` siempre de sesión) |
+| `POST /solicitudes/{id}/cancelar` | No | Solo el dueño, solo si `estado_inicial === 0` |
+| `GET /solicitudes` | Perfil (Coordinador su nivel / Admin todas) | Bandeja de aprobación; filtros `per-page`, `id_nivel`, `perfil`, `estado`, `fecha_desde`/`fecha_hasta`, `s` |
+| `POST /solicitudes/{id}/aprobar` | Perfil (Coordinador su nivel / Admin) | `estado_inicial` 0→1 + crea la fila final |
+| `POST /solicitudes/{id}/rechazar-inicial` | Perfil (Coordinador su nivel / Admin) | `estado_inicial` 0→3 |
 | `GET /solicitudes/{id}` | 60 | Detalle con `verificacionInicial` |
-| `POST /solicitudes/{id}/verificar` | 60 | Rubros Si/No + observaciones; decision `aprobar\|devolver\|rechazar` |
-| `POST /solicitudes/{id}/asignar-proveedor` | 60 | Multipart: `id_proveedor` (perfil 17 activo), `iva`, `cotizacion_doc`; convierte inicial→final y copia productos |
+| `POST /solicitudes/{id}/verificar` | 60 | Variante legada: rubros Si/No + observaciones; decision `aprobar\|devolver\|rechazar` |
 | `PUT /solicitudes/{id}/aplazar` | 60 | `fecha_aplazado` + `activo=10` |
 | `PUT /solicitudes/{id}/rechazar` | 60 | `motivo`/`observacion` + `activo=0`, limpia `fecha_aplazado` |
-| `POST /solicitudes/{id}/verificar-entrega` | 60 | Multipart: rubros + `factura_doc`; decision `cerrar\|devolucion` |
 | `POST /solicitudes/{id}/agregar-inventario` | 60 | Agrega los artículos de la compra al inventario |
+| `GET /solicitudes/seguimiento` | 104 | Todas las `solicitudes` no anuladas; filtros `fecha_desde`/`fecha_hasta`/`id_user`/`s` (abiertos) + `id_nivel`/`perfil` (solo si Super Admin/Admin) |
+| `POST /solicitudes/{id}/asignar-proveedor` | 104 | Multipart: `id_proveedor` (perfil 17 activo), `iva`, `cotizacion_doc`; formaliza (estado 1) y copia/actualiza productos |
+| `POST /solicitudes/{id}/disponible-stock` | 104 | Solo si `estado===0` y sin proveedor; pasa a estado 4 |
+| `POST /solicitudes/{id}/anular` | 104 | `anulada=1` |
+| `POST /solicitudes/{id}/verificar-entrega` | 105 | Multipart: rubros + `factura_doc`; decision `cerrar\|devolucion` |
 
 Quirks del módulo:
 - Archivos: cotización → `solicitudes/cotizaciones`, factura → `solicitudes/facturas`.
@@ -375,6 +435,9 @@ Quirks del módulo:
 - Los multipart de update usan `POST` (PHP no parsea campos en `PUT` multipart).
 - Los FormRequest de subida necesitan `Accept: application/json` (si no, 302 a `/`).
 - `fecha_ingreso` de proveedor no admite `'0000-00-00'` (MySQL strict) — forzar null.
+- Las notificaciones por correo (`notificarNuevaSolicitud`, `notificarCambioEstado`) son
+  no bloqueantes a propósito: un fallo de correo nunca debe impedir crear/gestionar la
+  solicitud — mismo patrón que otros módulos (ver Evaluaciones/Instituciones).
 
 ### Agregar artículos al inventario (`POST /solicitudes/{id}/agregar-inventario`)
 

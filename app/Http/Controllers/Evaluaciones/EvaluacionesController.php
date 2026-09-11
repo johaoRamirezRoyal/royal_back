@@ -148,6 +148,7 @@ class EvaluacionesController extends Controller
             'descripcion' => 'nullable|string',
             'id_servicio' => 'required|integer|exists:evaluaciones_servicios,id',
             'activo' => 'sometimes|integer',
+            'es_satisfaccion' => 'sometimes|boolean',
             'fecha_inicio' => 'nullable|date',
             'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
             'niveles' => 'sometimes|array',
@@ -190,6 +191,7 @@ class EvaluacionesController extends Controller
             'descripcion' => 'nullable|string',
             'id_servicio' => 'sometimes|integer|exists:evaluaciones_servicios,id',
             'activo' => 'sometimes|integer',
+            'es_satisfaccion' => 'sometimes|boolean',
             'fecha_inicio' => 'nullable|date',
             'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
             'niveles' => 'sometimes|array',
@@ -249,6 +251,14 @@ class EvaluacionesController extends Controller
         }
 
         return $this->apiResponse($this->evaluacionesServices->listarDisponiblesParaCoordinador($request->user()));
+    }
+
+    // Autoservicio, sin sinAcceso() — mismo criterio que misResultados más abajo: cualquier
+    // usuario cuyo perfil+nivel califiquen para una evaluación de satisfacción puede verla
+    // y autoresponderla, sin necesidad de los permisos 101/102/103.
+    public function misEncuestasSatisfaccion(Request $request): JsonResponse
+    {
+        return $this->apiResponse($this->evaluacionesServices->misEncuestasSatisfaccion($request->user()));
     }
 
     // Lógica en PeriodoServices (App\Services\AnioEscolar) — mismo motivo que listarPeriodos
