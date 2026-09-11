@@ -322,6 +322,15 @@ class AuthController extends Controller
             return response()->json(['error' => true, 'message' => 'Usuario no encontrado.'], 404);
         }
 
+        // La cuenta pudo desactivarse después del login inicial (que sí valida esto) mientras
+        // el código quedó pendiente — sin este check, reenviar el código igual funcionaría
+        // para una cuenta ya inactiva.
+        if ($usuario->estado !== 'activo') {
+            Cache::forget("auth_login_pending_{$request->token}");
+
+            return response()->json(['error' => true, 'message' => 'Esta cuenta ha sido desactivada.'], 403);
+        }
+
         $rateLimitKey = "auth_login_otp_send_{$usuario->id_user}";
         $attempts = Cache::increment($rateLimitKey);
 
@@ -404,6 +413,13 @@ class AuthController extends Controller
 
         if (! $usuario) {
             return response()->json(['error' => true, 'message' => 'Usuario no encontrado.'], 404);
+        }
+
+        // Mismo caso que resendLoginOtp(): el login inicial ya validó `estado`, pero la
+        // cuenta pudo desactivarse mientras el código OTP quedó pendiente (hasta 15 min) —
+        // sin este check, ese login se completaba igual y emitía el JWT.
+        if ($usuario->estado !== 'activo') {
+            return response()->json(['error' => true, 'message' => 'Esta cuenta ha sido desactivada.'], 403);
         }
 
         $deviceToken = $this->service_auth->registrarDispositivoConfiable($connection, $usuario->id_user, $request->ip(), $request->userAgent());
