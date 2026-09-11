@@ -10,10 +10,12 @@ use Illuminate\Support\Facades\DB;
 
 class DocenteAsignatura extends Service
 {
-    // Docente (3) + psicóloga por nivel (21 Preescolar, 24 Primaria, 25 Secundaria/Bachillerato
-    // — mismos ids que AdmisionesServices::NIVELES_PSICOLOGAS): las psicólogas también dictan
-    // asignaturas y necesitan poder asignárselas desde este tab.
-    private const PERFILES_ASIGNABLES = [3, 21, 24, 25];
+    // Docente (3) + Docente ICT (14, mismo autoservicio de horario que Docente — ver
+    // GestionAcademicaController::PERFILES_DOCENTE — pero perfil aparte, así que necesita
+    // su propia entrada acá) + psicóloga por nivel (21 Preescolar, 24 Primaria, 25
+    // Secundaria/Bachillerato — mismos ids que AdmisionesServices::NIVELES_PSICOLOGAS):
+    // las psicólogas también dictan asignaturas y necesitan poder asignárselas desde este tab.
+    private const PERFILES_ASIGNABLES = [3, 14, 21, 24, 25];
 
     public function listarDocentesAsignaturas(?int $usuario, ?int $asignatura, ?string $search, int $perpage = 10): array
     {

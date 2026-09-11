@@ -55,4 +55,16 @@ class DocenteHorarioServiceTest extends TestCase
 
         $this->assertSame([4, 3], $this->invoke($nivel));
     }
+
+    /**
+     * Algunas BD (ver 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria) nunca
+     * tuvieron el rename manual a "Bachillerato" — la fila de `nivel` que agrupa 6°-11°
+     * quedó llamada "Secundaria" en su lugar, pero debe comportarse exactamente igual.
+     */
+    public function test_secundaria_aporta_media_y_secundaria_igual_que_bachillerato(): void
+    {
+        $nivel = new Nivel(['nombre' => 'Secundaria', 'id_nivel_academico' => 4]);
+
+        $this->assertSame([4, 3], $this->invoke($nivel));
+    }
 }
