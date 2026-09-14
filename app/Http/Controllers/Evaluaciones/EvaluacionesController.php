@@ -12,9 +12,12 @@ use Illuminate\Support\Facades\Validator;
 
 class EvaluacionesController extends Controller
 {
-    private const OPCION_VER = 102;
-    private const OPCION_ADMIN = 101;
-    private const OPCION_RESPONDER = 103;
+    // 101/102/103 colisionaban en producción con opciones de Gestión Académica (Llegadas
+    // Tarde/Asistencia Docentes/Métricas de Asistencia Académica) — ver migración
+    // 2026_09_14_150000_seed_opciones_evaluaciones, que creó los IDs reales de Evaluaciones.
+    private const OPCION_VER = 123;
+    private const OPCION_ADMIN = 122;
+    private const OPCION_RESPONDER = 124;
 
     public function __construct(
         private EvaluacionesServices $evaluacionesServices,
