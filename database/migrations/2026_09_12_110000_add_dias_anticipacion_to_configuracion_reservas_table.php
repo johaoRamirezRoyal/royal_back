@@ -14,7 +14,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('configuracion_reservas', function (Blueprint $table) {
-            $table->unsignedInteger('dias_min_anticipacion')->default(1)->after('correo_notificacion');
+            $table->unsignedInteger('dias_min_anticipacion')->default(1)->after('id');
             $table->unsignedInteger('dias_max_anticipacion')->default(1)->after('dias_min_anticipacion');
         });
     }
