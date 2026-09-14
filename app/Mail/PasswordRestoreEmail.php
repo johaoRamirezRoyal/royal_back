@@ -47,7 +47,7 @@ class PasswordRestoreEmail extends Mailable
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.passwordResotre',
+            view: 'emails.passwordResotre',
             with: [
                 'expires' => config('auth.passwords.users.expire'),
             ]

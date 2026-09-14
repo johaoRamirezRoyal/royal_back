@@ -246,3 +246,25 @@ INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VAL
     (@id_mis_areas, 26, 1, NOW());
 
 -- Id real en esta BD tras correr la migración: id_mis_areas = 117.
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_14_130000_seed_opcion_editar_reservas.php
+--
+-- Permiso para editar una reserva ya creada (fecha, hora, salón,
+-- descripción, portátiles y sonido) — distinto de 41 (crear/cancelar la
+-- propia, autoservicio) y 42 (ver la programación de todos). Arranca
+-- acotado a Super Admin (1) / Administrador (2) — ver
+-- ReservaController::actualizarReserva. Id real confirmado tras correr la
+-- migración: 118 = Reservas — Editar reserva.
+-- ---------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
+    VALUES ('Reservas — Editar reserva', 7, 1, NOW());
+SET @id_editar_reservas = LAST_INSERT_ID();
+
+-- Reservas — Editar reserva: Super Admin (1), Administrador (2)
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+    (@id_editar_reservas, 1, 1, NOW()),
+    (@id_editar_reservas, 2, 1, NOW());
+
+-- Id real en esta BD tras correr la migración: id_editar_reservas = 118.
