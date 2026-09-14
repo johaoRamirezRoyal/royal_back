@@ -74,6 +74,10 @@ class PasswordResetController extends Controller
             return response()->json(['message' => 'Token inválido.'], 404);
         }
 
+        if ($record->used) {
+            return response()->json(['message' => 'El token ha sido usado anteriormente. Solicita un nuevo token'], 410);
+        }
+
         return $this->success('Token válido.', 200);
     }
 
