@@ -18,6 +18,20 @@ class PermisosLicenciasServices
 {
     public const ESTADOS = [0 => 'Pendiente', 1 => 'Aprobado', 2 => 'Rechazado'];
 
+    /**
+     * Catálogos administrables desde Configuración — clave usada en la URL
+     * (`/permisos-licencias/catalogos/{tipo}`). `campo_nombre` difiere entre
+     * `permiso_motivo` (columna `nombre`) y los otros tres (`nombre_permiso`,
+     * legado). `con_motivo` marca cuáles tienen la FK de aplicación `id_motivo`
+     * hacia `permiso_motivo` (el motivo general no se vincula a sí mismo).
+     */
+    private const CATALOGOS = [
+        'motivo' => ['model' => PermisoMotivo::class, 'campo_nombre' => 'nombre', 'con_motivo' => false],
+        'ley' => ['model' => PermisoLey::class, 'campo_nombre' => 'nombre_permiso', 'con_motivo' => true],
+        'personal' => ['model' => PermisoPersonal::class, 'campo_nombre' => 'nombre_permiso', 'con_motivo' => true],
+        'institucional' => ['model' => PermisoInstitucional::class, 'campo_nombre' => 'nombre_permiso', 'con_motivo' => true],
+    ];
+
     /** Perfiles a los que un usuario con la opción 92 puede asignarle un permiso (ver Permisos/index.php "operativos_check"). */
     public const PERFILES_ASIGNABLES = [10, 23, 27, 32];
 
@@ -397,5 +411,89 @@ class PermisosLicenciasServices
     private function adjuntarUrl(Permiso $permiso): void
     {
         $permiso->url_evidencia = $permiso->evidencia_permiso ? $this->fileStorage->url($permiso->evidencia_permiso) : null;
+    }
+
+    // ── Configuración de catálogos (motivo/ley/personal/institucional) ─────
+
+    public static function tipoCatalogoValido(string $tipo): bool
+    {
+        return isset(self::CATALOGOS[$tipo]);
+    }
+
+    public function listarCatalogoAdmin(string $tipo): array
+    {
+        try {
+            $config = self::CATALOGOS[$tipo];
+            $query = $config['model']::orderBy($config['campo_nombre']);
+
+            if ($config['con_motivo']) {
+                $query->with('motivo:id,nombre');
+            }
+
+            return ['error' => false, 'message' => 'Catálogo obtenido correctamente', 'data' => $query->get()];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function crearCatalogo(string $tipo, array $data): array
+    {
+        try {
+            $config = self::CATALOGOS[$tipo];
+
+            $item = $config['model']::create([
+                $config['campo_nombre'] => $data['nombre'],
+                ...($config['con_motivo'] ? ['id_motivo' => $data['id_motivo'] ?? null] : []),
+            ]);
+
+            if ($config['con_motivo']) {
+                $item->load('motivo:id,nombre');
+            }
+
+            return ['error' => false, 'message' => 'Ítem creado correctamente', 'data' => $item];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarCatalogo(string $tipo, int $id, array $data): array
+    {
+        try {
+            $config = self::CATALOGOS[$tipo];
+            $item = $config['model']::find($id);
+
+            if (!$item) {
+                return ['error' => true, 'message' => 'No se encontró el ítem con id: ' . $id, 'status' => 404];
+            }
+
+            $item->update([
+                $config['campo_nombre'] => $data['nombre'] ?? $item->{$config['campo_nombre']},
+                ...($config['con_motivo'] && array_key_exists('id_motivo', $data) ? ['id_motivo' => $data['id_motivo']] : []),
+            ]);
+
+            $item = $item->fresh($config['con_motivo'] ? ['motivo:id,nombre'] : []);
+
+            return ['error' => false, 'message' => 'Ítem actualizado correctamente', 'data' => $item];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function toggleEstadoCatalogo(string $tipo, int $id, bool $activo): array
+    {
+        try {
+            $config = self::CATALOGOS[$tipo];
+            $item = $config['model']::find($id);
+
+            if (!$item) {
+                return ['error' => true, 'message' => 'No se encontró el ítem con id: ' . $id, 'status' => 404];
+            }
+
+            $item->update(['activo' => $activo]);
+
+            return ['error' => false, 'message' => $activo ? 'Ítem activado correctamente' : 'Ítem desactivado correctamente', 'data' => $item];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
     }
 }
