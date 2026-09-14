@@ -1218,8 +1218,10 @@ class InventarioServices
 
             $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
 
+                // 2 = ya reportado, 5 = descontinuado, 6 = mantenimiento preventivo
+                // pendiente — ninguno de los tres debería poder volver a reportarse.
                 $inventario = Inventario::whereIn('id', $ids)
-                    ->whereNotIn('estado', [2, 5])
+                    ->whereNotIn('estado', [2, 5, 6])
                     ->get();
 
                 if ($inventario->isEmpty()) {
@@ -1294,7 +1296,10 @@ class InventarioServices
         ?int $tipo_reporte = null,
         ?bool $sin_solucion = false,
         ?int $id_categoria = null,
-        ?string $estado_solucion = null
+        ?string $estado_solucion = null,
+        ?int $id_area = null,
+        ?int $id_bloque = null,
+        ?int $id_responsable = null
     ): array {
         try {
 
@@ -1415,6 +1420,24 @@ class InventarioServices
                 })
                 ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
                     $q->where('c.tipo_categoria', $tipo_categoria);
+                })
+                ->when($id_area, function ($q) use ($id_area) {
+                    $q->where('iv.id_area', $id_area);
+                })
+                // Bloque del ítem: directo (iv.id_bloque) o el de su propia área — mismo
+                // criterio que nom_bloque más abajo (ver reclasificarAreaComun).
+                ->when($id_bloque, function ($q) use ($id_bloque) {
+                    $q->where(function ($q2) use ($id_bloque) {
+                        $q2->where('iv.id_bloque', $id_bloque)
+                            ->orWhereIn('iv.id_area', function ($sub) use ($id_bloque) {
+                                $sub->select('id')->from('areas')->where('id_bloque', $id_bloque);
+                            });
+                    });
+                })
+                // Responsable del ítem (iv.id_user) — no confundir con `id_user`, que
+                // filtra quien REPORTÓ (rp.id_user).
+                ->when($id_responsable, function ($q) use ($id_responsable) {
+                    $q->where('iv.id_user', $id_responsable);
                 })
                 ->when($search, function ($q) use ($search) {
                     $q->where(function ($query) use ($search) {

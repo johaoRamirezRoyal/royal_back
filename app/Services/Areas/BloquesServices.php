@@ -83,6 +83,27 @@ class BloquesServices extends Service
         }
     }
 
+    /** Bloques donde el usuario autenticado figura como responsable — para "Mis áreas". */
+    public function obtenerBloquesResponsable(int $idUser)
+    {
+        try {
+            $bloques = Bloque::with(['nivel'])
+                ->whereHas('responsables', fn ($q) => $q->where('usuarios.id_user', $idUser))
+                ->where('activo', 1)
+                ->get();
+
+            return [
+                'error' => false,
+                'data' => $bloques,
+            ];
+        } catch (\Exception $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
     public function desactivarBloques(array $ids, int $estado)
     {
         try {

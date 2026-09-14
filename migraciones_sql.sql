@@ -225,57 +225,24 @@ ALTER TABLE `inventario_check`
 
 
 -- ---------------------------------------------------------------------
--- 2026_09_11_100000_add_id_nivel_2_to_usuarios_table.php
+-- 2026_09_14_120000_seed_opcion_mis_areas_comunes.php
 --
--- Segundo nivel opcional para un usuario (ej. un docente que dicta tanto en
--- Primaria como en Secundaria) — independiente de id_nivel, sin reemplazarlo.
+-- Permiso para la vista de autoservicio "Mis áreas"
+-- (`/inventario/areas-comunes/mis-areas`): un asistente de nivel/coordinador
+-- ve el inventario de los bloques donde `bloque_usuario` lo tiene como
+-- responsable. Distinto de 108/109 (esos dan acceso a TODO el módulo);
+-- este solo habilita la pestaña de autoservicio, otorgado a los mismos
+-- perfiles que pueden ser asignados como responsables
+-- (BloquesServices::PERFILES_RESPONSABLES). Id real confirmado tras correr
+-- la migración: 117 = Mis áreas comunes.
 -- ---------------------------------------------------------------------
-ALTER TABLE `usuarios` ADD `id_nivel_2` INT UNSIGNED NULL AFTER `id_nivel`;
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
+    VALUES ('Mis áreas comunes', 6, 1, NOW());
+SET @id_mis_areas = LAST_INSERT_ID();
 
+-- Mis áreas comunes: Asistente de nivel (11), Coordinador (26)
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+    (@id_mis_areas, 11, 1, NOW()),
+    (@id_mis_areas, 26, 1, NOW());
 
--- ---------------------------------------------------------------------
--- 2026_09_12_100100_create_configuracion_reservas_table.php
---
--- Config singleton (id=1) para el módulo de Reservas — mismo patrón que
--- configuracion_instituciones. Originalmente incluía una columna
--- correo_notificacion (revertida junto con el resto de la estandarización
--- de correos de Reservas, ver commit "revert(reservas): elimina la
--- estandarizacion de correos de notificacion") — el `up()` actual del
--- archivo ya no la crea, así que este SQL refleja la versión final, no la
--- que corrió por primera vez en esta BD.
--- ---------------------------------------------------------------------
-CREATE TABLE `configuracion_reservas` (
-    `id` INT NOT NULL AUTO_INCREMENT,
-    `fechareg` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `fecha_updated` TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
-
-INSERT INTO `configuracion_reservas` (`id`) VALUES (1);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_12_110000_add_dias_anticipacion_to_configuracion_reservas_table.php
---
--- Reemplaza la ventana fija "solo el día siguiente" de
--- ReservasServices::validarFechaReserva por una ventana de anticipación
--- configurable (en días calendario, fines de semana incluidos) — default
--- 1/1 reproduce exactamente el comportamiento anterior. `after` corregido a
--- `id` tras el revert de arriba (apuntaba a la columna correo_notificacion
--- ya eliminada).
--- ---------------------------------------------------------------------
-ALTER TABLE `configuracion_reservas` ADD `dias_min_anticipacion` INT UNSIGNED NOT NULL DEFAULT '1' AFTER `id`;
-ALTER TABLE `configuracion_reservas` ADD `dias_max_anticipacion` INT UNSIGNED NOT NULL DEFAULT '1' AFTER `dias_min_anticipacion`;
-
-
--- ---------------------------------------------------------------------
--- 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria.php
---
--- La migración 2026_08_25_020000_add_id_nivel_academico_to_nivel_table solo
--- hizo match por nombre contra 'Bachillerato'/'Media'/'Educación media' para
--- vincular el nivel_academico=4 (Educación media) — en esta BD la fila de
--- `nivel` id=4 se llama "Secundaria", así que quedó con
--- id_nivel_academico=null. Cualquier docente clasificado con ese nivel no
--- veía NINGÚN curso en "Mi horario".
--- ---------------------------------------------------------------------
-UPDATE `nivel` SET `id_nivel_academico` = 4 WHERE `nombre` = 'Secundaria' AND `id_nivel_academico` IS NULL;
+-- Id real en esta BD tras correr la migración: id_mis_areas = 117.

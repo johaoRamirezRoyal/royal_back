@@ -14,6 +14,8 @@ class BloquesController extends Controller
     // 2026_09_10_150000_seed_opciones_areas_comunes.
     private const OPCION_ADMIN_AREAS_COMUNES = 108;
     private const OPCION_USO_AREAS_COMUNES = 109;
+    // "Mis áreas" (autoservicio) — ver migración 2026_09_14_120000_seed_opcion_mis_areas_comunes.
+    private const OPCION_MIS_AREAS_COMUNES = 117;
 
     protected $service_bloques;
 
@@ -43,6 +45,28 @@ class BloquesController extends Controller
     private function esAdministrador(Request $request): bool
     {
         return $this->usuariosService->tienePermiso(self::OPCION_ADMIN_AREAS_COMUNES, $request->user()->perfil)['permiso'] ?? false;
+    }
+
+    /** Bloques donde el usuario autenticado es responsable — ver "Mis áreas". */
+    public function misBloques(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_MIS_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $bloques = $this->service_bloques->obtenerBloquesResponsable($request->user()->id_user);
+
+        if ($bloques['error']) {
+            return response()->json([
+                'error' => true,
+                'message' => $bloques['message'],
+            ]);
+        }
+
+        return response()->json([
+            'error' => false,
+            'data' => $bloques['data'],
+        ]);
     }
 
     public function obtenerTodosLosBloques(Request $request)
