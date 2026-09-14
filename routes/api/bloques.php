@@ -5,6 +5,8 @@ use App\Http\Controllers\Areas\BloquesController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [BloquesController::class, 'obtenerTodosLosBloques']);
+// "Mis áreas" — autoservicio, permiso propio (ver migración 2026_09_14_120000_seed_opcion_mis_areas_comunes).
+Route::get('/mis-bloques', [BloquesController::class, 'misBloques']);
 Route::post('/', [BloquesController::class, 'crearBloque']);
 Route::put('/', [BloquesController::class, 'actualizarBloque']);
 Route::post('/estado', [BloquesController::class, 'desactivarBloques']);

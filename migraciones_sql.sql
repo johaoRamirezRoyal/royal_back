@@ -222,3 +222,27 @@ CREATE TABLE `inventario_check` (
 
 ALTER TABLE `inventario_check`
     ADD INDEX `inventario_check_id_inventario_index` (`id_inventario`);
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_14_120000_seed_opcion_mis_areas_comunes.php
+--
+-- Permiso para la vista de autoservicio "Mis áreas"
+-- (`/inventario/areas-comunes/mis-areas`): un asistente de nivel/coordinador
+-- ve el inventario de los bloques donde `bloque_usuario` lo tiene como
+-- responsable. Distinto de 108/109 (esos dan acceso a TODO el módulo);
+-- este solo habilita la pestaña de autoservicio, otorgado a los mismos
+-- perfiles que pueden ser asignados como responsables
+-- (BloquesServices::PERFILES_RESPONSABLES). Id real confirmado tras correr
+-- la migración: 117 = Mis áreas comunes.
+-- ---------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
+    VALUES ('Mis áreas comunes', 6, 1, NOW());
+SET @id_mis_areas = LAST_INSERT_ID();
+
+-- Mis áreas comunes: Asistente de nivel (11), Coordinador (26)
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+    (@id_mis_areas, 11, 1, NOW()),
+    (@id_mis_areas, 26, 1, NOW());
+
+-- Id real en esta BD tras correr la migración: id_mis_areas = 117.

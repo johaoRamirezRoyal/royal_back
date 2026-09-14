@@ -28,6 +28,10 @@ class MostrarReportesInventarioRequest extends FormRequest
             'tipo_reporte' => ['nullable', 'integer'],
             'sin_solucion' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1'],
+            // Filtros de Reporte de Áreas Comunes (/inventario/areas-comunes/reportes).
+            'id_area' => ['nullable', 'integer', Rule::exists('areas', 'id')],
+            'id_bloque' => ['nullable', 'integer', Rule::exists('bloques', 'id')],
+            'id_responsable' => ['nullable', 'integer', Rule::exists('usuarios', 'id_user')],
         ];
     }
 

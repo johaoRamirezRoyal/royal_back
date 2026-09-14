@@ -113,7 +113,9 @@ class InventariosController extends Controller
     }
 
     public function listadoConsolidado(ListadoInventarioRequest $request){
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS)) {
+        // Áreas Comunes también lo usa (tabla de ítems de Listado/Mis áreas) — ver
+        // AGENTS.md "Áreas Comunes".
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -204,7 +206,7 @@ class InventariosController extends Controller
     }
 
     public function descontinuarInventario(Request $request){
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -286,7 +288,7 @@ class InventariosController extends Controller
 
     public function reportarInventario(ReportarInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -305,7 +307,9 @@ class InventariosController extends Controller
 
     public function mostrarReportesDeInventario(MostrarReportesInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        // Reporte de Áreas Comunes (/inventario/areas-comunes/reportes) pega contra este
+        // mismo endpoint — ver AGENTS.md "Áreas Comunes".
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -321,7 +325,10 @@ class InventariosController extends Controller
             $request->input('tipo_reporte'),
             $request->input('sin_solucion'),
             $request->input('id_categoria'),
-            $request->input('estado_solucion')
+            $request->input('estado_solucion'),
+            $request->input('id_area'),
+            $request->input('id_bloque'),
+            $request->input('id_responsable')
         );
 
         return $this->apiResponse($resultado);
@@ -329,7 +336,7 @@ class InventariosController extends Controller
 
     public function solucionarReporteInventario(SolucionarReporteInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
