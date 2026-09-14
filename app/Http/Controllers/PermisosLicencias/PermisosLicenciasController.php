@@ -18,6 +18,9 @@ class PermisosLicenciasController extends Controller
     private const OPCION_GESTION = 83;
     private const OPCION_DETALLE = 90;
     private const OPCION_ASIGNAR = 92;
+    // Configuración de catálogos (motivo/ley/personal/institucional) — ver migración
+    // 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.
+    private const OPCION_CONFIGURACION = 121;
 
     /** Coordinador/Directivo: ve (y le notifican) solo las solicitudes de su propio nivel. */
     private const PERFILES_COORDINACION_NIVEL = [26, 7];
@@ -195,5 +198,82 @@ class PermisosLicenciasController extends Controller
         $request->validate(['motivo' => ['required', 'string', 'max:2000']]);
 
         return $this->apiResponse($this->service->rechazar($id, $request->user()->id_user, $request->input('motivo')));
+    }
+
+    // ── Configuración de catálogos — opción 121, distinta de las de arriba
+    //    (esas gatean las SOLICITUDES, esta gatea administrar los catálogos) ──
+
+    private function tipoCatalogoInvalido(string $tipo): ?JsonResponse
+    {
+        if (!PermisosLicenciasServices::tipoCatalogoValido($tipo)) {
+            return $this->error("Catálogo inválido: {$tipo}. Debe ser uno de: motivo, ley, personal, institucional.", 422);
+        }
+
+        return null;
+    }
+
+    /** GET /catalogos/{tipo} — admin: TODOS los ítems (activos e inactivos), a diferencia de /motivos y /motivos/{ley|personal|institucional}. */
+    public function listarCatalogo(Request $request, string $tipo): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
+            return $rechazo;
+        }
+
+        if ($rechazo = $this->tipoCatalogoInvalido($tipo)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->service->listarCatalogoAdmin($tipo));
+    }
+
+    public function crearCatalogo(Request $request, string $tipo): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
+            return $rechazo;
+        }
+
+        if ($rechazo = $this->tipoCatalogoInvalido($tipo)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate([
+            'nombre' => ['required', 'string', 'max:100'],
+            'id_motivo' => ['nullable', 'integer', 'exists:permiso_motivo,id'],
+        ]);
+
+        return $this->apiResponse($this->service->crearCatalogo($tipo, $data));
+    }
+
+    public function actualizarCatalogo(Request $request, string $tipo, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
+            return $rechazo;
+        }
+
+        if ($rechazo = $this->tipoCatalogoInvalido($tipo)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate([
+            'nombre' => ['sometimes', 'string', 'max:100'],
+            'id_motivo' => ['sometimes', 'nullable', 'integer', 'exists:permiso_motivo,id'],
+        ]);
+
+        return $this->apiResponse($this->service->actualizarCatalogo($tipo, $id, $data));
+    }
+
+    public function estadoCatalogo(Request $request, string $tipo, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
+            return $rechazo;
+        }
+
+        if ($rechazo = $this->tipoCatalogoInvalido($tipo)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate(['activo' => ['required', 'boolean']]);
+
+        return $this->apiResponse($this->service->toggleEstadoCatalogo($tipo, $id, $data['activo']));
     }
 }

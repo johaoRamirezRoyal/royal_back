@@ -12,7 +12,7 @@ class PermisoInstitucional extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['nombre_permiso', 'activo'];
+    protected $fillable = ['nombre_permiso', 'id_motivo', 'activo'];
 
     protected $casts = [
         'activo' => 'boolean',
@@ -20,4 +20,10 @@ class PermisoInstitucional extends Model
     ];
 
     protected $attributes = ['activo' => true];
+
+    /** Ver PermisoLey::motivo(). */
+    public function motivo()
+    {
+        return $this->belongsTo(PermisoMotivo::class, 'id_motivo', 'id');
+    }
 }

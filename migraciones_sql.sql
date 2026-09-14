@@ -268,3 +268,40 @@ INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VAL
     (@id_editar_reservas, 2, 1, NOW());
 
 -- Id real en esta BD tras correr la migración: id_editar_reservas = 118.
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_14_140000_add_id_motivo_to_permiso_catalogos.php
+--
+-- Vincula cada ítem de los catálogos "hijos" (permiso_ley, permiso_personal,
+-- permisos_institucionales) con su motivo general (permiso_motivo). Sin FK
+-- real a nivel de motor: esas tres tablas son MyISAM (heredadas) y
+-- permiso_motivo es InnoDB — MySQL no soporta FOREIGN KEY entre motores
+-- distintos. La relación queda a nivel de aplicación (Eloquent belongsTo +
+-- validación exists:permiso_motivo,id).
+-- ---------------------------------------------------------------------
+ALTER TABLE `permiso_ley` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
+ALTER TABLE `permiso_personal` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
+ALTER TABLE `permisos_institucionales` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.php
+--
+-- Permiso para administrar los catálogos de Permisos y Licencias (motivos,
+-- ley, personal, institucional): renombrar, activar/desactivar y vincular
+-- cada ítem de ley/personal/institucional con su motivo general. Distinto
+-- de 80/81/82/83/90/92 (todas sobre las solicitudes). Id real confirmado
+-- tras correr la migración: 121 = Permisos y Licencias — Configuración de
+-- catálogos.
+-- ---------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
+    VALUES ('Permisos y Licencias — Configuración de catálogos', 3, 1, NOW());
+SET @id_config_permisos = LAST_INSERT_ID();
+
+-- Permisos y Licencias — Configuración de catálogos: Super Admin (1), Administrador (2)
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+    (@id_config_permisos, 1, 1, NOW()),
+    (@id_config_permisos, 2, 1, NOW());
+
+-- Id real en esta BD tras correr la migración: id_config_permisos = 121.

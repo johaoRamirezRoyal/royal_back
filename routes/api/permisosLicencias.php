@@ -21,3 +21,11 @@ Route::get('/', [PermisosLicenciasController::class, 'listar']);
 Route::get('/{id}', [PermisosLicenciasController::class, 'detalle'])->whereNumber('id');
 Route::post('/{id}/aprobar', [PermisosLicenciasController::class, 'aprobar'])->whereNumber('id');
 Route::post('/{id}/rechazar', [PermisosLicenciasController::class, 'rechazar'])->whereNumber('id');
+
+// Configuración de catálogos (opción 121) — admin de motivo/ley/personal/institucional,
+// separado de los catálogos de solo lectura de arriba (que siguen siendo públicos y solo
+// devuelven los activos). {tipo} = motivo|ley|personal|institucional.
+Route::get('/catalogos/{tipo}', [PermisosLicenciasController::class, 'listarCatalogo']);
+Route::post('/catalogos/{tipo}', [PermisosLicenciasController::class, 'crearCatalogo']);
+Route::put('/catalogos/{tipo}/{id}', [PermisosLicenciasController::class, 'actualizarCatalogo'])->whereNumber('id');
+Route::put('/catalogos/{tipo}/{id}/estado', [PermisosLicenciasController::class, 'estadoCatalogo'])->whereNumber('id');
