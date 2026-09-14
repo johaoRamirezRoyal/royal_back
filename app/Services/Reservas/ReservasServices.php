@@ -317,10 +317,12 @@ class ReservasServices extends Service
                 ];
             }
 
-            // No permitir cambiar portátil ni sonido
-            unset($data['portatil'], $data['sonido']);
+            // Edición completa (fecha/hora/salón/descripción/portátil/sonido) — gateada en
+            // el controller detrás de OPCION_EDITAR_RESERVAS, a diferencia de
+            // cancelar/finalizar arriba (autoservicio, sin permiso propio).
+            $salon = $reserva->salon;
 
-            if (!empty($data['hora_reserva'])) {
+            if (array_key_exists('hora_reserva', $data)) {
                 $hora = Horas::find($data['hora_reserva']);
 
                 if (!$hora) {
@@ -333,13 +335,40 @@ class ReservasServices extends Service
                 }
             }
 
-            if (!empty($data['id_salon'])) {
-                $fechaReserva = $data['fecha_reserva'] ?? $reserva->fecha_reserva;
-                $horaReserva = $data['hora_reserva'] ?? $reserva->hora_reserva;
+            if (array_key_exists('fecha_reserva', $data) && !strtotime($data['fecha_reserva'])) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => 'La fecha de la reserva no tiene un formato válido (Y-m-d).',
+                    'data' => []
+                ];
+            }
 
-                $ocupado = Reservas::where('id_salon', $data['id_salon'])
-                    ->where('fecha_reserva', $fechaReserva)
-                    ->where('hora_reserva', $horaReserva)
+            if (array_key_exists('id_salon', $data)) {
+                $salon = Salones::activo()->find($data['id_salon']);
+
+                if (!$salon) {
+                    DB::rollBack();
+                    return [
+                        'error' => true,
+                        'message' => 'El salón no existe o está inactivo.',
+                        'data' => []
+                    ];
+                }
+            }
+
+            // Choque con otra reserva: se revalida siempre que cualquiera de los tres
+            // (salón/fecha/hora) cambie, no solo cuando cambia el salón — antes, mover una
+            // reserva de fecha/hora dentro del mismo salón se guardaba sin chequear que la
+            // nueva franja ya estuviera ocupada por otra reserva.
+            if (array_key_exists('id_salon', $data) || array_key_exists('fecha_reserva', $data) || array_key_exists('hora_reserva', $data)) {
+                $idSalonEfectivo = $data['id_salon'] ?? $reserva->id_salon;
+                $fechaEfectiva = $data['fecha_reserva'] ?? $reserva->fecha_reserva;
+                $horaEfectiva = $data['hora_reserva'] ?? $reserva->hora_reserva;
+
+                $ocupado = Reservas::where('id_salon', $idSalonEfectivo)
+                    ->where('fecha_reserva', $fechaEfectiva)
+                    ->where('hora_reserva', $horaEfectiva)
                     ->where('activo', 1)
                     ->whereNull('fecha_cancelado')
                     ->where('id', '!=', $data['id'])
@@ -352,6 +381,81 @@ class ReservasServices extends Service
                         'message' => 'El salón ya se encuentra reservado para esa fecha y hora.',
                         'data' => []
                     ];
+                }
+            }
+
+            $sonidoSolicitado = array_key_exists('sonido', $data) ? $data['sonido'] : ($reserva->sonido && $reserva->sonido !== 'no' && $reserva->sonido !== '0');
+
+            if ($sonidoSolicitado && (!$salon || $salon->sonido !== 'si')) {
+                DB::rollBack();
+                return [
+                    'error' => true,
+                    'message' => 'El salón no tiene disponibilidad de sonido.',
+                    'data' => []
+                ];
+            }
+
+            // Reconcilia los préstamos de portátiles (mismo marcador "reserva #{id}" que usa
+            // crearReserva) cuando cambia la cantidad solicitada o la reserva se mueve de
+            // fecha/hora — en ese caso se libera todo lo prestado para la franja vieja y se
+            // vuelve a asignar desde cero en la nueva, en vez de intentar "mover" cada unidad.
+            $fechaCambia = array_key_exists('fecha_reserva', $data) && (string) $data['fecha_reserva'] !== (string) $reserva->fecha_reserva;
+            $horaCambia = array_key_exists('hora_reserva', $data) && (int) $data['hora_reserva'] !== (int) $reserva->hora_reserva;
+
+            if (array_key_exists('portatil', $data) || $fechaCambia || $horaCambia) {
+                $prestamosActivos = PrestamosInventario::where('observacion', 'like', "%reserva #{$reserva->id}")
+                    ->whereNull('fecha_devolucion')
+                    ->get();
+
+                $fechaEfectiva = $data['fecha_reserva'] ?? $reserva->fecha_reserva;
+                $horaEfectiva = $data['hora_reserva'] ?? $reserva->hora_reserva;
+                $solicitado = array_key_exists('portatil', $data) ? max(0, (int) $data['portatil']) : $prestamosActivos->count();
+
+                if ($fechaCambia || $horaCambia) {
+                    foreach ($prestamosActivos as $prestamo) {
+                        $prestamo->update(['fecha_devolucion' => now()]);
+                        $prestamo->inventario()->update(['estado' => 1]);
+                    }
+                    $yaAsignados = 0;
+                } else {
+                    $yaAsignados = $prestamosActivos->count();
+                }
+
+                if ($solicitado < $yaAsignados) {
+                    foreach ($prestamosActivos->take($yaAsignados - $solicitado) as $prestamo) {
+                        $prestamo->update(['fecha_devolucion' => now()]);
+                        $prestamo->inventario()->update(['estado' => 1]);
+                    }
+                } elseif ($solicitado > $yaAsignados) {
+                    $faltan = $solicitado - $yaAsignados;
+                    $disponibilidad = $this->validarDisponibilidadPortatil($fechaEfectiva, (int) $horaEfectiva);
+
+                    if ($disponibilidad['disponibles'] < $faltan) {
+                        DB::rollBack();
+                        return [
+                            'error' => true,
+                            'message' => "No hay suficientes portátiles disponibles ({$disponibilidad['disponibles']}) para los {$faltan} adicionales solicitados.",
+                            'data' => $disponibilidad
+                        ];
+                    }
+
+                    $portatiles = Inventario::where('descripcion', 'like', '%PORTATIL%')
+                        ->where('activo', 1)
+                        ->whereNotIn('estado', [2, 5, 8])
+                        ->lockForUpdate()
+                        ->limit($faltan)
+                        ->get();
+
+                    foreach ($portatiles as $portatil) {
+                        $this->prestamosService->registrarPrestamo([
+                            'id_inventario'    => $portatil->id,
+                            'id_user_prestamo' => $reserva->id_user,
+                            'fecha_prestamo'   => $fechaEfectiva,
+                            'id_user_entrega'  => $portatil->id_user,
+                            'fecha_compromiso' => $fechaEfectiva . ' 23:59:59',
+                            'observacion'      => 'Préstamo automático por reserva #' . $reserva->id,
+                        ]);
+                    }
                 }
             }
 
