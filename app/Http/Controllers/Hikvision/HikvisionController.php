@@ -298,7 +298,7 @@ class HikvisionController extends Controller
 
         $usuariosPendientes = array_values(array_filter(
             $usuarios['data'],
-            fn ($usuario) => empty($usuario['asistenciaRegistrada'])
+            fn($usuario) => empty($usuario['asistenciaRegistrada'])
         ));
 
         if (empty($usuariosPendientes)) {
@@ -337,7 +337,7 @@ class HikvisionController extends Controller
 
         $usuariosRegistrados = array_values(array_filter(
             $usuarios['data'],
-            fn ($usuario) => ! empty($usuario['asistenciaRegistrada'])
+            fn($usuario) => ! empty($usuario['asistenciaRegistrada'])
         ));
 
         if (empty($usuariosRegistrados)) {
