@@ -330,10 +330,16 @@ class BibliotecaServices extends Service
 
                 ->when(
                     !empty($search),
-                    fn($q) => $q
-                        ->where('titulo', 'LIKE', "%$search%")
-                        ->orWhere('autor', 'LIKE', "%$search%")
-                        ->orWhere('editorial', 'LIKE', "%$search%")
+                    fn($q) => $q->where(function ($sub) use ($search) {
+                        $sub->where('titulo', 'LIKE', "%$search%")
+                            ->orWhere('autor', 'LIKE', "%$search%")
+                            ->orWhere('editorial', 'LIKE', "%$search%")
+                            ->orWhereHas('ejemplares', fn($eq) => $eq->where('codigo', 'LIKE', "%$search%"));
+
+                        if (is_numeric($search)) {
+                            $sub->orWhere('id', (int) $search);
+                        }
+                    })
                 )
 
                 ->paginate($perpage);
