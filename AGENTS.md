@@ -11,8 +11,6 @@ composer run test         # config:clear + php artisan test
 php artisan serve         # dev server on localhost:8000
 ```
 
-SIEMPRE DEBES ESTAR EN LA RAMA MAIN PARA CADA CAMBIO QUE DEBES REALIZAR.
-
 ## Registro manual de SQL de migraciones (`migraciones_sql.sql`)
 
 **Regla fija para cualquier sesión que cree una migración nueva en este repo**:
