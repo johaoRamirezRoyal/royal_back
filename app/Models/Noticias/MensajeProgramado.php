@@ -17,6 +17,7 @@ class MensajeProgramado extends Model
         'url',
         'nivel',
         'tipo',
+        'dias_visualizacion',
         'id_log',
         'activo',
         'enviado_at',

@@ -16,23 +16,18 @@ class NoticiasService
     }
 
     /**
-     * Ventana de "noticias recientes" para el contenedor del Home (ver
-     * NoticiasController::paraMostrar) — sin esto, una fila legacy de 2022 activa
-     * quedaría mostrándose para siempre, y `fecha` no tiene columna de expiración
-     * propia.
-     * ponytail: 30 días fijo, sin pedido explícito de un valor configurable — subir a
-     * un campo de configuración si algún día se necesita ajustar sin tocar código.
+     * Cuántos días se muestra una noticia (contados desde su `fecha`) cuando no define su
+     * propia `dias_visualizacion` — ver la columna en la migración
+     * add_dias_visualizacion_to_asistencia_mensaje_table. Sin esto (o sin la columna),
+     * una fila legacy de 2022 activa quedaría mostrándose para siempre, y `fecha` no
+     * tiene columna de expiración propia.
      */
-    private const VENTANA_DIAS = 30;
-
-    /** Las de `tipo` = 'cumpleanos' se muestran aparte (ver `obtenerParaMostrar` /
-     * NoticiasCard en el frontend) y por mucho menos tiempo que una noticia normal — un
-     * cumpleaños deja de ser relevante mucho antes que un aviso cualquiera. */
-    private const VENTANA_DIAS_CUMPLEANOS = 3;
+    private const DIAS_VISUALIZACION_DEFECTO = 10;
 
     /**
-     * Mensaje general activo + programadas de tipo 'normal' de los últimos 30 días +
-     * de tipo 'cumpleanos' de los últimos 3 días, todas activas y visibles para
+     * Mensaje general activo + programadas activas (tipo 'normal' y 'cumpleanos por
+     * separado) que todavía están dentro de su ventana de visualización (`fecha` +
+     * `dias_visualizacion`, o el default de arriba si no la definieron), visibles para
      * `$idNivel` (0 = "todos los niveles" del usuario ve todo; cualquier otro valor solo
      * ve lo propio de su nivel + lo de nivel 0). Pensado para el contenedor de noticias
      * del Home — a diferencia de `listarProgramados` (admin, paginado, sin filtro de
@@ -47,8 +42,8 @@ class NoticiasService
                 'error' => false,
                 'data' => [
                     'general' => $general && $general->activo ? $general : null,
-                    'programadas' => $this->programadasDeTipo('normal', self::VENTANA_DIAS, $idNivel),
-                    'cumpleanos' => $this->programadasDeTipo('cumpleanos', self::VENTANA_DIAS_CUMPLEANOS, $idNivel),
+                    'programadas' => $this->programadasVisiblesDeTipo('normal', $idNivel),
+                    'cumpleanos' => $this->programadasVisiblesDeTipo('cumpleanos', $idNivel),
                 ],
             ];
         } catch (\Exception $e) {
@@ -56,12 +51,22 @@ class NoticiasService
         }
     }
 
-    private function programadasDeTipo(string $tipo, int $ventanaDias, ?int $idNivel)
+    private function programadasVisiblesDeTipo(string $tipo, ?int $idNivel)
     {
+        $hoy = now()->toDateString();
+
         return MensajeProgramado::with('nivelRelacion')
             ->where('activo', 1)
             ->where('tipo', $tipo)
-            ->whereBetween('fecha', [now()->subDays($ventanaDias)->toDateString(), now()->toDateString()])
+            ->whereDate('fecha', '<=', $hoy)
+            // fecha + COALESCE(dias_visualizacion, default) >= hoy — el default no se
+            // guarda como literal en cada fila, así que si DIAS_VISUALIZACION_DEFECTO
+            // cambia más adelante, aplica también retroactivamente a lo que ya se dejó
+            // en blanco.
+            ->whereRaw(
+                'DATE_ADD(fecha, INTERVAL COALESCE(dias_visualizacion, ?) DAY) >= ?',
+                [self::DIAS_VISUALIZACION_DEFECTO, $hoy],
+            )
             ->where(function ($query) use ($idNivel) {
                 $query->where('nivel', 0);
                 if ($idNivel) {
@@ -164,6 +169,7 @@ class NoticiasService
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
                 'tipo' => $datos['tipo'] ?? 'normal',
+                'dias_visualizacion' => $datos['dias_visualizacion'] ?? null,
                 'activo' => $datos['activo'] ?? true,
                 'id_log' => $idLog,
                 'fechareg' => now(),
@@ -192,6 +198,7 @@ class NoticiasService
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
                 'tipo' => $datos['tipo'] ?? $programado->tipo,
+                'dias_visualizacion' => array_key_exists('dias_visualizacion', $datos) ? $datos['dias_visualizacion'] : $programado->dias_visualizacion,
                 'activo' => $datos['activo'] ?? true,
             ]);
 

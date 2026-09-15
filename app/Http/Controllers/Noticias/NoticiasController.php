@@ -107,6 +107,7 @@ class NoticiasController extends Controller
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
             'tipo' => 'nullable|in:normal,cumpleanos',
+            'dias_visualizacion' => 'nullable|integer|min:1',
             'activo' => 'required|boolean',
         ]);
 
@@ -128,6 +129,7 @@ class NoticiasController extends Controller
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
             'tipo' => 'nullable|in:normal,cumpleanos',
+            'dias_visualizacion' => 'nullable|integer|min:1',
             'activo' => 'required|boolean',
         ]);
 
