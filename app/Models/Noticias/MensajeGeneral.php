@@ -14,9 +14,14 @@ class MensajeGeneral extends Model
         'mensaje',
         'id_log',
         'activo',
+        'ultimo_envio_fecha',
     ];
 
     public $timestamps = false;
+
+    protected $casts = [
+        'ultimo_envio_fecha' => 'date:Y-m-d',
+    ];
 
     protected $attributes = [
         'activo' => 1,

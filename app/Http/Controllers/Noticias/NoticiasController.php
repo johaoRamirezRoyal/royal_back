@@ -20,22 +20,49 @@ class NoticiasController extends Controller
         private NoticiasService $service,
         private UsuariosServices $usuariosService,
         private FileStorageService $fileStorage,
-        Request $request,
+        private Request $request,
     ) {
-        $perfil = $request->user()->perfil;
+    }
+
+    /** Gestionar noticias (crear/editar/activar/desactivar el CRUD de contenido) sigue
+     * restringido a RH/Admin — pero VERLAS (paraMostrar/verImagen) es para cualquier
+     * usuario autenticado del sistema general, es lo que alimenta el contenedor de
+     * noticias del Home. Por eso el chequeo ya no vive en el constructor (bloquearía
+     * también a esas dos acciones) sino que cada acción de administración lo llama a
+     * mano — mismo patrón que ColegioAdmisionController::ensureAdmin. */
+    private function ensurePermisoGestion(): void
+    {
+        $perfil = $this->request->user()->perfil;
 
         if (!($this->usuariosService->tienePermiso(self::OPCION_NOTICIAS, $perfil)['permiso'] ?? false)) {
             abort($this->error('No tienes permiso para gestionar noticias', 403));
         }
     }
 
+    /**
+     * GET /api/noticias/para-mostrar — mensaje general activo + programadas activas de
+     * los últimos 30 días para el nivel del usuario autenticado (o todas si es
+     * "todos los niveles" = nivel 0). Sin gating de OPCION_NOTICIAS: cualquier usuario
+     * del sistema general puede verlas, es contenido informativo, no administración.
+     */
+    public function paraMostrar(): JsonResponse
+    {
+        return $this->apiResponse(
+            $this->service->obtenerParaMostrar($this->request->user()->id_nivel)
+        );
+    }
+
     public function obtenerGeneral(): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         return $this->apiResponse($this->service->obtenerMensajeGeneral());
     }
 
     public function actualizarGeneral(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $request->validate([
             'titulo' => 'nullable|string|max:200',
             'mensaje' => 'nullable|string',
@@ -53,6 +80,8 @@ class NoticiasController extends Controller
      */
     public function listar(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $filtros = [
             's' => $request->input('s') ? trim($request->input('s')) : null,
             'nivel' => $request->input('nivel'),
@@ -68,6 +97,8 @@ class NoticiasController extends Controller
 
     public function crear(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $request->validate([
             'fecha' => 'required|date',
             'titulo' => 'required|string|max:200',
@@ -75,6 +106,7 @@ class NoticiasController extends Controller
             'imagen' => 'nullable|string|max:250',
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
+            'tipo' => 'nullable|in:normal,cumpleanos',
             'activo' => 'required|boolean',
         ]);
 
@@ -85,6 +117,8 @@ class NoticiasController extends Controller
 
     public function actualizar(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $request->validate([
             'id' => 'required|integer',
             'fecha' => 'required|date',
@@ -93,6 +127,7 @@ class NoticiasController extends Controller
             'imagen' => 'nullable|string|max:250',
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
+            'tipo' => 'nullable|in:normal,cumpleanos',
             'activo' => 'required|boolean',
         ]);
 
@@ -103,6 +138,8 @@ class NoticiasController extends Controller
 
     public function cambiarEstado(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $request->validate([
             'ids' => 'required|array|min:1',
             'ids.*' => 'integer',
@@ -121,6 +158,8 @@ class NoticiasController extends Controller
      */
     public function subirImagen(Request $request): JsonResponse
     {
+        $this->ensurePermisoGestion();
+
         $request->validate([
             'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:2048',
         ]);

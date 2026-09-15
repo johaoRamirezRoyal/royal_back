@@ -16,19 +16,23 @@ class MensajeProgramado extends Model
         'mensaje',
         'url',
         'nivel',
+        'tipo',
         'id_log',
         'activo',
+        'enviado_at',
     ];
 
     public $timestamps = false;
 
     protected $casts = [
         'fecha' => 'date:Y-m-d',
+        'enviado_at' => 'datetime',
     ];
 
     protected $attributes = [
         // 0 = todos los niveles (ver AGENTS.md "Noticias").
         'nivel' => 0,
+        'tipo' => 'normal',
         'activo' => 1,
     ];
 

@@ -2,11 +2,76 @@
 
 namespace App\Services\Noticias;
 
+use App\Mail\NoticiaMail;
 use App\Models\Noticias\MensajeGeneral;
 use App\Models\Noticias\MensajeProgramado;
+use App\Models\Usuarios\Usuario;
+use App\Services\MailService;
+use Illuminate\Support\Facades\Log;
 
 class NoticiasService
 {
+    public function __construct(private MailService $mailService)
+    {
+    }
+
+    /**
+     * Ventana de "noticias recientes" para el contenedor del Home (ver
+     * NoticiasController::paraMostrar) — sin esto, una fila legacy de 2022 activa
+     * quedaría mostrándose para siempre, y `fecha` no tiene columna de expiración
+     * propia.
+     * ponytail: 30 días fijo, sin pedido explícito de un valor configurable — subir a
+     * un campo de configuración si algún día se necesita ajustar sin tocar código.
+     */
+    private const VENTANA_DIAS = 30;
+
+    /** Las de `tipo` = 'cumpleanos' se muestran aparte (ver `obtenerParaMostrar` /
+     * NoticiasCard en el frontend) y por mucho menos tiempo que una noticia normal — un
+     * cumpleaños deja de ser relevante mucho antes que un aviso cualquiera. */
+    private const VENTANA_DIAS_CUMPLEANOS = 3;
+
+    /**
+     * Mensaje general activo + programadas de tipo 'normal' de los últimos 30 días +
+     * de tipo 'cumpleanos' de los últimos 3 días, todas activas y visibles para
+     * `$idNivel` (0 = "todos los niveles" del usuario ve todo; cualquier otro valor solo
+     * ve lo propio de su nivel + lo de nivel 0). Pensado para el contenedor de noticias
+     * del Home — a diferencia de `listarProgramados` (admin, paginado, sin filtro de
+     * fecha/audiencia/tipo), esto es de solo lectura para cualquier usuario.
+     */
+    public function obtenerParaMostrar(?int $idNivel): array
+    {
+        try {
+            $general = MensajeGeneral::orderByDesc('id')->first();
+
+            return [
+                'error' => false,
+                'data' => [
+                    'general' => $general && $general->activo ? $general : null,
+                    'programadas' => $this->programadasDeTipo('normal', self::VENTANA_DIAS, $idNivel),
+                    'cumpleanos' => $this->programadasDeTipo('cumpleanos', self::VENTANA_DIAS_CUMPLEANOS, $idNivel),
+                ],
+            ];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function programadasDeTipo(string $tipo, int $ventanaDias, ?int $idNivel)
+    {
+        return MensajeProgramado::with('nivelRelacion')
+            ->where('activo', 1)
+            ->where('tipo', $tipo)
+            ->whereBetween('fecha', [now()->subDays($ventanaDias)->toDateString(), now()->toDateString()])
+            ->where(function ($query) use ($idNivel) {
+                $query->where('nivel', 0);
+                if ($idNivel) {
+                    $query->orWhere('nivel', $idNivel);
+                }
+            })
+            ->orderByDesc('fecha')
+            ->get();
+    }
+
     /**
      * El "mensaje general" es una única configuración editable (como el banner
      * informativo) — no una lista. Se opera siempre sobre la fila más reciente
@@ -98,6 +163,7 @@ class NoticiasService
                 'mensaje' => $datos['mensaje'] ?? null,
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
+                'tipo' => $datos['tipo'] ?? 'normal',
                 'activo' => $datos['activo'] ?? true,
                 'id_log' => $idLog,
                 'fechareg' => now(),
@@ -125,6 +191,7 @@ class NoticiasService
                 'mensaje' => $datos['mensaje'] ?? null,
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
+                'tipo' => $datos['tipo'] ?? $programado->tipo,
                 'activo' => $datos['activo'] ?? true,
             ]);
 
@@ -143,5 +210,119 @@ class NoticiasService
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Envía por correo el mensaje general (si está activo y no se envió hoy) y todas
+     * las noticias programadas cuya `fecha` es hoy (si están activas y no se enviaron
+     * antes) — pensado para correr una vez al día desde un comando programado (ver
+     * EnviarNoticiasDiariasCommand). Nunca lanza: cada envío individual ya maneja sus
+     * propios errores (MailService::send), así que un correo inválido o un fallo de SMTP
+     * puntual no debe tumbar el resto del lote.
+     */
+    public function enviarPendientesDelDia(): array
+    {
+        $generalEnviado = $this->enviarMensajeGeneralSiCorresponde();
+        $programadasEnviadas = $this->enviarProgramadosDelDia();
+
+        return [
+            'error' => false,
+            'message' => sprintf(
+                'Mensaje general: %s. Noticias programadas enviadas: %d.',
+                $generalEnviado ? 'enviado' : 'sin cambios',
+                $programadasEnviadas,
+            ),
+            'data' => ['general_enviado' => $generalEnviado, 'programadas_enviadas' => $programadasEnviadas],
+        ];
+    }
+
+    private function enviarMensajeGeneralSiCorresponde(): bool
+    {
+        $mensaje = MensajeGeneral::orderByDesc('id')->first();
+
+        if (!$mensaje || !$mensaje->activo) {
+            return false;
+        }
+
+        $hoy = now()->toDateString();
+
+        // Ya se envió hoy — el mensaje general no tiene `fecha` propia (es una sola fila
+        // siempre vigente), así que sin este chequeo se reenviaría cada vez que corra el
+        // comando, no una vez al día.
+        if ($mensaje->ultimo_envio_fecha && $mensaje->ultimo_envio_fecha->toDateString() === $hoy) {
+            return false;
+        }
+
+        $correos = $this->correosPorNivel(0);
+
+        if (empty($correos)) {
+            Log::warning('Noticias: mensaje general activo sin destinatarios que enviar.');
+            return false;
+        }
+
+        $mailable = new NoticiaMail($mensaje->titulo ?: 'Noticia', $mensaje->mensaje, null, $mensaje->imagen);
+        $enviados = 0;
+
+        foreach ($correos as $correo) {
+            if ($this->mailService->send($correo, $mailable)) {
+                $enviados++;
+            }
+        }
+
+        $mensaje->update(['ultimo_envio_fecha' => $hoy]);
+
+        Log::info("Noticias: mensaje general enviado a {$enviados}/".count($correos).' destinatarios.');
+
+        return true;
+    }
+
+    private function enviarProgramadosDelDia(): int
+    {
+        $pendientes = MensajeProgramado::where('activo', 1)
+            ->whereDate('fecha', now()->toDateString())
+            ->whereNull('enviado_at')
+            ->get();
+
+        $enviadas = 0;
+
+        foreach ($pendientes as $programado) {
+            $correos = $this->correosPorNivel((int) ($programado->nivel ?? 0));
+
+            if (empty($correos)) {
+                Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
+                // Se marca igual como enviada — sin destinatarios que probar mañana
+                // tampoco los va a tener, y su `fecha` ya pasó/está pasando hoy.
+                $programado->update(['enviado_at' => now()]);
+                continue;
+            }
+
+            $mailable = new NoticiaMail($programado->titulo, $programado->mensaje, $programado->url, $programado->imagen);
+            $enviados = 0;
+
+            foreach ($correos as $correo) {
+                if ($this->mailService->send($correo, $mailable)) {
+                    $enviados++;
+                }
+            }
+
+            $programado->update(['enviado_at' => now()]);
+            $enviadas++;
+
+            Log::info("Noticias: programada #{$programado->id} ('{$programado->titulo}') enviada a {$enviados}/".count($correos).' destinatarios.');
+        }
+
+        return $enviadas;
+    }
+
+    /** 0 = todos los niveles activos. Cualquier otro valor filtra por ese `id_nivel`. */
+    private function correosPorNivel(int $nivel): array
+    {
+        $query = Usuario::where('estado', 'activo')->whereNotNull('correo');
+
+        if ($nivel !== 0) {
+            $query->where('id_nivel', $nivel);
+        }
+
+        return $query->pluck('correo')->filter()->unique()->values()->all();
     }
 }

@@ -3,7 +3,11 @@
 use App\Http\Controllers\Noticias\NoticiasController;
 use Illuminate\Support\Facades\Route;
 
-// Antes de "/": si no, "general" matchea el listado paginado en vez del mensaje general.
+// Antes de "/": si no, "general"/"para-mostrar" matchean el listado paginado en vez de
+// sus propias acciones. Sin permiso de gestión — cualquier usuario del sistema general
+// puede verlas (alimenta el contenedor de noticias del Home).
+Route::get('/para-mostrar', [NoticiasController::class, 'paraMostrar']);
+
 Route::get('/general', [NoticiasController::class, 'obtenerGeneral']);
 Route::put('/general', [NoticiasController::class, 'actualizarGeneral']);
 

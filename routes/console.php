@@ -43,6 +43,19 @@ Schedule::command('logs-actividad:purgar-antiguos')->cron('0 2 */3 * *');
 // conexión con la otra purga. Misma nota operativa que los jobs de arriba.
 Schedule::command('logs-dominio:purgar-antiguos')->cron('15 2 */3 * *');
 
+// Envía por correo el mensaje general (si está activo, una vez al día) y las noticias
+// programadas cuya `fecha` es hoy (ver NoticiasService::enviarPendientesDelDia) — el
+// módulo de Noticias (Gestión Humana) existía como CRUD de contenido sin ningún envío
+// real hasta este comando. Una vez al día basta: el corte es por fecha, no por hora, y
+// cada fila se marca como enviada (enviado_at/ultimo_envio_fecha) para no repetirse si
+// el comando corre más de una vez el mismo día. `withoutOverlapping()`: el envío es
+// síncrono, uno por destinatario (ver el comentario en NoticiaMail sobre por qué no
+// está encolado) — probado con ~2500 usuarios activos y tardó ~3 minutos solo con el
+// driver `log`; con SMTP real puede tardar bastante más, así que si el comando de un
+// día todavía sigue corriendo a la hora del siguiente disparo, no debe arrancar un
+// segundo en paralelo. Misma nota operativa que los jobs de arriba.
+Schedule::command('noticias:enviar-diarias')->daily()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
