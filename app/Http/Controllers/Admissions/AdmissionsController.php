@@ -193,7 +193,7 @@ class AdmissionsController extends Controller
                 'cookie_token' => true,
             ])
                 ->withCookie(
-                    $this->makeCookie($this->jwt->generateAdmissionsToken($userExists), 'admissions_token')
+                    $this->makeCookie($this->jwt->generateAdmissionsToken($userExists, $this->colegioAdmisionConnection()), 'admissions_token')
                 );
         }
 
@@ -263,7 +263,7 @@ class AdmissionsController extends Controller
             // rebotaba por falta de autenticación. Mismo mecanismo que el resto de
             // AdmissionsController (otorgarSesionAcudiente/forgetVerificationCode).
             return $this->success('Registro completado exitosamente.', 201)
-                ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario), 'admissions_token'));
+                ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario, $this->colegioAdmisionConnection()), 'admissions_token'));
         } catch (\Exception $e) {
             return $this->error('Ocurrió un error al procesar el registro. Intenta de nuevo.', 500);
         }
@@ -510,7 +510,15 @@ class AdmissionsController extends Controller
         $usuario->update(['ultima_ip' => $ip, 'ultima_conexion' => now()]);
 
         return $this->success('Sesión iniciada', ['redirect' => true])
-            ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario), 'admissions_token'));
+            ->withCookie($this->makeCookie($this->jwt->generateAdmissionsToken($usuario, $this->colegioAdmisionConnection()), 'admissions_token'));
+    }
+
+    /** Connection resuelta por ResolveColegioAdmision para esta petición (ver
+     * app_attributes en el middleware) — 'mysql' si por algún motivo no corrió (no
+     * debería pasar en ninguna ruta pública de /api/admissions, todas están detrás de él). */
+    private function colegioAdmisionConnection(): string
+    {
+        return request()->attributes->get('colegio_admision_connection', 'mysql');
     }
 
     public function registrarInscripcion(RegistrarInscripcionRequest $request)

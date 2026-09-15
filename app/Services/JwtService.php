@@ -29,11 +29,17 @@ class JwtService
         ], $extraClaims))->fromUser($user);
     }
 
-    public function generateAdmissionsToken(Authenticatable $user): string
+    /** `$connection` viene del colegio resuelto por ResolveColegioAdmision para esta
+     * petición de login/registro (ver AdmissionsController) — el resto de la sesión del
+     * acudiente (/api/admisiones/*) sigue apuntando a esa misma connection vía este claim,
+     * leído por JwtFromCookie en cada petición posterior. 'mysql' (Royal School) si no
+     * viene ninguna, mismo default que JwtFromCookie usa para un token sin el claim. */
+    public function generateAdmissionsToken(Authenticatable $user, string $connection = 'mysql'): string
     {
         return JWTAuth::claims([
             'active' => true,
             'system' => 'admissions',
+            'db_connection' => $connection,
             'user_id' => $user->id_user,
             'nombre' => $user->nombre,
             'apellido' => $user->apellido,

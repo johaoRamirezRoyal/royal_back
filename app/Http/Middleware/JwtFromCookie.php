@@ -44,10 +44,14 @@ class JwtFromCookie
                 // Multi-tenant: switchea `database.default` a la base del tenant ANTES de que
                 // cualquier modelo (empezando por la resolución de $request->user() vía el
                 // guard JWT) toque la DB — Usuario/LogActividad ya resuelven su connection
-                // dinámicamente contra `database.default` (ver Usuario::__construct). Solo
-                // aplica al sistema general: el token de admisiones es un contexto de auth
-                // aparte, sin este claim.
-                if ($payload->get('system') === 'general') {
+                // dinámicamente contra `database.default` (ver Usuario::__construct). Aplica a
+                // ambos sistemas: el general (elegido al login por email, ver
+                // AuthServices::resolverUsuarioMultiTenant) y admisiones (elegido por el slug
+                // de colegio en la URL al momento del login del acudiente, ver
+                // ResolveColegioAdmision + JwtService::generateAdmissionsToken). Un token de
+                // admisiones sin el claim (emitido antes de este cambio, o por
+                // TokenExchangeController en el puente admin->admisiones) cae a 'mysql'.
+                if (in_array($payload->get('system'), ['general', 'admissions'], true)) {
                     // Payload::get() no soporta un segundo argumento de default (ver
                     // vendor/tymon/jwt-auth/src/Payload.php) — devuelve null si el claim no
                     // existe (tokens emitidos antes de este cambio).
