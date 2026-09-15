@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 class LlegadasTarde extends Service
 {
     private const PERFIL_DIRECTIVO_DOCENTE = 20;
+    private const PERFIL_ASISTENTE_NIVEL = 11;
 
     // `periodo_academico.nombre` se guarda como texto ("Primer periodo", "Segundo
     // periodo"...) pero en los correos se muestra como número ("Periodo 1") — ver
@@ -684,9 +685,10 @@ class LlegadasTarde extends Service
      * persiste en `enviado` el caller — este método no toca la fila, solo envía); el
      * resultado del WhatsApp no se propaga porque `enviado` en la fila históricamente
      * solo trackea el correo. Si `$avisarVicerrectoria` es true, además notifica a
-     * Vicerrectoría por separado con `LlegadaTardeAvisoInternoMail` (mismo estilo
-     * visual, pero ese envío no cuenta para el resultado devuelto: es una escalación
-     * interna, no la carta al acudiente) — el caller solo pasa true la primera vez que
+     * Vicerrectoría (correo fijo en `$mailToVicerrectoria`), Directivo Docente (perfil
+     * 20) y Asistentes de Nivel (perfil 11) por separado con `LlegadaTardeAvisoInternoMail`
+     * (mismo estilo visual, pero ese envío no cuenta para el resultado devuelto: es una
+     * escalación interna, no la carta al acudiente) — el caller solo pasa true la primera vez que
      * se cruza el límite, para no repetir la escalación en cada reincidencia.
      * `MailService::send()`/`WhatsAppService::sendTemplate()` atrapan sus propios
      * errores, así que un fallo de envío no afecta el registro de la llegada tarde (ya
@@ -736,7 +738,7 @@ class LlegadasTarde extends Service
         }
 
         if ($limiteAlcanzado && $avisarVicerrectoria) {
-            $correosDirectivoDocente = Usuario::where('perfil', self::PERFIL_DIRECTIVO_DOCENTE)
+            $correosInternos = Usuario::whereIn('perfil', [self::PERFIL_DIRECTIVO_DOCENTE, self::PERFIL_ASISTENTE_NIVEL])
                 ->where('estado', 'activo')
                 ->whereNotNull('correo')
                 ->pluck('correo')
@@ -744,7 +746,7 @@ class LlegadasTarde extends Service
                 ->all();
 
             $this->mailService->send(
-                array_values(array_unique(array_merge($this->mailToVicerrectoria, $correosDirectivoDocente))),
+                array_values(array_unique(array_merge($this->mailToVicerrectoria, $correosInternos))),
                 new LlegadaTardeAvisoInternoMail(
                     nombreEstudiante: trim("{$estudiante->nombre} {$estudiante->apellido}"),
                     documento: (string) $estudiante->documento,
