@@ -21,7 +21,7 @@ Route::post('/pushNotification/{tenant?}', [HikvisionController::class, 'testNot
 
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
-    require __DIR__ . '/api/auth.php';
+    require __DIR__.'/api/auth.php';
 });
 
 // Banner informativo público (sin token — se lee desde el login y desde el sistema
@@ -100,7 +100,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
 });
 
 Route::group(['prefix' => 'admissions'], function () {
-    require __DIR__ . '/api/admissions.php';
+    require __DIR__.'/api/admissions.php';
 });
 
 Route::group(['prefix' => 'institucion'], function () {
@@ -111,13 +111,14 @@ Route::group(['prefix' => 'institucion'], function () {
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     // ADMISIONES
     Route::prefix('/admisiones')->group(function () {
-        require __DIR__ . '/api/admisiones.php';
+        require __DIR__.'/api/admisiones.php';
     });
 
     // TIPOS DE DOCUMENTOS
     Route::prefix('/admisiones/tipos-documentos')->group(function () {
-        require __DIR__ . '/api/TipoDocumentos.php';
+        require __DIR__.'/api/TipoDocumentos.php';
     });
+
 });
 
 // RUTAS PROTEGIDAS (pagina principal | administracion)
@@ -125,7 +126,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // AUTH
     Route::group(['prefix' => 'auth'], function () {
-        require __DIR__ . '/api/auth-protected.php';
+        require __DIR__.'/api/auth-protected.php';
     });
 
     // PERFIL USUARIO (antes de usuarios para no matchear contra /usuarios/{id})
@@ -135,22 +136,22 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // USUARIOS
     Route::group(['prefix' => 'usuarios'], function () {
-        require __DIR__ . '/api/usuarios.php';
+        require __DIR__.'/api/usuarios.php';
     });
 
     // CURSOS
     Route::group(['prefix' => 'cursos'], function () {
-        require __DIR__ . '/api/cursos.php';
+        require __DIR__.'/api/cursos.php';
     });
 
     // PERMISOS
     Route::prefix('permisos')->group(function () {
-        require __DIR__ . '/api/permisos.php';
+        require __DIR__.'/api/permisos.php';
     });
 
     // AREAS
     Route::prefix('areas')->group(function () {
-        require __DIR__ . '/api/areas.php';
+        require __DIR__.'/api/areas.php';
     });
 
     // BLOQUES (Áreas Comunes)
@@ -165,7 +166,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // INVENTARIO
     Route::prefix('inventario')->group(function () {
-        require __DIR__ . '/api/inventario.php';
+        require __DIR__.'/api/inventario.php';
     });
 
     // PRÉSTAMOS
@@ -190,7 +191,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // CATEGORIAS
     Route::prefix('categorias')->group(function () {
-        require __DIR__ . '/api/categorias.php';
+        require __DIR__.'/api/categorias.php';
     });
 
     // PROVEEDORES (Proceso de compra)
@@ -205,7 +206,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // HIKVISION
     Route::prefix('/hikvision')->group(function () {
-        require __DIR__ . '/api/hikvision.php';
+        require __DIR__.'/api/hikvision.php';
     });
 
     // BIBLIOTECA
@@ -215,11 +216,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // TIPOS DE DOCUMENTOS
     Route::prefix('/tipos-documentos')->group(function () {
-        require __DIR__ . '/api/TipoDocumentos.php';
-    });
-    //LLEGADAS TARDE
-    Route::prefix("/llegadas-tarde")->group(function () {
-        require __DIR__ . '/api/llegadasTarde.php';
+        require __DIR__.'/api/TipoDocumentos.php';
     });
 
     //LLEGADAS TARDE

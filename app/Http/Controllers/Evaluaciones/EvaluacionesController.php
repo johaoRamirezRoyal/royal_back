@@ -448,7 +448,6 @@ class EvaluacionesController extends Controller
             'id_evaluado' => 'nullable|integer|exists:usuarios,id_user',
             'id_nivel' => 'nullable|integer|exists:nivel,id',
             'id_periodo' => 'required|integer|exists:periodos,id',
-            'id_anio_escolar' => 'nullable|integer|exists:anio_escolar,id',
             'respuestas' => 'required|array|min:1',
             'respuestas.*.id_pregunta' => 'required|integer|exists:evaluaciones_preguntas,id',
             'respuestas.*.id_opcion' => 'nullable|integer|exists:evaluaciones_opciones_pregunta,id',

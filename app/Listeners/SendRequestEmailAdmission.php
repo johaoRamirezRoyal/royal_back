@@ -24,7 +24,7 @@ class SendRequestEmailAdmission implements ShouldQueue
         Mail::to($event->email)
             ->send(new RequestEmail($event->email, $event->token, $event->verificationCode));
     }
-    
+
     public function failed(RequestEmailAdmission $event, \Throwable $e): void
     {
         Log::error("Falló el envío de email de admisión", [

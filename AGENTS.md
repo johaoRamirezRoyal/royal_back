@@ -1121,8 +1121,7 @@ class InventarioServices
 
 **Convención de retorno**: `['error' => bool, 'message' => string, 'data' => mixed]`
 
-`app/Services/Service.php` es base abstracta con `sendError()`. NO es optativa.
-
+`app/Services/Service.php` es base abstracta con `sendError()`. La mayoría de services NO la extienden — es optativa.
 
 ### Models
 ```php
@@ -1260,21 +1259,6 @@ $this->app->singleton(CategoriasServices::class);
 - **Office docs** → `resource_type: 'raw'`
 - `public_id` sin extensión para `raw` (Cloudinary agrega `.temp`)
 - Límite 10MB, extensiones permitidas: jpg, jpeg, png, webp, pdf
-
-## FileStorageService (`app/Services/FileStorageService.php`)
-
-Almacenamiento local de archivos subidos (vs Cloudinary). Usado en: `DocumentosVariosService`, `BibliotecaServices`/`BibliotecaController`, `PerfilUsuarioService`.
-
-| Método | Firma | Uso |
-|--------|-------|-----|
-| `uploadFile()` | `(UploadedFile $archivo, string $carpeta = 'uploads', ?string $disk = null): array` | Guarda con nombre UUID + extensión original. Retorna `['nombre_original','nombre_guardado','ruta','url']` |
-| `eliminar()` | `(?string $ruta, ?string $disk = null): bool` | Borra si existe la ruta |
-| `reemplazar()` | `(UploadedFile $nuevoArchivo, ?string $archivoAnterior, string $carpeta = 'uploads', ?string $disk = null): array` | Elimina el anterior y sube el nuevo (`uploadFile`) |
-
-- Disco por defecto: `config('filesystems.uploads_disk', 'public')` → `.env` `UPLOADS_DISK=sami` (VPS) o `public` (local).
-- Disco `sami` sirve `public/upload` directamente via web server del VPS (`config/filesystems.php:57`).
-- Guardar la **`ruta`** devuelta en BD (ej: columna `nombre_doc`); `url` se usa para exponerla.
-- Sin DI: instancia directa `app(FileStorageService::class)` o constructor injection.
 
 ## Hikvision (`app/Services/Hikvisionattendance/hikvisionattendanceService.php` ~2200 líneas)
 

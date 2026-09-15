@@ -1,0 +1,78 @@
+### ============================================
+### ASISTENCIA ESTUDIANTE — REST Client
+### ============================================
+### Primero haz login para obtener el token.
+POST http://localhost:8000/api/auth/login
+Content-Type: application/json
+
+{
+    "user": "1193377218",
+    "pass": "1193377218"
+}
+
+### ============================================
+
+### 1. FILTRAR asistencias por id_horario_clase (mínimo requerido si no hay otros filtros)
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_horario_clase=1
+
+### 2. FILTRAR por id_horario_clase + fecha
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_horario_clase=1&fecha=2026-07-08
+
+### 3. FILTRAR por estudiante
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_estudiante=296
+
+### 4. FILTRAR por curso
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_curso=1
+
+### 5. FILTRAR por clase (asistencia_clase)
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_clase=5
+
+### 6. FILTRAR por estudiante + fecha
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante?id_estudiante=1&fecha=2026-07-02
+
+### 7. FILTRAR sin parámetros (debe fallar — exige id_horario_clase)
+GET http://localhost:8000/api/gestion-academica/asistencias-estudiante
+
+### 8. CREAR asistencias para una clase
+POST http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_asistencia_clase": 5,
+    "estudiantes": [
+        { "id_alumno": 294, "estado": "AUSENTE" },
+        { "id_alumno": 295, "estado": "TARDE" },
+        { "id_alumno": 296, "estado": "PERMISO" }
+    ]
+}
+
+### 9. CREAR con estado inválido (debe fallar)
+POST http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "id_asistencia_clase": 1,
+    "estudiantes": [
+        { "id_alumno": 4, "estado": "ASISTIO" }
+    ]
+}
+
+### 10. ELIMINAR asistencias por IDs
+DELETE http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": [1, 2, 3]
+}
+
+### 11. ELIMINAR sin IDs (debe fallar)
+DELETE http://localhost:8000/api/gestion-academica/asistencias-estudiante
+Content-Type: application/json
+Accept: application/json
+
+{
+    "ids": []
+}
