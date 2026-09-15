@@ -11,6 +11,7 @@ use App\Models\Evaluaciones\EvaluacionRespuestaPregunta;
 use App\Models\Evaluaciones\EvaluacionSeccion;
 use App\Models\Evaluaciones\EvaluacionServicio;
 use App\Models\Evaluaciones\EvaluacionTipoPregunta;
+use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\Periodo;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -206,7 +207,7 @@ class EvaluacionesServices
     public function listar(array $filtros, ?Usuario $solicitante = null): array
     {
         try {
-            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles'])
+            $query = Evaluacion::with(['servicio', 'niveles', 'perfiles', 'secciones'])
                 ->withCount('respuestas');
 
             if ($solicitante && !in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true)) {
@@ -370,6 +371,13 @@ class EvaluacionesServices
     public function crear(array $datos): array
     {
         try {
+            if (!empty($datos['secciones'])) {
+                $sumaPorcentajes = array_sum(array_column($datos['secciones'], 'porcentaje'));
+                if ($sumaPorcentajes > 100.01) {
+                    return ['error' => true, 'message' => 'La suma de los porcentajes de las secciones no puede superar el 100%', 'status' => 422];
+                }
+            }
+
             return DB::transaction(function () use ($datos) {
                 $evaluacion = Evaluacion::create([
                     'titulo' => $datos['titulo'],
@@ -571,6 +579,11 @@ class EvaluacionesServices
             $evaluacion = Evaluacion::find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
 
+            $sumaExistente = $evaluacion->secciones()->sum('porcentaje');
+            if ($sumaExistente + ($datos['porcentaje'] ?? 0) > 100.01) {
+                return ['error' => true, 'message' => 'La suma de los porcentajes de las secciones no puede superar el 100%', 'status' => 422];
+            }
+
             $seccion = $evaluacion->secciones()->create([
                 'titulo' => $datos['titulo'],
                 'descripcion' => $datos['descripcion'] ?? null,
@@ -590,6 +603,15 @@ class EvaluacionesServices
         try {
             $seccion = EvaluacionSeccion::find($idSeccion);
             if (!$seccion) return ['error' => true, 'message' => 'Sección no encontrada', 'status' => 404];
+
+            if (array_key_exists('porcentaje', $datos)) {
+                $sumaOtras = EvaluacionSeccion::where('id_evaluacion', $seccion->id_evaluacion)
+                    ->where('id', '!=', $idSeccion)
+                    ->sum('porcentaje');
+                if ($sumaOtras + $datos['porcentaje'] > 100.01) {
+                    return ['error' => true, 'message' => 'La suma de los porcentajes de las secciones no puede superar el 100%', 'status' => 422];
+                }
+            }
 
             $seccion->update($datos);
             return ['error' => false, 'message' => 'Sección actualizada', 'data' => $seccion];
@@ -734,11 +756,15 @@ class EvaluacionesServices
                 return ['error' => true, 'message' => 'Selecciona un periodo activo válido', 'status' => 422];
             }
 
-            // El año escolar de la respuesta es el vigente AHORA (tabla `anio_escolar`,
-            // resuelto igual que el indicador que ve el evaluador en Responder.tsx) — no el
-            // que traiga `periodo.id_anio`, que es un catálogo legacy aparte y puede no
-            // coincidir (ver AGENTS.md, sección Evaluaciones).
-            $anioEscolar = $this->anioEscolarServices->obtenerUltimoAnioEscolar()['data'] ?? null;
+            // El año escolar de la respuesta es, por defecto, el vigente AHORA (tabla
+            // `anio_escolar`, resuelto igual que el indicador que ve el evaluador en
+            // Responder.tsx) — no el que traiga `periodo.id_anio`, que es un catálogo
+            // legacy aparte y puede no coincidir (ver AGENTS.md, sección Evaluaciones).
+            // El evaluador puede sobreescribirlo eligiendo otro año en el selector del
+            // formulario (`id_anio_escolar` en el payload).
+            $anioEscolar = !empty($datos['id_anio_escolar'])
+                ? Anio::find($datos['id_anio_escolar'])
+                : ($this->anioEscolarServices->obtenerUltimoAnioEscolar()['data'] ?? null);
 
             $resultado = DB::transaction(function () use ($idEvaluacion, $solicitante, $datos, $periodo, $anioEscolar) {
                 $evaluacion = Evaluacion::with(['perfiles', 'niveles'])->find($idEvaluacion);
@@ -960,6 +986,10 @@ class EvaluacionesServices
         try {
             $respuesta = EvaluacionRespuestaEvaluacion::with([
                 'evaluacion.servicio',
+                // `.tipo` es indispensable aquí: el frontend (Ver.tsx) decide qué preguntas son
+                // texto libre por `pregunta.tipo.slug` sobre esta misma estructura — sin esta
+                // relación cargada, esas tarjetas nunca aparecen (quedaban en null/undefined).
+                'evaluacion.secciones.preguntas.tipo',
                 'evaluacion.secciones.preguntas.opciones',
                 'usuario',
                 'evaluado.perfilRelacion:id_perfil,nombre',
@@ -1065,14 +1095,38 @@ class EvaluacionesServices
     // ─── Resultados / Puntaje ──────────────────────────────────
 
     /**
+     * Puntaje máximo posible para UNA pregunta. En `seleccion_multiple` el evaluador
+     * puede marcar varias opciones a la vez, así que el máximo es la SUMA de todas sus
+     * opciones — usar solo `max()` (como si fuera de única selección) deja el máximo por
+     * debajo de lo que realmente se puede obtener y el promedio termina superando el
+     * 100% (bug real, visto en producción: 105/60 = 175%). Para cualquier otro tipo
+     * (única selección, escalas, sí/no) sigue siendo el valor de la opción más alta,
+     * porque solo se puede elegir una.
+     */
+    private function maxPosiblePregunta(EvaluacionPregunta $pregunta): float
+    {
+        if ($pregunta->opciones->isEmpty()) {
+            return 0;
+        }
+
+        return $pregunta->tipo?->slug === 'seleccion_multiple'
+            ? (float) $pregunta->opciones->sum('valor')
+            : (float) $pregunta->opciones->max('valor');
+    }
+
+    /**
      * Puntaje ponderado de UNA respuesta individual (no el agregado de todos los
      * evaluados de `calcularResultados`) — usado para la tarjeta de promedio en la
      * pantalla "Ver evaluación" de un evaluado puntual. Misma fórmula por sección
      * (puntaje obtenido / puntaje máximo posible * 100, ponderado por
      * `seccion.porcentaje`) pero contra las respuestas de una sola fila de
      * `evaluaciones_respuestas_evaluacion`.
+     *
+     * Público (no privado) porque `EvaluacionRespuestaPdfService` también lo necesita
+     * para pintar el mismo puntaje por sección en el PDF — evita reimplementar la
+     * fórmula una segunda vez.
      */
-    private function calcularPuntajeRespuesta(EvaluacionRespuestaEvaluacion $respuesta): array
+    public function calcularPuntajeRespuesta(EvaluacionRespuestaEvaluacion $respuesta): array
     {
         $sumaGeneral = 0;
 
@@ -1088,9 +1142,7 @@ class EvaluacionesServices
 
             $maxPosible = 0;
             foreach ($seccion->preguntas as $pregunta) {
-                if ($pregunta->opciones->isNotEmpty()) {
-                    $maxPosible += $pregunta->opciones->max('valor');
-                }
+                $maxPosible += $this->maxPosiblePregunta($pregunta);
             }
 
             $promedioSeccion = $maxPosible > 0 ? round(($puntajeObtenido / $maxPosible) * 100, 2) : 0;
@@ -1115,7 +1167,7 @@ class EvaluacionesServices
     public function calcularResultados(int $idEvaluacion): array
     {
         try {
-            $evaluacion = Evaluacion::with(['secciones.preguntas.opciones'])->find($idEvaluacion);
+            $evaluacion = Evaluacion::with(['secciones.preguntas.tipo', 'secciones.preguntas.opciones'])->find($idEvaluacion);
             if (!$evaluacion) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
 
             $respuestas = EvaluacionRespuestaEvaluacion::with(['respuestasPreguntas.opcion'])
@@ -1127,13 +1179,14 @@ class EvaluacionesServices
                     'total_respuestas' => 0,
                     'promedio_general' => 0,
                     'por_seccion' => [],
+                    'distribucion_niveles' => ['Bajo' => 0, 'Medio' => 0, 'Eficiente' => 0, 'Alto' => 0],
                 ]];
             }
 
             $totalRespuestas = $respuestas->count();
             $sumaGeneral = 0;
 
-            $porSeccion = $evaluacion->secciones->map(function ($seccion) use ($respuestas, &$sumaGeneral) {
+            $porSeccion = $evaluacion->secciones->map(function ($seccion) use ($respuestas, $totalRespuestas, &$sumaGeneral) {
                 $preguntasIds = $seccion->preguntas->pluck('id')->toArray();
                 $totalPuntosSeccion = 0;
                 $respuestasEnSeccion = 0;
@@ -1147,12 +1200,15 @@ class EvaluacionesServices
                     }
                 }
 
+                // El máximo de una sola respuesta multiplicado por el total de respuestas
+                // registradas — $totalPuntosSeccion suma los puntos de TODAS las
+                // respuestas, así que compararlo contra el máximo de una sola inflaba el
+                // promedio muy por encima de 100% (bug real, visto en producción).
                 $maxPosible = 0;
                 foreach ($seccion->preguntas as $pregunta) {
-                    if ($pregunta->opciones->isNotEmpty()) {
-                        $maxPosible += $pregunta->opciones->max('valor');
-                    }
+                    $maxPosible += $this->maxPosiblePregunta($pregunta);
                 }
+                $maxPosible *= $totalRespuestas;
 
                 $promedioSeccion = $maxPosible > 0 ? round(($totalPuntosSeccion / $maxPosible) * 100, 2) : 0;
                 $sumaGeneral += $promedioSeccion * ($seccion->porcentaje / 100);
@@ -1168,15 +1224,38 @@ class EvaluacionesServices
                 ];
             });
 
+            // Distribución de niveles de desempeño entre TODOS los evaluados (no el
+            // promedio agregado por sección de arriba, sino el promedio individual de
+            // cada respuesta) — alimenta la gráfica de torta en Graficas.tsx. Reutiliza
+            // `calcularPuntajeRespuesta` seteando a mano la relación `evaluacion` (ya
+            // cargada una sola vez arriba con sus secciones/preguntas/opciones) en vez de
+            // recargarla por cada respuesta.
+            $distribucionNiveles = ['Bajo' => 0, 'Medio' => 0, 'Eficiente' => 0, 'Alto' => 0];
+            foreach ($respuestas as $respuesta) {
+                $respuesta->setRelation('evaluacion', $evaluacion);
+                $individual = $this->calcularPuntajeRespuesta($respuesta);
+                $distribucionNiveles[$this->nivelDesempeno($individual['promedio_general'])]++;
+            }
+
             return ['error' => false, 'message' => 'ok', 'data' => [
                 'id_evaluacion' => $evaluacion->id,
                 'titulo' => $evaluacion->titulo,
                 'total_respuestas' => $totalRespuestas,
                 'promedio_general' => round($sumaGeneral, 2),
                 'por_seccion' => $porSeccion,
+                'distribucion_niveles' => $distribucionNiveles,
             ]];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /** Mismos umbrales que `nivelDesempeno` en Ver.tsx (frontend) y `nivel()` en EvaluacionRespuestaPdfService. */
+    private function nivelDesempeno(float $promedio): string
+    {
+        if ($promedio < 60) return 'Bajo';
+        if ($promedio < 80) return 'Medio';
+        if ($promedio < 90) return 'Eficiente';
+        return 'Alto';
     }
 }
