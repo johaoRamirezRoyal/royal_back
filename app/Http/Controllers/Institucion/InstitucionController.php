@@ -227,9 +227,14 @@ class InstitucionController extends Controller
 
         // `expires_at` va dentro del propio valor cacheado (no solo como TTL del store)
         // para poder devolvérselo al frontend — Cache::get() no expone el TTL restante.
+        // `connection` es la resuelta por ResolveColegioAdmision para ESTA petición de
+        // login (ver routes/api/institucion.php) — el resto de la sesión de esta
+        // institución (check/carta-recomendacion/...) sigue apuntando a esa misma base,
+        // leída por EnsureInstitucionSession, no por el header en cada request.
         Cache::put("institucion_session_{$sessionToken}", [
             'id' => $institucion->id,
             'expires_at' => $expiresAt->toIso8601String(),
+            'connection' => request()->attributes->get('colegio_admision_connection', 'mysql'),
         ], $expiresAt);
 
         return $this->success('Sesión iniciada', ['redirect' => true])
