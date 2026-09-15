@@ -3,11 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Models\Instituciones\Institucion;
-use App\Services\AdminManagement\BasesDatosService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Config;
 
 /**
  * Guarda de las rutas protegidas de instituciones. Deliberadamente NO usa JWT ni el guard
@@ -30,19 +28,6 @@ class EnsureInstitucionSession
 
         if (! $data) {
             return response()->json(['active' => false, 'message' => 'Sesión expirada'], 401);
-        }
-
-        // Multi-tenant: switchea `database.default` a la base del colegio bajo el que se
-        // otorgó ESTA sesión (ver InstitucionController::otorgarSesion) ANTES de que
-        // Institucion::find toque la DB — se lee de la sesión cacheada, no del header
-        // X-Colegio-Slug de esta request, para no confiar en la URL actual (una cookie
-        // institucion_token vieja de otro colegio en la misma pestaña/dominio no debe
-        // poder leer datos de un tenant distinto al que realmente inició sesión). 'mysql'
-        // si falta el campo (sesiones cacheadas antes de este cambio).
-        $connection = $data['connection'] ?? 'mysql';
-
-        if (BasesDatosService::esConnectionValida($connection)) {
-            Config::set('database.default', $connection);
         }
 
         // Se revisa `activo` en cada request, no solo al hacer login — si un admin

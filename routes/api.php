@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Admissions\AdmissionsController;
-use App\Http\Controllers\Branding\ColegioAdmisionController;
 use App\Http\Controllers\Hikvision\HikvisionController;
 use Illuminate\Support\Facades\Route;
 
@@ -101,17 +100,7 @@ Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
 });
 
 Route::group(['prefix' => 'admissions'], function () {
-    // Pública, sin el middleware de tenant de abajo: es como el frontend descubre si el
-    // slug de la URL (/{slug}/admissions) existe y qué branding mostrar antes de tener
-    // nada más que ese slug — ver ColegioAdmisionController::branding.
-    Route::get('colegio/{slug}/branding', [ColegioAdmisionController::class, 'branding']);
-
-    // Multi-tenant por URL: el resto de este grupo exige el header X-Colegio-Slug y
-    // switchea la base de datos al colegio correspondiente antes de tocar cualquier
-    // modelo de negocio — ver ResolveColegioAdmision.
-    Route::middleware('colegio.admision')->group(function () {
-        require __DIR__.'/api/admissions.php';
-    });
+    require __DIR__ . '/api/admissions.php';
 });
 
 Route::group(['prefix' => 'institucion'], function () {

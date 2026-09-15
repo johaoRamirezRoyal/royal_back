@@ -5,7 +5,6 @@ use App\Http\Middleware\EnsureInstitucionSession;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
-use App\Http\Middleware\ResolveColegioAdmision;
 use App\Http\Middleware\RestrictToAdminEmails;
 use App\Http\Middleware\RestrictToHikvisionDevices;
 use App\Http\Middleware\SwitchActiveConnection;
@@ -37,7 +36,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'institucion.session' => EnsureInstitucionSession::class,
             'hikvision.device' => RestrictToHikvisionDevices::class,
             'admin.access' => RestrictToAdminEmails::class,
-            'colegio.admision' => ResolveColegioAdmision::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
