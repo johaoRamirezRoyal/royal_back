@@ -2,9 +2,12 @@
 
 namespace App\Services\Noticias;
 
+use App\Exceptions\MailRateLimitException;
 use App\Mail\NoticiaMail;
+use App\Models\CorreoInstitucional;
 use App\Models\Noticias\MensajeGeneral;
 use App\Models\Noticias\MensajeProgramado;
+use App\Models\Usuarios\Nivel;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +26,20 @@ class NoticiasService
      * tiene columna de expiración propia.
      */
     private const DIAS_VISUALIZACION_DEFECTO = 10;
+
+    /**
+     * Grupos de `correos_institucionales` que administra esta pantalla (ver
+     * resolverDestinatariosDistribucion) — etiqueta legible por grupo. Toda consulta de
+     * esta sección filtra explícitamente por estas llaves para no tocar/exponer los
+     * demás grupos de la tabla (ADMISIONES, BIBLIOTECA, ...), que son de otros módulos.
+     */
+    private const GRUPOS_DISTRIBUCION = [
+        'NOTICIAS_TODOS' => 'Todos (trabajadores)',
+        'NOTICIAS_PREESCOLAR' => 'Preescolar',
+        'NOTICIAS_PRIMARIA' => 'Primaria',
+        'NOTICIAS_SECUNDARIA' => 'Secundaria / Bachillerato',
+        'NOTICIAS_ADMINISTRATIVO' => 'Administrativo',
+    ];
 
     /**
      * Mensaje general activo + programadas activas (tipo 'normal' y 'cumpleanos por
@@ -104,6 +121,7 @@ class NoticiasService
                 'imagen' => $datos['imagen'] ?? null,
                 'mensaje' => $datos['mensaje'] ?? null,
                 'activo' => $datos['activo'] ?? true,
+                'nivel' => $datos['nivel'],
                 'id_log' => $idLog,
             ];
 
@@ -260,25 +278,46 @@ class NoticiasService
             return false;
         }
 
-        $correos = $this->correosPorNivel(0);
-
-        if (empty($correos)) {
-            Log::warning('Noticias: mensaje general activo sin destinatarios que enviar.');
+        // Debe elegirse explícitamente un nivel (o "Todos", nivel=0) al editar el mensaje
+        // — ver NoticiasController::actualizarGeneral. Sin nivel asignado (fila legacy
+        // sin editar todavía) no se envía nada.
+        if ($mensaje->nivel === null) {
+            Log::warning('Noticias: mensaje general activo sin nivel configurado, no se envía.');
             return false;
         }
 
         $mailable = new NoticiaMail($mensaje->titulo ?: 'Noticia', $mensaje->mensaje, null, $mensaje->imagen);
         $enviados = 0;
+        $total = 1;
 
-        foreach ($correos as $correo) {
-            if ($this->mailService->send($correo, $mailable)) {
-                $enviados++;
+        $distribucion = $this->resolverDestinatariosDistribucion((int) $mensaje->nivel);
+
+        if (!empty($distribucion)) {
+            $enviados = $this->mailService->send($distribucion, $mailable) ? count($distribucion) : 0;
+        } else {
+            $correos = $this->correosPorNivel((int) $mensaje->nivel);
+            $total = count($correos);
+
+            if (empty($correos)) {
+                Log::warning('Noticias: mensaje general activo sin destinatarios que enviar.');
+                return false;
+            }
+
+            foreach ($correos as $correo) {
+                try {
+                    if ($this->mailService->send($correo, $mailable)) {
+                        $enviados++;
+                    }
+                } catch (MailRateLimitException $e) {
+                    Log::warning("Noticias: mensaje general cortado por límite de envío del proveedor tras {$enviados}/{$total} destinatarios. {$e->getMessage()}");
+                    break;
+                }
             }
         }
 
         $mensaje->update(['ultimo_envio_fecha' => $hoy]);
 
-        Log::info("Noticias: mensaje general enviado a {$enviados}/".count($correos).' destinatarios.');
+        Log::info("Noticias: mensaje general enviado a {$enviados}/{$total} destinatarios" . (!empty($distribucion) ? ' (lista de distribución: ' . implode(', ', $distribucion) . ').' : '.'));
 
         return true;
     }
@@ -293,32 +332,185 @@ class NoticiasService
         $enviadas = 0;
 
         foreach ($pendientes as $programado) {
-            $correos = $this->correosPorNivel((int) ($programado->nivel ?? 0));
-
-            if (empty($correos)) {
-                Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
-                // Se marca igual como enviada — sin destinatarios que probar mañana
-                // tampoco los va a tener, y su `fecha` ya pasó/está pasando hoy.
-                $programado->update(['enviado_at' => now()]);
-                continue;
-            }
-
             $mailable = new NoticiaMail($programado->titulo, $programado->mensaje, $programado->url, $programado->imagen);
+            $nivel = (int) ($programado->nivel ?? 0);
+            $distribucion = $this->resolverDestinatariosDistribucion($nivel);
             $enviados = 0;
+            $total = 1;
 
-            foreach ($correos as $correo) {
-                if ($this->mailService->send($correo, $mailable)) {
-                    $enviados++;
+            if (!empty($distribucion)) {
+                $enviados = $this->mailService->send($distribucion, $mailable) ? count($distribucion) : 0;
+            } else {
+                $correos = $this->correosPorNivel($nivel);
+                $total = count($correos);
+
+                if (empty($correos)) {
+                    Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
+                    // Se marca igual como enviada — sin destinatarios que probar mañana
+                    // tampoco los va a tener, y su `fecha` ya pasó/está pasando hoy.
+                    $programado->update(['enviado_at' => now()]);
+                    continue;
+                }
+
+                foreach ($correos as $correo) {
+                    try {
+                        if ($this->mailService->send($correo, $mailable)) {
+                            $enviados++;
+                        }
+                    } catch (MailRateLimitException $e) {
+                        Log::warning("Noticias: programada #{$programado->id} cortada por límite de envío del proveedor tras {$enviados}/{$total} destinatarios. {$e->getMessage()}");
+                        break;
+                    }
                 }
             }
 
             $programado->update(['enviado_at' => now()]);
             $enviadas++;
 
-            Log::info("Noticias: programada #{$programado->id} ('{$programado->titulo}') enviada a {$enviados}/".count($correos).' destinatarios.');
+            Log::info("Noticias: programada #{$programado->id} ('{$programado->titulo}') enviada a {$enviados}/{$total} destinatarios" . (!empty($distribucion) ? ' (lista de distribución: ' . implode(', ', $distribucion) . ').' : '.'));
         }
 
         return $enviadas;
+    }
+
+    /**
+     * Listado + catálogo de grupos + niveles (con el grupo que tengan asociado, si
+     * alguno) para la pantalla de administración de correos de distribución.
+     */
+    public function listarCorreosDistribucion(): array
+    {
+        try {
+            $correos = CorreoInstitucional::whereIn('grupo', array_keys(self::GRUPOS_DISTRIBUCION))
+                ->orderBy('grupo')
+                ->orderBy('id')
+                ->get();
+
+            $niveles = Nivel::orderBy('nombre')
+                ->get(['id', 'nombre', 'grupo_correo_distribucion']);
+
+            return [
+                'error' => false,
+                'data' => [
+                    'grupos' => self::GRUPOS_DISTRIBUCION,
+                    'correos' => $correos,
+                    'niveles' => $niveles,
+                ],
+            ];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Asocia (o desasocia, con `$grupo = null`) un nivel a uno de los grupos de
+     * distribución de Noticias — lo que antes era un match hardcodeado por `nombre` (ver
+     * migración add_grupo_correo_distribucion_to_nivel_table) ahora se edita desde la UI.
+     */
+    public function asignarGrupoDelNivel(int $idNivel, ?string $grupo): array
+    {
+        try {
+            if ($grupo !== null && !array_key_exists($grupo, self::GRUPOS_DISTRIBUCION)) {
+                return ['error' => true, 'message' => 'Grupo inválido'];
+            }
+
+            $nivel = Nivel::find($idNivel);
+
+            if (!$nivel) {
+                return ['error' => true, 'message' => 'Nivel no encontrado'];
+            }
+
+            $nivel->update(['grupo_correo_distribucion' => $grupo]);
+
+            return ['error' => false, 'data' => $nivel];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function crearCorreoDistribucion(array $datos): array
+    {
+        try {
+            if (!array_key_exists($datos['grupo'] ?? null, self::GRUPOS_DISTRIBUCION)) {
+                return ['error' => true, 'message' => 'Grupo inválido'];
+            }
+
+            $correo = CorreoInstitucional::create([
+                'grupo' => $datos['grupo'],
+                'nombre' => $datos['nombre'] ?? null,
+                'correo' => $datos['correo'],
+                'activo' => $datos['activo'] ?? true,
+            ]);
+
+            return ['error' => false, 'data' => $correo];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarCorreoDistribucion(int $id, array $datos): array
+    {
+        try {
+            // Scoped a los grupos de Noticias: no permite editar por esta vía filas de
+            // otros módulos (ADMISIONES, BIBLIOTECA, ...) aunque adivinen el id.
+            $correo = CorreoInstitucional::whereIn('grupo', array_keys(self::GRUPOS_DISTRIBUCION))->find($id);
+
+            if (!$correo) {
+                return ['error' => true, 'message' => 'Correo no encontrado'];
+            }
+
+            $correo->update([
+                'nombre' => $datos['nombre'] ?? null,
+                'correo' => $datos['correo'],
+                'activo' => $datos['activo'] ?? true,
+            ]);
+
+            return ['error' => false, 'data' => $correo];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function eliminarCorreoDistribucion(int $id): array
+    {
+        try {
+            $borrado = CorreoInstitucional::whereIn('grupo', array_keys(self::GRUPOS_DISTRIBUCION))
+                ->where('id', $id)
+                ->delete();
+
+            if (!$borrado) {
+                return ['error' => true, 'message' => 'Correo no encontrado'];
+            }
+
+            return ['error' => false, 'message' => 'Correo eliminado'];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Destinatarios activos de `correos_institucionales` para el grupo asociado al nivel
+     * dado (columna `nivel.grupo_correo_distribucion`, editable desde "Correos de
+     * distribución") — un solo Mail::send con estos como "to" reparte el mensaje sin
+     * repetir el incidente de rate-limit de mandar un correo por usuario. Vacío = ese
+     * nivel no tiene grupo asociado (o el grupo no tiene filas activas), y el llamador
+     * cae al envío individual de siempre vía `correosPorNivel`. nivel=0 ("Todos") no es
+     * una fila real de `nivel`, así que usa siempre NOTICIAS_TODOS directo.
+     */
+    private function resolverDestinatariosDistribucion(int $nivel): array
+    {
+        $grupo = $nivel === 0 ? 'NOTICIAS_TODOS' : Nivel::find($nivel)?->grupo_correo_distribucion;
+
+        if (!$grupo || !array_key_exists($grupo, self::GRUPOS_DISTRIBUCION)) {
+            return [];
+        }
+
+        return CorreoInstitucional::where('grupo', $grupo)
+            ->where('activo', true)
+            ->pluck('correo')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /** 0 = todos los niveles activos. Cualquier otro valor filtra por ese `id_nivel`. */

@@ -213,6 +213,83 @@ Reglas:
   `up()` con `insertGetId` en `cron_opciones` + inserts iniciales en `cron_permisos`, y un
   `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
   de hardcodear el número en el frontend.
+- **Todo es fail-closed, incluido Super Admin**: crear la fila en `cron_opciones` sin el
+  `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso — ni
+  siquiera perfil 1, porque `tienePermiso()` no tiene ningún caso especial para Super
+  Admin, solo mira la fila de `cron_permisos`. Pasó de verdad con la opción 146
+  ("Metricas Asistencias", ver `2026_09_16_160000_seed_permisos_opcion_metricas_asistencias.php`):
+  quedó creada pero invisible para todos hasta que una segunda migración le otorgó el
+  acceso. Al agregar una opción, verifica en el mismo `up()` (o justo después, con el
+  query de arriba) que quedó otorgada a los perfiles que la necesitan.
+
+### CRUD de módulos/opciones desde la UI — solo Super Admin (`PermisosController`)
+
+Alternativa a escribir una migración para lo de arriba: `/permisos` (frontend) tiene una
+pestaña "Módulos y opciones" que llama a `POST/PUT/DELETE /api/permisos/modulos` y
+`/api/permisos/opciones`. A diferencia del resto de este controller (gateado por la
+opción `28`, otorgable a cualquier perfil), estos 7 endpoints están detrás de
+`PermisosController::soloSuperAdmin()` — un chequeo aparte de `sinAcceso()` que exige
+`perfil === 1` literal, no una opción de `cron_permisos`. Igual que con cualquier
+`cron_opciones` nueva: **crear una opción desde esta UI no gatea nada por sí sola** — un
+desarrollador todavía tiene que escribir el `PermissionGate`/`sinAcceso()` que la
+referencie por id en el sitio que se quiere proteger. `eliminarOpcion` borra en cascada
+los `cron_permisos` de esa opción para no dejar filas huérfanas.
+
+## Noticias — envío masivo, rate-limit y correos de distribución
+
+`NoticiasController`/`NoticiasService` (`app/Http/Controllers/Noticias/`,
+`app/Services/Noticias/NoticiasService.php`). Dos formas de contenido: el "mensaje
+general" (una sola fila siempre vigente, `asistencia_mensaje_general`) y las "noticias
+programadas" (`asistencia_mensaje`, por `fecha`). Un comando diario
+(`EnviarNoticiasDiariasCommand`, `noticias:enviar-diarias`) envía por correo lo que esté
+activo y no se haya enviado aún.
+
+- **Probarlo manualmente**: `routes/console.php` programa el comando con `->daily()`
+  (una vez a las 00:00) — correr `php artisan schedule:run` en cualquier otro momento no
+  hace nada, porque el scheduler solo dispara tareas cuyo horario coincide con el minuto
+  exacto en que se invoca (así está pensado para un cron real cada minuto, no para una
+  prueba puntual). Para probar el envío ya mismo, salta el scheduler y corre el comando
+  directo: `php artisan noticias:enviar-diarias`. Con `MAIL_MAILER=log` en `.env` (el
+  valor típico en local) esto no manda ningún correo real — solo lo deja escrito en
+  `storage/logs/laravel.log`, seguro para repetir cuantas veces haga falta.
+- **Incidente de origen (2026-09-16)**: el mensaje general se enviaba por correo
+  individualmente a cada usuario de TODOS los niveles (~2149 destinatarios en un run
+  real), agotando en minutos el límite de "Max Emails Per Hour" de la cuenta de correo
+  del hosting (cPanel/Exim) — 1967 de 2149 correos fallaron con
+  `452-4.5.3 "Your message has too many recipients"`, y el comando siguió reintentando
+  uno por uno durante 1h22m en vez de cortar.
+- **`App\Exceptions\MailRateLimitException`** — `MailService::send()` detecta esa firma
+  exacta (código `452` + "too many recipients", deliberadamente específica para no
+  confundir un buzón lleno de UN destinatario con el límite de cuenta) y la lanza en vez
+  de solo devolver `false`. `NoticiasService` la captura en sus loops de envío individual
+  y corta el lote (loguea cuántos alcanzó a enviar) en vez de seguir martillando el SMTP.
+- **Correos de distribución (`correos_institucionales`, grupos `NOTICIAS_*`)** — la
+  solución de raíz al incidente: en vez de un correo por usuario, cada nivel puede
+  asociarse a una lista de distribución real del colegio (`nivel.grupo_correo_distribucion`,
+  migración `add_grupo_correo_distribucion_to_nivel_table`) y el envío manda UN solo
+  correo a esa lista (`NoticiasService::resolverDestinatariosDistribucion`, grupos
+  `App\Enums\Mails::NOTICIAS_TODOS/NOTICIAS_PREESCOLAR/NOTICIAS_PRIMARIA/NOTICIAS_SECUNDARIA/NOTICIAS_ADMINISTRATIVO`
+  — mismo mecanismo de `correos_institucionales` que ya usan Admisiones/Biblioteca/Gestión
+  Humana/Dirección Administrativa, ver el enum). Un nivel sin alias asociado (o el alias
+  sin filas activas) cae al envío individual de siempre, con el corte por rate-limit como
+  red de seguridad. La fila real `nivel` "Secundaria" en BD corresponde a 10°-11°/Media —
+  lo que a diario llaman "Bachillerato" (ver migración
+  `backfill_id_nivel_academico_for_secundaria`) — de ahí que mapee al alias `midhigh@`.
+  `NoticiasController::correosDistribucion`/`crearCorreoDistribucion`/
+  `actualizarCorreoDistribucion`/`eliminarCorreoDistribucion`/`asignarGrupoNivel`
+  (endpoints bajo `/api/noticias/correos-distribucion*`) administran esto desde la
+  pestaña "Correos de distribución" del frontend — todos scoped a `grupo` `NOTICIAS_*`
+  para no tocar los grupos de otros módulos en la misma tabla.
+- **`OPCION_NOTICIAS` — mismo tipo de drift de `insertGetId` que Instituciones (104 vs
+  106, ver más abajo)**: la migración `seed_opcion_noticias` asumía que la fila quedaría
+  en el id `107`, pero en esta BD el `107` real es "Año Escolar y Periodos" (otra
+  feature completamente distinta) — el `107` correcto para Noticias resultó ser el `69`
+  ("NEWS Royal", una opción que ya existía de antes). Confirmado contra la tabla real
+  2026-09-16 y corregido en `NoticiasController::OPCION_NOTICIAS` y en el frontend
+  (`router/index.tsx`, `sideBar/index.layout.tsx`) — **antes de asumir un id de opción
+  desde un comentario o esta doc, confírmalo contra `cron_opciones` real.**
+  `OPCION_CORREOS_DISTRIBUCION = 147` (opción separada, ver arriba) sí se creó y otorgó
+  correctamente desde el principio.
 
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 

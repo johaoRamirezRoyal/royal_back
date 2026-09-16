@@ -19,6 +19,7 @@ class Nivel extends Model
         'user_log',
         'fechareg',
         'id_nivel_academico',
+        'grupo_correo_distribucion',
     ];
 
     public function perfil(){

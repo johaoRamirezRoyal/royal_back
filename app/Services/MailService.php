@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\MailRateLimitException;
 use App\Mail\GenericMail;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
@@ -9,6 +10,19 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
+    /**
+     * Firma del throttle de cuenta de cPanel/Exim ("Max Emails Per Hour"), confirmada
+     * en producción (ver log del 2026-09-16: 1967/2149 correos de una noticia fallaron
+     * con este mismo mensaje durante 1h18m seguidas). Deliberadamente específica -
+     * un 452 por buzón lleno de UN destinatario trae otro texto y no debe cortar el lote.
+     */
+    private function esLimiteDeEnvioDelProveedor(\Throwable $e): bool
+    {
+        $mensaje = $e->getMessage();
+
+        return str_contains($mensaje, '452') && stripos($mensaje, 'too many recipients') !== false;
+    }
+
     /**
      * Descarta direcciones que no cumplen RFC 2822 antes de enviar.
      * Un solo correo inválido en el lote hace que Mail::to()->send() lance
@@ -143,6 +157,10 @@ class MailService
                 'mailable' => get_class($mailable),
                 'error' => $e->getMessage(),
             ]);
+
+            if ($this->esLimiteDeEnvioDelProveedor($e)) {
+                throw new MailRateLimitException($e->getMessage(), previous: $e);
+            }
 
             return false;
         }

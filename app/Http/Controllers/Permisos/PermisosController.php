@@ -37,6 +37,19 @@ class PermisosController extends Controller
         return $tienePermiso ? null : $this->error('No tienes permiso para gestionar los permisos del sistema', 403);
     }
 
+    /**
+     * A diferencia de sinAcceso() (exige la opción 28, otorgable a cualquier perfil),
+     * crear/editar/eliminar módulos y opciones queda reservado explícitamente a Super
+     * Admin (perfil 1) — una opción nueva define qué puede proteger cualquier
+     * PermissionGate del sistema, no basta con tener la opción 28 asignada.
+     */
+    private function soloSuperAdmin(Request $request): ?JsonResponse
+    {
+        return $request->user()->perfil === 1
+            ? null
+            : $this->error('Solo un Super Admin puede gestionar módulos y opciones', 403);
+    }
+
     public function verPermisosPorPerfil(Request $request)
     {
         if ($rechazo = $this->sinAcceso($request)) {
@@ -139,5 +152,90 @@ class PermisosController extends Controller
             'error' => false,
             'data' => $datos['data']
         ]);
+    }
+
+    public function listarModulos(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->services_permisos->listarModulos());
+    }
+
+    public function crearModulo(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:190',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->services_permisos->crearModulo($validated));
+    }
+
+    public function actualizarModulo(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        $validated = $request->validate([
+            'nombre' => 'nullable|string|max:190',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->services_permisos->actualizarModulo($id, $validated));
+    }
+
+    public function eliminarModulo(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->services_permisos->eliminarModulo($id));
+    }
+
+    public function crearOpcion(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:190',
+            'id_modulo' => 'required|integer|exists:cron_modulos,id',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->services_permisos->crearOpcion($validated));
+    }
+
+    public function actualizarOpcion(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        $validated = $request->validate([
+            'nombre' => 'nullable|string|max:190',
+            'id_modulo' => 'nullable|integer|exists:cron_modulos,id',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->services_permisos->actualizarOpcion($id, $validated));
+    }
+
+    public function eliminarOpcion(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->soloSuperAdmin($request)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->services_permisos->eliminarOpcion($id));
     }
 }

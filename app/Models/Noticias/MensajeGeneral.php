@@ -14,6 +14,7 @@ class MensajeGeneral extends Model
         'mensaje',
         'id_log',
         'activo',
+        'nivel',
         'ultimo_envio_fecha',
     ];
 

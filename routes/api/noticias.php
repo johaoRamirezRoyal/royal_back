@@ -11,6 +11,12 @@ Route::get('/para-mostrar', [NoticiasController::class, 'paraMostrar']);
 Route::get('/general', [NoticiasController::class, 'obtenerGeneral']);
 Route::put('/general', [NoticiasController::class, 'actualizarGeneral']);
 
+Route::get('/correos-distribucion', [NoticiasController::class, 'correosDistribucion']);
+Route::post('/correos-distribucion', [NoticiasController::class, 'crearCorreoDistribucion']);
+Route::put('/correos-distribucion/{id}', [NoticiasController::class, 'actualizarCorreoDistribucion']);
+Route::delete('/correos-distribucion/{id}', [NoticiasController::class, 'eliminarCorreoDistribucion']);
+Route::put('/correos-distribucion/niveles/{idNivel}', [NoticiasController::class, 'asignarGrupoNivel']);
+
 Route::get('/', [NoticiasController::class, 'listar']);
 Route::post('/', [NoticiasController::class, 'crear']);
 Route::put('/', [NoticiasController::class, 'actualizar']);

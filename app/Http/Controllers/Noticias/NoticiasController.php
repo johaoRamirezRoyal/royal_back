@@ -12,9 +12,20 @@ use Illuminate\Support\Facades\Storage;
 
 class NoticiasController extends Controller
 {
-    // cron_opciones id 107 ("Noticias", id_modulo=3 Gestión Humana) — ver migración
-    // 2026_09_11_110000_seed_opcion_noticias.
-    private const OPCION_NOTICIAS = 107;
+    // cron_opciones id 69 ("NEWS Royal", id_modulo=3 Gestión Humana) — la migración
+    // 2026_09_11_110000_seed_opcion_noticias asumía que el `insertGetId` de esa fila
+    // daría 107, pero en esta BD el id 107 real es "Año Escolar y Periodos" (mismo tipo
+    // de drift ya documentado para Instituciones en AGENTS.md, "104 vs 106"): dos
+    // features distintas quedaban gateadas por la misma opción por error. Confirmado
+    // contra la tabla real 2026-09-16.
+    private const OPCION_NOTICIAS = 69;
+
+    // cron_opciones id 147 ("Noticias — Correos de distribución") — ver migración
+    // 2026_09_16_150000_seed_opcion_correos_distribucion_noticias. Separada de
+    // OPCION_NOTICIAS a propósito: quien administra el contenido de Noticias no
+    // necesariamente debe poder cambiar a qué direcciones reales se manda el correo
+    // masivo.
+    private const OPCION_CORREOS_DISTRIBUCION = 147;
 
     public function __construct(
         private NoticiasService $service,
@@ -30,12 +41,39 @@ class NoticiasController extends Controller
      * noticias del Home. Por eso el chequeo ya no vive en el constructor (bloquearía
      * también a esas dos acciones) sino que cada acción de administración lo llama a
      * mano — mismo patrón que ColegioAdmisionController::ensureAdmin. */
+    // Super Admin (perfil 1) siempre pasa, tenga o no la opción otorgada en
+    // `cron_permisos` — mismo criterio que el bypass `allowedRoles={[1]}` del lado
+    // frontend (router/sidebar): un Super Admin no debe quedar afuera de un módulo por
+    // un permiso mal configurado o revocado por error.
+    private const SUPER_ADMIN_PERFIL = 1;
+
     private function ensurePermisoGestion(): void
     {
         $perfil = $this->request->user()->perfil;
 
+        if ($perfil === self::SUPER_ADMIN_PERFIL) {
+            return;
+        }
+
         if (!($this->usuariosService->tienePermiso(self::OPCION_NOTICIAS, $perfil)['permiso'] ?? false)) {
             abort($this->error('No tienes permiso para gestionar noticias', 403));
+        }
+    }
+
+    /**
+     * Guard propio de "Correos de distribución" — separado de ensurePermisoGestion()
+     * porque es una opción distinta (147), ver la constante arriba.
+     */
+    private function ensurePermisoCorreosDistribucion(): void
+    {
+        $perfil = $this->request->user()->perfil;
+
+        if ($perfil === self::SUPER_ADMIN_PERFIL) {
+            return;
+        }
+
+        if (!($this->usuariosService->tienePermiso(self::OPCION_CORREOS_DISTRIBUCION, $perfil)['permiso'] ?? false)) {
+            abort($this->error('No tienes permiso para gestionar los correos de distribución', 403));
         }
     }
 
@@ -68,6 +106,11 @@ class NoticiasController extends Controller
             'mensaje' => 'nullable|string',
             'imagen' => 'nullable|string|max:250',
             'activo' => 'required|boolean',
+            // 0 = "Todos" (alias all@royalschool.edu.co, un solo correo real de
+            // distribución) sigue siendo válido — lo que causó el incidente de rate-limit
+            // (ver MailRateLimitException) era el envío individual a cada usuario, no la
+            // audiencia amplia en sí. Debe elegirse explícitamente algo, eso sí.
+            'nivel' => 'required|integer|min:0',
         ]);
 
         return $this->apiResponse(
@@ -151,6 +194,58 @@ class NoticiasController extends Controller
         return $this->apiResponse(
             $this->service->cambiarEstadoProgramados($request->input('ids'), (int) $request->input('estado'))
         );
+    }
+
+    public function correosDistribucion(): JsonResponse
+    {
+        $this->ensurePermisoCorreosDistribucion();
+
+        return $this->apiResponse($this->service->listarCorreosDistribucion());
+    }
+
+    public function crearCorreoDistribucion(Request $request): JsonResponse
+    {
+        $this->ensurePermisoCorreosDistribucion();
+
+        $request->validate([
+            'grupo' => 'required|string',
+            'nombre' => 'nullable|string|max:190',
+            'correo' => 'required|email|max:190',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->service->crearCorreoDistribucion($request->all()));
+    }
+
+    public function actualizarCorreoDistribucion(Request $request, int $id): JsonResponse
+    {
+        $this->ensurePermisoCorreosDistribucion();
+
+        $request->validate([
+            'nombre' => 'nullable|string|max:190',
+            'correo' => 'required|email|max:190',
+            'activo' => 'nullable|boolean',
+        ]);
+
+        return $this->apiResponse($this->service->actualizarCorreoDistribucion($id, $request->all()));
+    }
+
+    public function eliminarCorreoDistribucion(int $id): JsonResponse
+    {
+        $this->ensurePermisoCorreosDistribucion();
+
+        return $this->apiResponse($this->service->eliminarCorreoDistribucion($id));
+    }
+
+    public function asignarGrupoNivel(Request $request, int $idNivel): JsonResponse
+    {
+        $this->ensurePermisoCorreosDistribucion();
+
+        $request->validate([
+            'grupo' => 'nullable|string',
+        ]);
+
+        return $this->apiResponse($this->service->asignarGrupoDelNivel($idNivel, $request->input('grupo')));
     }
 
     /**
