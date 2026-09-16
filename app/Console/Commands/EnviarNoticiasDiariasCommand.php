@@ -9,7 +9,7 @@ class EnviarNoticiasDiariasCommand extends Command
 {
     protected $signature = 'noticias:enviar-diarias';
 
-    protected $description = 'Envía por correo el mensaje general (una vez al día) y las noticias programadas cuya fecha es hoy (ver NoticiasService::enviarPendientesDelDia)';
+    protected $description = 'Envía por correo las noticias programadas de tipo cumpleaños cuya fecha es hoy (ver NoticiasService::enviarPendientesDelDia)';
 
     public function handle(NoticiasService $noticiasService): int
     {

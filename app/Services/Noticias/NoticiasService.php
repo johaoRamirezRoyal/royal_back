@@ -286,6 +286,7 @@ class NoticiasService
     private function enviarProgramadosDelDia(): int
     {
         $pendientes = MensajeProgramado::where('activo', 1)
+            ->where('tipo', 'cumpleanos')
             ->whereDate('fecha', now()->toDateString())
             ->whereNull('enviado_at')
             ->get();
