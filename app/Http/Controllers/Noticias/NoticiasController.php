@@ -20,12 +20,13 @@ class NoticiasController extends Controller
     // contra la tabla real 2026-09-16.
     private const OPCION_NOTICIAS = 69;
 
-    // cron_opciones id 147 ("Noticias — Correos de distribución") — ver migración
+    // cron_opciones id 128 ("Noticias — Correos de distribución") — ver migración
     // 2026_09_16_150000_seed_opcion_correos_distribucion_noticias. Separada de
     // OPCION_NOTICIAS a propósito: quien administra el contenido de Noticias no
     // necesariamente debe poder cambiar a qué direcciones reales se manda el correo
-    // masivo.
-    private const OPCION_CORREOS_DISTRIBUCION = 147;
+    // masivo. Renumerada de 147 a 128 el 2026-09-16 al sincronizar cron_opciones con
+    // producción (147 era un id inflado por duplicados locales, ver AGENTS.md).
+    private const OPCION_CORREOS_DISTRIBUCION = 128;
 
     public function __construct(
         private NoticiasService $service,
@@ -62,7 +63,7 @@ class NoticiasController extends Controller
 
     /**
      * Guard propio de "Correos de distribución" — separado de ensurePermisoGestion()
-     * porque es una opción distinta (147), ver la constante arriba.
+     * porque es una opción distinta (128), ver la constante arriba.
      */
     private function ensurePermisoCorreosDistribucion(): void
     {

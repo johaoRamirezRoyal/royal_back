@@ -216,8 +216,8 @@ Reglas:
 - **Todo es fail-closed, incluido Super Admin**: crear la fila en `cron_opciones` sin el
   `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso — ni
   siquiera perfil 1, porque `tienePermiso()` no tiene ningún caso especial para Super
-  Admin, solo mira la fila de `cron_permisos`. Pasó de verdad con la opción 146
-  ("Metricas Asistencias", ver `2026_09_16_160000_seed_permisos_opcion_metricas_asistencias.php`):
+  Admin, solo mira la fila de `cron_permisos`. Pasó de verdad con la opción "Metricas
+  Asistencias" (id 127 hoy, ver `2026_09_16_160000_seed_permisos_opcion_metricas_asistencias.php`):
   quedó creada pero invisible para todos hasta que una segunda migración le otorgó el
   acceso. Al agregar una opción, verifica en el mismo `up()` (o justo después, con el
   query de arriba) que quedó otorgada a los perfiles que la necesitan.
@@ -288,8 +288,23 @@ activo y no se haya enviado aún.
   2026-09-16 y corregido en `NoticiasController::OPCION_NOTICIAS` y en el frontend
   (`router/index.tsx`, `sideBar/index.layout.tsx`) — **antes de asumir un id de opción
   desde un comentario o esta doc, confírmalo contra `cron_opciones` real.**
-  `OPCION_CORREOS_DISTRIBUCION = 147` (opción separada, ver arriba) sí se creó y otorgó
-  correctamente desde el principio.
+  `OPCION_CORREOS_DISTRIBUCION` sí se creó y otorgó correctamente desde el principio,
+  pero también cambió de número (ver el punto de sincronización justo abajo).
+- **Sincronización de `cron_opciones` con producción (2026-09-16)**: al comparar un
+  dump real de `cron_opciones` de producción (hasta el id `125`) contra local, resultó
+  que ids `126`–`145` en local eran **19 filas duplicadas** de opciones que ya existían
+  con un id más bajo — causadas por volver a correr migraciones viejas `seed_opcion_*`
+  cuya tabla `migrations` local no tenía registro de que ya habían corrido contra los
+  datos importados del dump. Se borraron esas 19 filas (y sus `cron_permisos`, sin
+  intentar fusionar sus permisos con los de la fila original — esos permisos eran tan
+  artefacto del re-run como las filas mismas) y se renumeraron las 3 opciones
+  genuinamente nuevas para que siguieran justo después del último id real de
+  producción: `139→126` ("Noticias", sin uso real en código — reemplazada por la 69,
+  "NEWS Royal"), `146→127` ("Metricas Asistencias"), `147→128` ("Noticias — Correos de
+  distribución", `NoticiasController::OPCION_CORREOS_DISTRIBUCION`). Si vuelves a
+  encontrar un id de opción que no cuadra con lo documentado acá, sospecha primero de
+  este mismo patrón (migraciones legacy re-corridas sobre un dump importado) antes de
+  asumir que la doc está desactualizada.
 
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 
