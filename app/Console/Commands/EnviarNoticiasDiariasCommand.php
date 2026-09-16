@@ -10,7 +10,7 @@ class EnviarNoticiasDiariasCommand extends Command
 {
     protected $signature = 'noticias:enviar-diarias';
 
-    protected $description = 'Genera las felicitaciones automáticas de cumpleaños y envía por correo el mensaje general y los cumpleaños programados de hoy (ver NoticiasService::enviarPendientesDelDia)';
+    protected $description = 'Envía por correo las noticias programadas de tipo cumpleaños cuya fecha es hoy (ver NoticiasService::enviarPendientesDelDia)';
 
     public function handle(NoticiasService $noticiasService, CumpleanosService $cumpleanosService): int
     {
