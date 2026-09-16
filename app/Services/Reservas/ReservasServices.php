@@ -525,14 +525,6 @@ class ReservasServices extends Service
                 ->orderBy('hora_reserva')
                 ->paginate($perpage);
 
-            if ($reservas->isEmpty()) {
-                return [
-                    'error' => false,
-                    'message' => 'No se encontraron reservas con los filtros indicados.',
-                    'data' => []
-                ];
-            }
-            
             return [
                 'error' => false,
                 'message' => 'Se obtuvieron correctamente las reservas.',

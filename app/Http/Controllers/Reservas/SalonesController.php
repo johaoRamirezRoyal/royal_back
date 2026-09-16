@@ -43,6 +43,22 @@ class SalonesController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/salones/select
+     * Listado liviano (solo id + nombre, salones activos) para poblar cualquier select de
+     * salón — a diferencia de listarSalones(), no trae portatil/sonido porque quien solo
+     * necesita el nombre para mostrarlo (ej. un filtro) no debería cargar esos campos.
+     * Lectura pública, igual que listarSalones/listarHoras: reservar es de acceso general.
+     */
+    public function salonesSelect()
+    {
+        return $this->apiResponse([
+            'error' => false,
+            'message' => 'Salones obtenidos correctamente.',
+            'data' => Salones::activo()->orderBy('nombre')->get(['id', 'nombre']),
+        ]);
+    }
+
     public function crearSalon(SalonRequest $request)
     {
         if ($rechazo = $this->sinAcceso($request)) {
@@ -123,13 +139,13 @@ class SalonesController extends Controller
     /**
      * Ventana de anticipación (días) para poder reservar — editable acá para no tocar el
      * servidor, mismo patrón que InstitucionAdminController::configuracion()/actualizarConfiguracion().
+     * Lectura pública para cualquier autenticado (igual que listarSalones/listarHoras):
+     * CreateReservaModal la necesita para calcular el rango de fechas reservable, y
+     * reservar es de acceso general — solo actualizarConfiguracion() queda tras la
+     * opción 40.
      */
-    public function configuracion(Request $request)
+    public function configuracion()
     {
-        if ($rechazo = $this->sinAcceso($request)) {
-            return $rechazo;
-        }
-
         return $this->apiResponse([
             'error' => false,
             'message' => 'Configuración obtenida correctamente.',

@@ -22,8 +22,13 @@ class ConfiguracionReservas extends Model
         'dias_max_anticipacion' => 'integer',
     ];
 
+    /**
+     * Fila singleton — `firstOrCreate` en vez de `findOrFail` porque el `id=1` insertado
+     * por la migración de creación no llega en entornos donde esa migración ya estaba
+     * marcada como ejecutada antes de agregarle el `insert` (no vuelve a correr).
+     */
     public static function actual(): self
     {
-        return self::findOrFail(self::ID_CONFIG);
+        return self::firstOrCreate(['id' => self::ID_CONFIG]);
     }
 }

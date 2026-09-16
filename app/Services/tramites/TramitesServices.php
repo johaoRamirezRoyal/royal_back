@@ -227,7 +227,11 @@ class TramitesServices
     {
         $tipo = $tramite->tipo?->nombre ?? 'Trámite';
         $nombreCompleto = trim("{$solicitante->nombre} {$solicitante->apellido}");
-        $contenido = "El usuario {$nombreCompleto} (documento {$solicitante->documento}) ha solicitado el trámite #{$tramite->id} ({$tipo}).";
+        $fecha = $tramite->fechareg?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i');
+        $contenido = "El usuario {$nombreCompleto} ha solicitado un trámite: {$tipo}\n"
+            . "Fecha: {$fecha}\n"
+            . "Documento: {$solicitante->documento}\n"
+            . "Trámite: {$tipo}";
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
             config('gestionHumana.correo_notificacion', []),
@@ -239,16 +243,38 @@ class TramitesServices
 
     private function notificarCambioEstado(Tramite $tramite): void
     {
-        $correo = $tramite->usuario?->correo;
+        $solicitante = $tramite->usuario;
 
-        if (!$correo) {
+        $destinatarios = array_values(array_unique(array_filter(array_merge(
+            config('gestionHumana.correo_notificacion', []),
+            [$solicitante->correo]
+        ))));
+
+        if (!$destinatarios) {
             return;
         }
 
-        $estado = self::ESTADOS[$tramite->estado] ?? 'actualizado';
-        $contenido = "Tu trámite #{$tramite->id} ({$tramite->tipo?->nombre}) ha sido {$estado}."
-            . ($tramite->estado === 2 && $tramite->motivo_rechazo ? " Motivo: {$tramite->motivo_rechazo}" : '');
+        $nombreCompleto = trim("{$solicitante->nombre} {$solicitante->apellido}");
 
-        $this->mailService->sendGeneric($correo, "Trámite o servicio - {$estado}", $contenido);
+        $tipo = $tramite->tipo?->nombre ?? 'Trámite';
+
+        $estado = self::ESTADOS[$tramite->estado] ?? 'Actualizado';
+
+        $fechaSolicitud = $tramite->fechareg?->format('d/m/Y H:i') ?? '';
+        
+        $fechaEdit = $tramite->fecha_edit?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i');
+
+        $contenido = "El trámite del usuario {$nombreCompleto} ha sido actualizado: {$tipo}\n"
+            . "Fecha de solicitud: {$fechaSolicitud}\n"
+            . "Documento: {$solicitante->documento}\n"
+            . "Trámite: {$tipo}\n"
+            . "Estado: {$estado}\n"
+            . "Fecha de actualización: {$fechaEdit}";
+
+        if ($tramite->estado === 2 && $tramite->motivo_rechazo) {
+            $contenido .= "\nMotivo del rechazo: {$tramite->motivo_rechazo}";
+        }
+
+        $this->mailService->sendGeneric($destinatarios, "Trámite o servicio - {$estado}", $contenido);
     }
 }
