@@ -3,6 +3,7 @@
 namespace App\Services\Prestamos;
 
 use App\Models\Inventario\Inventario;
+use App\Models\Inventario\InventarioLog;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Reservas\Reservas;
 use App\Services\Service;
@@ -11,7 +12,20 @@ use Illuminate\Support\Facades\DB;
 
 class PrestamosService extends Service
 {
-
+    // Mismo registro que InventarioServices::registrarLog — los cambios de estado por
+    // préstamo (8 = Prestado, 1 = devuelto/Asignado) no pasaban por ahí y quedaban fuera
+    // del historial de inventario (`inventario_log`).
+    public function registrarLog(Inventario $inventario, int $estado, ?int $idUser): void
+    {
+        InventarioLog::create([
+            'id_inventario' => $inventario->id,
+            'id_user' => $idUser,
+            'id_area' => $inventario->id_area,
+            'id_log' => $idUser,
+            'estado' => $estado,
+            'id_super_empresa' => null,
+        ]);
+    }
 
     /**
      * Método para agregar o prestar un elemento del inventario.
@@ -51,6 +65,7 @@ class PrestamosService extends Service
                     'estado' => 8, // Prestado
                     'id_user' => $data['id_user_prestamo'],
                 ]);
+                $this->registrarLog($inventario, 8, $data['id_user_entrega'] ?? $data['id_user_prestamo']);
 
                 return [
                     'error' => false,
@@ -111,6 +126,7 @@ class PrestamosService extends Service
                         'estado'  => 1,
                         'id_user' => $prestamo->id_user_entrega,
                     ]);
+                    $this->registrarLog($prestamo->inventario, 1, $data['id_user_recibe']);
                 }
 
                 $prestamo->refresh();
@@ -216,6 +232,7 @@ class PrestamosService extends Service
             'estado' => 8,
             'id_user' => $data['id_user_prestamo']
         ]);
+        $this->registrarLog($inventario, 8, $data['id_user_entrega'] ?? $data['id_user_prestamo']);
 
         return $prestamo;
     }

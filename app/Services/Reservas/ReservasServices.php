@@ -280,6 +280,7 @@ class ReservasServices extends Service
                 foreach ($prestamos as $prestamo) {
                     $prestamo->update(['fecha_devolucion' => now()]);
                     $prestamo->inventario()->update(['estado' => 1]);
+                    $this->prestamosService->registrarLog($prestamo->inventario, 1, Auth::id());
                 }
 
                 $reserva->update(['confirmado' => 1]);
@@ -307,6 +308,7 @@ class ReservasServices extends Service
                 foreach ($prestamos as $prestamo) {
                     $prestamo->update(['fecha_devolucion' => now()]);
                     $prestamo->inventario()->update(['estado' => 1]);
+                    $this->prestamosService->registrarLog($prestamo->inventario, 1, Auth::id());
                 }
 
                 DB::commit();
@@ -415,6 +417,7 @@ class ReservasServices extends Service
                     foreach ($prestamosActivos as $prestamo) {
                         $prestamo->update(['fecha_devolucion' => now()]);
                         $prestamo->inventario()->update(['estado' => 1]);
+                        $this->prestamosService->registrarLog($prestamo->inventario, 1, Auth::id());
                     }
                     $yaAsignados = 0;
                 } else {
@@ -425,6 +428,7 @@ class ReservasServices extends Service
                     foreach ($prestamosActivos->take($yaAsignados - $solicitado) as $prestamo) {
                         $prestamo->update(['fecha_devolucion' => now()]);
                         $prestamo->inventario()->update(['estado' => 1]);
+                        $this->prestamosService->registrarLog($prestamo->inventario, 1, Auth::id());
                     }
                 } elseif ($solicitado > $yaAsignados) {
                     $faltan = $solicitado - $yaAsignados;
