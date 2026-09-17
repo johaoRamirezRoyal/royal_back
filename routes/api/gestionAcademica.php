@@ -103,13 +103,21 @@ Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambi
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias?id_esquema=3&id_dia_semana=2&disponible=1&id_carga_academica=5
 'disponible=1' filtra solo las franjas que aún no tienen un horario de clase asignado.
-Si además se envía 'id_carga_academica', solo se excluyen las franjas ya asignadas a ESA carga académica
-(las asignadas a otras cargas académicas se siguen mostrando como disponibles).
+Si además se envía 'id_carga_academica', solo se excluyen las franjas donde YA hay clase
+para el CURSO o el DOCENTE de esa carga (las ocupadas por un curso/docente distinto se
+siguen mostrando como disponibles).
+
+Cuando la carga académica todavía no existe (docente reservando una combinación
+curso+asignatura por primera vez — ver DocenteHorarioService::reservar, que la crea recién
+al confirmar), se puede enviar 'id_curso' y/o 'id_docente' sueltos en su lugar, con el mismo
+efecto de exclusión por curso/docente. Sin ninguno de los tres ('id_carga_academica',
+'id_curso', 'id_docente'), el filtro cae al modo más restrictivo: excluye cualquier franja
+ocupada por cualquier curso/docente (franjas compartidas por todo el colegio, ej. recesos).
 
 En vez de 'id_esquema' también se puede enviar 'id_curso' + 'id_anio_escolar' — el backend
 resuelve el esquema a partir del nivel de ese curso (usado por la pestaña "Horario" y por
 el autoservicio de horario del docente, que solo conocen el curso, no el esquema):
-http://localhost:8000/api/gestion-academica/franjas-horarias?id_curso=1&id_anio_escolar=2&disponible=1
+http://localhost:8000/api/gestion-academica/franjas-horarias?id_curso=1&id_anio_escolar=2&disponible=1&id_docente=7
  */
 Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
 

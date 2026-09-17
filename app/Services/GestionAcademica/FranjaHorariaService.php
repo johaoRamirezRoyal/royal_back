@@ -59,7 +59,8 @@ class FranjaHorariaService extends Service
         ?int $id_anio_escolar = null,
         ?int $id_dia_semana = null,
         ?bool $disponible = null,
-        ?int $id_carga_academica = null
+        ?int $id_carga_academica = null,
+        ?int $id_docente = null
     ) {
         try {
             $idEsquemaResuelto = $this->resolverIdEsquema($id_esquema, $id_curso, $id_anio_escolar);
@@ -87,28 +88,41 @@ class FranjaHorariaService extends Service
                 )->where('id_esquema', $idEsquemaResuelto)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
-                })->when($disponible, function ($query) use ($id_carga_academica) {
+                })->when($disponible, function ($query) use ($id_carga_academica, $id_curso, $id_docente) {
 
                     // No asignable (receso, almuerzo, etc. marcados directo en la franja):
                     // nunca aparece como disponible, sin importar la carga académica.
                     $query->where('asignable', true);
 
-                    // Sin id_carga_academica: excluye franjas ocupadas por cualquier clase.
-                    // Con id_carga_academica: excluye las franjas donde YA hay clase para
-                    // ese CURSO (con cualquier docente) o para ese DOCENTE (en cualquier
-                    // curso), ya que ninguno de los dos puede estar en dos clases a la vez.
-                    // Ocupado por otro curso con otro docente sigue apareciendo como libre.
+                    // Sin ningún dato de curso/docente: excluye franjas ocupadas por
+                    // cualquier clase (modo "libre para todo el colegio"). Con curso y/o
+                    // docente (ya sea vía id_carga_academica, si esa carga ya existe, o vía
+                    // id_curso/id_docente sueltos — caso del autoservicio del docente antes
+                    // de que su carga académica exista, ver DocenteHorarioService::reservar,
+                    // que la crea recién al confirmar): excluye las franjas donde YA hay
+                    // clase para ese CURSO (con cualquier docente) o para ese DOCENTE (en
+                    // cualquier curso), ya que ninguno de los dos puede estar en dos clases a
+                    // la vez. Ocupado por otro curso con otro docente sigue apareciendo libre.
                     $carga = $id_carga_academica
                         ? CargaAcademica::with('docenteAsignatura')->find($id_carga_academica)
                         : null;
 
-                    $query->whereDoesntHave('horarioClase', function ($q) use ($carga) {
-                        $q->when($carga, function ($q) use ($carga) {
-                            $q->whereHas('cargaAcademica', function ($q2) use ($carga) {
-                                $q2->where('id_curso', $carga->id_curso)
-                                    ->orWhereHas('docenteAsignatura', function ($q3) use ($carga) {
-                                        $q3->where('id_docente', $carga->docenteAsignatura?->id_docente);
-                                    });
+                    $cursoScope = $carga->id_curso ?? $id_curso;
+                    $docenteScope = $carga?->docenteAsignatura?->id_docente ?? $id_docente;
+
+                    $query->whereDoesntHave('horarioClase', function ($q) use ($cursoScope, $docenteScope) {
+                        $q->when($cursoScope !== null || $docenteScope !== null, function ($q) use ($cursoScope, $docenteScope) {
+                            $q->whereHas('cargaAcademica', function ($q2) use ($cursoScope, $docenteScope) {
+                                $q2->where(function ($q3) use ($cursoScope, $docenteScope) {
+                                    if ($cursoScope !== null) {
+                                        $q3->orWhere('id_curso', $cursoScope);
+                                    }
+                                    if ($docenteScope !== null) {
+                                        $q3->orWhereHas('docenteAsignatura', function ($q4) use ($docenteScope) {
+                                            $q4->where('id_docente', $docenteScope);
+                                        });
+                                    }
+                                });
                             });
                         });
                     });

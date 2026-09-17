@@ -241,8 +241,9 @@ class GestionAcademicaController extends Controller
         $id_dia_semana = $request->input('id_dia_semana');
         $disponible = $request->boolean('disponible');
         $id_carga_academica = $request->input('id_carga_academica');
+        $id_docente = $request->input('id_docente');
 
-        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_esquema, $id_curso, $id_anio_escolar, $id_dia_semana, $disponible, $id_carga_academica));
+        return $this->apiResponse($this->service->franjaHoraria()->verFranjasHorarias($id_esquema, $id_curso, $id_anio_escolar, $id_dia_semana, $disponible, $id_carga_academica, $id_docente));
     }
 
     public function listarEsquemasHorario(Request $request)
