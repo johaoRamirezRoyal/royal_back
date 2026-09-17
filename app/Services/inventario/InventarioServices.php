@@ -1383,6 +1383,13 @@ class InventarioServices
                     // COALESCE con observacion: soluciones migradas del legacy no siempre
                     // traen descripcion, pero sí observacion con el mismo texto.
                     DB::raw("(SELECT COALESCE(s.descripcion, s.observacion) FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3 ORDER BY s.id DESC LIMIT 1) AS respuesta"),
+                    // Fecha de la solución — junto con fechareg (fecha del reporte), permite
+                    // calcular el tiempo de respuesta como hacía el historial legacy
+                    // (`historial/index.php`: diff entre fecha de reporte y fecha_respuesta).
+                    // fecha_respuesta, no fechareg: es la columna que
+                    // solucionarReporteInventario() siempre rellena (fechareg de la fila de
+                    // solución no se setea salvo en la rama de mantenimiento preventivo).
+                    DB::raw("(SELECT s.fecha_respuesta FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3 ORDER BY s.id DESC LIMIT 1) AS fecha_solucion"),
                     DB::raw("CONCAT(u.nombre, ' ', u.apellido) AS nom_usuario"),
                     DB::raw("CONCAT(ae.anio_inicio, ' - ', ae.anio_fin) AS anio_escolar"),
                     'c.tipo_categoria',
@@ -1760,6 +1767,7 @@ class InventarioServices
             }
 
             $creados = [];
+            $inventariosActualizados = [];
 
             DB::transaction(function () use (
                 $inventarios,
@@ -1771,7 +1779,8 @@ class InventarioServices
                 $periodo,
                 $conSolucion,
                 $id_tecnico,
-                &$creados
+                &$creados,
+                &$inventariosActualizados
             ) {
                 $inicio = Carbon::parse($fecha_inicio);
                 $fin = Carbon::parse($fecha_fin);
@@ -1799,6 +1808,7 @@ class InventarioServices
                         'estado' => 6,
                         'observacion' => $descripcion,
                     ]);
+                    $inventariosActualizados[] = $inventario;
 
                     if ($conSolucion) {
                         Reportes::create([
@@ -1820,6 +1830,11 @@ class InventarioServices
 
                     $creados[] = ['inventario' => $inventario, 'id_resp' => $idRespReporte, 'fecha' => $fecha];
                 }
+
+                // Sin esto, el cambio a estado 6 (mantenimiento preventivo) de arriba no
+                // quedaba en inventario_log — el historial de inventario nunca reflejaba que
+                // estos ítems entraron a mantenimiento.
+                $this->registrarLog($inventariosActualizados, 6, $id_log);
             });
 
             $this->notificarMantenimientoProgramado($creados, $descripcion, $fecha_inicio, $fecha_fin);
