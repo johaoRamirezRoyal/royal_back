@@ -12,6 +12,11 @@ class BannerInformativo extends Model
 
     public const TAMANOS = ['sm', 'md', 'lg', 'xl'];
 
+    /** Usado por BannerInformativoService::enviarCorreo cuando `destinatario_correo` queda
+     * vacío — alias de distribución del lado del proveedor de correo, no una lista de
+     * usuarios individuales (ver migración add_correo_modal_to_banner_informativo_table). */
+    public const DESTINATARIO_CORREO_DEFAULT = 'all@royalschool.edu.co';
+
     /** Transversal en `admin_management` (ver config/database.php), igual que MarcaDominio/
      * LlaveMaestra/LogDominio — sin esto, sigue la connection activa del Super Admin
      * (SwitchActiveConnection) o del tenant de turno, y falla en cualquiera que no sea la
@@ -29,12 +34,17 @@ class BannerInformativo extends Model
         'tamano',
         'activo',
         'expira_en',
+        'enviar_correo',
+        'destinatario_correo',
+        'mostrar_modal',
         'actualizado_por',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
         'expira_en' => 'datetime',
+        'enviar_correo' => 'boolean',
+        'mostrar_modal' => 'boolean',
     ];
 
     public static function actual(): self

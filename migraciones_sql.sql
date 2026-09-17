@@ -345,3 +345,17 @@ INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VAL
     (@id_config_permisos, 2, 1, NOW());
 
 -- Id real en esta BD tras correr la migración: id_config_permisos = 121.
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_17_120000_add_correo_modal_to_banner_informativo_table.php
+--
+-- Envío del banner por correo (enviar_correo + destinatario_correo, un solo
+-- destinatario tipo alias de distribución, ej. "all@royalschool.edu.co" —
+-- ver BannerInformativoService::enviarCorreo) y modal automático
+-- (mostrar_modal, ver InformativeBannerModal en el frontend). Tabla en la
+-- connection `admin_management`.
+-- ---------------------------------------------------------------------
+ALTER TABLE `banner_informativo` ADD COLUMN `enviar_correo` TINYINT(1) NOT NULL DEFAULT 0 AFTER `expira_en`;
+ALTER TABLE `banner_informativo` ADD COLUMN `destinatario_correo` VARCHAR(190) NULL AFTER `enviar_correo`;
+ALTER TABLE `banner_informativo` ADD COLUMN `mostrar_modal` TINYINT(1) NOT NULL DEFAULT 0 AFTER `destinatario_correo`;

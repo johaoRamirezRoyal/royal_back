@@ -38,6 +38,9 @@ class BannerInformativoController extends Controller
             'tamano' => 'required|string|in:' . implode(',', BannerInformativo::TAMANOS),
             'activo' => 'required|boolean',
             'expira_en' => 'nullable|date',
+            'enviar_correo' => 'nullable|boolean',
+            'destinatario_correo' => 'nullable|email|max:190',
+            'mostrar_modal' => 'nullable|boolean',
         ]);
 
         if ($request->boolean('activo') && !trim((string) $request->input('mensaje'))) {
@@ -51,6 +54,8 @@ class BannerInformativoController extends Controller
         // BannerInformativoController::obtener (público) queden en el mismo formato.
         $dominio = $request->filled('dominio') ? mb_strtolower(trim((string) $request->input('dominio'))) : null;
 
+        $enviarCorreo = $request->boolean('enviar_correo');
+
         $banner = $this->service->actualizar(
             $request->input('mensaje'),
             $dominio,
@@ -58,9 +63,38 @@ class BannerInformativoController extends Controller
             $request->input('tamano'),
             $request->boolean('activo'),
             $request->input('expira_en'),
+            $enviarCorreo,
+            $request->filled('destinatario_correo') ? trim((string) $request->input('destinatario_correo')) : null,
+            $request->boolean('mostrar_modal'),
             $request->user()->id_user,
         );
 
-        return $this->success('Banner informativo actualizado correctamente', $banner);
+        // Después de guardar (no antes, ver BannerInformativoService::actualizar): así el
+        // correo sale con el mensaje/destinatario que se acaban de guardar, no los viejos.
+        // Si el guardado en sí funcionó pero el correo falla, igual se devuelve 200 con el
+        // banner ya actualizado — el mensaje solo avisa que el envío no salió, no revierte
+        // el guardado (MailService::sendGeneric ya deja el detalle en los logs).
+        $mensaje = 'Banner informativo actualizado correctamente';
+
+        if ($enviarCorreo) {
+            $resultadoCorreo = $this->service->enviarCorreo();
+            $mensaje = $resultadoCorreo['error']
+                ? 'Banner guardado, pero el correo no se pudo enviar: ' . $resultadoCorreo['message']
+                : 'Banner guardado y correo enviado correctamente';
+        }
+
+        return $this->success($mensaje, $banner);
+    }
+
+    /** Envía el mensaje ya guardado del banner por correo — ver BannerInformativoService::enviarCorreo. */
+    public function enviarCorreo()
+    {
+        $resultado = $this->service->enviarCorreo();
+
+        if ($resultado['error']) {
+            return $this->error($resultado['message'], 422);
+        }
+
+        return $this->success($resultado['message'], $resultado['data']);
     }
 }

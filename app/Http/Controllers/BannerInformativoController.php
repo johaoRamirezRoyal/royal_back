@@ -52,6 +52,7 @@ class BannerInformativoController extends Controller
             'variante' => $banner->variante,
             'tamano' => $banner->tamano,
             'expira_en' => $banner->expira_en,
+            'mostrar_modal' => $banner->mostrar_modal,
         ]);
     }
 }
