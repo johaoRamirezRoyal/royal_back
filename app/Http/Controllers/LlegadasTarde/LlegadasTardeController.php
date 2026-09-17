@@ -79,18 +79,24 @@ class LlegadasTardeController extends Controller
             ->all();
     }
 
-    /** Ambas acciones "operativas" (reenviar correo, editar observación) no exigen la
-     * opción 99/101 — pero para un perfil en autoservicio (Acudiente o Docente sin
-     * acceso completo) sí hay que verificar que la llegada tarde puntual esté dentro de
-     * su scope (sus hijos / los alumnos de sus cursos), o cualquiera de ellos podría
-     * tocar el registro de un estudiante ajeno solo conociendo su ID. Perfiles con
-     * acceso al módulo por opción (99 o 101) no se tocan, ya están cubiertos por tener
-     * acceso al módulo en primer lugar. */
+    /** "Operativas" (reenviar correo, editar observación) no exigen la opción 99/101 — el
+     * Acudiente sí puede hacerlas sobre sus propios hijos (por eso valida scope en vez de
+     * bloquear siempre). El Docente en autoservicio (sin acceso completo) es de SOLO
+     * LECTURA, sin excepción: puede ver el historial completo de sus alumnos (ver el
+     * drill-down por id_alumno en obtenerLlegadasTarde) pero no tocar ningún campo ni
+     * reenviar correo, ni siquiera de sus propios alumnos — a diferencia del Acudiente,
+     * que si conserva esa capacidad operativa sobre sus hijos. Perfiles con acceso al
+     * módulo por opción (99 o 101) no se tocan, ya están cubiertos por tener acceso al
+     * módulo en primer lugar. */
     private function bloqueadoParaAutoservicio(Request $request, int $id): bool
     {
         $perfil = $request->user()->perfil;
 
-        if ($perfil !== self::PERFIL_ACUDIENTE && !($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request))) {
+        if ($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request)) {
+            return true;
+        }
+
+        if ($perfil !== self::PERFIL_ACUDIENTE) {
             return false;
         }
 
@@ -100,11 +106,7 @@ class LlegadasTardeController extends Controller
             return true;
         }
 
-        $scope = $perfil === self::PERFIL_ACUDIENTE
-            ? $this->idsHijosDe($request)
-            : $this->idsAlumnosDeCursosDocente($request);
-
-        return !in_array($idAlumno, $scope, true);
+        return !in_array($idAlumno, $this->idsHijosDe($request), true);
     }
 
     public function agregarLlegadaTarde(LlegadaTardeRequest $request){
@@ -141,14 +143,29 @@ class LlegadasTardeController extends Controller
 
         // Autoservicio del Docente (sin opción 99, ver PERFIL_DOCENTE arriba): mismo
         // trato que el Acudiente en cuanto al scope (alumnos de SUS cursos en vez de sus
-        // hijos), pero además solo del día actual — a diferencia del Acudiente, a quien sí
-        // le sirve ver el historial completo de sus hijos. Mismo criterio de "solo hoy"
-        // que el acceso restringido (opción 101) más abajo: se ignora cualquier fecha que
-        // mande el cliente. Un Docente que además tenga la opción 99 (ej. también
-        // Coordinador) no entra acá, cae a la rama general de abajo sin scope ni límite de
-        // fecha.
+        // hijos), pero el listado general queda acotado al día actual — a diferencia del
+        // Acudiente, a quien sí le sirve ver el historial completo de sus hijos de entrada.
+        // Mismo criterio de "solo hoy" que el acceso restringido (opción 101) más abajo:
+        // se ignora la fecha que mande el cliente para el listado general. Un Docente que
+        // además tenga la opción 99 (ej. también Coordinador) no entra acá, cae a la rama
+        // general de abajo sin scope ni límite de fecha.
         if ($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request)) {
             $idsAlumnos = $this->idsAlumnosDeCursosDocente($request);
+
+            $idAlumnoSolicitado = $request->input('id_alumno');
+
+            // Drill-down de UN alumno puntual (modal de historial completo, ver
+            // StudentLateArrivalsModal — el docente puede abrirlo en solo lectura desde
+            // "Mis llegadas tarde" para revisar todo el historial si lo necesita, aunque
+            // el listado general se quede en hoy): se valida que el alumno esté dentro de
+            // SUS cursos antes de levantar la restricción de fecha — nunca se confía en el
+            // id_alumno del cliente sin verificar el scope primero, igual que
+            // bloqueadoParaAutoservicio() para las acciones operativas.
+            if ($idAlumnoSolicitado !== null && in_array((int) $idAlumnoSolicitado, $idsAlumnos, true)) {
+                $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, (int) $idAlumnoSolicitado, null);
+
+                return $this->apiResponse($response);
+            }
 
             $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, null, now()->toDateString(), $idsAlumnos);
 
