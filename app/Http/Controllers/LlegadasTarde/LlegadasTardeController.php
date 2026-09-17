@@ -140,13 +140,17 @@ class LlegadasTardeController extends Controller
         }
 
         // Autoservicio del Docente (sin opción 99, ver PERFIL_DOCENTE arriba): mismo
-        // trato que el Acudiente, pero el scope son los alumnos de SUS cursos en vez de
-        // sus hijos. Un Docente que además tenga la opción 99 (ej. también Coordinador)
-        // no entra acá, cae a la rama general de abajo sin scope.
+        // trato que el Acudiente en cuanto al scope (alumnos de SUS cursos en vez de sus
+        // hijos), pero además solo del día actual — a diferencia del Acudiente, a quien sí
+        // le sirve ver el historial completo de sus hijos. Mismo criterio de "solo hoy"
+        // que el acceso restringido (opción 101) más abajo: se ignora cualquier fecha que
+        // mande el cliente. Un Docente que además tenga la opción 99 (ej. también
+        // Coordinador) no entra acá, cae a la rama general de abajo sin scope ni límite de
+        // fecha.
         if ($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request)) {
             $idsAlumnos = $this->idsAlumnosDeCursosDocente($request);
 
-            $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, null, null, $idsAlumnos);
+            $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, null, now()->toDateString(), $idsAlumnos);
 
             return $this->apiResponse($response);
         }
