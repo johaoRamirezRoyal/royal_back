@@ -3,6 +3,7 @@
 namespace App\Models\Inventario;
 
 use App\Models\AnioEscolar\Anio;
+use App\Models\AnioEscolar\Periodo;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
@@ -34,5 +35,12 @@ class InventarioCheck extends Model
 
     public function responsable(){
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
+    }
+
+    // Nombre distinto de la columna `periodo` (que guarda el id real de `periodos`, no un
+    // ordinal — ver ReportarInventarioRequest) a propósito: un accessor y una relación con
+    // el mismo nombre que su propia columna se pisan entre sí en Eloquent.
+    public function periodoInfo(){
+        return $this->belongsTo(Periodo::class, 'periodo', 'id');
     }
 }

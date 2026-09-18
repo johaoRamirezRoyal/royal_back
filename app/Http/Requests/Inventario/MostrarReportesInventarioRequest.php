@@ -19,9 +19,10 @@ class MostrarReportesInventarioRequest extends FormRequest
             'id_inventario.*' => ['integer', Rule::exists('inventario', 'id')],
             'id_user' => ['nullable', 'integer', Rule::exists('usuarios', 'id_user')],
             'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
-            'id_periodo' => ['nullable', 'integer'],
+            // Id real de una fila de `periodos` — ver ReportarInventarioRequest.
+            'id_periodo' => ['nullable', 'integer', Rule::exists('periodos', 'id')],
             'id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
-            'estado_solucion' => ['nullable', 'string', 'in:pendiente,solucionado'],
+            'estado_solucion' => ['nullable', 'string', 'in:pendiente,solucionado,todos'],
             'search' => ['nullable', 'string', 'max:100'],
             'estado' => ['nullable', 'integer'],
             'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],

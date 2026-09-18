@@ -20,7 +20,8 @@ class SolucionarReporteInventarioRequest extends FormRequest
             'fecha_respuesta' => ['nullable', 'date'],
             'descripcion' => ['required', 'string', 'max:500'],
             'id_anio' => ['nullable', 'integer', Rule::exists('anio_escolar', 'id')],
-            'id_periodo' => ['nullable', 'integer'],
+            // Id real de una fila de `periodos` — ver ReportarInventarioRequest.
+            'id_periodo' => ['nullable', 'integer', Rule::exists('periodos', 'id')],
         ];
     }
 
@@ -45,6 +46,7 @@ class SolucionarReporteInventarioRequest extends FormRequest
             'id_anio.exists' => 'El año escolar no existe',
 
             'id_periodo.integer' => 'El periodo debe ser un número entero',
+            'id_periodo.exists' => 'El periodo no existe',
         ];
     }
 

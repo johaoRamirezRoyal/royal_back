@@ -405,7 +405,8 @@ class InventariosController extends Controller
             "fecha_fin" => "required|date|after_or_equal:fecha_inicio",
             "descripcion" => "required|string",
             "id_anio" => "required|integer|exists:anio_escolar,id",
-            "periodo" => "required|integer|in:1,2",
+            // El id real de una fila de `periodos`, igual que en ReportarInventarioRequest.
+            "periodo" => "required|integer|exists:periodos,id",
             "id_log" => "required|integer|exists:usuarios,id_user",
             "con_solucion" => "boolean",
             "id_tecnico" => "nullable|integer|exists:usuarios,id_user",

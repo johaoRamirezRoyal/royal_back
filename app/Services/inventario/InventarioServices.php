@@ -24,7 +24,6 @@ class InventarioServices
 {
     public function __construct(
         private MailService $mailService,
-        private \App\Services\AnioEscolar\PeriodoServices $periodoServices,
     ) {}
 
     /**
@@ -349,7 +348,34 @@ class InventarioServices
                         // Áreas Comunes: último check semestral registrado (migración de
                         // chek_zonas) — ver InventarioServices::registrarCheckInventario.
                         DB::raw("(SELECT fechareg FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check"),
-                        DB::raw("(SELECT periodo FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check_periodo")
+                        // `inventario_check.periodo` guarda el id real de `periodos` (no un
+                        // ordinal) — se resuelve acá al `numero` legible ("I", "II"...) para
+                        // no mostrar el id crudo en el frontend.
+                        DB::raw("(SELECT p.numero FROM inventario_check ic JOIN periodos p ON p.id = ic.periodo WHERE ic.id_inventario = inventario.id ORDER BY ic.id DESC LIMIT 1) AS ultimo_check_periodo"),
+                        DB::raw("(SELECT CONCAT(ae.anio_inicio, ' — ', ae.anio_fin) FROM inventario_check ic JOIN anio_escolar ae ON ae.id = ic.id_anio WHERE ic.id_inventario = inventario.id ORDER BY ic.id DESC LIMIT 1) AS ultimo_check_anio"),
+                        // Ids crudos (id_anio real, periodos.id real) del último check —
+                        // para que el frontend pueda comparar exacto contra el año/periodo
+                        // elegido y decidir si "ya tiene check EN ESE año/periodo" (no
+                        // "alguna vez tuvo un check"), sin parsear los textos ya formateados
+                        // de arriba.
+                        DB::raw("(SELECT id_anio FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check_anio_id"),
+                        DB::raw("(SELECT periodo FROM inventario_check WHERE id_inventario = inventario.id ORDER BY id DESC LIMIT 1) AS ultimo_check_periodo_id"),
+                        // Áreas Comunes: reporte correctivo y mantenimiento preventivo
+                        // pendientes (sin solución), cada uno INDEPENDIENTE de
+                        // `inventario.estado` — un ítem puede tener un mantenimiento
+                        // pendiente (tipo_reporte=2) y, aparte, quedar reportado después
+                        // (tipo_reporte=1), sin que reportarlo cancele el mantenimiento que
+                        // ya tenía. `inventario.estado`/`observacion` solo reflejan la
+                        // ÚLTIMA acción, por eso hace falta ir directo a `reportes` para
+                        // saber si hay uno, el otro, o ambos a la vez — mismo criterio que
+                        // `$idsConPendiente` en registrarCheckInventario.
+                        DB::raw("(SELECT descripcion FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 1 AND r.estado = 2 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS reporte_pendiente"),
+                        DB::raw("(SELECT descripcion FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 2 AND r.estado = 6 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS mantenimiento_pendiente"),
+                        // Id real de la fila de `reportes` de cada pendiente — lo necesita
+                        // solucionarReporte() (POST /api/inventario/reportes/solucionar) para
+                        // saber CUÁL reporte se está resolviendo desde la tarjeta.
+                        DB::raw("(SELECT id FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 1 AND r.estado = 2 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS reporte_pendiente_id"),
+                        DB::raw("(SELECT id FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 2 AND r.estado = 6 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS mantenimiento_pendiente_id")
                     )
                     ->orderByDesc('inventario.id')
                     ->paginate($perPage);
@@ -637,6 +663,9 @@ class InventarioServices
                 ->with([
                     'anioEscolar:id,anio_inicio,anio_fin',
                     'responsable:id_user,nombre,apellido',
+                    // `periodo` es el id real de `periodos`, no un ordinal — se resuelve acá
+                    // al `numero` legible ("I", "II"...) para la hoja de vida.
+                    'periodoInfo:id,numero',
                 ])
                 ->orderByDesc('id')
                 ->get();
@@ -856,11 +885,10 @@ class InventarioServices
      * reporte original, crea una fila nueva con `id_reporte` apuntando de
      * vuelta; el original se queda en estado 2/6 para siempre, así que hay
      * que descartar los que ya tienen esa fila de solución, mismo criterio
-     * que ya usa `mostrarReportesDeInventario`), cuando ya se registró un
-     * check para ese mismo periodo, o cuando el ítem ya tiene el check del
-     * periodo actual hecho y el que se pide ahora NO es de un año anterior
-     * (una vez al día certificado el periodo vigente, solo se permite
-     * ponerse al día con años pasados, no repetir el actual ni adelantarse).
+     * que ya usa `mostrarReportesDeInventario`), o cuando ya se registró un
+     * check para ese mismo año Y ese mismo periodo puntual — un año puede
+     * tener varios checks, uno por periodo, sin restricción contra cuál sea
+     * el periodo institucional "vigente" en este momento.
      */
     public function registrarCheckInventario(array $ids, ?int $idAnio, ?int $periodo, int $idResponsable): array
     {
@@ -882,30 +910,13 @@ class InventarioServices
                 ->unique()
                 ->all();
 
-            // Periodo institucional vigente — para saber si lo que se está pidiendo
-            // ahora es "el periodo actual" (ya cubierto abajo) o un año anterior.
-            $periodoActivo = $this->periodoServices->resolverActivo();
-            $idAnioActivo = $periodoActivo?->id_anio;
-            $periodoActivoOrdinal = $periodoActivo ? $this->ordinalDePeriodo($periodoActivo->numero) : null;
-
-            $esAnioPasado = false;
-            if ($idAnio && $idAnioActivo && $idAnio !== $idAnioActivo) {
-                $anioInicioSolicitado = Anio::find($idAnio)?->anio_inicio;
-                $anioInicioActivo = Anio::find($idAnioActivo)?->anio_inicio;
-                $esAnioPasado = $anioInicioSolicitado !== null && $anioInicioActivo !== null
-                    && $anioInicioSolicitado < $anioInicioActivo;
-            }
-
-            $idsYaAlDiaPeriodoActual = [];
-            if ($idAnioActivo && $periodoActivoOrdinal && !$esAnioPasado) {
-                $idsYaAlDiaPeriodoActual = InventarioCheck::whereIn('id_inventario', $ids)
-                    ->where('id_anio', $idAnioActivo)
-                    ->where('periodo', $periodoActivoOrdinal)
-                    ->pluck('id_inventario')
-                    ->unique()
-                    ->all();
-            }
-
+            // `inventario_check.periodo`/`reportes.periodo` guardan el id real de la fila
+            // de `periodos` (no un ordinal) — ver ReportarInventarioRequest. Un mismo año
+            // puede tener varios checks, uno por periodo — el único duplicado real es el
+            // mismo año Y el mismo periodo (chequeado más abajo, `$yaChequeado`); no hay
+            // restricción contra el periodo institucional "vigente": si el año pedido
+            // todavía no tiene check para ESE periodo puntual, se deja crear sin importar
+            // cuál sea el periodo activo ahora mismo.
             foreach ($items as $item) {
                 if (in_array($item->id, $idsConPendiente)) {
                     $omitidos[] = [
@@ -926,15 +937,6 @@ class InventarioServices
                         'id' => $item->id,
                         'descripcion' => $item->descripcion,
                         'motivo' => 'Ya se registró un check en este periodo',
-                    ];
-                    continue;
-                }
-
-                if (!$esAnioPasado && in_array($item->id, $idsYaAlDiaPeriodoActual)) {
-                    $omitidos[] = [
-                        'id' => $item->id,
-                        'descripcion' => $item->descripcion,
-                        'motivo' => 'Ya tiene el check del periodo actual — solo se permiten checks de años pasados',
                     ];
                     continue;
                 }
@@ -962,30 +964,6 @@ class InventarioServices
                 'message' => $e->getMessage(),
             ];
         }
-    }
-
-    /**
-     * Espejo en PHP de `periodoOrdinal` (src/utils/labelPeriodo.ts en el frontend) —
-     * `periodos.numero` es texto libre, normalmente un romano ("I", "II"...), a veces
-     * ya un entero. Solo existe acá porque `registrarCheckInventario` necesita
-     * comparar contra el periodo vigente en el mismo formato ordinal que ya usa
-     * `inventario_check.periodo`/`reportes.periodo`.
-     */
-    private function ordinalDePeriodo(?string $numero): ?int
-    {
-        if ($numero === null) {
-            return null;
-        }
-
-        $romanos = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-        $trimmed = trim($numero);
-
-        if (ctype_digit($trimmed) && (int) $trimmed >= 1) {
-            return (int) $trimmed;
-        }
-
-        $idx = array_search(strtoupper($trimmed), $romanos, true);
-        return $idx !== false && $idx > 0 ? $idx : null;
     }
 
     /**
@@ -1218,10 +1196,13 @@ class InventarioServices
 
             $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
 
-                // 2 = ya reportado, 5 = descontinuado, 6 = mantenimiento preventivo
-                // pendiente — ninguno de los tres debería poder volver a reportarse.
+                // 2 = ya reportado, 5 = descontinuado — un ítem con mantenimiento
+                // preventivo pendiente (6) SÍ se puede reportar (ej. un daño nuevo,
+                // distinto del mantenimiento ya programado); reportarlo no lo toca, solo
+                // cambia inventario.estado a 2 y crea el reporte de daño aparte — mismo
+                // criterio que puedeReportar() en InventarioListado/parts/ItemsModal.tsx.
                 $inventario = Inventario::whereIn('id', $ids)
-                    ->whereNotIn('estado', [2, 5, 6])
+                    ->whereNotIn('estado', [2, 5])
                     ->get();
 
                 if ($inventario->isEmpty()) {
@@ -1303,7 +1284,14 @@ class InventarioServices
     ): array {
         try {
 
-            $esSolucionado = $estado_solucion === 'solucionado';
+            // 'todos' es un tercer modo (además de 'pendiente'/'solucionado') exclusivo del
+            // historial de inventario (/inventario/reportes): muestra el histórico completo
+            // (reportados y ya solucionados juntos), a diferencia de las bandejas de trabajo
+            // (reportado/mantenimiento pendiente), que siguen sin mandar `estado_solucion` y
+            // por lo tanto conservan el comportamiento por defecto ('pendiente').
+            $modoSolucion = $estado_solucion === 'solucionado'
+                ? 'solucionado'
+                : ($estado_solucion === 'todos' ? 'todos' : 'pendiente');
 
             $query = DB::table('inventario as iv')
                 ->join('reportes as rp', 'rp.id_inventario', '=', 'iv.id')
@@ -1312,7 +1300,12 @@ class InventarioServices
                 ->leftJoin('categoria as c', 'c.id', '=', 'iv.id_categoria')
                 ->leftJoin('anio_escolar as ae', 'ae.id', '=', 'rp.id_anio')
                 ->where('iv.activo', 1)
-                ->when($esSolucionado, function ($q) {
+                ->when($modoSolucion === 'todos', function ($q) {
+                    // Solo exige que sea el reporte original (no una fila de solución) — sin
+                    // filtrar por iv.estado ni por si ya tiene o no una solución asociada.
+                    $q->whereNull('rp.id_reporte');
+                })
+                ->when($modoSolucion === 'solucionado', function ($q) {
                     $q->whereNotIn('iv.estado', [4, 5])
                         ->whereNull('rp.id_reporte')
                         ->whereExists(function ($query) {
@@ -1321,7 +1314,8 @@ class InventarioServices
                                 ->whereColumn('rpe.id_reporte', 'rp.id')
                                 ->where('rpe.estado', 3);
                         });
-                }, function ($q) use ($estado, $tipo_reporte) {
+                })
+                ->when($modoSolucion === 'pendiente', function ($q) use ($estado, $tipo_reporte) {
                     // El estado real (2 para reportado, 6 para mantenimiento) lo aporta el
                     // filtro `estado` del caller — cuando viene, replicamos el comportamiento
                     // legacy de exigir iv.estado = rp.estado (antes se relajó a un simple
@@ -1364,6 +1358,9 @@ class InventarioServices
                     'rp.fechareg as fechareg',
                     'rp.descripcion as descripcion',
                     'rp.periodo as periodo',
+                    // `rp.periodo` guarda el id real de `periodos` (no un ordinal) — se
+                    // resuelve acá al `numero` legible para mostrar en el frontend.
+                    DB::raw("(SELECT numero FROM periodos WHERE id = rp.periodo) AS periodo_numero"),
                     'rp.id_anio as id_anio',
                     // Nombre propio del ítem (antes de que 'descripcion' se sobrescribiera con
                     // la del reporte) — lo necesita la columna "Artículo"/"Inventario".
@@ -1395,7 +1392,11 @@ class InventarioServices
                     'c.tipo_categoria',
                     'c.nombre as nom_categoria',
                     'ar.nombre as nom_area',
-                    'rp.id as reporte_id'
+                    'rp.id as reporte_id',
+                    // 1 = correctivo (reporte de daño), 2 = preventivo (mantenimiento) — se
+                    // filtraba por esta columna más abajo pero no se devolvía, así que el
+                    // frontend no podía distinguir el tipo fila por fila.
+                    'rp.tipo_reporte'
                 )
                 // Sin distinct(): cada fila ya es única por rp.id (PK de `reportes`), y todos
                 // los leftJoin de arriba (usuarios/areas/categoria/anio_escolar) son sobre

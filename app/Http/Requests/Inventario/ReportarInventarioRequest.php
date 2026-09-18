@@ -20,6 +20,9 @@ class ReportarInventarioRequest extends FormRequest
             'id_log' => ['required', 'integer', Rule::exists('usuarios', 'id_user')],
             'descripcion' => ['required', 'string', 'max:500'],
             'id_anio' => ['required', 'integer', Rule::exists('anio_escolar', 'id')],
+            // El id real de una fila de `periodos` (no un ordinal/número de periodo) — ver
+            // Periodo::reportes() y registrarCheckInventario en InventarioServices, que
+            // comparan `reportes.periodo`/`inventario_check.periodo` contra ese mismo id.
             'id_periodo' => ['required', 'integer', Rule::exists('periodos', 'id')],
         ];
     }
