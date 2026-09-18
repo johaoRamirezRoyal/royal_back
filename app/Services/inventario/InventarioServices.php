@@ -1014,7 +1014,8 @@ class InventarioServices
             $checks = InventarioCheck::query()
                 ->with([
                     'inventario:id,descripcion,id_area,id_bloque',
-                    'inventario.area:id,nombre',
+                    'inventario.area:id,nombre,id_bloque',
+                    'inventario.area.bloque:id,nombre',
                     'inventario.bloque:id,nombre',
                     'anioEscolar:id,anio_inicio,anio_fin',
                     'responsable:id_user,nombre,apellido',
@@ -1024,7 +1025,14 @@ class InventarioServices
                 ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
                 ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
                 ->when($filtros['id_responsable'] ?? null, fn ($q, $v) => $q->where('id_user', $v))
-                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->whereHas('inventario', fn ($q2) => $q2->where('id_bloque', $v)))
+                // El ítem puede tener el bloque directo (iv.id_bloque) o solo un área puntual
+                // cuyo propio id_bloque lo determina (la mayoría de los reclasificados a Áreas
+                // Comunes nunca llegan a tener iv.id_bloque propio, ver reclasificarAreaComun /
+                // el mismo COALESCE que usa obtenerListadoConsolidado más abajo en este archivo).
+                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->whereHas(
+                    'inventario',
+                    fn ($q2) => $q2->where('id_bloque', $v)->orWhereHas('area', fn ($q3) => $q3->where('id_bloque', $v))
+                ))
                 ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereHas('inventario', fn ($q2) => $q2->where('id_area', $v)))
                 ->when($filtros['s'] ?? null, fn ($q, $s) => $q->whereHas('inventario', fn ($q2) => $q2->where('descripcion', 'like', "%{$s}%")))
                 ->orderByDesc('id')
@@ -1052,7 +1060,17 @@ class InventarioServices
                 ->where('c.tipo_categoria', 3)
                 ->where('inventario.activo', 1)
                 ->where('inventario.estado', '!=', 5)
-                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->where('inventario.id_bloque', $v))
+                // Mismo fallback que historialChecks: el bloque puede venir directo o a
+                // través del área puntual del ítem (COALESCE, ver arriba en este archivo).
+                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->where(function ($q2) use ($v) {
+                    $q2->where('inventario.id_bloque', $v)
+                        ->orWhereExists(function ($q3) use ($v) {
+                            $q3->select(DB::raw(1))
+                                ->from('areas as a')
+                                ->whereColumn('a.id', 'inventario.id_area')
+                                ->where('a.id_bloque', $v);
+                        });
+                }))
                 ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->where('inventario.id_area', $v));
 
             $totalAreas = $base->clone()->count('inventario.id');
