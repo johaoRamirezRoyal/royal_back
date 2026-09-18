@@ -22,3 +22,5 @@ Route::post('/inventario/check', [AreasComunesController::class, 'registrarCheck
 Route::post('/inventario/mover', [AreasComunesController::class, 'moverItem']);
 // Historial completo de checks (108 o 109) — ver "Historial de Checks".
 Route::get('/inventario/checks', [AreasComunesController::class, 'historialChecks']);
+// % de áreas comunes con al menos un check registrado (108 o 109).
+Route::get('/inventario/checks/indicador', [AreasComunesController::class, 'indicadorChecks']);

@@ -1037,6 +1037,54 @@ class InventarioServices
     }
 
     /**
+     * Áreas Comunes: % de cumplimiento del check semestral — cuántas áreas comunes
+     * existentes (tipo_categoria=3, activas, no descontinuadas) tienen AL MENOS un check
+     * registrado que matchee los filtros, sobre el total de áreas comunes que matchean
+     * esos mismos filtros de ubicación. Mismos filtros que historialChecks (bloque/área
+     * para ubicación, año/periodo para acotar el check en sí) — así el indicador siempre
+     * refleja lo mismo que la tabla de abajo en /inventario/areas-comunes/historial-checks.
+     */
+    public function indicadorChecksAreasComunes(array $filtros): array
+    {
+        try {
+            $base = Inventario::query()
+                ->join('categoria as c', 'c.id', '=', 'inventario.id_categoria')
+                ->where('c.tipo_categoria', 3)
+                ->where('inventario.activo', 1)
+                ->where('inventario.estado', '!=', 5)
+                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->where('inventario.id_bloque', $v))
+                ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->where('inventario.id_area', $v));
+
+            $totalAreas = $base->clone()->count('inventario.id');
+
+            $conCheck = $base->clone()
+                ->whereExists(function ($q) use ($filtros) {
+                    $q->select(DB::raw(1))
+                        ->from('inventario_check as ic')
+                        ->whereColumn('ic.id_inventario', 'inventario.id')
+                        ->when($filtros['id_anio'] ?? null, fn ($q2, $v) => $q2->where('ic.id_anio', $v))
+                        ->when($filtros['periodo'] ?? null, fn ($q2, $v) => $q2->where('ic.periodo', $v));
+                })
+                ->count('inventario.id');
+
+            return [
+                'error' => false,
+                'data' => [
+                    'total_areas' => $totalAreas,
+                    'con_check' => $conCheck,
+                    'porcentaje' => $totalAreas > 0 ? round($conCheck / $totalAreas * 100, 1) : 0,
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
      * Summary of descontinuarInventario
      * @param array $ids
      * @param mixed $id_log

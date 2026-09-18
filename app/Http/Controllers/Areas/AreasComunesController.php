@@ -177,4 +177,18 @@ class AreasComunesController extends Controller
 
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
     }
+
+    /** % de áreas comunes con al menos un check — ver InventarioServices::indicadorChecksAreasComunes. */
+    public function indicadorChecks(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $filtros = $request->only(['id_bloque', 'id_area', 'id_anio', 'periodo']);
+
+        $resultado = $this->inventarioService->indicadorChecksAreasComunes($filtros);
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
 }
