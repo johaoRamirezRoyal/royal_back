@@ -18,3 +18,9 @@ Route::post('/areas', [AreasComunesController::class, 'asignarAreasBloque']);
 Route::post('/inventario/reclasificar', [AreasComunesController::class, 'reclasificarInventario']);
 // Check semestral (108 o 109) — migración del legacy chek_zonas.
 Route::post('/inventario/check', [AreasComunesController::class, 'registrarCheck']);
+// Mover un ítem ya existente a otro bloque/área (108 propio).
+Route::post('/inventario/mover', [AreasComunesController::class, 'moverItem']);
+// Historial completo de checks (108 o 109) — ver "Historial de Checks".
+Route::get('/inventario/checks', [AreasComunesController::class, 'historialChecks']);
+// % de áreas comunes con al menos un check registrado (108 o 109).
+Route::get('/inventario/checks/indicador', [AreasComunesController::class, 'indicadorChecks']);

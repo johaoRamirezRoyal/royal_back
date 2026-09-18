@@ -281,7 +281,7 @@ class InventariosController extends Controller
             ], 422);
         }
 
-        $asignar = $this->inventario_services->asignarInventario($data['ids'], $data['id_area'], $data['id_user']);
+        $asignar = $this->inventario_services->asignarInventario($data['ids'], $data['id_area'], $data['id_user'], $request->user()->id_user ?? null);
 
         return $this->apiResponse($asignar);
     }
