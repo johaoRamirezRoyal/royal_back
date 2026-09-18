@@ -132,4 +132,49 @@ class AreasComunesController extends Controller
 
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
     }
+
+    /** Mueve un ítem ya existente a otro bloque/área — ver InventarioServices::moverItemAreaComun. */
+    public function moverItem(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id' => ['required', 'integer', 'exists:inventario,id'],
+            'id_bloque' => ['required', 'integer', 'exists:bloques,id'],
+            'id_area' => ['nullable', 'integer', 'exists:areas,id'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $resultado = $this->inventarioService->moverItemAreaComun(
+            $request->input('id'),
+            $request->input('id_bloque'),
+            $request->input('id_area'),
+            $request->user()->id_user,
+        );
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
+
+    /** Historial completo de checks semestrales — ver InventarioServices::historialChecks. */
+    public function historialChecks(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $filtros = $request->only(['id_inventario', 'id_bloque', 'id_area', 'id_anio', 'periodo', 'id_responsable', 's']);
+        $perPage = (int) $request->input('per-page', 15);
+
+        $resultado = $this->inventarioService->historialChecks($filtros, $perPage);
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
 }

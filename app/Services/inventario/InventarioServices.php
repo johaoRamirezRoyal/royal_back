@@ -3,7 +3,9 @@
 namespace App\Services\inventario;
 
 use App\Models\AnioEscolar\Anio;
+use App\Models\Areas\Areas;
 use App\Models\Inventario\Categoria;
+use App\Models\Inventario\Estado;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioCheck;
 use App\Models\Inventario\InventarioDescontinuado;
@@ -967,6 +969,74 @@ class InventarioServices
     }
 
     /**
+     * Áreas Comunes: mueve un ítem YA EXISTENTE a otro bloque/área — a diferencia
+     * de reclasificarAreaComun (que solo cambia la categoría), esto cambia la
+     * ubicación real del ítem. `$idArea` null = queda asignado directo al bloque.
+     */
+    public function moverItemAreaComun(int $id, int $idBloque, ?int $idArea, int $idLog): array
+    {
+        try {
+            $item = Inventario::find($id);
+
+            if (!$item) {
+                return ['error' => true, 'message' => 'Ítem no encontrado'];
+            }
+
+            if ($idArea !== null) {
+                $area = Areas::find($idArea);
+                if (!$area || (int) $area->id_bloque !== $idBloque) {
+                    return ['error' => true, 'message' => 'El área seleccionada no pertenece a ese bloque'];
+                }
+            }
+
+            $item->update([
+                'id_bloque' => $idBloque,
+                'id_area' => $idArea,
+                'user_log' => $idLog,
+            ]);
+
+            return ['error' => false, 'message' => 'Ítem movido correctamente'];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Áreas Comunes: historial COMPLETO de checks semestrales (no solo el
+     * "último check" que ya trae obtenerListadoConsolidado) — cada fila de
+     * `inventario_check`, filtrable por ítem/bloque/área/año/periodo/responsable.
+     * Sirve tanto para "historial de un ítem" (filtrando por id_inventario) como
+     * para el historial general por año/periodo, en la misma consulta.
+     */
+    public function historialChecks(array $filtros, int $perPage = 15): array
+    {
+        try {
+            $checks = InventarioCheck::query()
+                ->with([
+                    'inventario:id,descripcion,id_area,id_bloque',
+                    'inventario.area:id,nombre',
+                    'inventario.bloque:id,nombre',
+                    'anioEscolar:id,anio_inicio,anio_fin',
+                    'responsable:id_user,nombre,apellido',
+                    'periodoInfo:id,numero',
+                ])
+                ->when($filtros['id_inventario'] ?? null, fn ($q, $v) => $q->where('id_inventario', $v))
+                ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
+                ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
+                ->when($filtros['id_responsable'] ?? null, fn ($q, $v) => $q->where('id_user', $v))
+                ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->whereHas('inventario', fn ($q2) => $q2->where('id_bloque', $v)))
+                ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereHas('inventario', fn ($q2) => $q2->where('id_area', $v)))
+                ->when($filtros['s'] ?? null, fn ($q, $s) => $q->whereHas('inventario', fn ($q2) => $q2->where('descripcion', 'like', "%{$s}%")))
+                ->orderByDesc('id')
+                ->paginate($perPage);
+
+            return ['error' => false, 'data' => $checks];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Summary of descontinuarInventario
      * @param array $ids
      * @param mixed $id_log
@@ -1017,11 +1087,15 @@ class InventarioServices
 
             if (!$result['error']) {
 
+                $actor = InventarioEmailHelper::nombreUsuario($id_log);
+                $fecha = now()->format('d/m/Y H:i');
+                $nombreEstado = InventarioEmailHelper::nombreEstado(5, 'Descontinuado');
+
                 $titulo = "Notificación | Inventario Descontinuado";
                 $contenido = "Se han descontinuado los siguientes elementos:\n\n";
 
                 foreach ($result['data'] as $inv) {
-                    $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
+                    $contenido .= InventarioEmailHelper::detalle($inv, $nombreEstado, $actor, InventarioEmailHelper::nombreUsuario($inv->id_user), $fecha) . "\n\n";
                 }
 
                 $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
@@ -1086,16 +1160,24 @@ class InventarioServices
             });
 
             if (!$result['error']) {
+                $actor = InventarioEmailHelper::nombreUsuario($id_log);
+                $fecha = now()->format('d/m/Y H:i');
+                $nombreEstado = InventarioEmailHelper::nombreEstado(4, 'Liberado');
+
                 $titulo = "Notificación | Inventario Liberado";
-                $contenido = "Se han Liberado los siguientes elementos:\n\n";
+                $contenido = "Se han liberado los siguientes elementos:\n\n";
                 $destinatarios = $this->mailTo;
 
                 foreach ($result['data'] as $inv) {
-                    $contenido .= "- {$inv->descripcion} (Código: {$inv->codigo})\n";
-
+                    // El responsable/reportador se resuelven ANTES del liberado (el bulk
+                    // update ya vació id_user en BD, pero $inv sigue en memoria con el valor
+                    // previo) — es a propósito: quien debe enterarse es quien tenía el ítem
+                    // asignado, no "nadie" (que es lo que quedaría después de liberar).
                     $responsable = Usuario::find($inv->id_user)?->correo;
                     $ultimoReporte = $inv->reportes()->latest('id')->first();
                     $reportador = $ultimoReporte?->id_user ? Usuario::find($ultimoReporte->id_user)?->correo : null;
+
+                    $contenido .= InventarioEmailHelper::detalle($inv, $nombreEstado, $actor, InventarioEmailHelper::nombreUsuario($inv->id_user), $fecha) . "\n\n";
 
                     foreach (array_filter([$responsable, $reportador]) as $correo) {
                         $destinatarios[] = $correo;
@@ -1124,7 +1206,7 @@ class InventarioServices
      * @param int $id_usuario
      * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
      */
-    public function asignarInventario(array $ids, int $id_area, int $id_usuario)
+    public function asignarInventario(array $ids, int $id_area, int $id_usuario, ?int $id_log = null)
     {
         try {
             $inventario_liberado = Inventario::whereIn('id', $ids)
@@ -1149,12 +1231,21 @@ class InventarioServices
 
             $this->registrarLog($inventario_liberado->all(), 1, null, $id_area);
 
-            $titulo = "Notificación | Inventario Asignado";
-            $contenido = "Se han Asignado los siguientes elementos:\n\n";
+            $actor = InventarioEmailHelper::nombreUsuario($id_log);
+            $responsableNombre = InventarioEmailHelper::nombreUsuario($id_usuario);
+            $fecha = now()->format('d/m/Y H:i');
+            $nombreEstado = InventarioEmailHelper::nombreEstado(1, 'Asignado');
 
+            $titulo = "Notificación | Inventario Asignado";
+            $contenido = "Se han asignado los siguientes elementos:\n\n";
 
             foreach ($inventario_liberado as $inv) {
-                $contenido .= "{$inv->descripcion} (Codigo: {$inv->id})\n";
+                // Refresca cada ítem: el bulk update de arriba ya cambió su área/usuario en
+                // BD, pero $inv sigue en memoria con los valores ANTERIORES (liberado, sin
+                // área) — el correo debe mostrar el área/responsable NUEVOS a los que quedó
+                // asignado, no los que tenía antes de asignarlo.
+                $inv->refresh();
+                $contenido .= InventarioEmailHelper::detalle($inv, $nombreEstado, $actor, $responsableNombre, $fecha) . "\n\n";
             }
 
             $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
@@ -1244,13 +1335,24 @@ class InventarioServices
             });
 
             if (!$resultado['error']) {
-                $reportador = Usuario::find($id_log)?->correo;
+                $reportadorCorreo = Usuario::find($id_log)?->correo;
+                $reportadorNombre = InventarioEmailHelper::nombreUsuario($id_log);
+                $fecha = now()->format('d/m/Y H:i');
+                // Nombre del estado al que quedó el ítem (2 = Reportado) — no vía la
+                // relación Inventario::estado(), que colisiona con la columna `estado`
+                // del propio modelo (mismo criterio que el resto del módulo, que
+                // resuelve este nombre con un join a `estado`, nunca con la relación).
+                $nombreEstado = InventarioEmailHelper::nombreEstado(2, 'Reportado');
 
                 foreach ($resultado['data'] as $item) {
-                    $responsable = Usuario::find($item->id_user)?->correo;
+                    $responsable = Usuario::find($item->id_user);
+
                     $titulo = "Notificación | Inventario Reportado";
-                    $contenido = "Se ha reportado el inventario:\n\n- {$item->descripcion} (Código: {$item->codigo})\n\nDescripción: {$descripcion}";
-                    $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador), $titulo, $contenido);
+                    $contenido = "Se ha reportado el siguiente ítem de inventario:\n\n"
+                        . InventarioEmailHelper::detalle($item, $nombreEstado, $reportadorNombre, InventarioEmailHelper::nombreUsuario($item->id_user), $fecha)
+                        . "\n\nDescripción del reporte: {$descripcion}";
+
+                    $this->mailService->sendGeneric($this->destinatarios($responsable?->correo, $reportadorCorreo), $titulo, $contenido);
                 }
             }
 
@@ -1584,27 +1686,35 @@ class InventarioServices
                 // (ControlReportes::solucionarReporteControl): a quien reportó, al
                 // responsable actual del ítem y a quien solucionó — más el correo fijo de
                 // sistemas (ya incluido por defecto en $this->mailTo).
-                $reporteFresco = Reportes::with('inventario.usuario', 'inventario.area')->find($id_reporte);
+                $reporteFresco = Reportes::with('inventario.usuario', 'inventario.area', 'inventario.categoria')->find($id_reporte);
                 $inventario = $reporteFresco?->inventario;
                 $responsable = $inventario?->usuario?->correo;
                 $reportador = Usuario::find($reporteFresco?->id_user)?->correo;
                 $solucionador = Usuario::find($id_resp)?->correo;
                 $fechaRespuesta = $resultado['data']->fecha_respuesta ?? null;
                 $fechaRespuestaTexto = $fechaRespuesta instanceof \Carbon\Carbon
-                    ? $fechaRespuesta->format('Y-m-d H:i:s')
+                    ? $fechaRespuesta->format('d/m/Y H:i')
                     : (string) $fechaRespuesta;
 
                 $titulo = "Notificación | Reporte Solucionado";
-                $contenido = "Se ha solucionado el reporte #{$id_reporte} del siguiente artículo:\n\n"
-                    . "Descripción: {$inventario?->descripcion}\n"
-                    . "Marca: {$inventario?->marca}\n"
-                    . "Código: {$inventario?->codigo}\n"
-                    . "Estado del artículo: Arreglado\n"
-                    . "Área/Oficina: {$inventario?->area?->nombre}\n"
-                    . "Responsable: {$inventario?->usuario?->nombre} {$inventario?->usuario?->apellido}\n"
-                    . "Fecha de respuesta: {$fechaRespuestaTexto}\n"
-                    . "Observación: {$descripcion}\n\n"
-                    . "En caso de no recibir nuevamente el reporte de este inventario se tomará como satisfecha la solución al reporte.";
+
+                if ($inventario) {
+                    $nombreEstado = InventarioEmailHelper::nombreEstado((int) $inventario->estado, 'Arreglado');
+                    $contenido = "Se ha solucionado el reporte #{$id_reporte} del siguiente artículo:\n\n"
+                        . InventarioEmailHelper::detalle(
+                            $inventario,
+                            $nombreEstado,
+                            InventarioEmailHelper::nombreUsuario($id_resp),
+                            InventarioEmailHelper::nombreUsuario($inventario->id_user),
+                            $fechaRespuestaTexto
+                        )
+                        . "\nMarca: {$inventario->marca}\n"
+                        . "Código: {$inventario->codigo}\n"
+                        . "Observación: {$descripcion}\n\n"
+                        . "En caso de no recibir nuevamente el reporte de este inventario se tomará como satisfecha la solución al reporte.";
+                } else {
+                    $contenido = "Se ha solucionado el reporte #{$id_reporte}.\n\nObservación: {$descripcion}";
+                }
 
                 $this->mailService->sendGeneric($this->destinatarios($responsable, $reportador, $solucionador), $titulo, $contenido);
             }
@@ -1838,7 +1948,7 @@ class InventarioServices
                 $this->registrarLog($inventariosActualizados, 6, $id_log);
             });
 
-            $this->notificarMantenimientoProgramado($creados, $descripcion, $fecha_inicio, $fecha_fin);
+            $this->notificarMantenimientoProgramado($creados, $descripcion, $fecha_inicio, $fecha_fin, $id_log);
 
             return [
                 'error' => false,
@@ -1921,7 +2031,7 @@ class InventarioServices
      * programaron en este lote — evita spam cuando se programan muchos equipos a la vez.
      * Falla en silencio (no revierte la programación) si el envío da error.
      */
-    private function notificarMantenimientoProgramado(array $creados, string $descripcion, string $fechaInicio, string $fechaFin): void
+    private function notificarMantenimientoProgramado(array $creados, string $descripcion, string $fechaInicio, string $fechaFin, ?int $idLog = null): void
     {
         if (empty($creados)) {
             return;
@@ -1930,15 +2040,24 @@ class InventarioServices
         try {
             $porResponsable = [];
             foreach ($creados as $item) {
-                $porResponsable[$item['id_resp']][] = $item['inventario'];
+                $porResponsable[$item['id_resp']][] = $item;
             }
 
-            foreach ($porResponsable as $idResp => $inventarios) {
+            $actor = InventarioEmailHelper::nombreUsuario($idLog);
+            $nombreEstado = InventarioEmailHelper::nombreEstado(6, 'Mantenimiento preventivo programado');
+
+            foreach ($porResponsable as $idResp => $items) {
                 $responsable = Usuario::find($idResp);
+                $responsableNombre = InventarioEmailHelper::nombreUsuario($idResp);
+
                 $titulo = 'Notificación | Mantenimiento preventivo programado';
-                $contenido = "Se te asignó como responsable de " . count($inventarios) . " mantenimiento(s) preventivo(s), "
-                    . "con fecha estimada entre {$fechaInicio} y {$fechaFin}.\n\nDescripción: {$descripcion}\n\n"
-                    . "Equipos: " . collect($inventarios)->pluck('descripcion')->implode(', ');
+                $contenido = "Se te asignó como responsable de " . count($items) . " mantenimiento(s) preventivo(s), "
+                    . "con fecha estimada entre {$fechaInicio} y {$fechaFin}.\n\nDescripción: {$descripcion}\n\n";
+
+                foreach ($items as $item) {
+                    $fecha = $item['fecha'] instanceof \Carbon\Carbon ? $item['fecha']->format('d/m/Y H:i') : (string) $item['fecha'];
+                    $contenido .= InventarioEmailHelper::detalle($item['inventario'], $nombreEstado, $actor, $responsableNombre, $fecha) . "\n\n";
+                }
 
                 $this->mailService->sendGeneric($this->destinatarios($responsable?->correo), $titulo, $contenido);
             }

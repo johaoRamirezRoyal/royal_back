@@ -6,12 +6,31 @@ use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioLog;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Reservas\Reservas;
+use App\Models\Usuarios\Usuario;
+use App\Services\inventario\InventarioEmailHelper;
+use App\Services\MailService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class PrestamosService extends Service
 {
+    public function __construct(
+        private MailService $mailService,
+    ) {}
+
+    // Mismo correo fijo de sistemas que InventarioServices::$mailTo — el equipo que
+    // monitorea el resto de los procesos de inventario también debe ver los préstamos.
+    private function destinatarios(?string ...$correos): array
+    {
+        $destinatarios = array_merge(
+            ['cronograma.sistemas@royalschool.edu.co'],
+            array_filter($correos),
+        );
+
+        return array_values(array_unique($destinatarios));
+    }
+
     // Mismo registro que InventarioServices::registrarLog — los cambios de estado por
     // préstamo (8 = Prestado, 1 = devuelto/Asignado) no pasaban por ahí y quedaban fuera
     // del historial de inventario (`inventario_log`).
@@ -35,7 +54,9 @@ class PrestamosService extends Service
     public function agregarPrestamos(array $data): array
     {
         try {
-            return DB::transaction(function () use ($data) {
+            $inventarioPrestado = null;
+
+            $resultado = DB::transaction(function () use ($data, &$inventarioPrestado) {
 
                 $inventario = Inventario::find($data['id_inventario']);
 
@@ -66,6 +87,7 @@ class PrestamosService extends Service
                     'id_user' => $data['id_user_prestamo'],
                 ]);
                 $this->registrarLog($inventario, 8, $data['id_user_entrega'] ?? $data['id_user_prestamo']);
+                $inventarioPrestado = $inventario;
 
                 return [
                     'error' => false,
@@ -73,6 +95,12 @@ class PrestamosService extends Service
                     'data' => $prestamo->fresh()->toArray()
                 ];
             });
+
+            if (!$resultado['error'] && $inventarioPrestado) {
+                $this->notificarPrestamo($inventarioPrestado, $data);
+            }
+
+            return $resultado;
         } catch (Exception $e) {
 
             $this->sendError($e, 'Error al crear el préstamo');
@@ -85,10 +113,36 @@ class PrestamosService extends Service
         }
     }
 
+    /** Correo al registrar un préstamo — mismos campos estándar que el resto de Inventario. */
+    private function notificarPrestamo(Inventario $inventario, array $data): void
+    {
+        try {
+            $actor = InventarioEmailHelper::nombreUsuario($data['id_user_entrega'] ?? null);
+            $responsableNombre = InventarioEmailHelper::nombreUsuario($data['id_user_prestamo'] ?? null);
+            $fecha = !empty($data['fecha_prestamo'])
+                ? \Carbon\Carbon::parse($data['fecha_prestamo'])->format('d/m/Y H:i')
+                : now()->format('d/m/Y H:i');
+            $nombreEstado = InventarioEmailHelper::nombreEstado(8, 'Prestado');
+
+            $titulo = 'Notificación | Inventario Prestado';
+            $contenido = "Se ha registrado el siguiente préstamo de inventario:\n\n"
+                . InventarioEmailHelper::detalle($inventario, $nombreEstado, $actor, $responsableNombre, $fecha);
+
+            $correoEntrega = Usuario::find($data['id_user_entrega'] ?? null)?->correo;
+            $correoPresta = Usuario::find($data['id_user_prestamo'] ?? null)?->correo;
+
+            $this->mailService->sendGeneric($this->destinatarios($correoEntrega, $correoPresta), $titulo, $contenido);
+        } catch (\Throwable $e) {
+            $this->sendError($e, 'No se pudo notificar el préstamo');
+        }
+    }
+
     public function actualizarPrestamo(array $data): array
     {
         try {
-            return DB::transaction(function () use ($data) {
+            $inventarioDevuelto = null;
+
+            $resultado = DB::transaction(function () use ($data, &$inventarioDevuelto) {
 
                 $prestamo = PrestamosInventario::with('inventario')
                     ->find($data['id']);
@@ -127,6 +181,7 @@ class PrestamosService extends Service
                         'id_user' => $prestamo->id_user_entrega,
                     ]);
                     $this->registrarLog($prestamo->inventario, 1, $data['id_user_recibe']);
+                    $inventarioDevuelto = $prestamo->inventario;
                 }
 
                 $prestamo->refresh();
@@ -137,6 +192,12 @@ class PrestamosService extends Service
                     'data' => $prestamo->toArray()
                 ];
             });
+
+            if (!$resultado['error'] && $inventarioDevuelto) {
+                $this->notificarDevolucionPrestamo($inventarioDevuelto, $data);
+            }
+
+            return $resultado;
         } catch (Exception $e) {
 
             $this->sendError($e, 'Error al actualizar el préstamo');
@@ -146,6 +207,32 @@ class PrestamosService extends Service
                 'message' => 'Error en el servidor al actualizar el préstamo.',
                 'data' => []
             ];
+        }
+    }
+
+    /** Correo al registrar la devolución de un préstamo — mismos campos estándar. */
+    private function notificarDevolucionPrestamo(Inventario $inventario, array $data): void
+    {
+        try {
+            $inventario->refresh();
+
+            $actor = InventarioEmailHelper::nombreUsuario($data['id_user_recibe'] ?? null);
+            $responsableNombre = InventarioEmailHelper::nombreUsuario($inventario->id_user);
+            $fecha = !empty($data['fecha_devolucion'])
+                ? \Carbon\Carbon::parse($data['fecha_devolucion'])->format('d/m/Y H:i')
+                : now()->format('d/m/Y H:i');
+            $nombreEstado = InventarioEmailHelper::nombreEstado(1, 'Asignado');
+
+            $titulo = 'Notificación | Préstamo Devuelto';
+            $contenido = "Se ha registrado la devolución del siguiente préstamo de inventario:\n\n"
+                . InventarioEmailHelper::detalle($inventario, $nombreEstado, $actor, $responsableNombre, $fecha);
+
+            $correoRecibe = Usuario::find($data['id_user_recibe'] ?? null)?->correo;
+            $correoResponsable = Usuario::find($inventario->id_user)?->correo;
+
+            $this->mailService->sendGeneric($this->destinatarios($correoRecibe, $correoResponsable), $titulo, $contenido);
+        } catch (\Throwable $e) {
+            $this->sendError($e, 'No se pudo notificar la devolución del préstamo');
         }
     }
 
