@@ -58,6 +58,15 @@ class AsistenciaGestionController extends Controller
         $filtros = $request->validated();
         $filtros['id_usuario'] = $this->idUsuarioPermitido($request, $filtros['id_usuario'] ?? null);
 
+        // El componente de tabla remota del frontend (DataTable) manda el tamaño de
+        // página como "per-page" (guion) por convención genérica — FiltroAsistenciaGestionRequest
+        // solo valida "per_page" (guion bajo), así que sin este alias el selector de
+        // filas por página no tenía ningún efecto real (el service siempre caía al
+        // default de 50). No pasa por el FormRequest porque no es un campo declarado ahí.
+        if (!isset($filtros['per_page']) && $request->filled('per-page')) {
+            $filtros['per_page'] = min(100, max(1, (int) $request->input('per-page')));
+        }
+
         $resultado = $this->asistenciaService->obtenerAsistencia($filtros);
 
         return $this->apiResponse($resultado);
