@@ -113,4 +113,34 @@ class ReservasServicesTest extends TestCase
         $this->assertNotNull($error);
         $this->assertStringContainsString('más de', $error);
     }
+
+    public function test_rechaza_domingo_aunque_este_dentro_de_la_ventana(): void
+    {
+        $hoy = Carbon::parse('2026-06-10'); // miércoles
+        $domingo = $hoy->copy()->next(Carbon::SUNDAY);
+
+        $error = $this->validar($domingo, $hoy, $hoy->copy()->setTime(9, 0), $this->config(1, 10));
+
+        $this->assertNotNull($error);
+        $this->assertStringContainsString('domingo', $error);
+    }
+
+    public function test_rechaza_lunes_si_hoy_es_sabado(): void
+    {
+        $sabado = Carbon::parse('2026-06-13'); // sábado
+        $lunes = $sabado->copy()->addDays(2);
+
+        $error = $this->validar($lunes, $sabado, $sabado->copy()->setTime(9, 0), $this->config(1, 10));
+
+        $this->assertNotNull($error);
+        $this->assertStringContainsString('sábado', $error);
+    }
+
+    public function test_permite_lunes_si_hoy_no_es_sabado(): void
+    {
+        $viernes = Carbon::parse('2026-06-12');
+        $lunesSiguiente = $viernes->copy()->next(Carbon::MONDAY);
+
+        $this->assertNull($this->validar($lunesSiguiente, $viernes, $viernes->copy()->setTime(9, 0), $this->config(1, 10)));
+    }
 }

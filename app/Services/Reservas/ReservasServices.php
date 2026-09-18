@@ -231,6 +231,17 @@ class ReservasServices extends Service
             return 'No se puede reservar para el día de hoy: debes reservar con anticipación.';
         }
 
+        // Domingo es festivo por convención, nunca reservable. Y si hoy es sábado tampoco
+        // se puede reservar para el lunes siguiente: el colegio no tiene a nadie
+        // disponible ese fin de semana para gestionar/confirmar la reserva.
+        if ($fechaReserva->isSunday()) {
+            return 'No se puede reservar para un domingo.';
+        }
+
+        if ($hoy->isSaturday() && $fechaReserva->isMonday()) {
+            return 'Reservando en sábado no se puede reservar para el lunes siguiente.';
+        }
+
         $diasMin = $config->dias_min_anticipacion;
         $diasMax = $config->dias_max_anticipacion;
 
