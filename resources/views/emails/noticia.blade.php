@@ -16,6 +16,9 @@
                     <!-- HEADER -->
                     <tr>
                         <td style="background:#2563eb; color:white; padding:20px; text-align:center;">
+                            <p style="margin:0 0 4px; font-size:12px; letter-spacing:0.05em; text-transform:uppercase; opacity:0.85;">
+                                {{ config('app.name') }}
+                            </p>
                             <h2 style="margin:0;">{{ $titulo }}</h2>
                         </td>
                     </tr>
@@ -25,7 +28,7 @@
                     <tr>
                         <td style="padding:30px; color:#333;">
                             <div style="font-size:15px; line-height:1.6;">
-                                {!! nl2br(e($mensaje)) !!}
+                                {!! \App\Support\NoticiaTextoFormatter::aHtml($mensaje) !!}
                             </div>
                         </td>
                     </tr>
@@ -46,7 +49,7 @@
                     <!-- FOOTER -->
                     <tr>
                         <td style="background:#f1f5f9; padding:15px; text-align:center; font-size:12px; color:#666;">
-                            Este es un mensaje automático del sistema.<br>
+                            {{ config('app.name') }} · Este es un mensaje automático del sistema.<br>
                             Por favor no responder a este correo.
                         </td>
                     </tr>
