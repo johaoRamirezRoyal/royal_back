@@ -54,13 +54,7 @@ class HorarioExcelService
      * Un único docente — usado tanto por "Mi horario" (el propio docente autenticado) como
      * por el admin desde Configuración académica > Horario, sobre el docente seleccionado.
      */
-    /**
-     * @param ?array<int> $idsEsquema Restringe la grilla a estos esquemas (interseca con
-     * los esquemas reales del docente) — null incluye todos los esquemas donde dicta, el
-     * comportamiento de siempre. Usado por el admin cuando un docente dicta en más de un
-     * esquema/nivel y quiere exportar solo uno (o algunos), no todos mezclados.
-     */
-    public function exportarDocente(int $idDocente, ?array $idsEsquema = null): array
+    public function exportarDocente(int $idDocente): array
     {
         try {
             $docente = Usuario::select('id_user', 'nombre', 'apellido', 'correo')->find($idDocente);
@@ -75,7 +69,7 @@ class HorarioExcelService
             $nombre = trim("{$docente->nombre} {$docente->apellido}");
             $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
 
-            if (!$this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath, $idsEsquema)) {
+            if (!$this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath)) {
                 return ['error' => true, 'message' => 'Este docente no tiene ningún esquema de horario asignado.', 'data' => []];
             }
 
@@ -201,18 +195,12 @@ class HorarioExcelService
      * sola fila (evita una fila "Martes 7:30" duplicada solo porque el docente también
      * dicta en otro nivel a esa misma hora de reloj).
      *
-     * @param ?array<int> $idsEsquemaFiltro Restringe a esta lista (interseca con los
-     * esquemas reales del docente) — ver exportarDocente.
      * @return list<array{id:int,nombre:string,bloques:list<array{hora_inicio:string,hora_fin:string,asignable:bool,etiqueta:?string,color:?string,rows:list<array>}>}>
      */
-    private function diasConFranjas(int $idDocente, ?array $idsEsquemaFiltro = null): array
+    private function diasConFranjas(int $idDocente): array
     {
         $idsEsquemaAnioActivo = $this->horarioClaseService->idsEsquemaAnioActivo();
         $idsEsquema = $this->horarioClaseService->esquemasDelDocente($idDocente, $idsEsquemaAnioActivo);
-
-        if ($idsEsquemaFiltro !== null) {
-            $idsEsquema = $idsEsquema->intersect($idsEsquemaFiltro)->values();
-        }
 
         if ($idsEsquema->isEmpty()) {
             return [];
@@ -399,12 +387,10 @@ class HorarioExcelService
      *
      * @param ?string $logoPath Logo resuelto por dominio de correo del docente (ver
      * MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
-     * @param ?array<int> $idsEsquemaFiltro Ver exportarDocente — null incluye todos los
-     * esquemas del docente (usado también por exportarTodosLosDocentes, sin filtro).
      */
-    private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null, ?array $idsEsquemaFiltro = null): bool
+    private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null): bool
     {
-        $dias = $this->diasConFranjas($idDocente, $idsEsquemaFiltro);
+        $dias = $this->diasConFranjas($idDocente);
 
         if (count($dias) === 0) {
             return false;

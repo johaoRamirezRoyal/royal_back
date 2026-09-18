@@ -323,17 +323,6 @@ class HorarioClaseService extends Service
 
                     'franjaHoraria.diaSemana:id,nombre,abreviatura',
 
-                    // id_esquema ya viajaba en franjaHoraria (usado para el scoping de
-                    // arriba), pero sin esta relación el frontend no tenía forma de saber
-                    // A QUÉ esquema pertenece cada franja — solo el id numérico, sin
-                    // nombre ni nivel. Necesario para poder diferenciar, en "Asistencia |
-                    // Clases", bloques de esquemas distintos que comparten el mismo
-                    // `orden` sin ser la misma hora real (ver el comentario más arriba
-                    // sobre "todos comparten la misma numeración horaria").
-                    'franjaHoraria.esquema:id,nombre,id_nivel',
-
-                    'franjaHoraria.esquema.nivel:id,nombre',
-
                     'cargaAcademica:id,id_docente_asignatura,id_curso',
 
                     'cargaAcademica.curso:id,nombre,id_nivel',

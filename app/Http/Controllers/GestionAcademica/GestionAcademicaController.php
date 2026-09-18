@@ -407,11 +407,7 @@ class GestionAcademicaController extends Controller
     /** Descarga el .xlsx del horario de UN docente (admin, desde Configuración académica > Horario). */
     public function exportarHorarioDocente(Request $request)
     {
-        // id_esquema[] (opcional) restringe la grilla exportada a esos esquemas — sin él,
-        // se incluyen todos los esquemas donde el docente dicta (comportamiento previo).
-        $idsEsquema = $request->has('id_esquema') ? array_map('intval', (array) $request->input('id_esquema')) : null;
-
-        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->integer('id_docente'), $idsEsquema));
+        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->integer('id_docente')));
     }
 
     /** Descarga un único .xlsx con una hoja por docente (los que tengan bloques de horario). */
