@@ -321,8 +321,12 @@ class AsistenciaGestionService extends Service
                 if (isset($fila['usuario']['perfil'])) {
                     $fila['usuario']['grupo'] = $this->grupoLabel((int) $fila['usuario']['perfil']);
                 }
-                $fila['tardanzas_acumuladas'] = $acumulados[$fila['id_user']] ?? 0;
-                $fila['estado_tardanzas'] = $this->estadoTardanzas($fila['tardanzas_acumuladas'], $limiteTardanzas);
+                // El acumulado solo se muestra en las filas que SÍ fueron llegada tarde (y no
+                // revocadas) — una llegada a tiempo no lleva contador, aunque el trabajador
+                // tenga tardanzas anteriores en el rango.
+                $esTarde = !empty($fila['es_tardanza']) && empty($fila['revocado']);
+                $fila['tardanzas_acumuladas'] = $esTarde ? ($acumulados[$fila['id_user']] ?? 0) : null;
+                $fila['estado_tardanzas'] = $esTarde ? $this->estadoTardanzas($fila['tardanzas_acumuladas'], $limiteTardanzas) : null;
             }
             unset($fila);
 

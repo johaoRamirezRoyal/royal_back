@@ -56,7 +56,9 @@ class AsistenciaGestion extends Model
 
         $hora = $this->hora_asistencia->format('H:i:s');
         $grupoId = $this->usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $this->usuario->perfil] ?? null) : null;
-        $horario = self::horarioAplicable($grupoId);
+        // Con el día de ESTE registro, no el de hoy: si no, un mismo registro cambiaba de
+        // banda según el día en que se consultara el reporte (ver horarioAplicable).
+        $horario = self::horarioAplicable($grupoId, $this->fecha_asistencia);
 
         if (!$horario) {
             return match (true) {
@@ -107,13 +109,15 @@ class AsistenciaGestion extends Model
      * AsistenciaGestionService::cerrarAsistenciasVencidas() para saber la hora de salida
      * esperada de cada usuario con marcación abierta.
      */
-    public static function horarioAplicable(?int $grupoId): ?AsistenciaHorario
+    public static function horarioAplicable(?int $grupoId, ?\Carbon\CarbonInterface $fecha = null): ?AsistenciaHorario
     {
         if (self::$horariosCache === null) {
             self::$horariosCache = AsistenciaHorario::with('bandas')->where('activo', true)->get();
         }
 
-        $diaHoy = (int) now()->isoWeekday();
+        // `$fecha` = día del registro que se evalúa; sin él (marcar salida, cierre automático)
+        // el horario que aplica es el de hoy.
+        $diaHoy = (int) ($fecha ?? now())->isoWeekday();
 
         $horariosDeHoy = self::$horariosCache->filter(
             fn (AsistenciaHorario $horario) => in_array($diaHoy, $horario->dias_habiles ?? [], true)
