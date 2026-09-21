@@ -96,7 +96,7 @@ class BannerInformativoController extends Controller
     public function subirImagen(Request $request)
     {
         $request->validate([
-            'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:2048',
+            'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:8192',
         ]);
 
         return $this->success('Imagen subida correctamente', $this->fileStorage->uploadFile($request->file('imagen'), 'banner'));
