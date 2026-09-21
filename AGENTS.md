@@ -671,6 +671,48 @@ reintroducir esos ids acá.
   (`id_bloque`/`id_area`). No confundirlos — son las dos acciones "Agregar área común
   existente" y "Mover" del frontend, respectivamente.
 
+### Notificación por correo (`InventarioServices::notificarAreaComun`)
+
+Reportar un daño, programar mantenimiento preventivo o registrar un check semestral
+sobre un ítem de Área Común (`categoria.tipo_categoria = 3`) dispara un correo
+**adicional** al genérico que ya enviaba cada flujo (ese sigue intacto, va a
+`cronograma.sistemas@...` + responsable/reportador) — este es específico del módulo,
+asunto `"Notificación | Área Común — {movimiento}"`, y siempre se refiere al ítem como
+"Área común", nunca como "inventario".
+
+- **Destinatarios**: todos los responsables del bloque (`Bloque::responsables()`,
+  `bloque_usuario` — puede haber varios) + el responsable del inventario
+  (`inventario.id_user`) + Dirección Administrativa. **El responsable del área y el
+  responsable del inventario NO son necesariamente la misma persona** — son dos campos
+  independientes (`bloque_usuario` se asigna desde "Responsables" en Bloques;
+  `inventario.id_user` se elige aparte, como "Usuario responsable", al crear/asignar el
+  ítem) — confirmado en código, no asumir que coinciden.
+- **Dirección Administrativa**: `Mails::DIRECCION_ADMINISTRATIVA->recipients()`
+  (`app/Enums/Mails.php`), que lee `correos_institucionales` filtrando por
+  `grupo = 'DIRECCION_ADMINISTRATIVA'` y `activo = true` — mismo mecanismo que usa
+  `NoticiasService` para sus listas de distribución (`GRUPOS_DISTRIBUCION`), reutilizado
+  tal cual, sin tabla ni lógica propia.
+- **Contenido fijo**: Bloque, Área (si existe), Área común (la `descripcion` del ítem),
+  Responsable del área, Responsable del inventario, Movimiento, Fecha del movimiento
+  (la real del mantenimiento programado en ese caso, no `now()`) y quién lo realizó (el
+  usuario logueado que ejecutó la acción).
+- **Un solo método cubre los tres triggers**: `notificarAreaComun(array $entradas,
+  string $movimiento, ?int $idActor)` recibe `[['inventario' => Inventario, 'fecha' =>
+  ?Carbon], ...]` e **ignora en silencio** cualquier ítem que no sea Área Común — así
+  `reportarInventario` y `programarMantenimientoPreventivo` (compartidos con el módulo
+  general de Inventario) pueden pasarle la misma lista de ítems que ya procesaron, sin
+  filtrar antes por categoría. Se llama desde:
+  - `reportarInventario` → movimiento "Reporte de daño".
+  - `programarMantenimientoPreventivo` → movimiento "Mantenimiento preventivo
+    programado".
+  - `registrarCheckInventario` → movimiento "Check semestral registrado" (antes no
+    enviaba ningún correo; el `select(['id', 'descripcion'])` original se amplió a
+    también traer `id_area`/`id_bloque`/`id_categoria`/`id_user`, necesarios para
+    resolver bloque/responsables).
+- Cualquier excepción al construir o enviar el correo se registra en el log
+  (`Log::error`) y no interrumpe la operación de negocio (reporte/mantenimiento/check ya
+  quedó guardado en BD de todas formas).
+
 ## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
 
 Módulo de **evaluaciones de calidad de servicios / desempeño** (Gestor de

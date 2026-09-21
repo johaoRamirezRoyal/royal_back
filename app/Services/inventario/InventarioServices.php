@@ -2,6 +2,7 @@
 
 namespace App\Services\inventario;
 
+use App\Enums\Mails;
 use App\Models\AnioEscolar\Anio;
 use App\Models\Areas\Areas;
 use App\Models\Inventario\Categoria;
@@ -43,6 +44,77 @@ class InventarioServices
             $destinatarios[] = $correo;
         }
         return array_values(array_unique($destinatarios));
+    }
+
+    /**
+     * Notifica un movimiento de Área Común (reportar daño, programar mantenimiento o
+     * registrar check semestral) al responsable del bloque, al responsable del
+     * inventario (`inventario.id_user` — no necesariamente la misma persona que el
+     * responsable del bloque) y a Dirección Administrativa (`correos_institucionales`,
+     * grupo `DIRECCION_ADMINISTRATIVA`, mismo mecanismo que usa Noticias —
+     * `Mails::recipients()`). Ítems que no sean Área Común (`categoria.tipo_categoria`
+     * != 3) se ignoran en silencio, así los tres callers (`reportarInventario`,
+     * `programarMantenimientoPreventivo`, `registrarCheckInventario`) pueden pasar la
+     * misma lista mixta de ítems que ya procesaron para el módulo general de
+     * Inventario, sin filtrar antes.
+     *
+     * @param array<array{inventario: Inventario, fecha: ?Carbon}> $entradas
+     */
+    private function notificarAreaComun(array $entradas, string $movimiento, ?int $idActor): void
+    {
+        if (empty($entradas)) {
+            return;
+        }
+
+        try {
+            $actorNombre = InventarioEmailHelper::nombreUsuario($idActor);
+            $direccionAdministrativa = Mails::DIRECCION_ADMINISTRATIVA->recipients();
+
+            foreach ($entradas as $entrada) {
+                $item = $entrada['inventario'];
+                $item->loadMissing(['categoria', 'area.bloque', 'bloque', 'usuario']);
+
+                if ((int) ($item->categoria?->tipo_categoria) !== 3) {
+                    continue;
+                }
+
+                $bloque = $item->bloque ?? $item->area?->bloque;
+                $responsablesArea = $bloque ? $bloque->responsables()->get() : collect();
+                $responsableInventario = $item->usuario;
+                $fecha = ($entrada['fecha'] ?? now())->format('d/m/Y H:i');
+
+                $destinatarios = array_values(array_unique(array_filter(array_merge(
+                    $responsablesArea->pluck('correo')->all(),
+                    [$responsableInventario?->correo],
+                    $direccionAdministrativa
+                ))));
+
+                if (empty($destinatarios)) {
+                    continue;
+                }
+
+                $nombreResponsablesArea = $responsablesArea->isNotEmpty()
+                    ? $responsablesArea->map(fn ($u) => trim("{$u->nombre} {$u->apellido}"))->implode(', ')
+                    : '—';
+                $nombreResponsableInventario = $responsableInventario
+                    ? trim("{$responsableInventario->nombre} {$responsableInventario->apellido}")
+                    : '—';
+
+                $titulo = "Notificación | Área Común — {$movimiento}";
+                $contenido = "Bloque: " . ($bloque?->nombre ?? '—') . "\n"
+                    . "Área: " . ($item->area?->nombre ?? '—') . "\n"
+                    . "Área común: {$item->descripcion}\n"
+                    . "Responsable del área: {$nombreResponsablesArea}\n"
+                    . "Responsable del inventario: {$nombreResponsableInventario}\n"
+                    . "Movimiento: {$movimiento}\n"
+                    . "Fecha del movimiento: {$fecha}\n"
+                    . "Realizado por: " . ($actorNombre ?? '—');
+
+                $this->mailService->sendGeneric($destinatarios, $titulo, $contenido);
+            }
+        } catch (\Throwable $e) {
+            Log::error('No se notificó el movimiento de área común: ' . $e->getMessage());
+        }
     }
 
     private function registrarLog(array $items, int $estado, ?int $idUser, ?int $idArea = null): void
@@ -895,7 +967,7 @@ class InventarioServices
     public function registrarCheckInventario(array $ids, ?int $idAnio, ?int $periodo, int $idResponsable): array
     {
         try {
-            $items = Inventario::whereIn('id', $ids)->get(['id', 'descripcion']);
+            $items = Inventario::whereIn('id', $ids)->get(['id', 'descripcion', 'id_area', 'id_bloque', 'id_categoria', 'id_user']);
             $marcados = [];
             $omitidos = [];
 
@@ -952,6 +1024,12 @@ class InventarioServices
                 ]);
                 $marcados[] = $item->id;
             }
+
+            $this->notificarAreaComun(
+                $items->whereIn('id', $marcados)->map(fn ($item) => ['inventario' => $item, 'fecha' => null])->all(),
+                'Check semestral registrado',
+                $idResponsable
+            );
 
             return [
                 'error' => false,
@@ -1420,6 +1498,12 @@ class InventarioServices
 
                     $this->mailService->sendGeneric($this->destinatarios($responsable?->correo, $reportadorCorreo), $titulo, $contenido);
                 }
+
+                $this->notificarAreaComun(
+                    $resultado['data']->map(fn ($item) => ['inventario' => $item, 'fecha' => null])->all(),
+                    'Reporte de daño',
+                    $id_log
+                );
             }
 
             return $resultado;
@@ -2015,6 +2099,12 @@ class InventarioServices
             });
 
             $this->notificarMantenimientoProgramado($creados, $descripcion, $fecha_inicio, $fecha_fin, $id_log);
+
+            $this->notificarAreaComun(
+                array_map(fn ($c) => ['inventario' => $c['inventario'], 'fecha' => $c['fecha']], $creados),
+                'Mantenimiento preventivo programado',
+                $id_log
+            );
 
             return [
                 'error' => false,
