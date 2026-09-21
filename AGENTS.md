@@ -607,6 +607,112 @@ corrigieron para ordenar por `inventario.descripcion` cuando no hay un sort expl
   `inventario.descripcion` ascendente. Es el endpoint que importa si "el listado
   principal de inventario" vuelve a reportarse como desordenado.
 
+## Áreas Comunes (`/inventario/areas-comunes` — `BloquesController` + `AreasComunesController`)
+
+Módulo para administrar inventario ubicado en espacios físicos compartidos (patios,
+salas, canchas...), organizado en **Bloques** → **Áreas** → ítems de `inventario` con
+`categoria.tipo_categoria = 3` ("Área Común"). Reutiliza `InventarioServices` para
+reportar/solucionar/descontinuar/mover — no duplica esa lógica, `AreasComunesController`
+solo agrega las acciones propias del módulo (reclasificar, check semestral, mover,
+historial/indicador de checks). Rutas en `routes/api/bloques.php`.
+
+### Permisos (`cron_opciones`, módulo 6 "Zonas" — legacy, reusado solo como agrupador;
+sus tablas legacy `zonas`/`areas_zona`/`chek_zonas`/`reportes_zonas` no se tocan)
+
+| Id | Nombre | Perfiles otorgados | Alcance |
+|---|---|---|---|
+| `108` | Administrador áreas comunes | Super Admin (1), Administrador (2) | Todo el módulo, sin recorte |
+| `109` | Uso áreas comunes | Asistente de nivel (11), Coordinador (26) | Todo el módulo, pero `obtenerTodosLosBloques` recorta server-side a `id_nivel` del usuario cuando NO tiene también la 108 |
+| `119` | Mis áreas comunes (autoservicio) | Asistente de nivel (11), Coordinador (26) — mismos perfiles que pueden ser responsables de un bloque (`BloquesServices::PERFILES_RESPONSABLES`) | Solo `/mis-areas`: bloques donde el usuario autenticado figura como responsable (`bloque_usuario`) — ver `BloquesServices::obtenerBloquesResponsable` |
+
+Ambos controllers gatean por método vía el patrón `sinAcceso()` (no constructor-wide):
+`crearBloque`/`actualizarBloque`/`desactivarBloques`/`asignarResponsables`/
+`usuariosAsignablesBloque`/`asignarAreasBloque`/`reclasificarInventario`/`moverItem`
+exigen **108**; `registrarCheck`/`historialChecks`/`indicadorChecks` aceptan **108 o
+109**; `misBloques` exige **119** en solitario (`BloquesController::OPCION_MIS_AREAS_COMUNES`).
+**118 y 117 no son permisos de este módulo** — `117`/`118` fueron ids provisionales
+usados por error en el sidebar del frontend antes de confirmarse contra `cron_opciones`
+en producción que el id real de "Mis áreas comunes" es `119` (corregido 2026-09-21); no
+reintroducir esos ids acá.
+
+### Endpoints (`routes/api/bloques.php`)
+
+| Endpoint | Gate | Método/servicio |
+|---|---|---|
+| `GET /` | 108 o 109 | `obtenerTodosLosBloques` — recorta por nivel si solo tiene 109 |
+| `GET /mis-bloques` | 119 | `obtenerBloquesResponsable` |
+| `POST /` / `PUT /` | 108 | `crearBloque` / `actualizarBloque` |
+| `POST /estado` | 108 | `desactivarBloques` (activar/desactivar en lote) |
+| `POST /responsables` | 108 | `asignarResponsables` (sync de `bloque_usuario`) |
+| `GET /usuarios-asignables` | 108 | usuarios activos con perfil 11 o 26 |
+| `POST /areas` | 108 | `AreasComunesController::asignarAreasBloque` |
+| `POST /inventario/reclasificar` | 108 | reclasifica ítems YA existentes a una categoría `tipo_categoria=3`, sin mover su `id_area`/`id_bloque` |
+| `POST /inventario/check` | 108 o 109 | check semestral en lote — ver quirks abajo |
+| `POST /inventario/mover` | 108 | mueve un ítem a otro bloque/área (`id_area=null` = directo al bloque) |
+| `GET /inventario/checks` | 108 o 109 | `historialChecks` — filtra por ítem/bloque/área/año/periodo/responsable |
+| `GET /inventario/checks/indicador` | 108 o 109 | `indicadorChecksAreasComunes` — % de áreas con al menos un check |
+
+### Quirks
+
+- **Check semestral (`registrarCheckInventario`)**: migración de `chek_zonas` legacy — un
+  lote de ids se omite (sin bloquear el resto) cuando el ítem tiene un reporte/mantenimiento
+  genuinamente pendiente (`estado IN [2,6]` sin fila de solución vinculada) o cuando ya
+  existe un check para ese mismo `id_anio` **y** `periodo` — un año puede tener varios
+  checks, uno por periodo, sin restricción contra cuál sea el periodo institucional
+  "vigente" en ese momento.
+- **`id_bloque` derivado en `historialChecks`/`indicadorChecksAreasComunes`**: un ítem
+  reclasificado a Área Común normalmente nunca llega a tener `inventario.id_bloque`
+  propio, solo `id_area` — ambos métodos resuelven el bloque real con un
+  `whereHas`/`whereExists` que cae al `id_bloque` del área cuando el directo es nulo.
+  Cualquier query nueva que filtre áreas comunes por bloque debe replicar ese mismo
+  fallback o perderá silenciosamente los ítems asignados a un área puntual.
+- **`reclasificarAreaComun` vs. `moverItemAreaComun`**: el primero solo cambia
+  `id_categoria` (el ítem se queda donde ya estaba); el segundo cambia la ubicación real
+  (`id_bloque`/`id_area`). No confundirlos — son las dos acciones "Agregar área común
+  existente" y "Mover" del frontend, respectivamente.
+
+### Notificación por correo (`InventarioServices::notificarAreaComun`)
+
+Reportar un daño, programar mantenimiento preventivo o registrar un check semestral
+sobre un ítem de Área Común (`categoria.tipo_categoria = 3`) dispara un correo
+**adicional** al genérico que ya enviaba cada flujo (ese sigue intacto, va a
+`cronograma.sistemas@...` + responsable/reportador) — este es específico del módulo,
+asunto `"Notificación | Área Común — {movimiento}"`, y siempre se refiere al ítem como
+"Área común", nunca como "inventario".
+
+- **Destinatarios**: todos los responsables del bloque (`Bloque::responsables()`,
+  `bloque_usuario` — puede haber varios) + el responsable del inventario
+  (`inventario.id_user`) + Dirección Administrativa. **El responsable del área y el
+  responsable del inventario NO son necesariamente la misma persona** — son dos campos
+  independientes (`bloque_usuario` se asigna desde "Responsables" en Bloques;
+  `inventario.id_user` se elige aparte, como "Usuario responsable", al crear/asignar el
+  ítem) — confirmado en código, no asumir que coinciden.
+- **Dirección Administrativa**: `Mails::DIRECCION_ADMINISTRATIVA->recipients()`
+  (`app/Enums/Mails.php`), que lee `correos_institucionales` filtrando por
+  `grupo = 'DIRECCION_ADMINISTRATIVA'` y `activo = true` — mismo mecanismo que usa
+  `NoticiasService` para sus listas de distribución (`GRUPOS_DISTRIBUCION`), reutilizado
+  tal cual, sin tabla ni lógica propia.
+- **Contenido fijo**: Bloque, Área (si existe), Área común (la `descripcion` del ítem),
+  Responsable del área, Responsable del inventario, Movimiento, Fecha del movimiento
+  (la real del mantenimiento programado en ese caso, no `now()`) y quién lo realizó (el
+  usuario logueado que ejecutó la acción).
+- **Un solo método cubre los tres triggers**: `notificarAreaComun(array $entradas,
+  string $movimiento, ?int $idActor)` recibe `[['inventario' => Inventario, 'fecha' =>
+  ?Carbon], ...]` e **ignora en silencio** cualquier ítem que no sea Área Común — así
+  `reportarInventario` y `programarMantenimientoPreventivo` (compartidos con el módulo
+  general de Inventario) pueden pasarle la misma lista de ítems que ya procesaron, sin
+  filtrar antes por categoría. Se llama desde:
+  - `reportarInventario` → movimiento "Reporte de daño".
+  - `programarMantenimientoPreventivo` → movimiento "Mantenimiento preventivo
+    programado".
+  - `registrarCheckInventario` → movimiento "Check semestral registrado" (antes no
+    enviaba ningún correo; el `select(['id', 'descripcion'])` original se amplió a
+    también traer `id_area`/`id_bloque`/`id_categoria`/`id_user`, necesarios para
+    resolver bloque/responsables).
+- Cualquier excepción al construir o enviar el correo se registra en el log
+  (`Log::error`) y no interrumpe la operación de negocio (reporte/mantenimiento/check ya
+  quedó guardado en BD de todas formas).
+
 ## Evaluaciones (`/evaluaciones` — `EvaluacionesController`)
 
 Módulo de **evaluaciones de calidad de servicios / desempeño** (Gestor de
