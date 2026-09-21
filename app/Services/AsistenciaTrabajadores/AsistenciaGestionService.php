@@ -10,6 +10,7 @@ use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -26,6 +27,9 @@ class AsistenciaGestionService extends Service
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
+
+    // Límite por defecto de llegadas tarde en el período (mismo default que estudiantes).
+    private const LIMITE_TARDANZAS_DEFECTO = 5;
 
     // Tope de destinatarios por perfiles del aviso de llegada tarde: un solo correo a un perfil
     // enorme (ej. todos los docentes) dispararía el límite del proveedor (ver el incidente de
@@ -84,6 +88,68 @@ class AsistenciaGestionService extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al registrar asistencia',
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * Registro manual de una asistencia completa (entrada y, opcional, salida) — para corregir
+     * un olvido del dispositivo. Queda marcada con QR = 2 ("Registro manual") y con una
+     * observación que dice quién la registró. Respeta el índice único usuario+fecha: si ya hay
+     * una asistencia ese día no la pisa (hay que editarla o eliminarla). El correo de llegada
+     * tarde solo se envía si la fecha es hoy — un registro retroactivo no debe disparar avisos.
+     */
+    public function registrarAsistenciaManual(array $datos, string $registradoPor): array
+    {
+        try {
+            $usuario = Usuario::select('id_user', 'perfil')->find($datos['id_user']);
+
+            if (!$usuario) {
+                return ['error' => true, 'message' => 'El usuario no existe.', 'data' => null];
+            }
+
+            if (in_array((int) $usuario->perfil, self::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+                return ['error' => true, 'message' => 'Este perfil no registra asistencia.', 'data' => null];
+            }
+
+            $conSegundos = fn (?string $hora) => $hora === null ? null : (strlen($hora) === 5 ? $hora . ':00' : $hora);
+            $nota = "Registro manual por {$registradoPor}";
+            $observacion = !empty($datos['observacion']) ? "{$nota}: {$datos['observacion']}" : $nota;
+
+            $asistencia = AsistenciaGestion::firstOrCreate(
+                ['id_user' => $datos['id_user'], 'fecha_asistencia' => $datos['fecha_asistencia']],
+                [
+                    'hora_asistencia' => $conSegundos($datos['hora_asistencia']),
+                    'hora_salida' => $conSegundos($datos['hora_salida'] ?? null),
+                    'observacion' => $observacion,
+                    'QR' => 2,
+                    'fechareg' => now(),
+                ]
+            );
+
+            if (!$asistencia->wasRecentlyCreated) {
+                return [
+                    'error' => true,
+                    'message' => 'Ya existe una asistencia de este trabajador en esa fecha. Edítala o elimínala antes de registrarla de nuevo.',
+                    'data' => null,
+                ];
+            }
+
+            if ($asistencia->fecha_asistencia->isToday()) {
+                $this->notificarLlegadaTardeDespuesDeResponder($asistencia);
+            }
+
+            return [
+                'error' => false,
+                'message' => 'Asistencia registrada manualmente',
+                'data' => $asistencia->toArray(),
+            ];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al registrar asistencia manual');
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al registrar la asistencia manual',
                 'data' => null,
             ];
         }
@@ -243,17 +309,20 @@ class AsistenciaGestionService extends Service
             $data = $resultados->toArray();
 
             // Acumulado de llegadas tarde por trabajador sobre un rango propio (independiente
-            // del rango del listado): por defecto del 1 del mes en curso a hoy.
-            $acumDesde = $filtros['acum_desde'] ?? now()->startOfMonth()->toDateString();
-            $acumHasta = $filtros['acum_hasta'] ?? now()->toDateString();
+            // del rango del listado); sin `acum_*` se usa el reinicio por defecto (rangoAcumuladoPorDefecto).
+            [$acumDesdeDefecto, $acumHastaDefecto] = $this->rangoAcumuladoPorDefecto();
+            $acumDesde = $filtros['acum_desde'] ?? $acumDesdeDefecto;
+            $acumHasta = $filtros['acum_hasta'] ?? $acumHastaDefecto;
             $acumulados = $this->tardanzasAcumuladas(array_column($data['data'], 'id_user'), $acumDesde, $acumHasta);
-            $data['acumulado'] = ['desde' => $acumDesde, 'hasta' => $acumHasta];
+            $limiteTardanzas = (int) (ConfiguracionAsistencia::find(self::ID_CONFIG)?->cantidad_limite_tardanzas ?? self::LIMITE_TARDANZAS_DEFECTO);
+            $data['acumulado'] = ['desde' => $acumDesde, 'hasta' => $acumHasta, 'limite' => $limiteTardanzas];
 
             foreach ($data['data'] as &$fila) {
                 if (isset($fila['usuario']['perfil'])) {
                     $fila['usuario']['grupo'] = $this->grupoLabel((int) $fila['usuario']['perfil']);
                 }
                 $fila['tardanzas_acumuladas'] = $acumulados[$fila['id_user']] ?? 0;
+                $fila['estado_tardanzas'] = $this->estadoTardanzas($fila['tardanzas_acumuladas'], $limiteTardanzas);
             }
             unset($fila);
 
@@ -280,6 +349,37 @@ class AsistenciaGestionService extends Service
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Nivel del acumulado frente al límite configurado — mismos niveles que llegadas tarde de
+     * estudiantes: 'aproximando' (limite-1), 'advertencia' (== limite), 'limite' (> limite).
+     * Límite 0 = sin límite.
+     */
+    private function estadoTardanzas(int $total, int $limite): string
+    {
+        return match (true) {
+            $limite <= 0 || $total <= 0 => 'normal',
+            $total > $limite => 'limite',
+            $total === $limite => 'advertencia',
+            $total === $limite - 1 => 'aproximando',
+            default => 'normal',
+        };
+    }
+
+    /**
+     * Único lugar donde se define cuándo "se reinicia" el acumulado de llegadas tarde: por
+     * defecto el acumulado es MENSUAL — del día 1 del mes de `$referencia` (hoy si no se da)
+     * hasta `$referencia`. Lo usan el reporte (cuando el usuario no elige un rango propio) y
+     * el correo de llegada tarde, para que ambos cuenten igual.
+     *
+     * @return array{0:string,1:string} [desde, hasta] en Y-m-d
+     */
+    private function rangoAcumuladoPorDefecto(?Carbon $referencia = null): array
+    {
+        $ref = ($referencia ?? now())->copy();
+
+        return [$ref->copy()->startOfMonth()->toDateString(), $ref->toDateString()];
     }
 
     /**
@@ -322,6 +422,12 @@ class AsistenciaGestionService extends Service
                     'id_asistencia' => $asistencia->id,
                     'error' => $e->getMessage(),
                 ]);
+
+                try {
+                    $asistencia->update(['correo_llegada_tarde' => 'fallido', 'correo_llegada_tarde_at' => now()]);
+                } catch (\Throwable) {
+                    // sin más que hacer: el error ya quedó en el log
+                }
             }
         });
     }
@@ -350,9 +456,9 @@ class AsistenciaGestionService extends Service
         $fecha = $asistencia->fecha_asistencia->toDateString();
         $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
         $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
-        $mes = $asistencia->fecha_asistencia->copy()->startOfMonth();
-        $acumulado = $this->tardanzasAcumuladas([$usuario->id_user], $mes->toDateString(), $fecha)[$usuario->id_user] ?? 0;
-        $periodo = "desde el {$mes->format('d/m/Y')} hasta el {$asistencia->fecha_asistencia->format('d/m/Y')}";
+        [$desdeAcum, $hastaAcum] = $this->rangoAcumuladoPorDefecto($asistencia->fecha_asistencia);
+        $acumulado = $this->tardanzasAcumuladas([$usuario->id_user], $desdeAcum, $hastaAcum)[$usuario->id_user] ?? 0;
+        $periodo = 'desde el ' . Carbon::parse($desdeAcum)->format('d/m/Y') . ' hasta el ' . Carbon::parse($hastaAcum)->format('d/m/Y');
 
         $idsPerfiles = array_map('intval', $config->perfiles_notificar_llegada_tarde ?? []);
         $nombresPerfiles = $idsPerfiles ? Perfil::whereIn('id_perfil', $idsPerfiles)->orderBy('nombre')->pluck('nombre')->all() : [];
@@ -381,8 +487,10 @@ class AsistenciaGestionService extends Service
         $destinos = array_merge($enviaTrabajador ? ['el propio trabajador'] : [], $correosPerfiles ? $nombresPerfiles : []);
         $lista = $destinos ? implode(', ', $destinos) : 'nadie más';
 
+        $resultados = [];
+
         if ($enviaTrabajador) {
-            $this->mailService->sendGeneric(
+            $resultados[] = $this->mailService->sendGeneric(
                 $usuario->correo,
                 'Llegada tarde registrada',
                 "Hola {$nombre},\n\nRegistraste tu llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nLlevas {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
@@ -390,12 +498,20 @@ class AsistenciaGestionService extends Service
         }
 
         if ($correosPerfiles) {
-            $this->mailService->sendGeneric(
+            $resultados[] = $this->mailService->sendGeneric(
                 $correosPerfiles,
                 "Llegada tarde: {$nombre}",
                 "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nAcumulado: {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
             );
         }
+
+        // Persistido para la columna "Correo" del reporte: 'omitido' si no hubo a quién avisar.
+        $estado = match (true) {
+            empty($resultados) => 'omitido',
+            collect($resultados)->contains(fn ($r) => $r['error'] ?? true) => 'fallido',
+            default => 'enviado',
+        };
+        $asistencia->update(['correo_llegada_tarde' => $estado, 'correo_llegada_tarde_at' => now()]);
     }
 
     /**

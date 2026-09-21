@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Route;
 // evita que un doble-tap o un retry dispare varias marcaciones seguidas, sin que un
 // kiosco compartido por varios trabajadores agote la cuota entre ellos.
 Route::post('/', [AsistenciaGestionController::class, 'registrarAsistencia'])->middleware('throttle:asistencia');
+// Registro manual de una asistencia (RH corrige un olvido del dispositivo) — ver
+// AsistenciaGestionController::registrarAsistenciaManual, exige la opción de "ver todas".
+Route::post('/manual', [AsistenciaGestionController::class, 'registrarAsistenciaManual']);
 Route::get('/', [AsistenciaGestionController::class, 'obtenerAsistencia']);
 Route::get('/resumen', [AsistenciaGestionController::class, 'obtenerResumenPorUsuario']);
 Route::get('/grafica', [AsistenciaGestionController::class, 'obtenerDatosGrafica']);

@@ -31,6 +31,8 @@ class AsistenciaGestion extends Model
         'hora_salida',
         'observacion',
         'revocado',
+        'correo_llegada_tarde',
+        'correo_llegada_tarde_at',
         'fechareg',
         'QR',
     ];
@@ -40,10 +42,11 @@ class AsistenciaGestion extends Model
         'hora_asistencia' => 'date:H:i:s',
         'hora_salida' => 'date:H:i:s',
         'revocado' => 'boolean',
+        'correo_llegada_tarde_at' => 'datetime',
         'fechareg' => 'datetime',
     ];
 
-    protected $appends = ['puntualidad', 'estado'];
+    protected $appends = ['puntualidad', 'estado', 'es_tardanza'];
 
     public function getPuntualidadAttribute(): ?string
     {
@@ -84,10 +87,12 @@ class AsistenciaGestion extends Model
      */
     public function esTardanza(): bool
     {
-        if ($this->revocado) {
-            return false;
-        }
+        return !$this->revocado && $this->es_tardanza;
+    }
 
+    /** Banda de tardanza según su nombre, sin mirar si fue revocada (la revocación la maneja esTardanza()). */
+    public function getEsTardanzaAttribute(): bool
+    {
         $banda = mb_strtolower((string) $this->puntualidad);
 
         return $banda !== '' && (str_contains($banda, 'atras') || str_contains($banda, 'tard'));

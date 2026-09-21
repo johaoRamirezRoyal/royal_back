@@ -10,6 +10,7 @@ use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class AsistenciaGestionController extends Controller
 {
@@ -51,6 +52,40 @@ class AsistenciaGestionController extends Controller
         );
 
         return $this->apiResponse($resultado);
+    }
+
+    /**
+     * Registro manual (a nombre de otro trabajador): solo quien puede ver/gestionar la
+     * asistencia de todos (OPCION_VER_TODAS) — sin este chequeo, cualquier usuario podría
+     * marcarle asistencia a cualquiera, o a sí mismo sin pasar por el dispositivo.
+     */
+    public function registrarAsistenciaManual(Request $request): JsonResponse
+    {
+        $usuarioAuth = $request->user();
+        $puedeGestionar = $this->usuariosService->tienePermiso(self::OPCION_VER_TODAS, $usuarioAuth->perfil)['permiso'] ?? false;
+
+        if (!$puedeGestionar) {
+            return $this->error('No tienes permiso para registrar asistencias manualmente', 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_user' => 'required|integer|exists:usuarios,id_user',
+            'fecha_asistencia' => 'required|date|before_or_equal:today',
+            'hora_asistencia' => 'required|date_format:H:i,H:i:s',
+            'hora_salida' => 'nullable|date_format:H:i,H:i:s|after:hora_asistencia',
+            'observacion' => 'nullable|string|max:1000',
+        ], [
+            'fecha_asistencia.before_or_equal' => 'La fecha no puede ser futura.',
+            'hora_salida.after' => 'La hora de salida debe ser posterior a la de entrada.',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error($validator->errors()->first(), 422);
+        }
+
+        $nombre = trim(($usuarioAuth->nombre ?? '') . ' ' . ($usuarioAuth->apellido ?? ''));
+
+        return $this->apiResponse($this->asistenciaService->registrarAsistenciaManual($validator->validated(), $nombre));
     }
 
     public function obtenerAsistencia(FiltroAsistenciaGestionRequest $request): JsonResponse

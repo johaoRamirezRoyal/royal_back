@@ -61,6 +61,7 @@ class AsistenciaHorariosController extends Controller
             'notificar_llegada_tarde_trabajador' => 'sometimes|boolean',
             'perfiles_notificar_llegada_tarde' => 'sometimes|nullable|array',
             'perfiles_notificar_llegada_tarde.*' => 'integer|exists:perfiles,id_perfil',
+            'cantidad_limite_tardanzas' => 'sometimes|integer|min:0|max:100',
         ]);
 
         if ($validator->fails()) {

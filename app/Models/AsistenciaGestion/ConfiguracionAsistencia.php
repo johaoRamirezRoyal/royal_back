@@ -15,11 +15,13 @@ class ConfiguracionAsistencia extends Model
         'notificar_llegada_tarde',
         'notificar_llegada_tarde_trabajador',
         'perfiles_notificar_llegada_tarde',
+        'cantidad_limite_tardanzas',
     ];
 
     protected $casts = [
         'notificar_llegada_tarde' => 'boolean',
         'notificar_llegada_tarde_trabajador' => 'boolean',
         'perfiles_notificar_llegada_tarde' => 'array',
+        'cantidad_limite_tardanzas' => 'integer',
     ];
 }
