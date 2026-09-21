@@ -16,6 +16,7 @@ use App\Models\Inventario\Reportes;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Usuario;
+use App\Pdf\Areas\HistorialChecksPdfService;
 use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\MailService;
@@ -296,9 +297,16 @@ class InventarioServices
                     $query->whereIn('inventario.id_bloque', $datos['id_bloque']);
                 })->when($datos['id_categoria'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.id_categoria', $datos['id_categoria']);
-                })->when($datos['tipo_categoria'] ?? null, function ($query) use ($datos) {
-                    $query->where('c.tipo_categoria', $datos['tipo_categoria']);
-                })->when($datos['estado'] ?? null, function ($query) use ($datos) {
+                })->when(
+                    $datos['tipo_categoria'] ?? null,
+                    function ($query) use ($datos) {
+                        $query->where('c.tipo_categoria', $datos['tipo_categoria']);
+                    },
+                    // Sin tipo_categoria explícito: nunca mezclar Área Común (3) en los
+                    // listados generales de Inventario — ese inventario solo se ve en el
+                    // módulo de Áreas Comunes (que sí manda tipo_categoria=3 a propósito).
+                    fn ($query) => $query->where('c.tipo_categoria', '!=', 3)
+                )->when($datos['estado'] ?? null, function ($query) use ($datos) {
                     $query->whereIn('inventario.estado', $datos['estado']);
                 })->when($datos['estado_not_in'] ?? null, function ($query) use ($datos) {
                     $query->whereNotIn('inventario.estado', $datos['estado_not_in']);
@@ -386,7 +394,14 @@ class InventarioServices
                 ->when(($filtros['id_area'] ?? null) && !($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_area', $filtros['id_area']))
                 ->when(!($filtros['id_area'] ?? null) && ($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_bloque', $filtros['id_bloque']))
                 ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
-                ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
+                ->when(
+                    $filtros['tipo_categoria'] ?? null,
+                    fn ($q, $v) => $q->where('c.tipo_categoria', $v),
+                    // Sin tipo_categoria explícito: nunca mezclar Área Común (3) en los
+                    // listados generales de Inventario — ese inventario solo se ve en el
+                    // módulo de Áreas Comunes (que sí manda tipo_categoria=3 a propósito).
+                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
+                )
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
                 ->when($filtros['s'] ?? null, function ($q, $s) {
                     // El "código" que ve el usuario (columna "Código" de Mis Inventarios,
@@ -451,7 +466,15 @@ class InventarioServices
                         DB::raw("(SELECT id FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 1 AND r.estado = 2 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS reporte_pendiente_id"),
                         DB::raw("(SELECT id FROM reportes r WHERE r.id_inventario = inventario.id AND r.tipo_reporte = 2 AND r.estado = 6 AND r.id_reporte IS NULL AND NOT EXISTS (SELECT 1 FROM reportes sol WHERE sol.id_reporte = r.id AND sol.estado = 3) ORDER BY r.id DESC LIMIT 1) AS mantenimiento_pendiente_id")
                     )
-                    ->orderByDesc('inventario.id')
+                    ->when(
+                        (int) ($filtros['tipo_categoria'] ?? 0) === 3,
+                        // Áreas Comunes: ordenado por área y luego por descripción del
+                        // ítem — importa sobre todo cuando el listado mezcla varias áreas
+                        // en una sola respuesta (ej. "Mis áreas", que trae todos los
+                        // bloques/áreas del responsable de una sola vez).
+                        fn ($q) => $q->orderBy('a.nombre')->orderBy('inventario.descripcion'),
+                        fn ($q) => $q->orderByDesc('inventario.id')
+                    )
                     ->paginate($perPage);
             } else {
                 // Modo agrupado (query 1): un solo grupo por (usuario, área, descripción).
@@ -1181,6 +1204,144 @@ class InventarioServices
     }
 
     /**
+     * Áreas Comunes: filas para el PDF "Checklist" de Historial de Checks — a diferencia
+     * de `historialChecks` (que lista EVENTOS de check ya registrados, siempre con check
+     * por definición), esto lista TODOS los ítems de Área Común que matcheen bloque/área
+     * (mismo `$base` que `indicadorChecksAreasComunes`, misma fuente de verdad que el
+     * indicador de arriba de la página), cada uno con si tiene o no un check para el
+     * año/periodo pedidos. `mantenimiento_descripcion`/`mantenimiento_fecha` viajan
+     * aparte (independientes de si hay check) — el PDF los muestra en sus propias
+     * columnas "Programación"/"Fecha De Programación", no reemplazan el estado del check.
+     */
+    public function historialChecksPdfItems(array $filtros)
+    {
+        return Inventario::query()
+            ->join('categoria as c', 'c.id', '=', 'inventario.id_categoria')
+            ->leftJoin('areas as a', 'a.id', '=', 'inventario.id_area')
+            ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(inventario.id_bloque, a.id_bloque)'))
+            ->where('c.tipo_categoria', 3)
+            ->where('inventario.activo', 1)
+            ->where('inventario.estado', '!=', 5)
+            // Mismo fallback que historialChecks/indicadorChecksAreasComunes: el bloque
+            // puede venir directo o a través del área puntual del ítem.
+            ->when($filtros['id_bloque'] ?? null, fn ($q, $v) => $q->where(function ($q2) use ($v) {
+                $q2->where('inventario.id_bloque', $v)
+                    ->orWhereExists(function ($q3) use ($v) {
+                        $q3->select(DB::raw(1))
+                            ->from('areas as a2')
+                            ->whereColumn('a2.id', 'inventario.id_area')
+                            ->where('a2.id_bloque', $v);
+                    });
+            }))
+            ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->where('inventario.id_area', $v))
+            ->select([
+                'inventario.id',
+                'inventario.descripcion',
+                DB::raw('COALESCE(b.nombre, "Sin bloque") as nom_bloque'),
+                DB::raw('COALESCE(a.nombre, "Directo al bloque") as nom_area'),
+            ])
+            ->addSelect(['tiene_check' => InventarioCheck::query()
+                ->selectRaw('1')
+                ->whereColumn('id_inventario', 'inventario.id')
+                ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
+                ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
+                ->limit(1),
+            ])
+            // Mantenimiento preventivo pendiente (el más reciente, mismo criterio que
+            // `mantenimiento_pendiente` en `obtenerListadoConsolidado`) — se piden
+            // descripción y fecha programada (`fechareg`, la que fija
+            // `fechaMantenimientoAleatoria` al crearlo) por separado, cada `addSelect`
+            // scalar solo puede traer una columna.
+            ->addSelect(['mantenimiento_descripcion' => Reportes::query()
+                ->select('descripcion')
+                ->whereColumn('id_inventario', 'inventario.id')
+                ->where('tipo_reporte', 2)
+                ->where('estado', 6)
+                ->whereNull('id_reporte')
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('reportes as sol')
+                        ->whereColumn('sol.id_reporte', 'reportes.id')
+                        ->where('sol.estado', 3);
+                })
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->addSelect(['mantenimiento_fecha' => Reportes::query()
+                ->select('fechareg')
+                ->whereColumn('id_inventario', 'inventario.id')
+                ->where('tipo_reporte', 2)
+                ->where('estado', 6)
+                ->whereNull('id_reporte')
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('reportes as sol')
+                        ->whereColumn('sol.id_reporte', 'reportes.id')
+                        ->where('sol.estado', 3);
+                })
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->orderBy('nom_bloque')
+            ->orderBy('nom_area')
+            ->orderBy('inventario.descripcion')
+            ->get();
+    }
+
+    /**
+     * Áreas Comunes: genera el PDF de `historialChecksPdfItems`, agrupado Bloque → Área
+     * (orden ya viene de la query). `anioLabel`/`periodoLabel` los resuelve el frontend
+     * con el mismo helper (`labelPeriodo`) que ya usa el resto de la página, para no
+     * duplicar la numeración romana de periodos acá — "Todos los años"/"Todos los
+     * periodos" cuando no hay filtro. El logo y "Documento generado por" sí se resuelven
+     * acá, contra el usuario autenticado, igual que `generarMantenimientoPdf`.
+     */
+    public function generarHistorialChecksPdf(array $filtros, string $anioLabel, string $periodoLabel, int $idLog): array
+    {
+        try {
+            $items = $this->historialChecksPdfItems($filtros);
+
+            $bloques = [];
+            foreach ($items as $item) {
+                $bloques[$item->nom_bloque][$item->nom_area][] = [
+                    'descripcion' => $item->descripcion,
+                    'check' => $item->tiene_check ? 'si' : 'no',
+                    'programacion' => $item->mantenimiento_descripcion,
+                    'fecha_programacion' => $item->mantenimiento_fecha ? Carbon::parse($item->mantenimiento_fecha)->format('d/m/Y') : null,
+                ];
+            }
+
+            $usuario = Usuario::find($idLog);
+            // Logo fijo del colegio (no el de MarcaDominioService, que resuelve por
+            // dominio de correo para el multi-tenant de otros PDFs de este módulo) —
+            // pedido explícito para este PDF puntual.
+            $logoPath = storage_path('app/public/royal-school/logotipoBackground.png');
+
+            $contenido = app(HistorialChecksPdfService::class)->generate([
+                'logo_path' => $logoPath,
+                'anio_label' => $anioLabel,
+                'periodo_label' => $periodoLabel,
+                'generado_por' => $usuario ? trim("{$usuario->nombre} {$usuario->apellido}") : 'N/A',
+                'bloques' => $bloques,
+            ]);
+
+            return [
+                'error' => false,
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => 'historial_checks_areas_comunes_' . now()->format('Ymd_His') . '.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'error' => true,
+                'message' => $e->getMessage(),
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
      * Summary of descontinuarInventario
      * @param array $ids
      * @param mixed $id_log
@@ -1678,9 +1839,16 @@ class InventarioServices
                 ->when($id_categoria, function ($q) use ($id_categoria) {
                     $q->where('iv.id_categoria', $id_categoria);
                 })
-                ->when($tipo_categoria, function ($q) use ($tipo_categoria) {
-                    $q->where('c.tipo_categoria', $tipo_categoria);
-                })
+                ->when(
+                    $tipo_categoria,
+                    function ($q) use ($tipo_categoria) {
+                        $q->where('c.tipo_categoria', $tipo_categoria);
+                    },
+                    // Sin tipo_categoria explícito: nunca mezclar Área Común (3) en los
+                    // listados generales de Inventario — ese inventario solo se ve en el
+                    // módulo de Áreas Comunes (que sí manda tipo_categoria=3 a propósito).
+                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
+                )
                 ->when($id_area, function ($q) use ($id_area) {
                     $q->where('iv.id_area', $id_area);
                 })
@@ -1999,33 +2167,11 @@ class InventarioServices
                 $idAnio = $ultimoAnioEscolar->id;
             }
 
-            // Evita duplicar: un mismo equipo no debería terminar con más de un
-            // mantenimiento preventivo (pendiente o ya solucionado) por año+periodo — sin
-            // este filtro se podía volver a programar un equipo que ya tuvo su
-            // mantenimiento en ese periodo (su estado ya había cambiado a otra cosa desde
-            // entonces), inflando el conteo de "realizados" por encima del total de
-            // equipos en el indicador.
-            if ($periodo) {
-                $idsConMantenimiento = DB::table('reportes')
-                    ->whereIn('id_inventario', $inventarios->pluck('id'))
-                    ->where('tipo_reporte', 2)
-                    ->whereNull('id_reporte')
-                    ->where('id_anio', $idAnio)
-                    ->where('periodo', $periodo)
-                    ->pluck('id_inventario');
-
-                $inventarios = $inventarios->reject(
-                    fn ($inventario) => $idsConMantenimiento->contains($inventario->id)
-                )->values();
-            }
-
-            if ($inventarios->isEmpty()) {
-                return [
-                    'error' => true,
-                    'message' => 'Los equipos seleccionados ya tienen un mantenimiento preventivo registrado para ese año y periodo.',
-                    'data' => []
-                ];
-            }
+            // Un mismo equipo SÍ puede tener más de un mantenimiento preventivo en el
+            // mismo año+periodo (ej. uno de seguimiento tras otro ya solucionado) — ya no
+            // se deduplica por año/periodo. La única restricción real sigue siendo la del
+            // `whereNotIn('estado', [2, 5, 6])` de arriba: no se puede programar uno nuevo
+            // mientras el equipo ya tiene uno actualmente ABIERTO (estado 6 sin resolver).
 
             $creados = [];
             $inventariosActualizados = [];
@@ -2232,7 +2378,13 @@ class InventarioServices
     public function indicadorMantenimiento(?int $tipoCategoria, ?int $idAnio, ?int $idPeriodo, ?int $idCategoria = null): array
     {
         try {
-            $categorias = Categoria::when($tipoCategoria, fn ($q) => $q->where('tipo_categoria', $tipoCategoria))
+            $categorias = Categoria::when(
+                $tipoCategoria,
+                fn ($q) => $q->where('tipo_categoria', $tipoCategoria),
+                // Sin tipo_categoria explícito: el indicador de mantenimiento es del
+                // módulo general de Inventario — Área Común (3) no entra acá.
+                fn ($q) => $q->where('tipo_categoria', '!=', 3)
+            )
                 ->when($idCategoria, fn ($q) => $q->where('id', $idCategoria))
                 ->orderBy('nombre')
                 ->get();
@@ -2317,7 +2469,13 @@ class InventarioServices
                 ->join('categoria as c', 'c.id', '=', 'i.id_categoria')
                 ->where('r.tipo_reporte', 2)
                 ->whereNull('r.id_reporte')
-                ->when($tipoCategoria, fn ($q) => $q->where('c.tipo_categoria', $tipoCategoria))
+                ->when(
+                    $tipoCategoria,
+                    fn ($q) => $q->where('c.tipo_categoria', $tipoCategoria),
+                    // Sin tipo_categoria explícito: la gráfica es del módulo general de
+                    // Inventario — Área Común (3) no entra acá.
+                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
+                )
                 ->when($idCategoria, fn ($q) => $q->where('i.id_categoria', $idCategoria))
                 ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
                 ->select(
@@ -2343,7 +2501,11 @@ class InventarioServices
     }
 
     /**
-     * Fecha aleatoria dentro de [inicio, fin], día hábil (L-V) y hora entre 07:30 y 15:45.
+     * Fecha aleatoria dentro de [inicio, fin], cualquier día excepto domingo (L-S), y
+     * hora entre 07:30 y 15:45. Áreas Comunes manda como rango el mes completo elegido
+     * por el usuario (ver ConfirmarAccionesModal.parts.tsx en el frontend) — este método
+     * es compartido con el módulo general de Mantenimiento, que sigue mandando su propio
+     * rango de fechas puntual.
      */
     private function fechaMantenimientoAleatoria(Carbon $inicio, Carbon $fin): Carbon
     {
@@ -2351,7 +2513,7 @@ class InventarioServices
         $cursor = $inicio->copy()->startOfDay();
 
         while ($cursor->lte($fin)) {
-            if ($cursor->isWeekday()) {
+            if (!$cursor->isSunday()) {
                 $dias[] = $cursor->copy();
             }
             $cursor->addDay();

@@ -20,6 +20,10 @@ class AreasComunesController extends Controller
 {
     private const OPCION_ADMIN_AREAS_COMUNES = 108;
     private const OPCION_USO_AREAS_COMUNES = 109;
+    // "Mis áreas comunes" (autoservicio) — sumada a registrarCheck por consistencia con
+    // InventariosController::listadoConsolidado/reportarInventario, aunque hoy la
+    // vista de autoservicio (`misAreas`) ya no ofrece el check, solo Reportar.
+    private const OPCION_MIS_AREAS_COMUNES = 119;
 
     public function __construct(
         private AreasServices $areasService,
@@ -105,7 +109,7 @@ class AreasComunesController extends Controller
      */
     public function registrarCheck(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -190,5 +194,52 @@ class AreasComunesController extends Controller
         $resultado = $this->inventarioService->indicadorChecksAreasComunes($filtros);
 
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
+
+    /**
+     * PDF "Checklist" de Historial de Checks — ver
+     * InventarioServices::generarHistorialChecksPdf. `anio_label`/`periodo_label` los
+     * manda el frontend ya resueltos (mismo `labelPeriodo` que usa la página), no se
+     * recalculan acá.
+     */
+    public function historialChecksPdf(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_bloque' => ['nullable', 'integer', 'exists:bloques,id'],
+            'id_area' => ['nullable', 'integer', 'exists:areas,id'],
+            'id_anio' => ['nullable', 'integer', 'exists:anio_escolar,id'],
+            'periodo' => ['nullable', 'integer'],
+            'anio_label' => ['required', 'string'],
+            'periodo_label' => ['required', 'string'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $filtros = $request->only(['id_bloque', 'id_area', 'id_anio', 'periodo']);
+
+        $resultado = $this->inventarioService->generarHistorialChecksPdf(
+            $filtros,
+            $request->input('anio_label'),
+            $request->input('periodo_label'),
+            $request->user()->id_user,
+        );
+
+        if ($resultado['error']) {
+            return response()->json($resultado, 400);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
     }
 }

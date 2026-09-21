@@ -9,8 +9,12 @@ use App\Services\Service;
 
 class BloquesServices extends Service
 {
-    /** Perfiles que pueden ser responsables de un bloque: asistente de nivel (11), coordinador (26). */
-    private const PERFILES_RESPONSABLES = [11, 26];
+    /**
+     * Perfiles que pueden ser responsables de un bloque: Administrador (2), Directora
+     * administrativa (7), Asistente de nivel (11), Coordinador (26), Supervisor
+     * Operativo (27).
+     */
+    private const PERFILES_RESPONSABLES = [1, 2, 7, 11, 26, 27];
 
     public function crearBloque(array $datos)
     {
