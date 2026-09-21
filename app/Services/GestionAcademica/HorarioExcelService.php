@@ -53,8 +53,11 @@ class HorarioExcelService
     /**
      * Un único docente — usado tanto por "Mi horario" (el propio docente autenticado) como
      * por el admin desde Configuración académica > Horario, sobre el docente seleccionado.
+     *
+     * @param ?array<int> $idsEsquema Restringe la grilla a estos esquemas (interseca con los
+     * esquemas reales del docente) — null incluye todos los esquemas donde dicta.
      */
-    public function exportarDocente(int $idDocente): array
+    public function exportarDocente(int $idDocente, ?array $idsEsquema = null): array
     {
         try {
             $docente = Usuario::select('id_user', 'nombre', 'apellido', 'correo')->find($idDocente);
@@ -69,7 +72,7 @@ class HorarioExcelService
             $nombre = trim("{$docente->nombre} {$docente->apellido}");
             $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
 
-            if (!$this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath)) {
+            if (!$this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath, $idsEsquema)) {
                 return ['error' => true, 'message' => 'Este docente no tiene ningún esquema de horario asignado.', 'data' => []];
             }
 
@@ -89,8 +92,11 @@ class HorarioExcelService
     /**
      * Un único .xlsx con una hoja por docente — solo los que tengan al menos una clase real
      * (con carga académica) asignada, en vez de exigir exportar docente por docente.
+     *
+     * @param ?array<int> $idsEsquema Ver exportarDocente — los docentes sin ningún bloque en
+     * esos esquemas simplemente no generan hoja.
      */
-    public function exportarTodosLosDocentes(): array
+    public function exportarTodosLosDocentes(?array $idsEsquema = null): array
     {
         try {
             $idsDocentes = CargaAcademica::query()
@@ -120,7 +126,7 @@ class HorarioExcelService
                 $sheetName = $this->nombreHojaUnico($nombre, $usados);
                 $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
 
-                if ($this->agregarHoja($spreadsheet, $docente->id_user, $nombre, $sheetName, $logoPath)) {
+                if ($this->agregarHoja($spreadsheet, $docente->id_user, $nombre, $sheetName, $logoPath, $idsEsquema)) {
                     $count++;
                 }
             }
@@ -197,10 +203,14 @@ class HorarioExcelService
      *
      * @return list<array{id:int,nombre:string,bloques:list<array{hora_inicio:string,hora_fin:string,asignable:bool,etiqueta:?string,color:?string,rows:list<array>}>}>
      */
-    private function diasConFranjas(int $idDocente): array
+    private function diasConFranjas(int $idDocente, ?array $idsEsquemaFiltro = null): array
     {
         $idsEsquemaAnioActivo = $this->horarioClaseService->idsEsquemaAnioActivo();
         $idsEsquema = $this->horarioClaseService->esquemasDelDocente($idDocente, $idsEsquemaAnioActivo);
+
+        if ($idsEsquemaFiltro !== null) {
+            $idsEsquema = $idsEsquema->intersect($idsEsquemaFiltro)->values();
+        }
 
         if ($idsEsquema->isEmpty()) {
             return [];
@@ -387,10 +397,11 @@ class HorarioExcelService
      *
      * @param ?string $logoPath Logo resuelto por dominio de correo del docente (ver
      * MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
+     * @param ?array<int> $idsEsquemaFiltro null incluye todos los esquemas del docente.
      */
-    private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null): bool
+    private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null, ?array $idsEsquemaFiltro = null): bool
     {
-        $dias = $this->diasConFranjas($idDocente);
+        $dias = $this->diasConFranjas($idDocente, $idsEsquemaFiltro);
 
         if (count($dias) === 0) {
             return false;

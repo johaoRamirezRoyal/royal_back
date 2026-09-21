@@ -318,7 +318,7 @@ class GestionAcademicaController extends Controller
     /** Descarga el .xlsx del horario propio (mismo docente autenticado que verMiHorario). */
     public function exportarMiHorario(Request $request)
     {
-        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->user()->id_user));
+        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->user()->id_user, $this->idsEsquemaExport($request)));
     }
 
     public function crearFranjaHoraria(FranjaHorariaRequest $request)
@@ -407,13 +407,19 @@ class GestionAcademicaController extends Controller
     /** Descarga el .xlsx del horario de UN docente (admin, desde Configuración académica > Horario). */
     public function exportarHorarioDocente(Request $request)
     {
-        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->integer('id_docente')));
+        return $this->responderXlsx($this->service->horarioExcel()->exportarDocente($request->integer('id_docente'), $this->idsEsquemaExport($request)));
     }
 
     /** Descarga un único .xlsx con una hoja por docente (los que tengan bloques de horario). */
     public function exportarHorariosTodosLosDocentes(Request $request)
     {
-        return $this->responderXlsx($this->service->horarioExcel()->exportarTodosLosDocentes());
+        return $this->responderXlsx($this->service->horarioExcel()->exportarTodosLosDocentes($this->idsEsquemaExport($request)));
+    }
+
+    /** id_esquema[] opcional de los endpoints de exportación — null = todos los esquemas. */
+    private function idsEsquemaExport(Request $request): ?array
+    {
+        return $request->has('id_esquema') ? array_map('intval', (array) $request->input('id_esquema')) : null;
     }
 
     /** Mismo patrón de descarga binaria que BibliotecaController::generarPazYSalvoPdf, para .xlsx en vez de .pdf. */

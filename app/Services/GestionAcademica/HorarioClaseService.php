@@ -323,6 +323,12 @@ class HorarioClaseService extends Service
 
                     'franjaHoraria.diaSemana:id,nombre,abreviatura',
 
+                    // Nombre/nivel del esquema de cada franja — el frontend segmenta
+                    // "Asistencia | Clases" por esquema (cada uno numera su `orden` desde 1).
+                    'franjaHoraria.esquema:id,nombre,id_nivel',
+
+                    'franjaHoraria.esquema.nivel:id,nombre',
+
                     'cargaAcademica:id,id_docente_asignatura,id_curso',
 
                     'cargaAcademica.curso:id,nombre,id_nivel',
@@ -500,7 +506,7 @@ class HorarioClaseService extends Service
         $franjasNoAsignables = FranjaHoraria::whereIn('id_esquema', $idsEsquema)
             ->where('asignable', false)
             ->when($id_dia_semana, fn ($q) => $q->where('id_dia_semana', $id_dia_semana))
-            ->with('diaSemana:id,nombre,abreviatura')
+            ->with(['diaSemana:id,nombre,abreviatura', 'esquema:id,nombre,id_nivel', 'esquema.nivel:id,nombre'])
             ->get()
             ->reject(fn (FranjaHoraria $franja) => isset($ocupados["{$franja->id_dia_semana}-{$franja->hora_inicio}"]));
 
@@ -520,11 +526,13 @@ class HorarioClaseService extends Service
                 'color' => $franja->color,
                 'franja_horaria' => [
                     'id' => $franja->id,
+                    'id_esquema' => $franja->id_esquema,
                     'id_dia_semana' => $franja->id_dia_semana,
                     'hora_inicio' => $franja->hora_inicio,
                     'hora_fin' => $franja->hora_fin,
                     'orden' => $franja->orden,
                     'dia_semana' => $franja->diaSemana,
+                    'esquema' => $franja->esquema,
                 ],
                 'carga_academica' => null,
             ];
