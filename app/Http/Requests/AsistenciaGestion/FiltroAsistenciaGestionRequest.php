@@ -22,6 +22,8 @@ class FiltroAsistenciaGestionRequest extends FormRequest
             'hora_desde' => ['nullable', 'date_format:H:i:s'],
             'hora_hasta' => ['nullable', 'date_format:H:i:s'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'acum_desde' => ['nullable', 'date'],
+            'acum_hasta' => ['nullable', 'date', 'after_or_equal:acum_desde'],
         ];
     }
 
@@ -37,6 +39,9 @@ class FiltroAsistenciaGestionRequest extends FormRequest
             'fecha_hasta.after_or_equal' => 'La fecha hasta debe ser igual o posterior a la fecha desde.',
             'hora_desde.date_format' => 'La hora desde debe tener el formato HH:MM:SS.',
             'hora_hasta.date_format' => 'La hora hasta debe tener el formato HH:MM:SS.',
+            'acum_desde.date' => 'La fecha desde del acumulado no tiene un formato válido.',
+            'acum_hasta.date' => 'La fecha hasta del acumulado no tiene un formato válido.',
+            'acum_hasta.after_or_equal' => 'La fecha hasta del acumulado debe ser igual o posterior a la fecha desde.',
             'per_page.integer' => 'El número de registros por página debe ser numérico.',
             'per_page.min' => 'Debe haber al menos 1 registro por página.',
             'per_page.max' => 'No puede haber más de 100 registros por página.',

@@ -76,6 +76,24 @@ class AsistenciaGestion extends Model
     }
 
     /**
+     * true si la banda de puntualidad de esta llegada es una tardanza. Las bandas son texto
+     * libre definido por RH (no hay un flag propio), así que por convención cuenta como
+     * tardanza toda banda cuyo nombre contenga "atras" o "tard" ("Atrasado", "Tarde",
+     * "Tardío"...) — el fallback sin horario configurado ya se llama "atrasado". Una llegada
+     * revocada no cuenta.
+     */
+    public function esTardanza(): bool
+    {
+        if ($this->revocado) {
+            return false;
+        }
+
+        $banda = mb_strtolower((string) $this->puntualidad);
+
+        return $banda !== '' && (str_contains($banda, 'atras') || str_contains($banda, 'tard'));
+    }
+
+    /**
      * Horario activo del grupo dado, o el horario global (grupo_id null) si no hay uno
      * específico, que además incluya el día de la semana actual en `dias_habiles`. Un
      * horario que no cubre hoy (ej. Lun-Vie un sábado) no aplica, aunque esté activo y

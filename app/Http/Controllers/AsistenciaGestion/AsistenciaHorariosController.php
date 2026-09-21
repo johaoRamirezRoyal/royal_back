@@ -57,6 +57,10 @@ class AsistenciaHorariosController extends Controller
 
         $validator = Validator::make($request->all(), [
             'hora_minima_salida_defecto' => 'required|date_format:H:i',
+            'notificar_llegada_tarde' => 'sometimes|boolean',
+            'notificar_llegada_tarde_trabajador' => 'sometimes|boolean',
+            'perfiles_notificar_llegada_tarde' => 'sometimes|nullable|array',
+            'perfiles_notificar_llegada_tarde.*' => 'integer|exists:perfiles,id_perfil',
         ]);
 
         if ($validator->fails()) {

@@ -4,12 +4,14 @@ namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
+use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AsistenciaGestionService extends Service
 {
@@ -24,6 +26,11 @@ class AsistenciaGestionService extends Service
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
+
+    // Tope de destinatarios por perfiles del aviso de llegada tarde: un solo correo a un perfil
+    // enorme (ej. todos los docentes) dispararía el límite del proveedor (ver el incidente de
+    // rate-limit de Noticias) — por encima de esto se omite el correo a perfiles y se registra en logs.
+    private const MAX_DESTINATARIOS_LLEGADA_TARDE = 30;
 
     // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
     private const GRUPO_LABEL_POR_GROUP_ID = [
@@ -64,6 +71,8 @@ class AsistenciaGestionService extends Service
                     'data' => null,
                 ];
             }
+
+            $this->notificarLlegadaTardeDespuesDeResponder($asistencia);
 
             return [
                 'error' => false,
@@ -133,6 +142,8 @@ class AsistenciaGestionService extends Service
                         'data' => null,
                     ];
                 }
+
+                $this->notificarLlegadaTardeDespuesDeResponder($asistencia);
 
                 return [
                     'error' => false,
@@ -231,10 +242,18 @@ class AsistenciaGestionService extends Service
 
             $data = $resultados->toArray();
 
+            // Acumulado de llegadas tarde por trabajador sobre un rango propio (independiente
+            // del rango del listado): por defecto del 1 del mes en curso a hoy.
+            $acumDesde = $filtros['acum_desde'] ?? now()->startOfMonth()->toDateString();
+            $acumHasta = $filtros['acum_hasta'] ?? now()->toDateString();
+            $acumulados = $this->tardanzasAcumuladas(array_column($data['data'], 'id_user'), $acumDesde, $acumHasta);
+            $data['acumulado'] = ['desde' => $acumDesde, 'hasta' => $acumHasta];
+
             foreach ($data['data'] as &$fila) {
                 if (isset($fila['usuario']['perfil'])) {
                     $fila['usuario']['grupo'] = $this->grupoLabel((int) $fila['usuario']['perfil']);
                 }
+                $fila['tardanzas_acumuladas'] = $acumulados[$fila['id_user']] ?? 0;
             }
             unset($fila);
 
@@ -260,6 +279,122 @@ class AsistenciaGestionService extends Service
                 'message' => 'Error en el servidor al obtener asistencia',
                 'data' => null,
             ];
+        }
+    }
+
+    /**
+     * Llegadas tarde (no revocadas) por usuario dentro de [desde, hasta]. Se evalúa con
+     * AsistenciaGestion::esTardanza() — la misma puntualidad que se muestra en pantalla — en
+     * vez de un corte de hora fijo en SQL, porque las bandas son configurables por horario.
+     *
+     * @param array<int> $idsUsuario
+     * @return array<int,int> id_user => total
+     */
+    private function tardanzasAcumuladas(array $idsUsuario, string $desde, string $hasta): array
+    {
+        if (empty($idsUsuario)) {
+            return [];
+        }
+
+        return AsistenciaGestion::with('usuario')
+            ->whereIn('id_user', array_unique($idsUsuario))
+            ->whereBetween('fecha_asistencia', [$desde, $hasta])
+            ->whereNotNull('hora_asistencia')
+            ->where('revocado', false)
+            ->get()
+            ->filter(fn (AsistenciaGestion $a) => $a->esTardanza())
+            ->countBy('id_user')
+            ->all();
+    }
+
+    /**
+     * El correo se envía DESPUÉS de responder al dispositivo (terminating): el push de
+     * Hikvision no debe esperar al SMTP, y un fallo de correo nunca debe afectar el
+     * registro de la asistencia.
+     */
+    private function notificarLlegadaTardeDespuesDeResponder(AsistenciaGestion $asistencia): void
+    {
+        app()->terminating(function () use ($asistencia) {
+            try {
+                $this->notificarLlegadaTarde($asistencia);
+            } catch (\Throwable $e) {
+                Log::error('Error al notificar llegada tarde de trabajador', [
+                    'id_asistencia' => $asistencia->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Aviso por correo de una entrada tarde recién registrada (ver la config en
+     * configuracion_asistencia): al propio trabajador y, en un solo correo, a los usuarios
+     * activos de los perfiles elegidos. Ambos correos incluyen el acumulado del mes y la lista
+     * de roles a quienes llega el aviso.
+     */
+    private function notificarLlegadaTarde(AsistenciaGestion $asistencia): void
+    {
+        $config = ConfiguracionAsistencia::find(self::ID_CONFIG);
+
+        if (!$config || !$config->notificar_llegada_tarde) {
+            return;
+        }
+
+        $asistencia->load('usuario');
+        $usuario = $asistencia->usuario;
+
+        if (!$usuario || !$asistencia->esTardanza()) {
+            return;
+        }
+
+        $fecha = $asistencia->fecha_asistencia->toDateString();
+        $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
+        $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
+        $mes = $asistencia->fecha_asistencia->copy()->startOfMonth();
+        $acumulado = $this->tardanzasAcumuladas([$usuario->id_user], $mes->toDateString(), $fecha)[$usuario->id_user] ?? 0;
+        $periodo = "desde el {$mes->format('d/m/Y')} hasta el {$asistencia->fecha_asistencia->format('d/m/Y')}";
+
+        $idsPerfiles = array_map('intval', $config->perfiles_notificar_llegada_tarde ?? []);
+        $nombresPerfiles = $idsPerfiles ? Perfil::whereIn('id_perfil', $idsPerfiles)->orderBy('nombre')->pluck('nombre')->all() : [];
+
+        $correosPerfiles = [];
+        if ($idsPerfiles) {
+            $correosPerfiles = Usuario::where('estado', 'activo')
+                ->whereIn('perfil', $idsPerfiles)
+                ->where('id_user', '!=', $usuario->id_user)
+                ->whereNotNull('correo')
+                ->pluck('correo')
+                ->unique()
+                ->values()
+                ->all();
+
+            if (count($correosPerfiles) > self::MAX_DESTINATARIOS_LLEGADA_TARDE) {
+                Log::warning('Aviso de llegada tarde a perfiles omitido: demasiados destinatarios', [
+                    'perfiles' => $idsPerfiles,
+                    'destinatarios' => count($correosPerfiles),
+                ]);
+                $correosPerfiles = [];
+            }
+        }
+
+        $enviaTrabajador = $config->notificar_llegada_tarde_trabajador && $usuario->correo;
+        $destinos = array_merge($enviaTrabajador ? ['el propio trabajador'] : [], $correosPerfiles ? $nombresPerfiles : []);
+        $lista = $destinos ? implode(', ', $destinos) : 'nadie más';
+
+        if ($enviaTrabajador) {
+            $this->mailService->sendGeneric(
+                $usuario->correo,
+                'Llegada tarde registrada',
+                "Hola {$nombre},\n\nRegistraste tu llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nLlevas {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
+            );
+        }
+
+        if ($correosPerfiles) {
+            $this->mailService->sendGeneric(
+                $correosPerfiles,
+                "Llegada tarde: {$nombre}",
+                "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nAcumulado: {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
+            );
         }
     }
 
