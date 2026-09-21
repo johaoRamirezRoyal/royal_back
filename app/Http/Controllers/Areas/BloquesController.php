@@ -15,7 +15,7 @@ class BloquesController extends Controller
     private const OPCION_ADMIN_AREAS_COMUNES = 108;
     private const OPCION_USO_AREAS_COMUNES = 109;
     // "Mis áreas" (autoservicio) — ver migración 2026_09_14_120000_seed_opcion_mis_areas_comunes.
-    private const OPCION_MIS_AREAS_COMUNES = 117;
+    private const OPCION_MIS_AREAS_COMUNES = 119;
 
     protected $service_bloques;
 
