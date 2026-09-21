@@ -3,12 +3,13 @@
 namespace App\Services\AdminManagement;
 
 use App\Models\BannerInformativo;
+use App\Services\FileStorageService;
 use App\Services\MailService;
 use Illuminate\Support\Facades\Cache;
 
 class BannerInformativoService
 {
-    public function __construct(private MailService $mailService) {}
+    public function __construct(private MailService $mailService, private FileStorageService $fileStorage) {}
 
     // banner_informativo vive en admin_management (ver el modelo) — sin cache, CADA
     // GET /api/banner-informativo (login + montaje de AppLayout, en cada carga de
@@ -24,12 +25,19 @@ class BannerInformativoService
         return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn () => BannerInformativo::actual());
     }
 
-    public function actualizar(?string $mensaje, ?string $dominio, string $variante, string $tamano, bool $activo, ?string $expiraEn, bool $enviarCorreo, ?string $destinatarioCorreo, bool $mostrarModal, int $idUser): BannerInformativo
+    public function actualizar(?string $mensaje, ?string $dominio, string $variante, string $tamano, bool $activo, ?string $expiraEn, bool $enviarCorreo, ?string $destinatarioCorreo, bool $mostrarModal, ?string $imagen, int $idUser): BannerInformativo
     {
         $banner = BannerInformativo::actual();
 
+        // Imagen reemplazada o quitada: se borra el archivo anterior del disco para no dejar
+        // huérfanos (una imagen nueva ya se subió aparte, ver subirImagen del controller).
+        if ($banner->imagen && $banner->imagen !== $imagen) {
+            $this->fileStorage->eliminar($banner->imagen);
+        }
+
         $banner->update([
             'mensaje' => $mensaje,
+            'imagen' => $imagen,
             'dominio' => $dominio,
             'variante' => $variante,
             'tamano' => $tamano,

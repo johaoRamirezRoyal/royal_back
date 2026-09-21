@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\AdminManagement\BannerInformativoService;
 use App\Services\branding\MarcaDominioService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Lectura pública del banner informativo (aviso/mantenimiento) — sin auth, porque se
@@ -49,10 +50,32 @@ class BannerInformativoController extends Controller
 
         return $this->success('Banner informativo obtenido correctamente', [
             'mensaje' => $banner->mensaje,
+            'imagen' => $banner->imagen,
             'variante' => $banner->variante,
             'tamano' => $banner->tamano,
             'expira_en' => $banner->expira_en,
             'mostrar_modal' => $banner->mostrar_modal,
         ]);
+    }
+
+    /**
+     * GET /api/banner-informativo/imagen/{filename} — sirve la imagen/GIF del banner sin
+     * token (se pide desde un <img src>, también en el login). Solo lee dentro de la
+     * carpeta `banner/` del disco de uploads; `{filename}` no admite "/" (ver la ruta).
+     */
+    public function verImagen(string $filename)
+    {
+        if (str_contains($filename, '..')) {
+            abort(404);
+        }
+
+        $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
+        $ruta = 'banner/' . $filename;
+
+        if (!$disk->exists($ruta)) {
+            abort(404);
+        }
+
+        return $disk->response($ruta);
     }
 }

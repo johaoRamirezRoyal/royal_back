@@ -32,6 +32,7 @@ Route::prefix('llaves-maestras')->group(function () {
 Route::prefix('banner-informativo')->group(function () {
     Route::get('/', [BannerInformativoController::class, 'obtener']);
     Route::put('/', [BannerInformativoController::class, 'actualizar']);
+    Route::post('/imagen', [BannerInformativoController::class, 'subirImagen']);
     // Envía el mensaje YA GUARDADO por correo — acción explícita separada del guardado
     // (ver BannerInformativoService::enviarCorreo), no dispara sola al tocar 'activo'.
     Route::post('/enviar-correo', [BannerInformativoController::class, 'enviarCorreo']);

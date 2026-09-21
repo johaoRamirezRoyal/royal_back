@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AdminManagement;
 use App\Http\Controllers\Controller;
 use App\Models\BannerInformativo;
 use App\Services\AdminManagement\BannerInformativoService;
+use App\Services\FileStorageService;
 use Illuminate\Http\Request;
 
 /**
@@ -17,6 +18,7 @@ class BannerInformativoController extends Controller
 
     public function __construct(
         private BannerInformativoService $service,
+        private FileStorageService $fileStorage,
         Request $request,
     ) {
         if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
@@ -33,6 +35,9 @@ class BannerInformativoController extends Controller
     {
         $request->validate([
             'mensaje' => 'nullable|string|max:500',
+            // Solo rutas dentro de la carpeta del banner (la que devuelve subirImagen) — evita
+            // apuntar a (y luego borrar, ver BannerInformativoService::actualizar) archivos ajenos.
+            'imagen' => ['nullable', 'string', 'max:255', 'regex:/^banner\/[A-Za-z0-9._-]+$/'],
             'dominio' => 'nullable|string|max:190',
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),
             'tamano' => 'required|string|in:' . implode(',', BannerInformativo::TAMANOS),
@@ -66,6 +71,7 @@ class BannerInformativoController extends Controller
             $enviarCorreo,
             $request->filled('destinatario_correo') ? trim((string) $request->input('destinatario_correo')) : null,
             $request->boolean('mostrar_modal'),
+            $request->filled('imagen') ? (string) $request->input('imagen') : null,
             $request->user()->id_user,
         );
 
@@ -84,6 +90,16 @@ class BannerInformativoController extends Controller
         }
 
         return $this->success($mensaje, $banner);
+    }
+
+    /** Sube la imagen/GIF del banner — devuelve `ruta`, que luego viaja en `imagen` al guardar. */
+    public function subirImagen(Request $request)
+    {
+        $request->validate([
+            'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:2048',
+        ]);
+
+        return $this->success('Imagen subida correctamente', $this->fileStorage->uploadFile($request->file('imagen'), 'banner'));
     }
 
     /** Envía el mensaje ya guardado del banner por correo — ver BannerInformativoService::enviarCorreo. */
