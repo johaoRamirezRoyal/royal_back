@@ -96,16 +96,7 @@ class SolicitudesServices
     /** Correos de los coordinadores activos a cargo del nivel dado (puede no haber ninguno). */
     private function coordinadoresDeNivel(?int $idNivel): array
     {
-        if (!$idNivel) {
-            return [];
-        }
-
-        return Usuario::where('perfil', self::PERFIL_COORDINADOR)
-            ->where('id_nivel', $idNivel)
-            ->where('estado', 'activo')
-            ->pluck('correo')
-            ->filter()
-            ->all();
+        return Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $idNivel, soloActivos: true);
     }
 
     // No bloqueante a propósito: un correo caído no debe impedir crear/gestionar la solicitud.

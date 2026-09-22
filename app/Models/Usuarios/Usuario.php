@@ -102,6 +102,25 @@ class Usuario extends Authenticatable implements JWTSubject
         return $this->hasMany(FotoPerfil::class, 'id_user', 'id_user');
     }
 
+    /**
+     * Correos de los usuarios con alguno de los `$perfiles` dados en el nivel `$idNivel`
+     * (ej. coordinador = 26, asistente de nivel = 11, directivo = 7). Sin nivel → [].
+     */
+    public static function correosPorPerfilesYNivel(array $perfiles, ?int $idNivel, bool $soloActivos = false): array
+    {
+        if (!$idNivel) {
+            return [];
+        }
+
+        return static::where('id_nivel', $idNivel)
+            ->whereIn('perfil', $perfiles)
+            ->when($soloActivos, fn ($q) => $q->where('estado', 'activo'))
+            ->pluck('correo')
+            ->filter()
+            ->values()
+            ->all();
+    }
+
     // Campos asignables masivamente
     protected $fillable = [
         'documento',

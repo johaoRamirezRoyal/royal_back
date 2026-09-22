@@ -11,7 +11,6 @@ use App\Models\PermisosLicencias\PermisoTipo;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
-use App\Services\Usuarios\UsuariosServices;
 use Exception;
 use Illuminate\Http\UploadedFile;
 
@@ -42,7 +41,6 @@ class PermisosLicenciasServices
     public function __construct(
         private FileStorageService $fileStorage,
         private MailService $mailService,
-        private UsuariosServices $usuariosService,
     ) {
     }
 
@@ -332,7 +330,7 @@ class PermisosLicenciasServices
         $destinatarios = array_merge(
             config('gestionHumana.correo_notificacion', []),
             [$beneficiario?->correo],
-            $this->usuariosService->correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
+            Usuario::correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
         );
 
         if ($idNivel === 1 || in_array($perfil, [23, 10, 32, 33], true) || $perfil === 11) {
@@ -345,7 +343,7 @@ class PermisosLicenciasServices
         if (in_array($idNivel, [1, 2, 3], true)) {
             $destinatarios = array_merge(
                 $destinatarios,
-                $this->usuariosService->correosPorPerfilesYNivel([7], $idNivel)
+                Usuario::correosPorPerfilesYNivel([7], $idNivel)
             );
         }
 

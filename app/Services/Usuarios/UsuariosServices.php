@@ -35,30 +35,6 @@ class UsuariosServices
             ->first();
     }
 
-    /**
-     * Correo(s) de usuarios con alguno de los `$perfiles` dados, en el mismo `$idNivel` —
-     * ej. el coordinador (perfil 26) del nivel de un trabajador puntual. Compartido entre
-     * módulos que enrutan avisos por coordinador/directivo de nivel (ver
-     * PermisosLicenciasServices, AsistenciaGestionService::notificarLlegadaTarde) para no
-     * duplicar esta resolución en cada uno. $soloActivos en false por defecto — mismo
-     * comportamiento que tenía el método original en PermisosLicenciasServices (no
-     * filtraba por estado); pásalo en true si el caller sí lo necesita.
-     */
-    public function correosPorPerfilesYNivel(array $perfiles, ?int $idNivel, bool $soloActivos = false): array
-    {
-        if (!$idNivel) {
-            return [];
-        }
-
-        return Usuario::where('id_nivel', $idNivel)
-            ->whereIn('perfil', $perfiles)
-            ->when($soloActivos, fn ($q) => $q->where('estado', 'activo'))
-            ->pluck('correo')
-            ->filter()
-            ->values()
-            ->all();
-    }
-
     public function mostrarTodosUsuariosActivos()
     {
         return DB::select("SELECT id_user, documento, CONCAT(nombre, ' ', apellido) AS nom_user, 

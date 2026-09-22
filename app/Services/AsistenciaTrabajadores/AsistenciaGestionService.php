@@ -9,7 +9,6 @@ use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
-use App\Services\Usuarios\UsuariosServices;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +17,6 @@ class AsistenciaGestionService extends Service
 {
     public function __construct(
         private MailService $mailService,
-        private UsuariosServices $usuariosService,
     ) {}
 
     // Mismo patrón que AdmisionesServices/LlegadasTarde: correo fijo del encargado de RH
@@ -33,7 +31,7 @@ class AsistenciaGestionService extends Service
 
     // Perfiles fijos del aviso de llegada tarde (ver notificarLlegadaTarde) — Recursos
     // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
-    // UsuariosServices::correosPorPerfilesYNivel).
+    // Usuario::correosPorPerfilesYNivel).
     private const PERFIL_RECURSOS_HUMANOS = 8;
     private const PERFIL_COORDINADOR = 26;
 
@@ -377,9 +375,10 @@ class AsistenciaGestionService extends Service
      * configuracion_asistencia): al propio trabajador y, en un solo correo, a Recursos
      * Humanos y/o al coordinador del mismo nivel del trabajador (cada uno un toggle
      * independiente, ya no un selector libre de perfiles). El coordinador se resuelve con
-     * UsuariosServices::correosPorPerfilesYNivel, el mismo mecanismo que ya usa
-     * PermisosLicenciasServices para enrutar avisos al coordinador de nivel — Recursos
-     * Humanos, en cambio, no se acota por nivel (es transversal a todo el colegio).
+     * Usuario::correosPorPerfilesYNivel, el mismo mecanismo que ya usan
+     * PermisosLicenciasServices y ProcesoCompra\SolicitudesServices para enrutar avisos al
+     * coordinador de nivel — Recursos Humanos, en cambio, no se acota por nivel (es
+     * transversal a todo el colegio).
      */
     private function notificarLlegadaTarde(AsistenciaGestion $asistencia): void
     {
@@ -419,7 +418,7 @@ class AsistenciaGestionService extends Service
 
         if ($config->notificar_coordinador_nivel) {
             $correosCoordinador = array_diff(
-                $this->usuariosService->correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $usuario->id_nivel, soloActivos: true),
+                Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $usuario->id_nivel, soloActivos: true),
                 [$usuario->correo],
             );
 

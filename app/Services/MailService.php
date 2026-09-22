@@ -11,6 +11,18 @@ use Illuminate\Support\Facades\Mail;
 class MailService
 {
     /**
+     * Gestión administrativa recibe copia oculta de toda notificación institucional
+     * (sendGeneric siempre; send() solo con $copiaGestor). Nunca en sendView: son OTP
+     * y verificaciones de correo, que no deben salir del buzón del titular.
+     */
+    private const COPIA_GESTOR = 'gestor.administrativo@royalschool.edu.co';
+
+    private function bccGestor(array $recipients): array
+    {
+        return in_array(self::COPIA_GESTOR, $recipients, true) ? [] : [self::COPIA_GESTOR];
+    }
+
+    /**
      * Firma del throttle de cuenta de cPanel/Exim ("Max Emails Per Hour"), confirmada
      * en producción (ver log del 2026-09-16: 1967/2149 correos de una noticia fallaron
      * con este mismo mensaje durante 1h18m seguidas). Deliberadamente específica -
@@ -106,7 +118,7 @@ class MailService
                 ];
             }
 
-            Mail::to($recipients)->send(new GenericMail($titulo, $contenido));
+            Mail::to($recipients)->bcc($this->bccGestor($recipients))->send(new GenericMail($titulo, $contenido));
 
             Log::info('Correo genérico enviado', [
                 'to' => $recipients,
@@ -133,7 +145,7 @@ class MailService
         }
     }
 
-    public function send(array|string $to, Mailable $mailable): bool
+    public function send(array|string $to, Mailable $mailable, bool $copiaGestor = false): bool
     {
         try {
             $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
@@ -143,7 +155,7 @@ class MailService
                 return false;
             }
 
-            Mail::to($recipients)->send($mailable);
+            Mail::to($recipients)->bcc($copiaGestor ? $this->bccGestor($recipients) : [])->send($mailable);
 
             Log::info('Correo enviado', [
                 'to' => $recipients,
