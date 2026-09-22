@@ -4,6 +4,7 @@ namespace App\Services\inventario;
 
 use App\Enums\Mails;
 use App\Models\AnioEscolar\Anio;
+use App\Models\AnioEscolar\Periodo;
 use App\Models\Areas\Areas;
 use App\Models\Inventario\Categoria;
 use App\Models\Inventario\Estado;
@@ -1209,9 +1210,11 @@ class InventarioServices
      * por definición), esto lista TODOS los ítems de Área Común que matcheen bloque/área
      * (mismo `$base` que `indicadorChecksAreasComunes`, misma fuente de verdad que el
      * indicador de arriba de la página), cada uno con si tiene o no un check para el
-     * año/periodo pedidos. `mantenimiento_descripcion`/`mantenimiento_fecha` viajan
-     * aparte (independientes de si hay check) — el PDF los muestra en sus propias
-     * columnas "Programación"/"Fecha De Programación", no reemplazan el estado del check.
+     * año/periodo pedidos, más fecha/año/periodo de ese check. `mantenimiento_descripcion`/
+     * `mantenimiento_fecha` viajan aparte (independientes de si hay check) — el PDF los
+     * muestra en sus propias columnas "Programación"/"Fecha De Programación", no
+     * reemplazan el estado del check. `generarHistorialChecksPdf` agrupa estas filas
+     * (una por ítem físico) por área+descripción+estado del check antes de armar el PDF.
      */
     public function historialChecksPdfItems(array $filtros)
     {
@@ -1240,11 +1243,32 @@ class InventarioServices
                 DB::raw('COALESCE(b.nombre, "Sin bloque") as nom_bloque'),
                 DB::raw('COALESCE(a.nombre, "Directo al bloque") as nom_area'),
             ])
-            ->addSelect(['tiene_check' => InventarioCheck::query()
-                ->selectRaw('1')
+            // Check (el más reciente que matchee el año/periodo pedidos, o el más
+            // reciente en general si no se filtró) — fecha/año/periodo van por columna
+            // aparte porque el PDF los muestra dentro de la propia celda "Check"
+            // (ver generarHistorialChecksPdf, que resuelve las etiquetas de año/periodo).
+            ->addSelect(['check_fecha' => InventarioCheck::query()
+                ->select('fechareg')
                 ->whereColumn('id_inventario', 'inventario.id')
                 ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
                 ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->addSelect(['check_id_anio' => InventarioCheck::query()
+                ->select('id_anio')
+                ->whereColumn('id_inventario', 'inventario.id')
+                ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
+                ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->addSelect(['check_periodo' => InventarioCheck::query()
+                ->select('periodo')
+                ->whereColumn('id_inventario', 'inventario.id')
+                ->when($filtros['id_anio'] ?? null, fn ($q, $v) => $q->where('id_anio', $v))
+                ->when($filtros['periodo'] ?? null, fn ($q, $v) => $q->where('periodo', $v))
+                ->orderByDesc('id')
                 ->limit(1),
             ])
             // Mantenimiento preventivo pendiente (el más reciente, mismo criterio que
@@ -1301,14 +1325,50 @@ class InventarioServices
         try {
             $items = $this->historialChecksPdfItems($filtros);
 
-            $bloques = [];
+            // Catálogos de año/periodo de los checks encontrados, en un solo select cada
+            // uno (evita N+1 al resolver la etiqueta de cada fila una por una).
+            $aniosPorId = Anio::whereIn('id', $items->pluck('check_id_anio')->filter()->unique())
+                ->get()->keyBy('id');
+            $periodosPorId = Periodo::whereIn('id', $items->pluck('check_periodo')->filter()->unique())
+                ->get()->keyBy('id');
+
+            // Agrupa filas por área + descripción + estado del check (una fila por
+            // "Lámparas" en vez de una por cada unidad física) — pedido explícito para no
+            // saturar el PDF de filas idénticas. `cantidad` es cuántos ítems físicos caen
+            // en ese grupo; el resto de columnas (check/programación) toman el primer
+            // valor no vacío que aparezca dentro del grupo como representativo — en la
+            // práctica todos los ítems de un mismo grupo se chequean/mantienen juntos en
+            // el mismo lote, así que casi siempre coinciden.
+            $grupos = [];
             foreach ($items as $item) {
-                $bloques[$item->nom_bloque][$item->nom_area][] = [
-                    'descripcion' => $item->descripcion,
-                    'check' => $item->tiene_check ? 'si' : 'no',
-                    'programacion' => $item->mantenimiento_descripcion,
-                    'fecha_programacion' => $item->mantenimiento_fecha ? Carbon::parse($item->mantenimiento_fecha)->format('d/m/Y') : null,
-                ];
+                $clave = $item->nom_area . '|' . $item->descripcion . '|' . ($item->check_fecha ? 'si' : 'no');
+
+                if (!isset($grupos[$item->nom_bloque][$item->nom_area][$clave])) {
+                    $anio = $item->check_id_anio ? $aniosPorId->get($item->check_id_anio) : null;
+                    $periodo = $item->check_periodo ? $periodosPorId->get($item->check_periodo) : null;
+
+                    $grupos[$item->nom_bloque][$item->nom_area][$clave] = [
+                        'descripcion' => $item->descripcion,
+                        'cantidad' => 0,
+                        'check' => $item->check_fecha ? 'si' : 'no',
+                        'check_fecha' => $item->check_fecha ? Carbon::parse($item->check_fecha)->format('d/m/Y') : null,
+                        'check_periodo' => $periodo ? $this->labelPeriodo((int) $periodo->numero) : null,
+                        'check_anio' => $anio ? "{$anio->anio_inicio} — {$anio->anio_fin}" : null,
+                        'programacion' => $item->mantenimiento_descripcion,
+                        'fecha_programacion' => $item->mantenimiento_fecha ? Carbon::parse($item->mantenimiento_fecha)->format('d/m/Y') : null,
+                    ];
+                }
+
+                $grupos[$item->nom_bloque][$item->nom_area][$clave]['cantidad']++;
+            }
+
+            // `array_values` sobre cada área: los grupos ya no necesitan su clave
+            // compuesta una vez armados, el PDF solo itera la lista.
+            $bloques = [];
+            foreach ($grupos as $nombreBloque => $areas) {
+                foreach ($areas as $nombreArea => $filas) {
+                    $bloques[$nombreBloque][$nombreArea] = array_values($filas);
+                }
             }
 
             $usuario = Usuario::find($idLog);
@@ -1339,6 +1399,16 @@ class InventarioServices
                 'data' => null,
             ];
         }
+    }
+
+    /** "1" -> "I Periodo" — mismo criterio que `labelPeriodo.ts` en el frontend (numeración
+     * romana solo para enteros 1-10; cualquier otro valor se muestra tal cual). Copiado acá
+     * en vez de compartido porque el frontend no expone ese util al backend. */
+    private function labelPeriodo(int $numero): string
+    {
+        $romanos = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+        return $numero >= 1 && $numero <= 10 ? "{$romanos[$numero]} Periodo" : "Periodo {$numero}";
     }
 
     /**
