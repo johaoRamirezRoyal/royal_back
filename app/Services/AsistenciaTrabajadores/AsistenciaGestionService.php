@@ -4,6 +4,7 @@ namespace App\Services\AsistenciaTrabajadores;
 
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
+use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
@@ -691,7 +692,14 @@ class AsistenciaGestionService extends Service
     {
         try {
             $limite = $filtros['top'] ?? 10;
-            $horaLimite = $filtros['hora_limite'] ?? '07:15:00';
+            // Mismo corte institucional configurable que ya usa
+            // HikvisionController::registrarLlegadaTardeSiAplica para decidir si una
+            // marcación es tarde — no un literal propio de este método. No se acepta
+            // override por request: antes tenía un `07:15:00` hardcodeado que no se
+            // movía aunque el admin cambiara la hora límite real desde el panel
+            // (hoy 07:05:00, ver configuracion_llegadas_tarde), desalineando este top del
+            // resto del sistema.
+            $horaLimite = ConfiguracionLlegadasTarde::find(1)?->hora_limite ?? '07:15:00';
 
             $query = DB::table('asistencia_gestion as ag')
                 ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')

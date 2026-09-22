@@ -93,8 +93,8 @@ Accept: application/json
 GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas
 Accept: application/json
 
-### 16. Top 5 — con hora límite personalizada
-GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas?top=5&hora_limite=08:00:00
+### 16. Top 5 — limitando cuántos usuarios devuelve
+GET http://localhost:8000/api/asistencia-gestion/grafica/top-tardanzas?top=5
 Accept: application/json
 
 ### 17. Top 10 — filtrado por perfil y rango de fechas

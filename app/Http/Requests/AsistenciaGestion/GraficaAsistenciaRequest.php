@@ -15,7 +15,6 @@ class GraficaAsistenciaRequest extends FormRequest
     {
         return [
             'top' => ['nullable', 'integer', 'min:1', 'max:50'],
-            'hora_limite' => ['nullable', 'date_format:H:i:s'],
             'id_usuario' => ['nullable', 'integer', 'exists:usuarios,id_user'],
             'id_perfil' => ['nullable', 'integer'],
             'fecha_desde' => ['nullable', 'date'],
@@ -30,7 +29,6 @@ class GraficaAsistenciaRequest extends FormRequest
             'top.integer' => 'El top debe ser numérico.',
             'top.min' => 'El top debe ser al menos 1.',
             'top.max' => 'El top no puede ser mayor a 50.',
-            'hora_limite.date_format' => 'La hora límite debe tener el formato HH:MM:SS.',
             'id_usuario.integer' => 'El ID del usuario debe ser numérico.',
             'id_usuario.exists' => 'El usuario seleccionado no existe.',
             'id_perfil.integer' => 'El ID del perfil debe ser numérico.',
