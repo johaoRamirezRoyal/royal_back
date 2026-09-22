@@ -306,6 +306,43 @@ activo y no se haya enviado aún.
   este mismo patrón (migraciones legacy re-corridas sobre un dump importado) antes de
   asumir que la doc está desactualizada.
 
+## Asistencia de Trabajadores — aviso de llegada tarde (`AsistenciaGestionService`)
+
+`notificarLlegadaTarde()` (llamado desde `registrarAsistencia`/`registrarAsistenciaManual`
+vía `notificarLlegadaTardeDespuesDeResponder`, en `app()->terminating()` para no bloquear
+la respuesta al dispositivo Hikvision) envía el aviso de entrada tarde. Configuración en
+la fila única `configuracion_asistencia` (id=1):
+
+- `notificar_llegada_tarde` — maestro, apagado por defecto.
+- `notificar_llegada_tarde_trabajador` — si el aviso también le llega al propio trabajador.
+- `notificar_recursos_humanos` (perfil `8`, todo el colegio) y `notificar_coordinador_nivel`
+  (perfil `26`, acotado al `id_nivel` del trabajador que llegó tarde) — **reemplazan** un
+  selector libre de perfiles (`perfiles_notificar_llegada_tarde`, columna JSON) que existió
+  brevemente; se simplificó a estos dos toggles fijos porque en la práctica solo esos dos
+  roles tenían sentido, y un selector libre invitaba a elegir perfiles grandes que
+  dispararían el límite de destinatarios (`MAX_DESTINATARIOS_LLEGADA_TARDE = 30`, mismo
+  criterio del incidente de rate-limit de Noticias, ver abajo). Migración
+  `2026_09_22_155537_replace_perfiles_notificar_llegada_tarde_with_rh_coordinador` — el
+  down() restaura la columna JSON si hace falta revertir.
+- El coordinador se resuelve con `Usuario::correosPorPerfilesYNivel(array $perfiles,
+  ?int $idNivel, bool $soloActivos = false)` (`app/Models/Usuarios/Usuario.php`, método
+  estático) — el mismo mecanismo que ya usan `PermisosLicenciasServices::destinatariosNotificacion`
+  (avisos de solicitudes de permiso al coordinador/directivo de nivel del beneficiario) y
+  `ProcesoCompra\SolicitudesServices` (aviso al coordinador al confirmar una solicitud de
+  compra) — si necesitas resolver "usuarios de perfil X en el nivel Y" en un servicio
+  nuevo, usa este método estático en vez de reimplementarlo otra vez. **Nota de historial**:
+  este método nació dos veces en paralelo — una vez como `UsuariosServices::correosPorPerfilesYNivel`
+  (instancia, inyectada) al extraerlo de la copia `private` que tenía
+  `PermisosLicenciasServices`, y por separado como este mismo `Usuario::correosPorPerfilesYNivel`
+  estático en otra rama que ya lo traía adoptado en `ProcesoCompra\SolicitudesServices` —
+  el conflicto de merge del 2026-09-22 se resolvió a favor de la versión estática (ya con
+  más consumidores) y se eliminó la copia en `UsuariosServices`; si ves una referencia a
+  `UsuariosServices::correosPorPerfilesYNivel` en un commit viejo, ya no existe. `$soloActivos`
+  nace en `false` por defecto: el método original en `PermisosLicenciasServices` no
+  filtraba por `estado`, y cambiar ese comportamiento por default habría alterado (sin
+  pedirlo) a quién le llegan los avisos de permisos ya en producción — `AsistenciaGestionService`
+  y `SolicitudesServices` sí pasan `true` explícito.
+
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 
 ### Autoservicio del Docente (tercer patrón de permisos, además de (a)/(b) arriba)
@@ -336,6 +373,70 @@ siempre, pero el propio `AsistenciaEstudianteService::metricasPorCurso` recibe
 parámetro) y restringe ahí los resultados a solo sus cursos — no confíes en que
 "whitelisteado en el controller" sea suficiente aislamiento para endpoints agregados,
 que también agregan datos de terceros.
+
+### "Horario suelto" — bloque de horario sin asignatura
+
+Un `academico_carga_academica` normalmente vincula curso+docente **a través de**
+`id_docente_asignatura` (FK a `academico_docente_asignatura`, que a su vez amarra
+docente+asignatura). Algunos horarios (ej. dirección de grupo, actividades sin materia)
+necesitan un docente atado a un curso sin pasar por ninguna asignatura. En vez de crear
+una asignatura ficticia (lo que ensuciaría reportes/exports que agrupan por asignatura),
+`academico_carga_academica` ganó una **segunda ruta**, mutuamente excluyente con la
+primera y no forzada por constraint de BD (solo por código de aplicación):
+
+- `id_docente_asignatura` se volvió `NULL`-able (antes `NOT NULL`) —
+  `2026_09_22_134203_add_id_docente_to_academico_carga_academica_table` hace
+  `DB::statement('ALTER TABLE academico_carga_academica MODIFY id_docente_asignatura INT NULL')`
+  (vía `DB::statement` crudo, no `Blueprint::change()` — este proyecto no tiene
+  `doctrine/dbal` instalado, ver convención ya documentada en otras migraciones del repo).
+- `id_docente` (nuevo, nullable, FK directa a `usuarios.id_user`) es la ruta alterna:
+  cuando está seteado, `id_docente_asignatura` es `NULL` y viceversa. `unique(['id_docente',
+  'id_curso'])` evita duplicar el mismo docente+curso por la ruta directa.
+- `CargaAcademica::getIdDocenteEfectivoAttribute()` resuelve "el docente de esta carga,
+  por cualquiera de las dos rutas" (`$this->id_docente ?? $this->docenteAsignatura?->id_docente`)
+  — deliberadamente **no** en `$appends` (forzaría cargar la relación `docenteAsignatura`
+  en cada serialización aunque no se use).
+- `CargaAcademicaService::añadirCargaAcademicaSuelta(int $id_curso, int $id_docente, bool
+  $silentIfExists = false)` — la ruta de creación para la ruta directa (usada solo desde
+  el admin, ver abajo).
+
+**Todo método que antes asumía `docenteAsignatura` no-nulo tuvo que aprender a resolver el
+docente por ambas rutas** (con `orWhere`/`leftJoin` en vez de `whereHas`/`join`, que
+descartarían silenciosamente las filas con `id_docente_asignatura` nulo):
+`HorarioClaseService::añadirHorarioClase`/`franjaDisponibleParaCarga`/`esquemasDelDocente`/`verHorario`,
+`FranjaHorariaService::verFranjasHorarias` (resolución de `$docenteScope`),
+`DocenteHorarioService::actualizarDescripcion`/`eliminar` (chequeo de dueño),
+`HorarioExcelService::exportarTodosLosDocentes`,
+`AsistenciaEstudianteService::metricasPorCurso` (resolución de `$cursosDocente`).
+
+**Solo el admin puede crear un horario suelto** (pestaña "Horario" de Gestión Académica,
+`HorarioClaseRequest` acepta `id_curso`/`id_docente` opcionales para esa rama) — se evaluó
+y se construyó completo un flujo de autoservicio equivalente en "Mi horario"
+(`GestionAcademicaController::reservarMiHorario`/`MiHorarioRequest`/
+`DocenteHorarioService::reservar`/`verMenu` con `id_asignatura` nullable) pero fue
+**revertido por decisión explícita del usuario** ("quita el que los profesores puedan
+asignarse franjas horarias sin asignaturas, deja que el admin se encargue de ello") — si
+se retoma esa idea, el punto de partida ya existió una vez en este mismo archivo de
+servicio, revisar el historial de git antes de reconstruirlo desde cero. Lo que sí quedó
+del intento (y es un fix real, no atado a autoservicio): `DocenteHorarioService::actualizarDescripcion`/`eliminar`
+usan `$horario->cargaAcademica?->id_docente_efectivo` para el chequeo de dueño, porque un
+docente sigue necesitando poder editar/eliminar (vía la UI normal de "Mi horario") un
+bloque suelto que el admin le asignó.
+
+### Bug corregido: "aplicar a todos los días" no revertía las franjas dependientes al desmarcar
+
+`FranjaHorariaService::actualizarHorarioFranja()` tiene un atajo cuando la franja pasa de
+"no asignable" a asignable (`desmarcarFranjaNoAsignable`): cuando se creó una franja "no
+asignable" con `aplicar_todos_los_dias`, el backend replica esa franja (mismo horario,
+mismo color/etiqueta) en el resto de los días de la semana
+(`quitarNoAsignableDeOtrosDias` las localiza por horario+`id_horario_asistencia`). El
+atajo de desmarcar llamaba `desmarcarFranjaNoAsignable` sobre la franja editada pero
+**no** propagaba el cambio a esas franjas replicadas — quedaban "no asignable" para
+siempre, aunque el usuario hubiera marcado "aplicar a todos los días" al desmarcar.
+Reproducido en `tinker` (marcar 4 franjas no-asignable con replicación → las 4 quedan
+marcadas; desmarcar 1 con el flag → las otras 3 seguían marcadas, incorrectamente) antes
+de escribir el fix: el short-circuit de desmarcar ahora también llama
+`$this->quitarNoAsignableDeOtrosDias($franja->id)` cuando `$aplicarTodosDias === true`.
 
 ### Años escolares y Calendario A/B
 
