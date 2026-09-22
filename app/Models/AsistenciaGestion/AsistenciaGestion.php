@@ -154,9 +154,9 @@ class AsistenciaGestion extends Model
         return $query->where('id_user', $idUsuario);
     }
 
-    public function scopePorPerfil(Builder $query, int $idPerfil): Builder
+    public function scopePorNivel(Builder $query, int $idNivel): Builder
     {
-        return $query->whereHas('usuario', fn (Builder $q) => $q->where('perfil', $idPerfil));
+        return $query->whereHas('usuario', fn (Builder $q) => $q->where('id_nivel', $idNivel));
     }
 
     public function scopeDelDia(Builder $query, ?string $fecha = null): Builder

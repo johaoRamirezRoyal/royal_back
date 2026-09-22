@@ -11,7 +11,6 @@ use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -28,9 +27,6 @@ class AsistenciaGestionService extends Service
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
-
-    // Límite por defecto de llegadas tarde en el período (mismo default que estudiantes).
-    private const LIMITE_TARDANZAS_DEFECTO = 5;
 
     // Tope de destinatarios por perfiles del aviso de llegada tarde: un solo correo a un perfil
     // enorme (ej. todos los docentes) dispararía el límite del proveedor (ver el incidente de
@@ -278,8 +274,8 @@ class AsistenciaGestionService extends Service
                 $query->porUsuario($filtros['id_usuario']);
             }
 
-            if (!empty($filtros['id_perfil'])) {
-                $query->porPerfil($filtros['id_perfil']);
+            if (!empty($filtros['id_nivel'])) {
+                $query->porNivel($filtros['id_nivel']);
             }
 
             if (!empty($filtros['fecha_desde'])) {
@@ -309,23 +305,10 @@ class AsistenciaGestionService extends Service
 
             $data = $resultados->toArray();
 
-            // Acumulado de llegadas tarde por trabajador, siempre el mes en curso (independiente
-            // del rango del listado) — el límite configurado es mensual, no un rango elegible.
-            [$acumDesde, $acumHasta] = $this->rangoAcumuladoPorDefecto();
-            $acumulados = $this->tardanzasAcumuladas(array_column($data['data'], 'id_user'), $acumDesde, $acumHasta);
-            $limiteTardanzas = (int) (ConfiguracionAsistencia::find(self::ID_CONFIG)?->cantidad_limite_tardanzas ?? self::LIMITE_TARDANZAS_DEFECTO);
-            $data['acumulado'] = ['desde' => $acumDesde, 'hasta' => $acumHasta, 'limite' => $limiteTardanzas];
-
             foreach ($data['data'] as &$fila) {
                 if (isset($fila['usuario']['perfil'])) {
                     $fila['usuario']['grupo'] = $this->grupoLabel((int) $fila['usuario']['perfil']);
                 }
-                // El acumulado solo se muestra en las filas que SÍ fueron llegada tarde (y no
-                // revocadas) — una llegada a tiempo no lleva contador, aunque el trabajador
-                // tenga tardanzas anteriores en el rango.
-                $esTarde = !empty($fila['es_tardanza']) && empty($fila['revocado']);
-                $fila['tardanzas_acumuladas'] = $esTarde ? ($acumulados[$fila['id_user']] ?? 0) : null;
-                $fila['estado_tardanzas'] = $esTarde ? $this->estadoTardanzas($fila['tardanzas_acumuladas'], $limiteTardanzas) : null;
             }
             unset($fila);
 
@@ -334,7 +317,7 @@ class AsistenciaGestionService extends Service
             if (!empty($filtros['fecha'])) {
                 $data['faltantes'] = $this->obtenerFaltantesDelDia(
                     $filtros['fecha'],
-                    $filtros['id_perfil'] ?? null,
+                    $filtros['id_nivel'] ?? null,
                     $filtros['id_usuario'] ?? null
                 );
             }
@@ -354,61 +337,6 @@ class AsistenciaGestionService extends Service
         }
     }
 
-    /**
-     * Nivel del acumulado frente al límite configurado — mismos niveles que llegadas tarde de
-     * estudiantes: 'aproximando' (limite-1), 'advertencia' (== limite), 'limite' (> limite).
-     * Límite 0 = sin límite.
-     */
-    private function estadoTardanzas(int $total, int $limite): string
-    {
-        return match (true) {
-            $limite <= 0 || $total <= 0 => 'normal',
-            $total > $limite => 'limite',
-            $total === $limite => 'advertencia',
-            $total === $limite - 1 => 'aproximando',
-            default => 'normal',
-        };
-    }
-
-    /**
-     * Único lugar donde se define cuándo "se reinicia" el acumulado de llegadas tarde: siempre
-     * MENSUAL — del día 1 del mes de `$referencia` (hoy si no se da) hasta `$referencia`. No es
-     * un rango elegible por el usuario (el límite configurado es "por mes", no por un período
-     * arbitrario) — lo usan el reporte y el correo de llegada tarde, para que ambos cuenten igual.
-     *
-     * @return array{0:string,1:string} [desde, hasta] en Y-m-d
-     */
-    private function rangoAcumuladoPorDefecto(?Carbon $referencia = null): array
-    {
-        $ref = ($referencia ?? now())->copy();
-
-        return [$ref->copy()->startOfMonth()->toDateString(), $ref->toDateString()];
-    }
-
-    /**
-     * Llegadas tarde (no revocadas) por usuario dentro de [desde, hasta]. Se evalúa con
-     * AsistenciaGestion::esTardanza() — la misma puntualidad que se muestra en pantalla — en
-     * vez de un corte de hora fijo en SQL, porque las bandas son configurables por horario.
-     *
-     * @param array<int> $idsUsuario
-     * @return array<int,int> id_user => total
-     */
-    private function tardanzasAcumuladas(array $idsUsuario, string $desde, string $hasta): array
-    {
-        if (empty($idsUsuario)) {
-            return [];
-        }
-
-        return AsistenciaGestion::with('usuario')
-            ->whereIn('id_user', array_unique($idsUsuario))
-            ->whereBetween('fecha_asistencia', [$desde, $hasta])
-            ->whereNotNull('hora_asistencia')
-            ->where('revocado', false)
-            ->get()
-            ->filter(fn (AsistenciaGestion $a) => $a->esTardanza())
-            ->countBy('id_user')
-            ->all();
-    }
 
     /**
      * El correo se envía DESPUÉS de responder al dispositivo (terminating): el push de
@@ -459,9 +387,6 @@ class AsistenciaGestionService extends Service
         $fecha = $asistencia->fecha_asistencia->toDateString();
         $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
         $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
-        [$desdeAcum, $hastaAcum] = $this->rangoAcumuladoPorDefecto($asistencia->fecha_asistencia);
-        $acumulado = $this->tardanzasAcumuladas([$usuario->id_user], $desdeAcum, $hastaAcum)[$usuario->id_user] ?? 0;
-        $periodo = 'desde el ' . Carbon::parse($desdeAcum)->format('d/m/Y') . ' hasta el ' . Carbon::parse($hastaAcum)->format('d/m/Y');
 
         $idsPerfiles = array_map('intval', $config->perfiles_notificar_llegada_tarde ?? []);
         $nombresPerfiles = $idsPerfiles ? Perfil::whereIn('id_perfil', $idsPerfiles)->orderBy('nombre')->pluck('nombre')->all() : [];
@@ -496,7 +421,7 @@ class AsistenciaGestionService extends Service
             $resultados[] = $this->mailService->sendGeneric(
                 $usuario->correo,
                 'Llegada tarde registrada',
-                "Hola {$nombre},\n\nRegistraste tu llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nLlevas {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
+                "Hola {$nombre},\n\nRegistraste tu llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nEste aviso llega a: {$lista}."
             );
         }
 
@@ -504,7 +429,7 @@ class AsistenciaGestionService extends Service
             $resultados[] = $this->mailService->sendGeneric(
                 $correosPerfiles,
                 "Llegada tarde: {$nombre}",
-                "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nAcumulado: {$acumulado} llegada(s) tarde {$periodo}.\n\nEste aviso llega a: {$lista}."
+                "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nEste aviso llega a: {$lista}."
             );
         }
 
@@ -523,16 +448,16 @@ class AsistenciaGestionService extends Service
      * existe una fila en asistencia_gestion para ellos (a diferencia de una llegada,
      * una falta no deja registro propio, se infiere por ausencia).
      */
-    private function obtenerFaltantesDelDia(string $fecha, ?int $idPerfil, ?int $idUsuario): array
+    private function obtenerFaltantesDelDia(string $fecha, ?int $idNivel, ?int $idUsuario): array
     {
         $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
 
         $usuariosFaltantes = Usuario::where('estado', 'activo')
             ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
             ->whereNotIn('id_user', $idsConAsistencia)
-            ->when($idPerfil, fn ($q) => $q->where('perfil', $idPerfil))
+            ->when($idNivel, fn ($q) => $q->where('id_nivel', $idNivel))
             ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))
-            ->get(['id_user', 'nombre', 'apellido', 'documento', 'perfil']);
+            ->get(['id_user', 'nombre', 'apellido', 'documento', 'perfil', 'id_nivel']);
 
         if ($usuariosFaltantes->isEmpty()) {
             return [];

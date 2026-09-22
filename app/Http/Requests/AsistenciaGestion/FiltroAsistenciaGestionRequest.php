@@ -16,6 +16,7 @@ class FiltroAsistenciaGestionRequest extends FormRequest
         return [
             'id_usuario' => ['nullable', 'integer', 'exists:usuarios,id_user'],
             'id_perfil' => ['nullable', 'integer'],
+            'id_nivel' => ['nullable', 'integer'],
             'fecha' => ['nullable', 'date'],
             'fecha_desde' => ['nullable', 'date'],
             'fecha_hasta' => ['nullable', 'date', 'after_or_equal:fecha_desde'],
@@ -31,6 +32,7 @@ class FiltroAsistenciaGestionRequest extends FormRequest
             'id_usuario.integer' => 'El ID del usuario debe ser numérico.',
             'id_usuario.exists' => 'El usuario seleccionado no existe.',
             'id_perfil.integer' => 'El ID del perfil debe ser numérico.',
+            'id_nivel.integer' => 'El ID del nivel debe ser numérico.',
             'fecha.date' => 'La fecha no tiene un formato válido.',
             'fecha_desde.date' => 'La fecha desde no tiene un formato válido.',
             'fecha_hasta.date' => 'La fecha hasta no tiene un formato válido.',

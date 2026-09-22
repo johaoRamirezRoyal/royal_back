@@ -37,8 +37,8 @@ Accept: application/json
 GET http://localhost:8000/api/asistencia-gestion?id_usuario=100
 Accept: application/json
 
-### 4. Obtener asistencia — filtrar por perfil
-GET http://localhost:8000/api/asistencia-gestion?id_perfil=3
+### 4. Obtener asistencia — filtrar por nivel
+GET http://localhost:8000/api/asistencia-gestion?id_nivel=3
 Accept: application/json
 
 ### 5. Obtener asistencia — filtrar por rango de fechas
@@ -54,7 +54,7 @@ GET http://localhost:8000/api/asistencia-gestion?hora_desde=07:00:00&hora_hasta=
 Accept: application/json
 
 ### 8. Obtener asistencia — combinación de filtros
-GET http://localhost:8000/api/asistencia-gestion?id_perfil=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27&per_page=20
+GET http://localhost:8000/api/asistencia-gestion?id_nivel=3&fecha_desde=2026-07-01&fecha_hasta=2026-07-27&per_page=20
 Accept: application/json
 
 ### ============================================
