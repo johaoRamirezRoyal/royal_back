@@ -334,7 +334,7 @@ class CloudinaryService
             ];
         }
 
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'];
         $extension = strtolower($file->getClientOriginalExtension());
 
         if (! in_array($extension, $allowedExtensions)) {

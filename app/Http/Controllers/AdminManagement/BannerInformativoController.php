@@ -5,7 +5,7 @@ namespace App\Http\Controllers\AdminManagement;
 use App\Http\Controllers\Controller;
 use App\Models\BannerInformativo;
 use App\Services\AdminManagement\BannerInformativoService;
-use App\Services\FileStorageService;
+use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Http\Request;
 
 /**
@@ -18,7 +18,7 @@ class BannerInformativoController extends Controller
 
     public function __construct(
         private BannerInformativoService $service,
-        private FileStorageService $fileStorage,
+        private CloudinaryService $cloudinary,
         Request $request,
     ) {
         if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
@@ -33,11 +33,15 @@ class BannerInformativoController extends Controller
 
     public function actualizar(Request $request)
     {
+        $cloudName = preg_quote((string) config('cloudinary.cloud_name'), '/');
+
         $request->validate([
             'mensaje' => 'nullable|string|max:500',
-            // Solo rutas dentro de la carpeta del banner (la que devuelve subirImagen) — evita
-            // apuntar a (y luego borrar, ver BannerInformativoService::actualizar) archivos ajenos.
-            'imagen' => ['nullable', 'string', 'max:255', 'regex:/^banner\/[A-Za-z0-9._-]+$/'],
+            // Solo URLs de Cloudinary dentro de la carpeta del banner (la que devuelve
+            // subirImagen) — evita apuntar a (y luego borrar, ver
+            // BannerInformativoService::actualizar) archivos ajenos.
+            'imagen' => ['nullable', 'string', 'max:500', 'regex:/^https:\/\/res\.cloudinary\.com\/' . $cloudName . '\/image\/upload\/.*\/banner\/[A-Za-z0-9._-]+$/'],
+            'imagen_public_id' => ['nullable', 'string', 'max:255', 'regex:/^banner\/[A-Za-z0-9._-]+$/'],
             'dominio' => 'nullable|string|max:190',
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),
             'tamano' => 'required|string|in:' . implode(',', BannerInformativo::TAMANOS),
@@ -72,6 +76,7 @@ class BannerInformativoController extends Controller
             $request->filled('destinatario_correo') ? trim((string) $request->input('destinatario_correo')) : null,
             $request->boolean('mostrar_modal'),
             $request->filled('imagen') ? (string) $request->input('imagen') : null,
+            $request->filled('imagen_public_id') ? (string) $request->input('imagen_public_id') : null,
             $request->user()->id_user,
         );
 
@@ -92,14 +97,30 @@ class BannerInformativoController extends Controller
         return $this->success($mensaje, $banner);
     }
 
-    /** Sube la imagen/GIF del banner — devuelve `ruta`, que luego viaja en `imagen` al guardar. */
+    /**
+     * Sube la imagen/GIF del banner a Cloudinary — devuelve `url` (para guardar en
+     * `imagen`) y `public_id` (para guardar en `imagen_public_id`), ambos exigidos por
+     * `actualizar()`. Antes se guardaba en disco local del VPS, pero sus límites de
+     * upload_max_filesize/post_max_size eran más bajos que el max:8192 (8MB) de acá y
+     * GIFs grandes fallaban con "The imagen failed to upload." antes de llegar a esta
+     * validación.
+     */
     public function subirImagen(Request $request)
     {
         $request->validate([
             'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:8192',
         ]);
 
-        return $this->success('Imagen subida correctamente', $this->fileStorage->uploadFile($request->file('imagen'), 'banner'));
+        $resultado = $this->cloudinary->uploadFile($request->file('imagen'), 'banner');
+
+        if ($resultado['error']) {
+            return $this->error($resultado['message'], 422);
+        }
+
+        return $this->success('Imagen subida correctamente', [
+            'url' => $resultado['data']['url'],
+            'public_id' => $resultado['data']['public_id'],
+        ]);
     }
 
     /** Envía el mensaje ya guardado del banner por correo — ver BannerInformativoService::enviarCorreo. */

@@ -359,3 +359,18 @@ INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VAL
 ALTER TABLE `banner_informativo` ADD COLUMN `enviar_correo` TINYINT(1) NOT NULL DEFAULT 0 AFTER `expira_en`;
 ALTER TABLE `banner_informativo` ADD COLUMN `destinatario_correo` VARCHAR(190) NULL AFTER `enviar_correo`;
 ALTER TABLE `banner_informativo` ADD COLUMN `mostrar_modal` TINYINT(1) NOT NULL DEFAULT 0 AFTER `destinatario_correo`;
+
+
+-- ---------------------------------------------------------------------
+-- 2026_09_22_100000_add_imagen_public_id_to_banner_informativo_table.php
+--
+-- La subida del banner se movió de disco local (FileStorageService) a
+-- Cloudinary: el VPS tenía upload_max_filesize/post_max_size más bajos que
+-- el max:8192 (8MB) que ya validaba Laravel, y GIFs grandes fallaban con
+-- "The imagen failed to upload." antes de llegar al controller. `imagen`
+-- pasa a guardar la URL de Cloudinary (antes ruta relativa en disco);
+-- `imagen_public_id` es el id necesario para borrar la imagen anterior al
+-- reemplazarla (mismo patrón que `soporte_public_id`/`logo_public_id` en
+-- LlegadasTarde/MarcaDominio). Tabla en la connection `admin_management`.
+-- ---------------------------------------------------------------------
+ALTER TABLE `banner_informativo` ADD COLUMN `imagen_public_id` VARCHAR(255) NULL AFTER `imagen`;

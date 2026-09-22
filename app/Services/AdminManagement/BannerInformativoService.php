@@ -3,13 +3,13 @@
 namespace App\Services\AdminManagement;
 
 use App\Models\BannerInformativo;
-use App\Services\FileStorageService;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Illuminate\Support\Facades\Cache;
 
 class BannerInformativoService
 {
-    public function __construct(private MailService $mailService, private FileStorageService $fileStorage) {}
+    public function __construct(private MailService $mailService, private CloudinaryService $cloudinary) {}
 
     // banner_informativo vive en admin_management (ver el modelo) — sin cache, CADA
     // GET /api/banner-informativo (login + montaje de AppLayout, en cada carga de
@@ -25,19 +25,20 @@ class BannerInformativoService
         return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, fn () => BannerInformativo::actual());
     }
 
-    public function actualizar(?string $mensaje, ?string $dominio, string $variante, string $tamano, bool $activo, ?string $expiraEn, bool $enviarCorreo, ?string $destinatarioCorreo, bool $mostrarModal, ?string $imagen, int $idUser): BannerInformativo
+    public function actualizar(?string $mensaje, ?string $dominio, string $variante, string $tamano, bool $activo, ?string $expiraEn, bool $enviarCorreo, ?string $destinatarioCorreo, bool $mostrarModal, ?string $imagen, ?string $imagenPublicId, int $idUser): BannerInformativo
     {
         $banner = BannerInformativo::actual();
 
-        // Imagen reemplazada o quitada: se borra el archivo anterior del disco para no dejar
+        // Imagen reemplazada o quitada: se borra la anterior en Cloudinary para no dejar
         // huérfanos (una imagen nueva ya se subió aparte, ver subirImagen del controller).
-        if ($banner->imagen && $banner->imagen !== $imagen) {
-            $this->fileStorage->eliminar($banner->imagen);
+        if ($banner->imagen_public_id && $banner->imagen_public_id !== $imagenPublicId) {
+            $this->cloudinary->deleteFile($banner->imagen_public_id, 'image');
         }
 
         $banner->update([
             'mensaje' => $mensaje,
             'imagen' => $imagen,
+            'imagen_public_id' => $imagenPublicId,
             'dominio' => $dominio,
             'variante' => $variante,
             'tamano' => $tamano,

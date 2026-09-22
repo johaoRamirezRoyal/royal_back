@@ -30,6 +30,7 @@ class BannerInformativo extends Model
     protected $fillable = [
         'mensaje',
         'imagen',
+        'imagen_public_id',
         'dominio',
         'variante',
         'tamano',
