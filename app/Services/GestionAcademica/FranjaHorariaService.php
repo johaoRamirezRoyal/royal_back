@@ -435,8 +435,8 @@ class FranjaHorariaService extends Service
                             'hora_fin' => $f->hora_fin,
                             'orden' => $orden++,
                             'asignable' => $f->asignable,
-                            'color' => $f->asignable ? null : $f->color,
-                            'etiqueta' => $f->asignable ? null : $f->etiqueta,
+                            'color' => $f->color,
+                            'etiqueta' => $f->etiqueta,
                             'id_franja_pivote' => $idPivote,
                         ]);
                     }
@@ -716,9 +716,11 @@ class FranjaHorariaService extends Service
     }
 
     /**
-     * Actualiza la hora de inicio y/o fin de una franja horaria, y/o si es asignable
-     * (con su color y etiqueta de identificación — ver migración
-     * add_asignable_color_to_academico_franja_horaria_table).
+     * Actualiza la hora de inicio y/o fin de una franja horaria, y/o si es asignable, y/o
+     * su color/etiqueta de identificación — estos dos últimos son atributos genéricos,
+     * independientes de `asignable` (ver migración
+     * add_asignable_color_to_academico_franja_horaria_table): cualquier franja puede
+     * tener etiqueta/color, sea o no asignable.
      *
      * @param int $id
      * @param string|null $hora_inicio Formato H:i:s
@@ -763,9 +765,11 @@ class FranjaHorariaService extends Service
 
             // Deshabilitar manualmente una franja "no asignable" (receso, almuerzo, etc.)
             // se desmarca (vuelve a un bloque normal reservable) en vez de eliminarse — ver
-            // desmarcarFranjaNoAsignable().
+            // desmarcarFranjaNoAsignable(). $color/$etiqueta del mismo request sí se
+            // aplican (p. ej. cambiar la etiqueta en el mismo guardado en que se destilda
+            // "no asignable"), no se pierden por tomar esta rama.
             if ($franja->asignable === false && $asignable === true) {
-                return $this->desmarcarFranjaNoAsignable($franja);
+                return $this->desmarcarFranjaNoAsignable($franja, $color, $etiqueta);
             }
 
             $nuevaHoraInicio = $hora_inicio ?? $franja->hora_inicio;
@@ -1022,13 +1026,17 @@ class FranjaHorariaService extends Service
     }
 
     /**
-     * Desmarca una franja "no asignable": vuelve asignable=true y limpia color/etiqueta/
-     * id_franja_pivote, pero conserva la franja (hora_inicio/hora_fin intactos) como un
-     * bloque normal — no la elimina. No se puede desmarcar si ya tiene una clase asignada
-     * (no debería pasar en una franja no asignable, pero puede ocurrir con datos de antes
-     * de esa validación).
+     * Desmarca una franja "no asignable": vuelve asignable=true y limpia id_franja_pivote
+     * (deja de pertenecer al grupo de réplica de "aplicar a todos los días"), pero
+     * conserva la franja (hora_inicio/hora_fin intactos) como un bloque normal — no la
+     * elimina. color/etiqueta se conservan tal cual: son atributos genéricos de la franja,
+     * no exclusivos de "no asignable" (ver migración add_asignable_color_to_academico_franja_horaria_table),
+     * así que un bloque que vuelve a ser asignable puede seguir mostrando su etiqueta/color
+     * si el usuario los quiere mantener. No se puede desmarcar si ya tiene una clase
+     * asignada (no debería pasar en una franja no asignable, pero puede ocurrir con datos
+     * de antes de esa validación).
      */
-    private function desmarcarFranjaNoAsignable(FranjaHoraria $franja): array
+    private function desmarcarFranjaNoAsignable(FranjaHoraria $franja, ?string $color = null, ?string $etiqueta = null): array
     {
         if ($franja->horarioClase()->exists()) {
             return [
@@ -1038,7 +1046,15 @@ class FranjaHorariaService extends Service
             ];
         }
 
-        $franja->update(['asignable' => true, 'color' => null, 'etiqueta' => null, 'id_franja_pivote' => null]);
+        $dataActualizar = ['asignable' => true, 'id_franja_pivote' => null];
+        if ($color !== null) {
+            $dataActualizar['color'] = $color;
+        }
+        if ($etiqueta !== null) {
+            $dataActualizar['etiqueta'] = $etiqueta;
+        }
+
+        $franja->update($dataActualizar);
 
         return [
             'error' => false,
@@ -1075,7 +1091,10 @@ class FranjaHorariaService extends Service
             $revertidas = $idsARevertir->count();
 
             if ($idsARevertir->isNotEmpty()) {
-                FranjaHoraria::whereIn('id', $idsARevertir)->update(['asignable' => true, 'color' => null, 'etiqueta' => null, 'id_franja_pivote' => null]);
+                // color/etiqueta se conservan — ver desmarcarFranjaNoAsignable(), mismo
+                // criterio: son atributos genéricos de la franja, no exclusivos de "no
+                // asignable".
+                FranjaHoraria::whereIn('id', $idsARevertir)->update(['asignable' => true, 'id_franja_pivote' => null]);
             }
 
             $mensaje = $revertidas > 0
