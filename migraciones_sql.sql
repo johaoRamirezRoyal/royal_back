@@ -1,376 +1,161 @@
--- =====================================================================
--- migraciones_sql.sql
---
--- Registro manual, en SQL plano, de cada migración de Laravel creada en
--- este repo — en el mismo orden en que se crean los archivos en
--- database/migrations/. Ver AGENTS.md ("Registro manual de SQL de
--- migraciones") para la práctica completa: toda sesión que agregue una
--- migración nueva debe anexar aquí su SQL equivalente.
---
--- Este archivo es solo documentación/histórico — NO se ejecuta contra la
--- BD (las migraciones reales corren vía `php artisan migrate`). Sirve
--- para poder revisar/auditar el DDL sin tener que abrir cada archivo PHP,
--- y como referencia si alguna vez hay que aplicar estos cambios a mano
--- contra otro entorno.
--- =====================================================================
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090000_create_encuestas_table.php
+-- Encuestas por salón vía QR (Gestión Humana): catálogo de encuestas.
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `titulo` varchar(255) NOT NULL,
+  `descripcion` varchar(255) DEFAULT NULL,
+  `activo` tinyint(4) NOT NULL DEFAULT 1,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090100_create_encuestas_preguntas_table.php
+-- Preguntas de una encuesta. id_tipo_pregunta reusa el catálogo de Evaluaciones
+-- (evaluaciones_tipos_pregunta) SIN FK real: esa tabla es MyISAM (legacy) y esta
+-- es InnoDB — MySQL no permite una FK InnoDB -> MyISAM (error 150).
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas_preguntas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_encuesta` int(11) NOT NULL,
+  `id_tipo_pregunta` int(11) NOT NULL,
+  `texto` varchar(255) NOT NULL,
+  `obligatoria` tinyint(4) NOT NULL DEFAULT 1,
+  `orden` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_enc_preguntas_encuesta` (`id_encuesta`),
+  CONSTRAINT `fk_enc_preguntas_encuesta` FOREIGN KEY (`id_encuesta`) REFERENCES `encuestas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ---------------------------------------------------------------------
--- 2026_09_10_100000_create_subcategoria_inventario_table.php
---
--- REVERTIDA por 2026_09_10_190000_drop_subcategoria_inventario_table.php
--- (más abajo) — se dejó de usar id_subcategoria, tipo_categoria=3 ya
--- alcanza. Se deja este bloque solo como historial.
---
--- Catálogo de subcategorías de inventario (Sistemas/Operativo/Área
--- Común). Agrega categoria.id_subcategoria en paralelo al legacy
--- tipo_categoria (que se mantiene, sincronizado por CategoriasServices
--- en el código — ver "Áreas Comunes" en AGENTS.md) y hace el backfill
--- desde los dos valores que ya existían.
--- ---------------------------------------------------------------------
-CREATE TABLE `subcategoria_inventario` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `nombre` VARCHAR(100) NOT NULL,
-    `activo` TINYINT(1) NOT NULL DEFAULT '1'
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090200_create_encuestas_opciones_pregunta_table.php
+-- Opciones de una pregunta de encuesta (sin puntaje — a diferencia de
+-- evaluaciones_opciones_pregunta, aquí solo importa el conteo por opción).
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas_opciones_pregunta` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_pregunta` int(11) NOT NULL,
+  `texto` varchar(255) NOT NULL,
+  `orden` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `fk_enc_opciones_pregunta` (`id_pregunta`),
+  CONSTRAINT `fk_enc_opciones_pregunta` FOREIGN KEY (`id_pregunta`) REFERENCES `encuestas_preguntas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `subcategoria_inventario` (`id`, `nombre`, `activo`) VALUES
-    (1, 'Sistemas', 1),
-    (2, 'Operativo', 1),
-    (3, 'Área Común', 1);
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090300_create_encuestas_salon_table.php
+-- Encuesta activa de cada salón (una fila por salón, no historial) + token del
+-- link/QR público. token_publico identifica el salón en la URL pública — no su
+-- id, para no permitir enumerar salones desde una URL adivinada.
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas_salon` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_salon` int(11) NOT NULL,
+  `id_encuesta` int(11) DEFAULT NULL,
+  `token_publico` varchar(64) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `encuestas_salon_token_publico_unique` (`token_publico`),
+  KEY `fk_enc_salon_salon` (`id_salon`),
+  KEY `fk_enc_salon_encuesta` (`id_encuesta`),
+  CONSTRAINT `fk_enc_salon_encuesta` FOREIGN KEY (`id_encuesta`) REFERENCES `encuestas` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_enc_salon_salon` FOREIGN KEY (`id_salon`) REFERENCES `salones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE `categoria`
-    ADD `id_subcategoria` BIGINT UNSIGNED NULL AFTER `tipo_categoria`;
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090400_create_encuestas_respuestas_table.php
+-- Respuesta anónima a una encuesta desde un salón: sin id_user/IP, por diseño.
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas_respuestas` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_encuesta` int(11) NOT NULL,
+  `id_salon` int(11) NOT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_enc_respuestas_encuesta` (`id_encuesta`),
+  KEY `fk_enc_respuestas_salon` (`id_salon`),
+  CONSTRAINT `fk_enc_respuestas_encuesta` FOREIGN KEY (`id_encuesta`) REFERENCES `encuestas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_enc_respuestas_salon` FOREIGN KEY (`id_salon`) REFERENCES `salones` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE `categoria`
-    ADD CONSTRAINT `categoria_id_subcategoria_foreign`
-    FOREIGN KEY (`id_subcategoria`) REFERENCES `subcategoria_inventario` (`id`);
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090500_create_encuestas_respuestas_pregunta_table.php
+-- Fila por pregunta respondida (y por opción marcada, en selección múltiple).
+-- id_pregunta/id_opcion son ON DELETE CASCADE (no la RESTRICT por defecto):
+-- borrar una encuesta cascada por dos caminos a la vez hasta acá (via
+-- encuestas_preguntas->encuestas_opciones_pregunta y via encuestas_respuestas) —
+-- sin este cascade, eliminar una encuesta con respuestas ya registradas fallaba
+-- con error 1451 (verificado con una prueba end-to-end real antes de este fix).
+-- ---------------------------------------------------------------------------
+CREATE TABLE `encuestas_respuestas_pregunta` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_respuesta` int(11) NOT NULL,
+  `id_pregunta` int(11) NOT NULL,
+  `id_opcion` int(11) DEFAULT NULL,
+  `valor_texto` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_enc_resp_pregunta_respuesta` (`id_respuesta`),
+  KEY `fk_enc_resp_pregunta_pregunta` (`id_pregunta`),
+  KEY `fk_enc_resp_pregunta_opcion` (`id_opcion`),
+  CONSTRAINT `fk_enc_resp_pregunta_opcion` FOREIGN KEY (`id_opcion`) REFERENCES `encuestas_opciones_pregunta` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_enc_resp_pregunta_pregunta` FOREIGN KEY (`id_pregunta`) REFERENCES `encuestas_preguntas` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_enc_resp_pregunta_respuesta` FOREIGN KEY (`id_respuesta`) REFERENCES `encuestas_respuestas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-UPDATE `categoria` SET `id_subcategoria` = 1 WHERE `tipo_categoria` = 1;
-UPDATE `categoria` SET `id_subcategoria` = 2 WHERE `tipo_categoria` = 2;
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_090600_seed_opciones_encuestas.php
+-- Opciones de permiso del módulo Encuestas (módulo 3 = Gestión Humana) +
+-- otorgamiento inmediato a Super Admin (1) / Administrador (2) / Gestión
+-- Humana (8) en cron_permisos, para no repetir el incidente de "Metricas
+-- Asistencias" (opción creada pero nunca otorgada, invisible para todos).
+-- Ids reales asignados al correr esta migración en la BD local (sami_royal):
+-- 126 = "Encuestas — Administrar encuestas y salones"
+-- 127 = "Encuestas — Ver resultados"
+-- (verificar contra cron_opciones antes de asumir estos mismos ids en otra BD)
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`) VALUES
+  ('Encuestas — Administrar encuestas y salones', 3, 1, NOW());
+SET @id_opcion_admin = LAST_INSERT_ID();
 
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`) VALUES
+  ('Encuestas — Ver resultados', 3, 1, NOW());
+SET @id_opcion_ver = LAST_INSERT_ID();
 
--- ---------------------------------------------------------------------
--- 2026_09_10_110000_create_bloques_table.php
---
--- Bloque = edificio/sección física asociada a un único nivel (nivel.id).
--- nivel.id es int(11) con signo (legado) — no bigint unsigned, por eso
--- id_nivel es `int`, no `bigint unsigned`, para que el FK no truene por
--- tipos incompatibles (errno 150).
--- ---------------------------------------------------------------------
-CREATE TABLE `bloques` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `nombre` VARCHAR(150) NOT NULL,
-    `id_nivel` INT NULL,
-    `activo` TINYINT(1) NOT NULL DEFAULT '1',
-    `user_log` INT NULL,
-    `fechareg` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
-
-ALTER TABLE `bloques`
-    ADD CONSTRAINT `bloques_id_nivel_foreign`
-    FOREIGN KEY (`id_nivel`) REFERENCES `nivel` (`id`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_120000_create_bloque_usuario_table.php
---
--- Pivot de responsables de un bloque (N a N) — asistentes de nivel
--- (perfil 11) / coordinadores (perfil 26). usuarios.id_user también es
--- int(11) con signo, mismo motivo que arriba para id_user.
--- ---------------------------------------------------------------------
-CREATE TABLE `bloque_usuario` (
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `id_bloque` BIGINT UNSIGNED NOT NULL,
-    `id_user` INT NOT NULL,
-    `fechareg` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
-
-ALTER TABLE `bloque_usuario`
-    ADD CONSTRAINT `bloque_usuario_id_bloque_foreign`
-    FOREIGN KEY (`id_bloque`) REFERENCES `bloques` (`id`) ON DELETE CASCADE;
-
-ALTER TABLE `bloque_usuario`
-    ADD UNIQUE `bloque_usuario_id_bloque_id_user_unique` (`id_bloque`, `id_user`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_130000_add_id_bloque_to_areas_table.php
---
--- Relación área → bloque (un área pertenece a lo sumo a un bloque).
--- ---------------------------------------------------------------------
-ALTER TABLE `areas`
-    ADD `id_bloque` BIGINT UNSIGNED NULL AFTER `nombre`;
-
-ALTER TABLE `areas`
-    ADD CONSTRAINT `areas_id_bloque_foreign`
-    FOREIGN KEY (`id_bloque`) REFERENCES `bloques` (`id`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_140000_add_id_bloque_to_inventario_table.php
---
--- Permite un ítem de inventario asignado directo a un bloque, sin área
--- (equipos de una zona común sin salón asociado). El SET SESSION previo
--- es necesario: agregar una FK obliga a MySQL a revalidar la tabla
--- completa, y filas legacy con fecha_compra='0000-00-00' rompen eso bajo
--- NO_ZERO_DATE — se relaja solo para esta sesión/migración, no global.
--- ---------------------------------------------------------------------
-SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'NO_ZERO_DATE', ''));
-
-ALTER TABLE `inventario`
-    ADD `id_bloque` BIGINT UNSIGNED NULL AFTER `id_area`;
-
-ALTER TABLE `inventario`
-    ADD CONSTRAINT `inventario_id_bloque_foreign`
-    FOREIGN KEY (`id_bloque`) REFERENCES `bloques` (`id`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_150000_seed_opciones_areas_comunes.php
---
--- Dos permisos nuevos bajo cron_modulos.id=6 ("Zonas", legacy — reusado
--- solo como agrupador; sus tablas zonas/areas_zona/chek_zonas/
--- reportes_zonas NO se tocan). Ids reales confirmados tras correr la
--- migración: 108 = Administrador areas comunes, 109 = Uso areas comunes.
--- ---------------------------------------------------------------------
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Administrador areas comunes', 6, 1, NOW());
-SET @id_admin = LAST_INSERT_ID();
-
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Uso areas comunes', 6, 1, NOW());
-SET @id_uso = LAST_INSERT_ID();
-
--- Administrador areas comunes: Super Admin (1), Administrador (2)
 INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_admin, 1, 1, NOW()),
-    (@id_admin, 2, 1, NOW());
+  (@id_opcion_admin, 1, 1, NOW()),
+  (@id_opcion_admin, 2, 1, NOW()),
+  (@id_opcion_admin, 8, 1, NOW()),
+  (@id_opcion_ver, 1, 1, NOW()),
+  (@id_opcion_ver, 2, 1, NOW()),
+  (@id_opcion_ver, 8, 1, NOW());
 
--- Uso areas comunes: Asistente de nivel (11), Coordinador (26)
-INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_uso, 11, 1, NOW()),
-    (@id_uso, 26, 1, NOW());
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_100000_fix_ids_opciones_encuestas.php
+-- Renumera las dos opciones de Encuestas para que coincidan con los ids reales
+-- de producción (129/130 — confirmado por el usuario), donde ya existían de
+-- forma independiente. cron_opciones/cron_permisos no tienen FK declarada entre
+-- sí, así que el UPDATE directo del id es seguro.
+-- ---------------------------------------------------------------------------
+UPDATE `cron_permisos` SET `id_opcion` = 129 WHERE `id_opcion` = 126;
+UPDATE `cron_opciones` SET `id` = 129 WHERE `id` = 126;
 
--- IDs reales en esta BD tras correr la migración: id_admin = 108, id_uso = 109.
+UPDATE `cron_permisos` SET `id_opcion` = 130 WHERE `id_opcion` = 127;
+UPDATE `cron_opciones` SET `id` = 130 WHERE `id` = 127;
 
-
--- ---------------------------------------------------------------------
--- 2026_09_10_190000_drop_subcategoria_inventario_table.php
---
--- Revierte 2026_09_10_100000_create_subcategoria_inventario_table —
--- decisión de producto: no hace falta tabla/columna aparte, categoria.
--- tipo_categoria ya sirve como subcategoría (1=Sistemas, 2=Operativo,
--- 3=Área Común). id_subcategoria nunca llegó a ser la fuente de verdad
--- real en el código, solo se mantenía en espejo.
--- ---------------------------------------------------------------------
-ALTER TABLE `categoria` DROP FOREIGN KEY `categoria_id_subcategoria_foreign`;
-ALTER TABLE `categoria` DROP COLUMN `id_subcategoria`;
-DROP TABLE IF EXISTS `subcategoria_inventario`;
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_200000_recreate_subcategoria_inventario_related_to_tipo_categoria.php
---
--- Segunda vuelta, corrigiendo el diseño anterior: sí hace falta el
--- catálogo `subcategoria_inventario` (para tener nombre, no solo un int
--- mágico), pero SIN columna nueva en `categoria` — la relación es una FK
--- real sobre la columna que ya existe, `categoria.tipo_categoria` →
--- `subcategoria_inventario.id`. `tipo_categoria` sigue siendo la única
--- fuente de verdad; esta tabla solo cataloga sus valores válidos.
--- `id` es `int` (no bigint unsigned) porque tipo_categoria es `int(11)`
--- con signo (legacy) — un PK bigint unsigned rompe la FK por
--- incompatibilidad de tipos (mismo problema ya visto con bloques.id_nivel).
--- ---------------------------------------------------------------------
-CREATE TABLE `subcategoria_inventario` (
-    `id` INT NOT NULL AUTO_INCREMENT,
-    `nombre` VARCHAR(100) NOT NULL,
-    `activo` TINYINT(1) NOT NULL DEFAULT '1',
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
-
-INSERT INTO `subcategoria_inventario` (`id`, `nombre`, `activo`) VALUES
-    (1, 'Sistemas', 1),
-    (2, 'Operativo', 1),
-    (3, 'Área Común', 1);
-
-ALTER TABLE `categoria`
-    ADD CONSTRAINT `categoria_tipo_categoria_foreign`
-    FOREIGN KEY (`tipo_categoria`) REFERENCES `subcategoria_inventario` (`id`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_10_210000_create_inventario_check_table.php
---
--- Migración del "check" semestral de zonas del SAMI legacy (tabla
--- chek_zonas, no se toca) — certifica que un ítem de inventario de Área
--- Común fue revisado en un periodo institucional. Sin índice único a
--- nivel de motor (el legacy tampoco lo tenía) — la regla "ya se hizo
--- check este periodo" se valida en InventarioServices::registrarCheckInventario.
--- Columnas `int` simples para calzar con inventario.id/anio_escolar.id/
--- usuarios.id_user, todos int(11) legacy.
--- ---------------------------------------------------------------------
-CREATE TABLE `inventario_check` (
-    `id` INT NOT NULL AUTO_INCREMENT,
-    `id_inventario` INT NOT NULL,
-    `id_anio` INT NULL,
-    `periodo` INT NULL,
-    `id_user` INT NULL,
-    `fechareg` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
-
-ALTER TABLE `inventario_check`
-    ADD INDEX `inventario_check_id_inventario_index` (`id_inventario`);
-
-
--- ---------------------------------------------------------------------
--- 2026_09_11_100000_seed_opcion_acceso_gestion_humana_calidad.php
---
--- El grupo de sidebar "Gestion humana y calidad" (asistencias de
--- trabajadores + listado de personal/hoja de vida + configuración de
--- asistencia) quedaba visible para CUALQUIER perfil porque su gate
--- combinaba (OR) las opciones de sus subitems junto con la opción legacy
--- 23 "Gestion Humana" — esa 23 está otorgada históricamente a casi todos
--- los perfiles (incluido Docente), sin relación real con este módulo. Se
--- agrega una opción propia y dedicada para el módulo completo, otorgada
--- solo a quienes ya tenían acceso real a alguno de sus subitems (63
--- Asistencia, 87 Listado Personal HV, 100 Configuración de asistencia):
--- Super Admin, Administrador, Recursos Humanos y Coordinador — reemplaza
--- la opción 23 en el gate del grupo (ver sideBar/index.layout.tsx).
---
--- Confirmado contra cron_opciones real (dump cron_opciones.sql): id 113,
--- fechareg 2026-09-11 09:59:43, es la fila original — la propia migración
--- se corrió una segunda vez ahí (mismo ledger desincronizado que en local)
--- y dejó un duplicado en id 125 (fechareg sin resolver, 'CURRENT_TIMESTAMP'
--- literal en vez de una fecha real). Mismo patrón que 108/109 (reales) vs
--- 117/118 (duplicados) para Áreas Comunes — ver `opciones={[108, 109]}` en
--- router/index.tsx. Usar 113; 125 es el duplicado, no tocar/asumirlo.
--- ---------------------------------------------------------------------
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Gestión Humana y Calidad — Acceso al módulo', 3, 1, NOW());
-SET @id_gestion_humana_calidad = LAST_INSERT_ID();
-
--- Gestión Humana y Calidad — Acceso al módulo: Super Admin (1),
--- Administrador (2), Recursos Humanos (8), Coordinador (26)
-INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_gestion_humana_calidad, 1, 1, NOW()),
-    (@id_gestion_humana_calidad, 2, 1, NOW()),
-    (@id_gestion_humana_calidad, 8, 1, NOW()),
-    (@id_gestion_humana_calidad, 26, 1, NOW());
-
--- Id real confirmado contra cron_opciones (dump cron_opciones.sql):
--- id_gestion_humana_calidad = 113. (En una BD local de desarrollo, sin
--- relación con esta, la misma migración dio 108 — no es el id real.)
-
-
--- ---------------------------------------------------------------------
--- 2026_09_14_120000_seed_opcion_mis_areas_comunes.php
---
--- Permiso para la vista de autoservicio "Mis áreas"
--- (`/inventario/areas-comunes/mis-areas`): un asistente de nivel/coordinador
--- ve el inventario de los bloques donde `bloque_usuario` lo tiene como
--- responsable. Distinto de 108/109 (esos dan acceso a TODO el módulo);
--- este solo habilita la pestaña de autoservicio, otorgado a los mismos
--- perfiles que pueden ser asignados como responsables
--- (BloquesServices::PERFILES_RESPONSABLES). Id real confirmado tras correr
--- la migración: 117 = Mis áreas comunes.
--- ---------------------------------------------------------------------
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Mis áreas comunes', 6, 1, NOW());
-SET @id_mis_areas = LAST_INSERT_ID();
-
--- Mis áreas comunes: Asistente de nivel (11), Coordinador (26)
-INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_mis_areas, 11, 1, NOW()),
-    (@id_mis_areas, 26, 1, NOW());
-
--- Id real en esta BD tras correr la migración: id_mis_areas = 117.
-
-
--- ---------------------------------------------------------------------
--- 2026_09_14_130000_seed_opcion_editar_reservas.php
---
--- Permiso para editar una reserva ya creada (fecha, hora, salón,
--- descripción, portátiles y sonido) — distinto de 41 (crear/cancelar la
--- propia, autoservicio) y 42 (ver la programación de todos). Arranca
--- acotado a Super Admin (1) / Administrador (2) — ver
--- ReservaController::actualizarReserva. Id real confirmado tras correr la
--- migración: 118 = Reservas — Editar reserva.
--- ---------------------------------------------------------------------
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Reservas — Editar reserva', 7, 1, NOW());
-SET @id_editar_reservas = LAST_INSERT_ID();
-
--- Reservas — Editar reserva: Super Admin (1), Administrador (2)
-INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_editar_reservas, 1, 1, NOW()),
-    (@id_editar_reservas, 2, 1, NOW());
-
--- Id real en esta BD tras correr la migración: id_editar_reservas = 118.
-
-
--- ---------------------------------------------------------------------
--- 2026_09_14_140000_add_id_motivo_to_permiso_catalogos.php
---
--- Vincula cada ítem de los catálogos "hijos" (permiso_ley, permiso_personal,
--- permisos_institucionales) con su motivo general (permiso_motivo). Sin FK
--- real a nivel de motor: esas tres tablas son MyISAM (heredadas) y
--- permiso_motivo es InnoDB — MySQL no soporta FOREIGN KEY entre motores
--- distintos. La relación queda a nivel de aplicación (Eloquent belongsTo +
--- validación exists:permiso_motivo,id).
--- ---------------------------------------------------------------------
-ALTER TABLE `permiso_ley` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
-ALTER TABLE `permiso_personal` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
-ALTER TABLE `permisos_institucionales` ADD COLUMN `id_motivo` INT NULL AFTER `nombre_permiso`;
-
-
--- ---------------------------------------------------------------------
--- 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.php
---
--- Permiso para administrar los catálogos de Permisos y Licencias (motivos,
--- ley, personal, institucional): renombrar, activar/desactivar y vincular
--- cada ítem de ley/personal/institucional con su motivo general. Distinto
--- de 80/81/82/83/90/92 (todas sobre las solicitudes). Id real confirmado
--- tras correr la migración: 121 = Permisos y Licencias — Configuración de
--- catálogos.
--- ---------------------------------------------------------------------
-INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
-    VALUES ('Permisos y Licencias — Configuración de catálogos', 3, 1, NOW());
-SET @id_config_permisos = LAST_INSERT_ID();
-
--- Permisos y Licencias — Configuración de catálogos: Super Admin (1), Administrador (2)
-INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-    (@id_config_permisos, 1, 1, NOW()),
-    (@id_config_permisos, 2, 1, NOW());
-
--- Id real en esta BD tras correr la migración: id_config_permisos = 121.
-
-
--- ---------------------------------------------------------------------
--- 2026_09_17_120000_add_correo_modal_to_banner_informativo_table.php
---
--- Envío del banner por correo (enviar_correo + destinatario_correo, un solo
--- destinatario tipo alias de distribución, ej. "all@royalschool.edu.co" —
--- ver BannerInformativoService::enviarCorreo) y modal automático
--- (mostrar_modal, ver InformativeBannerModal en el frontend). Tabla en la
--- connection `admin_management`.
--- ---------------------------------------------------------------------
-ALTER TABLE `banner_informativo` ADD COLUMN `enviar_correo` TINYINT(1) NOT NULL DEFAULT 0 AFTER `expira_en`;
-ALTER TABLE `banner_informativo` ADD COLUMN `destinatario_correo` VARCHAR(190) NULL AFTER `enviar_correo`;
-ALTER TABLE `banner_informativo` ADD COLUMN `mostrar_modal` TINYINT(1) NOT NULL DEFAULT 0 AFTER `destinatario_correo`;
-
-
--- ---------------------------------------------------------------------
--- 2026_09_22_100000_add_imagen_public_id_to_banner_informativo_table.php
---
--- La subida del banner se movió de disco local (FileStorageService) a
--- Cloudinary: el VPS tenía upload_max_filesize/post_max_size más bajos que
--- el max:8192 (8MB) que ya validaba Laravel, y GIFs grandes fallaban con
--- "The imagen failed to upload." antes de llegar al controller. `imagen`
--- pasa a guardar la URL de Cloudinary (antes ruta relativa en disco);
--- `imagen_public_id` es el id necesario para borrar la imagen anterior al
--- reemplazarla (mismo patrón que `soporte_public_id`/`logo_public_id` en
--- LlegadasTarde/MarcaDominio). Tabla en la connection `admin_management`.
--- ---------------------------------------------------------------------
-ALTER TABLE `banner_informativo` ADD COLUMN `imagen_public_id` VARCHAR(255) NULL AFTER `imagen`;
+-- ---------------------------------------------------------------------------
+-- 2026_09_22_110000_add_id_reserva_to_encuestas_respuestas_table.php
+-- Reserva del salón, del mismo día, a la que el visitante asocia su respuesta
+-- antes de contestar la encuesta (ver EncuestasServices::reservasHoySalon /
+-- responderPublica). FK real: `reservas` es InnoDB.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `encuestas_respuestas`
+  ADD COLUMN `id_reserva` int(11) DEFAULT NULL AFTER `id_salon`,
+  ADD KEY `fk_enc_respuestas_reserva` (`id_reserva`),
+  ADD CONSTRAINT `fk_enc_respuestas_reserva` FOREIGN KEY (`id_reserva`) REFERENCES `reservas` (`id`) ON DELETE SET NULL;

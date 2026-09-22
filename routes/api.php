@@ -29,6 +29,13 @@ Route::group(['prefix' => 'auth'], function () {
 // general ya autenticado, ver App\Http\Controllers\BannerInformativoController).
 Route::get('/banner-informativo', [App\Http\Controllers\BannerInformativoController::class, 'obtener']);
 
+// Encuesta pública por salón (sin token — se accede vía QR físico pegado en el salón,
+// anónima, cualquiera con el link puede responder). El token identifica el salón, no su
+// id — ver EncuestasServices::obtenerEncuestaPublica/responderPublica.
+Route::get('/encuestas/publica/{token}', [App\Http\Controllers\Encuestas\EncuestasController::class, 'obtenerEncuestaPublica']);
+Route::get('/encuestas/publica/{token}/reservas-hoy', [App\Http\Controllers\Encuestas\EncuestasController::class, 'reservasHoySalon']);
+Route::post('/encuestas/publica/{token}/responder', [App\Http\Controllers\Encuestas\EncuestasController::class, 'responderPublica']);
+
 // Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
 Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '.+');
@@ -303,6 +310,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // EVALUACIONES DE CALIDAD DE SERVICIOS
     Route::prefix('/evaluaciones')->group(function () {
         require __DIR__ . '/api/evaluaciones.php';
+    });
+
+    // ENCUESTAS POR SALÓN VÍA QR (administración, Gestión Humana)
+    Route::prefix('/encuestas')->group(function () {
+        require __DIR__ . '/api/encuestas.php';
     });
 
     // AÑO ESCOLAR Y PERIODOS (módulo administrativo — opción propia, ver
