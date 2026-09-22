@@ -308,11 +308,9 @@ class AsistenciaGestionService extends Service
 
             $data = $resultados->toArray();
 
-            // Acumulado de llegadas tarde por trabajador sobre un rango propio (independiente
-            // del rango del listado); sin `acum_*` se usa el reinicio por defecto (rangoAcumuladoPorDefecto).
-            [$acumDesdeDefecto, $acumHastaDefecto] = $this->rangoAcumuladoPorDefecto();
-            $acumDesde = $filtros['acum_desde'] ?? $acumDesdeDefecto;
-            $acumHasta = $filtros['acum_hasta'] ?? $acumHastaDefecto;
+            // Acumulado de llegadas tarde por trabajador, siempre el mes en curso (independiente
+            // del rango del listado) — el límite configurado es mensual, no un rango elegible.
+            [$acumDesde, $acumHasta] = $this->rangoAcumuladoPorDefecto();
             $acumulados = $this->tardanzasAcumuladas(array_column($data['data'], 'id_user'), $acumDesde, $acumHasta);
             $limiteTardanzas = (int) (ConfiguracionAsistencia::find(self::ID_CONFIG)?->cantidad_limite_tardanzas ?? self::LIMITE_TARDANZAS_DEFECTO);
             $data['acumulado'] = ['desde' => $acumDesde, 'hasta' => $acumHasta, 'limite' => $limiteTardanzas];
@@ -372,10 +370,10 @@ class AsistenciaGestionService extends Service
     }
 
     /**
-     * Único lugar donde se define cuándo "se reinicia" el acumulado de llegadas tarde: por
-     * defecto el acumulado es MENSUAL — del día 1 del mes de `$referencia` (hoy si no se da)
-     * hasta `$referencia`. Lo usan el reporte (cuando el usuario no elige un rango propio) y
-     * el correo de llegada tarde, para que ambos cuenten igual.
+     * Único lugar donde se define cuándo "se reinicia" el acumulado de llegadas tarde: siempre
+     * MENSUAL — del día 1 del mes de `$referencia` (hoy si no se da) hasta `$referencia`. No es
+     * un rango elegible por el usuario (el límite configurado es "por mes", no por un período
+     * arbitrario) — lo usan el reporte y el correo de llegada tarde, para que ambos cuenten igual.
      *
      * @return array{0:string,1:string} [desde, hasta] en Y-m-d
      */
