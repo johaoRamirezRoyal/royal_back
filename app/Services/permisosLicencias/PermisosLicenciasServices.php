@@ -312,21 +312,6 @@ class PermisosLicenciasServices
         }
     }
 
-    /** Correo(s) de usuarios con alguno de los `$perfiles` dados, en el mismo `$idNivel`. */
-    private function correosPorPerfilesYNivel(array $perfiles, ?int $idNivel): array
-    {
-        if (!$idNivel) {
-            return [];
-        }
-
-        return Usuario::where('id_nivel', $idNivel)
-            ->whereIn('perfil', $perfiles)
-            ->pluck('correo')
-            ->filter()
-            ->values()
-            ->all();
-    }
-
     /**
      * Enrutamiento de correo por perfil/nivel del beneficiario — mismo criterio que el
      * legado (ControlRecursos::solicitarPermisoControl/estadoPermisoControl), con dos
@@ -345,7 +330,7 @@ class PermisosLicenciasServices
         $destinatarios = array_merge(
             config('gestionHumana.correo_notificacion', []),
             [$beneficiario?->correo],
-            $this->correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
+            Usuario::correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
         );
 
         if ($idNivel === 1 || in_array($perfil, [23, 10, 32, 33], true) || $perfil === 11) {
@@ -358,7 +343,7 @@ class PermisosLicenciasServices
         if (in_array($idNivel, [1, 2, 3], true)) {
             $destinatarios = array_merge(
                 $destinatarios,
-                $this->correosPorPerfilesYNivel([7], $idNivel)
+                Usuario::correosPorPerfilesYNivel([7], $idNivel)
             );
         }
 
