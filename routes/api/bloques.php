@@ -24,3 +24,5 @@ Route::post('/inventario/mover', [AreasComunesController::class, 'moverItem']);
 Route::get('/inventario/checks', [AreasComunesController::class, 'historialChecks']);
 // % de áreas comunes con al menos un check registrado (108 o 109).
 Route::get('/inventario/checks/indicador', [AreasComunesController::class, 'indicadorChecks']);
+// PDF checklist del historial de checks (108 o 109) — ver "Historial de Checks".
+Route::post('/inventario/checks/pdf', [AreasComunesController::class, 'historialChecksPdf']);

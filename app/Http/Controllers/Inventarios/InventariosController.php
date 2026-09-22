@@ -35,6 +35,11 @@ class InventariosController extends Controller
     // Comunes (ver AGENTS.md "Áreas Comunes").
     private const OPCION_ADMIN_AREAS_COMUNES = 108;
     private const OPCION_USO_AREAS_COMUNES = 109;
+    // "Mis áreas comunes" (autoservicio, `/inventario/areas-comunes/mis-areas`): sin
+    // esta, alguien con SOLO 119 (sin 108/109) cargaría la página pero listadoConsolidado
+    // y reportarInventario le devolverían 403 — Reportar es la única acción que esa
+    // vista ofrece, así que ambos métodos la necesitan.
+    private const OPCION_MIS_AREAS_COMUNES = 119;
 
     protected $inventario_services;
 
@@ -115,7 +120,7 @@ class InventariosController extends Controller
     public function listadoConsolidado(ListadoInventarioRequest $request){
         // Áreas Comunes también lo usa (tabla de ítems de Listado/Mis áreas) — ver
         // AGENTS.md "Áreas Comunes".
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -288,7 +293,7 @@ class InventariosController extends Controller
 
     public function reportarInventario(ReportarInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
             return $rechazo;
         }
 
