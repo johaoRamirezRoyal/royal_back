@@ -769,7 +769,21 @@ class FranjaHorariaService extends Service
             // aplican (p. ej. cambiar la etiqueta en el mismo guardado en que se destilda
             // "no asignable"), no se pierden por tomar esta rama.
             if ($franja->asignable === false && $asignable === true) {
-                return $this->desmarcarFranjaNoAsignable($franja, $color, $etiqueta);
+                $resultado = $this->desmarcarFranjaNoAsignable($franja, $color, $etiqueta);
+
+                // Con "aplicar a todos los días" también se revierten las franjas
+                // dependientes de esta (id_franja_pivote = $franja->id) — si no, quedaban
+                // marcadas "no asignable" para siempre en los demás días aunque el admin
+                // haya marcado la casilla, porque esta rama retornaba antes de llegar al
+                // bloque de replicación de más abajo (ese solo corre para el resto de
+                // cambios, no para "desmarcar"). Bug real: un docente no podía reservar un
+                // horario que el admin ya había "hecho asignable" porque el resto de los
+                // días de esa misma franja seguían bloqueados.
+                if (!$resultado['error'] && $aplicarTodosDias === true) {
+                    $this->quitarNoAsignableDeOtrosDias($franja->id);
+                }
+
+                return $resultado;
             }
 
             $nuevaHoraInicio = $hora_inicio ?? $franja->hora_inicio;
