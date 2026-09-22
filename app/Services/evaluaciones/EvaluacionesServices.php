@@ -884,7 +884,8 @@ class EvaluacionesServices
 
             app(MailService::class)->send(
                 $evaluado->correo,
-                new EvaluacionRespuestaMail($respuestaEval, $pdfBinario, $nombrePdf)
+                new EvaluacionRespuestaMail($respuestaEval, $pdfBinario, $nombrePdf),
+                copiaGestor: true
             );
         } catch (\Throwable $e) {
             Log::error('No se pudo enviar el correo de la evaluación de desempeño', [

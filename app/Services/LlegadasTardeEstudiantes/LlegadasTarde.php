@@ -651,7 +651,7 @@ class LlegadasTarde extends Service
             grado: $estudiante->cursoRelacion?->nombre ?? 'Sin curso asignado',
             fecha: Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y'),
             observacion: $observacion,
-        ));
+        ), copiaGestor: true);
     }
 
     /**
@@ -726,7 +726,7 @@ class LlegadasTarde extends Service
         $enviado = false;
 
         if (!empty($destinatarios)) {
-            $enviado = $this->mailService->send($destinatarios, $carta);
+            $enviado = $this->mailService->send($destinatarios, $carta, copiaGestor: true);
         }
 
         if (!empty($telefonosAcudientes)) {
@@ -755,7 +755,8 @@ class LlegadasTarde extends Service
                     periodo: $this->numeroPeriodo($llegadaTarde->periodoAcademico, $llegadaTarde->id_periodo_academico),
                     fecha: Carbon::parse($llegadaTarde->fecha)->locale('es')->translatedFormat('d \d\e F \d\e Y'),
                     hora: substr($llegadaTarde->hora, 0, 5),
-                )
+                ),
+                copiaGestor: true,
             );
         }
 

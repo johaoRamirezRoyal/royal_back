@@ -1444,7 +1444,7 @@ class BibliotecaServices extends Service
                     $pdf['data']['contenido'],
                     $pdf['data']['nombre_archivo'],
                     $cantidadPaquetes
-                ));
+                ), copiaGestor: true);
 
                 if ($enviado) {
                     $enviados[] = $usuario->id_user;
@@ -1543,7 +1543,7 @@ class BibliotecaServices extends Service
                     $pdf['data']['contenido'],
                     $pdf['data']['nombre_archivo'],
                     $cantidadPaquetes
-                ));
+                ), copiaGestor: true);
 
                 if ($enviado) {
                     $enviados[] = $usuario->id_user;
