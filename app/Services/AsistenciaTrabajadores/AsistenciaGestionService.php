@@ -421,7 +421,7 @@ class AsistenciaGestionService extends Service
             $resultados[] = $this->mailService->sendGeneric(
                 $usuario->correo,
                 'Llegada tarde registrada',
-                "Hola {$nombre},\n\nRegistraste tu llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nEste aviso llega a: {$lista}."
+                "Hola {$nombre},\n\nTe recordamos la importancia de cumplir con la jornada laboral para el correcto funcionamiento de nuestra institución.\n\nSi estás ingresando fuera de tu horario, te invitamos a ajustar tu llegada. Nota: Si cuentas con un permiso parcial o previo autorizado, por favor haz caso omiso de este aviso. ¡Tu puntualidad cuenta!\n\nEste aviso llega a: {$lista}"
             );
         }
 
