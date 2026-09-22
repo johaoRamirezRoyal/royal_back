@@ -139,9 +139,15 @@ class AsistenciaEstudianteService extends Service
         try {
             $cursosDocente = null;
             if ($id_docente_scope !== null) {
+                // leftJoin: una carga "suelta" (sin asignatura) no tiene fila en
+                // academico_docente_asignatura — el docente se resuelve directo en
+                // ca.id_docente en ese caso (ver CargaAcademicaService::añadirCargaAcademicaSuelta).
                 $cursosDocente = DB::table('academico_carga_academica as ca')
-                    ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
-                    ->where('da.id_docente', $id_docente_scope)
+                    ->leftJoin('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+                    ->where(function ($q) use ($id_docente_scope) {
+                        $q->where('ca.id_docente', $id_docente_scope)
+                            ->orWhere('da.id_docente', $id_docente_scope);
+                    })
                     ->where('ca.activo', 1)
                     ->pluck('ca.id_curso')
                     ->unique()

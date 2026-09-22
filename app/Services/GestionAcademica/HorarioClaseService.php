@@ -12,7 +12,10 @@ use Exception;
 
 class HorarioClaseService extends Service
 {
-    public function __construct(private AnioEscolarServices $anioEscolarService) {}
+    public function __construct(
+        private AnioEscolarServices $anioEscolarService,
+        private CargaAcademicaService $cargaAcademicaService,
+    ) {}
 
     /**
      * Añade un horario de clase.
@@ -38,20 +41,36 @@ class HorarioClaseService extends Service
             // Validar carga académica
             if ($data['tipo'] === 'CLASE') {
 
-                if (empty($data['id_carga_academica'])) {
+                if (!empty($data['id_carga_academica'])) {
+                    $carga = CargaAcademica::with('docenteAsignatura.asignatura')->find($data['id_carga_academica']);
+
+                    if (!$carga) {
+                        return [
+                            'error' => true,
+                            'message' => 'La carga académica no existe.',
+                            'data' => []
+                        ];
+                    }
+                } elseif (!empty($data['id_curso']) && !empty($data['id_docente'])) {
+                    // "Horario suelto": docente + curso sin asignatura — la carga académica
+                    // se crea (o reutiliza si ya existe) al vuelo, mismo patrón que
+                    // DocenteHorarioService::reservar con la carga normal.
+                    $resultadoCarga = $this->cargaAcademicaService->añadirCargaAcademicaSuelta(
+                        $data['id_curso'],
+                        $data['id_docente'],
+                        silentIfExists: true,
+                    );
+
+                    if ($resultadoCarga['error']) {
+                        return $resultadoCarga;
+                    }
+
+                    $carga = CargaAcademica::with('docenteAsignatura.asignatura')->find($resultadoCarga['data']['id']);
+                    $data['id_carga_academica'] = $carga->id;
+                } else {
                     return [
                         'error' => true,
-                        'message' => 'Debe indicar la carga académica para una clase.',
-                        'data' => []
-                    ];
-                }
-
-                $carga = CargaAcademica::with('docenteAsignatura.asignatura')->find($data['id_carga_academica']);
-
-                if (!$carga) {
-                    return [
-                        'error' => true,
-                        'message' => 'La carga académica no existe.',
+                        'message' => 'Debe indicar la carga académica, o un curso y un docente para un horario suelto.',
                         'data' => []
                     ];
                 }
@@ -64,7 +83,10 @@ class HorarioClaseService extends Service
                     ];
                 }
 
-                if (!$carga->docenteAsignatura?->asignatura?->activo) {
+                // La asignatura solo aplica a una carga académica normal (con
+                // docenteAsignatura) — una carga "suelta" (horario sin asignatura) no
+                // tiene ninguna que pueda estar desactivada.
+                if ($carga->docenteAsignatura && !$carga->docenteAsignatura->asignatura?->activo) {
                     return [
                         'error' => true,
                         'message' => 'No se puede definir una clase de una asignatura desactivada.',
@@ -163,9 +185,15 @@ class HorarioClaseService extends Service
                 return 'El curso ya tiene una actividad asignada en esa franja horaria.';
             }
 
-            $docenteOcupado = $this->existeCruceHorarioClase($franja, function ($q) use ($carga) {
-                $q->whereHas('cargaAcademica.docenteAsignatura', function ($q2) use ($carga) {
-                    $q2->where('id_docente', $carga->docenteAsignatura->id_docente);
+            // id_docente_efectivo resuelve el docente sea cual sea el camino de $carga
+            // (directo en una carga "suelta", o vía docenteAsignatura en una normal) — el
+            // cruce en sí se busca contra AMBOS caminos, porque la otra actividad ocupada
+            // puede ser cualquiera de los dos tipos de carga.
+            $idDocente = $carga->id_docente_efectivo;
+            $docenteOcupado = $this->existeCruceHorarioClase($franja, function ($q) use ($idDocente) {
+                $q->whereHas('cargaAcademica', function ($q2) use ($idDocente) {
+                    $q2->where('id_docente', $idDocente)
+                        ->orWhereHas('docenteAsignatura', fn ($q3) => $q3->where('id_docente', $idDocente));
                 });
             });
 
@@ -217,7 +245,10 @@ class HorarioClaseService extends Service
      */
     public function esquemasDelDocente(int $idDocente, ?\Illuminate\Support\Collection $idsEsquemaPermitidos = null): \Illuminate\Support\Collection
     {
-        return HorarioClase::whereHas('cargaAcademica.docenteAsignatura', fn ($q) => $q->where('id_docente', $idDocente))
+        return HorarioClase::whereHas('cargaAcademica', function ($q) use ($idDocente) {
+                $q->where('id_docente', $idDocente)
+                    ->orWhereHas('docenteAsignatura', fn ($q2) => $q2->where('id_docente', $idDocente));
+            })
             ->join('academico_franja_horaria', 'academico_franja_horaria.id', '=', 'academico_horario_clase.id_franja_horaria')
             ->when($idsEsquemaPermitidos, fn ($q) => $q->whereIn('academico_franja_horaria.id_esquema', $idsEsquemaPermitidos))
             ->distinct()
@@ -329,7 +360,7 @@ class HorarioClaseService extends Service
 
                     'franjaHoraria.esquema.nivel:id,nombre',
 
-                    'cargaAcademica:id,id_docente_asignatura,id_curso',
+                    'cargaAcademica:id,id_docente_asignatura,id_docente,id_curso',
 
                     'cargaAcademica.curso:id,nombre,id_nivel',
 
@@ -339,7 +370,11 @@ class HorarioClaseService extends Service
 
                     'cargaAcademica.docenteAsignatura.docente:id_user,nombre,apellido',
 
-                    'cargaAcademica.docenteAsignatura.asignatura:id,nombre,codigo,abreviatura,color'
+                    'cargaAcademica.docenteAsignatura.asignatura:id,nombre,codigo,abreviatura,color',
+
+                    // Docente directo de una carga "suelta" (sin asignatura) — ver
+                    // CargaAcademica::docente().
+                    'cargaAcademica.docente:id_user,nombre,apellido',
                 ])
 
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
@@ -372,11 +407,14 @@ class HorarioClaseService extends Service
                                     $q3->whereIn('id_esquema', $idsEsquemaDocente);
                                 });
                         })
+                            // El docente de la carga puede resolverse directo (carga
+                            // "suelta") o vía docenteAsignatura (carga normal, con asignatura).
                             ->orWhereHas(
-                                'cargaAcademica.docenteAsignatura',
+                                'cargaAcademica',
                                 function ($q2) use ($id_docente) {
 
-                                    $q2->where('id_docente', $id_docente);
+                                    $q2->where('id_docente', $id_docente)
+                                        ->orWhereHas('docenteAsignatura', fn ($q3) => $q3->where('id_docente', $id_docente));
                                 }
                             );
                     });
@@ -395,6 +433,8 @@ class HorarioClaseService extends Service
 
                 // Oculta clases de carga académica o asignatura desactivada; las franjas
                 // sin carga académica (descansos, etc.) no aplican y se muestran siempre.
+                // Una carga "suelta" (sin asignatura) no tiene asignatura que revisar — solo
+                // se exige activa cuando la carga SÍ pasa por una (docenteAsignatura no nulo).
                 // $incluirInactivos se salta este filtro (ver doc del método arriba).
                 ->when(!$incluirInactivos, function ($query) {
 
@@ -405,10 +445,13 @@ class HorarioClaseService extends Service
 
                                 $q->whereHas('cargaAcademica', function ($q2) {
 
-                                    $q2->where('activo', 1);
-                                })->whereHas('cargaAcademica.docenteAsignatura.asignatura', function ($q2) {
-
-                                    $q2->where('activo', 1);
+                                    $q2->where('activo', 1)
+                                        ->where(function ($q3) {
+                                            $q3->whereNull('id_docente_asignatura')
+                                                ->orWhereHas('docenteAsignatura.asignatura', function ($q4) {
+                                                    $q4->where('activo', 1);
+                                                });
+                                        });
                                 });
                             });
                     });

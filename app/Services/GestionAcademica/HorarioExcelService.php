@@ -99,11 +99,15 @@ class HorarioExcelService
     public function exportarTodosLosDocentes(?array $idsEsquema = null): array
     {
         try {
+            // leftJoin, no join: una carga "suelta" (sin asignatura) no tiene fila en
+            // academico_docente_asignatura — el docente sale directo de
+            // academico_carga_academica.id_docente en ese caso.
             $idsDocentes = CargaAcademica::query()
                 ->join('academico_horario_clase', 'academico_horario_clase.id_carga_academica', '=', 'academico_carga_academica.id')
-                ->join('academico_docente_asignatura', 'academico_docente_asignatura.id', '=', 'academico_carga_academica.id_docente_asignatura')
+                ->leftJoin('academico_docente_asignatura', 'academico_docente_asignatura.id', '=', 'academico_carga_academica.id_docente_asignatura')
+                ->selectRaw('COALESCE(academico_carga_academica.id_docente, academico_docente_asignatura.id_docente) as id_docente')
                 ->distinct()
-                ->pluck('academico_docente_asignatura.id_docente');
+                ->pluck('id_docente');
 
             if ($idsDocentes->isEmpty()) {
                 return ['error' => true, 'message' => 'Ningún docente tiene bloques de horario.', 'data' => []];

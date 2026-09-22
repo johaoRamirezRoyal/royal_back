@@ -52,6 +52,51 @@ class CargaAcademicaService extends Service
         }
     }
 
+    /**
+     * Crea (o reutiliza) una carga académica "suelta": docente + curso, SIN pasar por
+     * DocenteAsignatura/asignatura — para bloques de horario que no corresponden a
+     * ninguna materia puntual (tutoría, disponibilidad, etc.). Mismo criterio de
+     * $silentIfExists que añadirCargaAcademicaDocente; usado por
+     * HorarioClaseService::añadirHorarioClase al crear un "horario suelto" desde la
+     * pestaña Horario (admin) — silentIfExists=true ahí, igual que el autoservicio del
+     * docente hace con la carga normal.
+     */
+    public function añadirCargaAcademicaSuelta(int $id_curso, int $id_docente, bool $silentIfExists = false)
+    {
+        try {
+
+            $carga = CargaAcademica::firstOrCreate(
+                [
+                    'id_docente' => $id_docente,
+                    'id_curso' => $id_curso,
+                ]
+            );
+
+            if (!$carga->wasRecentlyCreated && !$silentIfExists) {
+                return [
+                    'error' => true,
+                    'message' => 'Ya existe una carga académica para este docente en ese curso.',
+                    'data' => []
+                ];
+            }
+
+            return [
+                'error' => false,
+                'message' => "Se ha creado la carga académica correctamente.",
+                'data' => ['id' => $carga->id]
+            ];
+        } catch (Exception $e) {
+
+            $this->sendError($e, "Error en el servidor al tratar de añadir la carga académica suelta");
+
+            return [
+                'error' => true,
+                'message' => "Error en el servidor...",
+                'data' => []
+            ];
+        }
+    }
+
     public function listarCargaAcademicaDocente(int $id_docente, int $estado, ?int $id_curso = null, ?int $id_asignatura = null)
     {
         try {
@@ -102,10 +147,17 @@ class CargaAcademicaService extends Service
     public function obtenerCursosDocente(int $idDocente): array
     {
         try {
+            // leftJoin, no join: una carga "suelta" (sin asignatura) no tiene fila en
+            // academico_docente_asignatura — el docente se resuelve directo en `ca.id_docente`
+            // o, si esa carga sí es por asignatura, en `da.id_docente` (ver
+            // CargaAcademicaService::añadirCargaAcademicaSuelta).
             $cursos = DB::table('academico_carga_academica as ca')
-                ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+                ->leftJoin('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
                 ->join('curso as c', 'c.id', '=', 'ca.id_curso')
-                ->where('da.id_docente', $idDocente)
+                ->where(function ($q) use ($idDocente) {
+                    $q->where('ca.id_docente', $idDocente)
+                        ->orWhere('da.id_docente', $idDocente);
+                })
                 ->where('ca.activo', 1)
                 ->select('c.id', 'c.nombre')
                 ->distinct()

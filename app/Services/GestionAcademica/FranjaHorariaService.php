@@ -107,8 +107,10 @@ class FranjaHorariaService extends Service
                         ? CargaAcademica::with('docenteAsignatura')->find($id_carga_academica)
                         : null;
 
-                    $cursoScope = $carga->id_curso ?? $id_curso;
-                    $docenteScope = $carga?->docenteAsignatura?->id_docente ?? $id_docente;
+                    $cursoScope = $carga?->id_curso ?? $id_curso;
+                    // id_docente_efectivo: el docente de $carga sea cual sea el camino
+                    // (directo en una carga "suelta", o vía docenteAsignatura en una normal).
+                    $docenteScope = $carga?->id_docente_efectivo ?? $id_docente;
 
                     $query->whereDoesntHave('horarioClase', function ($q) use ($cursoScope, $docenteScope) {
                         $q->when($cursoScope !== null || $docenteScope !== null, function ($q) use ($cursoScope, $docenteScope) {
@@ -118,9 +120,10 @@ class FranjaHorariaService extends Service
                                         $q3->orWhere('id_curso', $cursoScope);
                                     }
                                     if ($docenteScope !== null) {
-                                        $q3->orWhereHas('docenteAsignatura', function ($q4) use ($docenteScope) {
-                                            $q4->where('id_docente', $docenteScope);
-                                        });
+                                        $q3->orWhere('id_docente', $docenteScope)
+                                            ->orWhereHas('docenteAsignatura', function ($q4) use ($docenteScope) {
+                                                $q4->where('id_docente', $docenteScope);
+                                            });
                                     }
                                 });
                             });

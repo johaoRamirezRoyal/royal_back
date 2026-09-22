@@ -277,7 +277,7 @@ class DocenteHorarioService extends Service
                 ];
             }
 
-            if (($horario->cargaAcademica?->docenteAsignatura?->id_docente ?? null) != $id_docente) {
+            if (($horario->cargaAcademica?->id_docente_efectivo ?? null) != $id_docente) {
                 return [
                     'error' => true,
                     'message' => 'No puedes editar un horario que no es tuyo.',
@@ -318,7 +318,7 @@ class DocenteHorarioService extends Service
             }
 
             $noPropios = $horarios->filter(
-                fn ($h) => ($h->cargaAcademica?->docenteAsignatura?->id_docente ?? null) != $id_docente
+                fn ($h) => ($h->cargaAcademica?->id_docente_efectivo ?? null) != $id_docente
             );
 
             if ($noPropios->isNotEmpty()) {

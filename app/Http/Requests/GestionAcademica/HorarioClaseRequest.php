@@ -17,6 +17,10 @@ class HorarioClaseRequest extends FormRequest
         return [
             'id_franja_horaria' => ['nullable', 'integer', 'exists:academico_franja_horaria,id'],
             'id_carga_academica' => ['nullable', 'integer', 'exists:academico_carga_academica,id'],
+            // "Horario suelto" (tipo=CLASE sin asignatura): alternativa a id_carga_academica
+            // — ver HorarioClaseService::añadirHorarioClase.
+            'id_curso' => ['nullable', 'integer', 'exists:curso,id'],
+            'id_docente' => ['nullable', 'integer', 'exists:usuarios,id_user'],
             'tipo' => ['nullable', 'string', Rule::in(['CLASE', 'PLANEACION', 'REUNION', 'CLUB', 'LIBRE', 'RECESO', 'ALMUERZO'])],
             'id' => ['nullable', 'integer', 'exists:academico_horario_clase,id'],
             'ids' => ['nullable', 'array'],
@@ -29,6 +33,8 @@ class HorarioClaseRequest extends FormRequest
         return [
             'id_franja_horaria.exists' => 'La franja horaria no existe.',
             'id_carga_academica.exists' => 'La carga académica no existe.',
+            'id_curso.exists' => 'El curso no existe.',
+            'id_docente.exists' => 'El docente no existe.',
             'tipo.in' => 'El tipo debe ser CLASE, PLANEACION, REUNION, CLUB, LIBRE, RECESO o ALMUERZO.',
             'ids.*.exists' => 'Uno o más horarios no existen.',
         ];
