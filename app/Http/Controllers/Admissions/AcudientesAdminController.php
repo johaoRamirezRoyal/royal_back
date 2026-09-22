@@ -16,7 +16,10 @@ use Illuminate\Http\Request;
  */
 class AcudientesAdminController extends Controller
 {
-    private const OPCION_GESTION = 106;
+    // Id real confirmado contra cron_opciones — la migración de seed usa insertGetId,
+    // así que el id no es un literal fijo; el mismo tipo de drift ya documentado para
+    // Instituciones (ver InstitucionAdminController::OPCION_GESTION/OPCION_LECTURA).
+    private const OPCION_GESTION = 112;
 
     public function __construct(private UsuariosServices $usuariosService)
     {

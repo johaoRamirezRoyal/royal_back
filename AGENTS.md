@@ -1206,31 +1206,46 @@ de `auth:api`+`system:general`; `/configuracion` está registrado **antes** del 
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `GET` | `/` | 104, 105 | Listado con estado derivado (`bloqueada`, `bloqueo_fecha`, etc.) |
-| `POST` | `/` | 104 | Crear (NIT hasheado; correo opcional, si se da queda verificado de una vez) |
-| `PUT` | `/{id}` | 104 | Actualizar (todos los campos `sometimes` — nunca pisa con NULL lo no enviado) |
-| `PUT` | `/estado` | 104 | Activar/desactivar (resetea `primer_ingreso_at` si aplica, ver arriba) |
-| `GET` | `/{id}/cartas` | 104, 105 | Documentos subidos por una institución |
-| `GET` | `/configuracion` | 104 | Días de plazo, correos de notificación, dominio Play and Learn |
-| `PUT` | `/configuracion` | 104 | Actualiza esos tres campos |
+| `GET` | `/` | 106, 111 | Listado con estado derivado (`bloqueada`, `bloqueo_fecha`, etc.) |
+| `POST` | `/` | 106 | Crear (NIT hasheado; correo opcional, si se da queda verificado de una vez) |
+| `PUT` | `/{id}` | 106 | Actualizar (todos los campos `sometimes` — nunca pisa con NULL lo no enviado) |
+| `PUT` | `/estado` | 106 | Activar/desactivar (resetea `primer_ingreso_at` si aplica, ver arriba) |
+| `GET` | `/{id}/cartas` | 106, 111 | Documentos subidos por una institución |
+| `GET` | `/configuracion` | 106 | Días de plazo, correos de notificación, dominio Play and Learn |
+| `PUT` | `/configuracion` | 106 | Actualiza esos tres campos |
 
-### Permisos — 104 (gestión completa) vs 105 (solo lectura)
+### Permisos — 106 (gestión completa) vs 111 (solo lectura)
+
+**Corregido el 2026-09-22** — este bloque documentaba antes 104/105 como si fueran
+literales estables; no lo son (`insertGetId`, ver "Sistema de permisos" arriba) y en esta
+BD terminaron siendo 104/105 = "Compras — Gestión de compras"/"Compras — Ventas" (módulo
+no relacionado), no Instituciones. Los ids reales, confirmados contra `cron_opciones`:
 
 Dos opciones separadas en `cron_opciones`, patrón (b) (`sinAcceso()` por método, no
 constructor único — ver "Sistema de permisos" arriba):
 
 | Opción | Otorgada a | Alcance |
 |--------|-----------|---------|
-| 104 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos |
-| 105 "Ver Instituciones y Documentos" | Admisiones (perfil 9) | Solo `index()`/`cartas()` — sin crear/editar/activar-desactivar/configuración |
+| 106 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos |
+| 111 "Ver Instituciones y Documentos" | Admisiones (perfil 9) | Solo `index()`/`cartas()` — sin crear/editar/activar-desactivar/configuración |
 
-104 se sembró primero con Super Admin **y** Admisiones
+106 se sembró primero con Super Admin **y** Admisiones
 (`2026_08_31_110000_seed_opcion_gestion_instituciones`), y luego se le retiró el acceso a
 Admisiones (`2026_08_31_130000_restrict_opcion_gestion_instituciones_a_super_admin`) a
-pedido explícito de que el módulo completo fuera exclusivo de Super Admin. 105 se agregó
+pedido explícito de que el módulo completo fuera exclusivo de Super Admin. 111 se agregó
 después (`2026_08_31_190000_seed_opcion_ver_instituciones_documentos`) para devolverle a
 Admisiones acceso de solo lectura sin reabrir la gestión completa — `index()` y `cartas()`
-aceptan el OR de ambas opciones, el resto de métodos solo acepta 104.
+aceptan el OR de ambas opciones, el resto de métodos solo acepta 106. El otorgamiento a
+Admisiones (perfil 9) sobre 111 se había perdido en esta BD (mismo síntoma que el de
+"Gestión de Acudientes" más abajo) — restaurado por
+`2026_09_22_100832_restore_perfil_admisiones_permisos_instituciones_acudientes`.
+
+**Mismo bug en el módulo de Acudientes** (`AcudientesAdminController::OPCION_GESTION`,
+`app/Http/Controllers/Admissions/AcudientesAdminController.php`): hardcodeaba `106`
+asumiendo que sería el id de "Gestión de Acudientes" (`2026_09_02_120000_seed_opcion_gestion_acudientes`,
+otorgada a Super Admin y Admisiones), pero en esta BD 106 ya estaba tomado por "Gestión de
+Instituciones" — el id real de "Gestión de Acudientes" es **112**. Corregido junto con lo
+anterior el 2026-09-22.
 
 ## Convenciones de código
 

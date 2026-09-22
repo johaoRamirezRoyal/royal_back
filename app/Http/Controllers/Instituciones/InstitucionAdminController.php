@@ -15,12 +15,16 @@ use Illuminate\Support\Facades\Hash;
 
 class InstitucionAdminController extends Controller
 {
-    private const OPCION_GESTION = 104;
+    // Ids reales confirmados contra cron_opciones (2026-09-22) — las migraciones de seed
+    // usan insertGetId, así que no son literales fijos; en esta BD terminaron en 106/111,
+    // no 104/105 (esos son "Compras — Gestión de compras"/"Compras — Ventas", módulo
+    // no relacionado, ver ProveedoresController y compras/seguimiento-compra).
+    private const OPCION_GESTION = 106;
     // Solo lectura — listado de instituciones y sus documentos, sin crear/editar/
     // activar-desactivar ni tocar la configuración (ver index()/cartas() vs. el resto de
     // métodos de este controller). Otorgada al perfil Admisiones (9), ver
     // 2026_08_31_190000_seed_opcion_ver_instituciones_documentos.
-    private const OPCION_LECTURA = 105;
+    private const OPCION_LECTURA = 111;
 
     private const PERFIL_SUPER_ADMIN = 1;
 
@@ -217,10 +221,9 @@ class InstitucionAdminController extends Controller
     /**
      * Elimina un documento (carta de recomendación) ya enviado — borra el archivo en
      * Cloudinary y el registro. Exclusivo de Super Admin, chequeado por perfil
-     * directamente en vez de reusar sinAcceso()/OPCION_GESTION: esa opción (104) hoy
-     * coincide, por un bug de seeding ya documentado, con "Compras — Gestión de
-     * compras" y también la tiene otorgada el perfil 34 — depender de ella dejaría
-     * borrar documentos a un perfil que no debería poder.
+     * directamente en vez de reusar sinAcceso()/OPCION_GESTION: acción destructiva, se
+     * prefiere no depender de que la opción quede bien otorgada en `cron_permisos`
+     * (el drift de ids 104/105→106/111 de este mismo controller ya mordió una vez).
      */
     public function eliminarCarta(Request $request, int $institucionId, int $cartaId)
     {
