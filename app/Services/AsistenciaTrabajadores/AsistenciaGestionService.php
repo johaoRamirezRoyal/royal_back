@@ -5,18 +5,21 @@ namespace App\Services\AsistenciaTrabajadores;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
-use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\MailService;
 use App\Services\Service;
+use App\Services\Usuarios\UsuariosServices;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AsistenciaGestionService extends Service
 {
-    public function __construct(private MailService $mailService) {}
+    public function __construct(
+        private MailService $mailService,
+        private UsuariosServices $usuariosService,
+    ) {}
 
     // Mismo patrón que AdmisionesServices/LlegadasTarde: correo fijo del encargado de RH
     // que se notifica cuando el sistema cierra una salida automáticamente.
@@ -28,9 +31,15 @@ class AsistenciaGestionService extends Service
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
 
-    // Tope de destinatarios por perfiles del aviso de llegada tarde: un solo correo a un perfil
-    // enorme (ej. todos los docentes) dispararía el límite del proveedor (ver el incidente de
-    // rate-limit de Noticias) — por encima de esto se omite el correo a perfiles y se registra en logs.
+    // Perfiles fijos del aviso de llegada tarde (ver notificarLlegadaTarde) — Recursos
+    // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
+    // UsuariosServices::correosPorPerfilesYNivel).
+    private const PERFIL_RECURSOS_HUMANOS = 8;
+    private const PERFIL_COORDINADOR = 26;
+
+    // Tope de destinatarios del aviso de llegada tarde: un solo correo a un grupo enorme
+    // dispararía el límite del proveedor (ver el incidente de rate-limit de Noticias) — por
+    // encima de esto se omite ese correo y se registra en logs.
     private const MAX_DESTINATARIOS_LLEGADA_TARDE = 30;
 
     // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
@@ -365,9 +374,12 @@ class AsistenciaGestionService extends Service
 
     /**
      * Aviso por correo de una entrada tarde recién registrada (ver la config en
-     * configuracion_asistencia): al propio trabajador y, en un solo correo, a los usuarios
-     * activos de los perfiles elegidos. Ambos correos incluyen el acumulado del mes y la lista
-     * de roles a quienes llega el aviso.
+     * configuracion_asistencia): al propio trabajador y, en un solo correo, a Recursos
+     * Humanos y/o al coordinador del mismo nivel del trabajador (cada uno un toggle
+     * independiente, ya no un selector libre de perfiles). El coordinador se resuelve con
+     * UsuariosServices::correosPorPerfilesYNivel, el mismo mecanismo que ya usa
+     * PermisosLicenciasServices para enrutar avisos al coordinador de nivel — Recursos
+     * Humanos, en cambio, no se acota por nivel (es transversal a todo el colegio).
      */
     private function notificarLlegadaTarde(AsistenciaGestion $asistencia): void
     {
@@ -388,31 +400,48 @@ class AsistenciaGestionService extends Service
         $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
         $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
 
-        $idsPerfiles = array_map('intval', $config->perfiles_notificar_llegada_tarde ?? []);
-        $nombresPerfiles = $idsPerfiles ? Perfil::whereIn('id_perfil', $idsPerfiles)->orderBy('nombre')->pluck('nombre')->all() : [];
+        $correosDestino = [];
+        $nombresDestino = [];
 
-        $correosPerfiles = [];
-        if ($idsPerfiles) {
-            $correosPerfiles = Usuario::where('estado', 'activo')
-                ->whereIn('perfil', $idsPerfiles)
+        if ($config->notificar_recursos_humanos) {
+            $correosRH = Usuario::where('estado', 'activo')
+                ->where('perfil', self::PERFIL_RECURSOS_HUMANOS)
                 ->where('id_user', '!=', $usuario->id_user)
                 ->whereNotNull('correo')
                 ->pluck('correo')
-                ->unique()
-                ->values()
                 ->all();
 
-            if (count($correosPerfiles) > self::MAX_DESTINATARIOS_LLEGADA_TARDE) {
-                Log::warning('Aviso de llegada tarde a perfiles omitido: demasiados destinatarios', [
-                    'perfiles' => $idsPerfiles,
-                    'destinatarios' => count($correosPerfiles),
-                ]);
-                $correosPerfiles = [];
+            if ($correosRH) {
+                $correosDestino = array_merge($correosDestino, $correosRH);
+                $nombresDestino[] = 'Recursos Humanos';
             }
         }
 
+        if ($config->notificar_coordinador_nivel) {
+            $correosCoordinador = array_diff(
+                $this->usuariosService->correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $usuario->id_nivel, soloActivos: true),
+                [$usuario->correo],
+            );
+
+            if ($correosCoordinador) {
+                $correosDestino = array_merge($correosDestino, $correosCoordinador);
+                $nombresDestino[] = 'el coordinador de nivel';
+            }
+        }
+
+        $correosDestino = array_values(array_unique($correosDestino));
+
+        if (count($correosDestino) > self::MAX_DESTINATARIOS_LLEGADA_TARDE) {
+            Log::warning('Aviso de llegada tarde omitido: demasiados destinatarios', [
+                'id_nivel' => $usuario->id_nivel,
+                'destinatarios' => count($correosDestino),
+            ]);
+            $correosDestino = [];
+            $nombresDestino = [];
+        }
+
         $enviaTrabajador = $config->notificar_llegada_tarde_trabajador && $usuario->correo;
-        $destinos = array_merge($enviaTrabajador ? ['el propio trabajador'] : [], $correosPerfiles ? $nombresPerfiles : []);
+        $destinos = array_merge($enviaTrabajador ? ['el propio trabajador'] : [], $nombresDestino);
         $lista = $destinos ? implode(', ', $destinos) : 'nadie más';
 
         $resultados = [];
@@ -421,15 +450,15 @@ class AsistenciaGestionService extends Service
             $resultados[] = $this->mailService->sendGeneric(
                 $usuario->correo,
                 'Llegada tarde registrada',
-                "Hola {$nombre},\n\nTe recordamos la importancia de cumplir con la jornada laboral para el correcto funcionamiento de nuestra institución.\n\nSi estás ingresando fuera de tu horario, te invitamos a ajustar tu llegada. Nota: Si cuentas con un permiso parcial o previo autorizado, por favor haz caso omiso de este aviso. ¡Tu puntualidad cuenta!\n\nEste aviso llega a: {$lista}"
+                "Hola {$nombre},\n\nTe recordamos la importancia de cumplir con la jornada laboral para el correcto funcionamiento de nuestra institución.\n\nSi estás ingresando fuera de tu horario, te invitamos a ajustar tu llegada. Nota: Si cuentas con un permiso parcial o previo autorizado, por favor haz caso omiso de este aviso.\n\n¡Tu puntualidad cuenta!"
             );
         }
 
-        if ($correosPerfiles) {
+        if ($correosDestino) {
             $resultados[] = $this->mailService->sendGeneric(
-                $correosPerfiles,
+                $correosDestino,
                 "Llegada tarde: {$nombre}",
-                "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad}).\n\nEste aviso llega a: {$lista}."
+                "{$nombre} (documento {$usuario->documento}) registró su llegada el {$fecha} a las {$hora}, fuera del horario de puntualidad ({$asistencia->puntualidad})."
             );
         }
 

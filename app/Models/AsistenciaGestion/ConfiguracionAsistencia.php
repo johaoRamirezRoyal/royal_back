@@ -14,12 +14,14 @@ class ConfiguracionAsistencia extends Model
         'hora_minima_salida_defecto',
         'notificar_llegada_tarde',
         'notificar_llegada_tarde_trabajador',
-        'perfiles_notificar_llegada_tarde',
+        'notificar_recursos_humanos',
+        'notificar_coordinador_nivel',
     ];
 
     protected $casts = [
         'notificar_llegada_tarde' => 'boolean',
         'notificar_llegada_tarde_trabajador' => 'boolean',
-        'perfiles_notificar_llegada_tarde' => 'array',
+        'notificar_recursos_humanos' => 'boolean',
+        'notificar_coordinador_nivel' => 'boolean',
     ];
 }
