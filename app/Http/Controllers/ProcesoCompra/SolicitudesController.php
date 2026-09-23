@@ -129,6 +129,7 @@ class SolicitudesController extends Controller
             's' => $request->input('s') ? trim($request->input('s')) : null,
             'id_nivel' => $esAdmin ? ($request->integer('id_nivel') ?: null) : null,
             'perfil' => $esAdmin ? ($request->integer('perfil') ?: null) : null,
+            'tipo' => $request->input('tipo'),
         ];
 
         return $this->apiResponse($this->solicitudesServices->listarSeguimiento($filtros));

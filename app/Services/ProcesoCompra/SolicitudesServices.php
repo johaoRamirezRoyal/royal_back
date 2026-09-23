@@ -237,10 +237,14 @@ class SolicitudesServices
         }
     }
 
+    /** Filtro "tipo" del seguimiento → área de la solicitud (32 = O20 Asistente administrativa, 85 = O13 Oficina de sistemas). */
+    private const AREA_POR_TIPO_SEGUIMIENTO = ['operativo' => 32, 'sistemas' => 85];
+
     // Seguimiento de compra: todas las solicitudes formalizadas no anuladas (tabla `solicitudes`),
     // ordenadas por fecha de solicitud más reciente primero.
     // $filtros: fecha_desde/fecha_hasta/id_user/s (todos abiertos a Compras) e
     // id_nivel/perfil (el controller solo los pasa cuando quien pide es Super Admin/Admin).
+    // tipo: operativo/sistemas → área fija de la solicitud (AREA_POR_TIPO_SEGUIMIENTO).
     public function listarSeguimiento(array $filtros = []): array
     {
         try {
@@ -253,6 +257,10 @@ class SolicitudesServices
                 'verificacion.usuario:id_user,nombre,apellido',
             ])
                 ->where('anulada', 0);
+
+            if (isset(self::AREA_POR_TIPO_SEGUIMIENTO[$filtros['tipo'] ?? ''])) {
+                $query->where('id_area', self::AREA_POR_TIPO_SEGUIMIENTO[$filtros['tipo']]);
+            }
 
             if (!empty($filtros['id_user'])) {
                 $query->where('id_user', $filtros['id_user']);
