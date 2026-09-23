@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Noticias;
 
 use App\Http\Controllers\Controller;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\FileStorageService;
 use App\Services\Noticias\NoticiasService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class NoticiasController extends Controller
 {
@@ -32,6 +34,7 @@ class NoticiasController extends Controller
         private NoticiasService $service,
         private UsuariosServices $usuariosService,
         private FileStorageService $fileStorage,
+        private CloudinaryService $cloudinary,
         private Request $request,
     ) {
     }
@@ -247,6 +250,68 @@ class NoticiasController extends Controller
         ]);
 
         return $this->apiResponse($this->service->asignarGrupoDelNivel($idNivel, $request->input('grupo')));
+    }
+
+    public function listarRevistas(): JsonResponse
+    {
+        $this->ensurePermisoGestion();
+
+        return $this->apiResponse($this->service->listarRevistas());
+    }
+
+    /**
+     * POST /api/noticias/revistas (multipart: titulo + archivo PDF) — sube y crea en un
+     * solo paso, a diferencia de las imágenes: el PDF no se previsualiza antes de guardar.
+     */
+    public function crearRevista(Request $request): JsonResponse
+    {
+        $this->ensurePermisoGestion();
+
+        $request->validate([
+            'titulo' => 'required|string|max:200',
+            // 10 MB — el máximo que acepta CloudinaryService::validateFile (y el plan
+            // gratuito de Cloudinary para PDFs).
+            'archivo' => 'required|file|mimes:pdf|max:10240',
+        ]);
+
+        // public_id único: si no, dos PDFs con el mismo nombre se pisan en Cloudinary.
+        $subida = $this->cloudinary->uploadFile($request->file('archivo'), 'Noticias/Revistas', 'revista_' . Str::uuid());
+
+        if ($subida['error']) {
+            return $this->apiResponse($subida);
+        }
+
+        return $this->apiResponse(
+            $this->service->crearRevista(
+                trim($request->input('titulo')),
+                $subida['data']['url'],
+                $subida['data']['public_id'],
+                $request->user()->id_user,
+            )
+        );
+    }
+
+    public function cambiarEstadoRevista(Request $request, int $id): JsonResponse
+    {
+        $this->ensurePermisoGestion();
+
+        $request->validate(['activo' => 'required|boolean']);
+
+        return $this->apiResponse($this->service->cambiarEstadoRevista($id, $request->boolean('activo')));
+    }
+
+    public function eliminarRevista(int $id): JsonResponse
+    {
+        $this->ensurePermisoGestion();
+
+        $resultado = $this->service->eliminarRevista($id);
+        // Los PDF se suben como resource_type "image" (CloudinaryService::getResourceType),
+        // no "raw" (el default de deleteFile) — ver InstitucionAdminController.
+        if (!$resultado['error']) {
+            $this->cloudinary->deleteFile($resultado['public_id'], 'image');
+        }
+
+        return $this->apiResponse($resultado);
     }
 
     /**

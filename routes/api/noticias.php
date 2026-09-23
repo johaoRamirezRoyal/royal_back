@@ -17,6 +17,11 @@ Route::put('/correos-distribucion/{id}', [NoticiasController::class, 'actualizar
 Route::delete('/correos-distribucion/{id}', [NoticiasController::class, 'eliminarCorreoDistribucion']);
 Route::put('/correos-distribucion/niveles/{idNivel}', [NoticiasController::class, 'asignarGrupoNivel']);
 
+Route::get('/revistas', [NoticiasController::class, 'listarRevistas']);
+Route::post('/revistas', [NoticiasController::class, 'crearRevista']);
+Route::put('/revistas/{id}/estado', [NoticiasController::class, 'cambiarEstadoRevista']);
+Route::delete('/revistas/{id}', [NoticiasController::class, 'eliminarRevista']);
+
 Route::get('/', [NoticiasController::class, 'listar']);
 Route::post('/', [NoticiasController::class, 'crear']);
 Route::put('/', [NoticiasController::class, 'actualizar']);

@@ -60,7 +60,11 @@ class CloudinaryService
      */
     public function uploadFile(
         UploadedFile $file,
-        string $folder = 'uploads'
+        string $folder = 'uploads',
+        // Opcional: por defecto el public_id es el nombre original del archivo (con
+        // overwrite), así que dos archivos con el mismo nombre se pisan entre sí. Pasar
+        // un nombre único cuando eso no es aceptable (ej. revistas de Noticias).
+        ?string $publicIdPersonalizado = null
     ): array {
         try {
             $validation = $this->validateFile($file);
@@ -97,6 +101,10 @@ class CloudinaryService
                 $publicId = $originalName;
             } else {
                 $publicId = $originalName;
+            }
+
+            if ($publicIdPersonalizado) {
+                $publicId = preg_replace('/[^A-Za-z0-9\-_]/', '_', $publicIdPersonalizado);
             }
 
             $options = [

@@ -7,6 +7,7 @@ use App\Mail\NoticiaMail;
 use App\Models\CorreoInstitucional;
 use App\Models\Noticias\MensajeGeneral;
 use App\Models\Noticias\MensajeProgramado;
+use App\Models\Noticias\Revista;
 use App\Models\Usuarios\Nivel;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
@@ -61,11 +62,60 @@ class NoticiasService
                     'general' => $general && $general->activo ? $general : null,
                     'programadas' => $this->programadasVisiblesDeTipo('normal', $idNivel),
                     'cumpleanos' => $this->programadasVisiblesDeTipo('cumpleanos', $idNivel),
+                    // Solo la más reciente activa — el Home incrusta una sola revista.
+                    'revista' => Revista::where('activo', true)->latest('id')->first(),
                 ],
             ];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    public function listarRevistas(): array
+    {
+        try {
+            return ['error' => false, 'data' => Revista::orderByDesc('id')->get()];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function crearRevista(string $titulo, string $url, string $publicId, int $idLog): array
+    {
+        try {
+            return [
+                'error' => false,
+                'message' => 'Revista publicada correctamente',
+                'data' => Revista::create(['titulo' => $titulo, 'url' => $url, 'public_id' => $publicId, 'id_log' => $idLog]),
+            ];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function cambiarEstadoRevista(int $id, bool $activo): array
+    {
+        $revista = Revista::find($id);
+        if (!$revista) {
+            return ['error' => true, 'message' => 'La revista no existe', 'status' => 404];
+        }
+
+        $revista->update(['activo' => $activo]);
+
+        return ['error' => false, 'message' => 'Estado actualizado', 'data' => $revista];
+    }
+
+    /** Borra la fila y devuelve el public_id para que el controller elimine el PDF de Cloudinary. */
+    public function eliminarRevista(int $id): array
+    {
+        $revista = Revista::find($id);
+        if (!$revista) {
+            return ['error' => true, 'message' => 'La revista no existe', 'status' => 404];
+        }
+
+        $revista->delete();
+
+        return ['error' => false, 'message' => 'Revista eliminada', 'public_id' => $revista->public_id];
     }
 
     private function programadasVisiblesDeTipo(string $tipo, ?int $idNivel)
