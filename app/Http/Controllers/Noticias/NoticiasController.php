@@ -260,8 +260,9 @@ class NoticiasController extends Controller
     }
 
     /**
-     * POST /api/noticias/revistas (multipart: titulo + archivo PDF) — sube y crea en un
-     * solo paso, a diferencia de las imágenes: el PDF no se previsualiza antes de guardar.
+     * POST /api/noticias/revistas (multipart: titulo + descripcion opcional + archivo PDF)
+     * — sube y crea en un solo paso, a diferencia de las imágenes: el PDF no se
+     * previsualiza antes de guardar.
      */
     public function crearRevista(Request $request): JsonResponse
     {
@@ -269,6 +270,7 @@ class NoticiasController extends Controller
 
         $request->validate([
             'titulo' => 'required|string|max:200',
+            'descripcion' => 'nullable|string|max:2000',
             // 10 MB — el máximo que acepta CloudinaryService::validateFile (y el plan
             // gratuito de Cloudinary para PDFs).
             'archivo' => 'required|file|mimes:pdf|max:10240',
@@ -284,9 +286,29 @@ class NoticiasController extends Controller
         return $this->apiResponse(
             $this->service->crearRevista(
                 trim($request->input('titulo')),
+                $request->filled('descripcion') ? trim($request->input('descripcion')) : null,
                 $subida['data']['url'],
                 $subida['data']['public_id'],
                 $request->user()->id_user,
+            )
+        );
+    }
+
+    /** PUT /api/noticias/revistas/{id} — solo título y descripción; el PDF no se reemplaza. */
+    public function actualizarRevista(Request $request, int $id): JsonResponse
+    {
+        $this->ensurePermisoGestion();
+
+        $request->validate([
+            'titulo' => 'required|string|max:200',
+            'descripcion' => 'nullable|string|max:2000',
+        ]);
+
+        return $this->apiResponse(
+            $this->service->actualizarRevista(
+                $id,
+                trim($request->input('titulo')),
+                $request->filled('descripcion') ? trim($request->input('descripcion')) : null,
             )
         );
     }

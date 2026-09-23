@@ -10,6 +10,7 @@ class Revista extends Model
 
     protected $fillable = [
         'titulo',
+        'descripcion',
         'url',
         'public_id',
         'activo',

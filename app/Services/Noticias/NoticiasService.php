@@ -62,8 +62,9 @@ class NoticiasService
                     'general' => $general && $general->activo ? $general : null,
                     'programadas' => $this->programadasVisiblesDeTipo('normal', $idNivel),
                     'cumpleanos' => $this->programadasVisiblesDeTipo('cumpleanos', $idNivel),
-                    // Solo la más reciente activa — el Home incrusta una sola revista.
-                    'revista' => Revista::where('activo', true)->latest('id')->first(),
+                    // Todas las activas, más reciente primero — el Home muestra la primera
+                    // y deja elegir otra si hay más de una.
+                    'revistas' => Revista::where('activo', true)->latest('id')->get(),
                 ],
             ];
         } catch (\Exception $e) {
@@ -80,17 +81,35 @@ class NoticiasService
         }
     }
 
-    public function crearRevista(string $titulo, string $url, string $publicId, int $idLog): array
+    public function crearRevista(string $titulo, ?string $descripcion, string $url, string $publicId, int $idLog): array
     {
         try {
             return [
                 'error' => false,
                 'message' => 'Revista publicada correctamente',
-                'data' => Revista::create(['titulo' => $titulo, 'url' => $url, 'public_id' => $publicId, 'id_log' => $idLog]),
+                'data' => Revista::create([
+                    'titulo' => $titulo,
+                    'descripcion' => $descripcion,
+                    'url' => $url,
+                    'public_id' => $publicId,
+                    'id_log' => $idLog,
+                ]),
             ];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    public function actualizarRevista(int $id, string $titulo, ?string $descripcion): array
+    {
+        $revista = Revista::find($id);
+        if (!$revista) {
+            return ['error' => true, 'message' => 'La revista no existe', 'status' => 404];
+        }
+
+        $revista->update(['titulo' => $titulo, 'descripcion' => $descripcion]);
+
+        return ['error' => false, 'message' => 'Revista actualizada', 'data' => $revista];
     }
 
     public function cambiarEstadoRevista(int $id, bool $activo): array

@@ -19,6 +19,7 @@ Route::put('/correos-distribucion/niveles/{idNivel}', [NoticiasController::class
 
 Route::get('/revistas', [NoticiasController::class, 'listarRevistas']);
 Route::post('/revistas', [NoticiasController::class, 'crearRevista']);
+Route::put('/revistas/{id}', [NoticiasController::class, 'actualizarRevista']);
 Route::put('/revistas/{id}/estado', [NoticiasController::class, 'cambiarEstadoRevista']);
 Route::delete('/revistas/{id}', [NoticiasController::class, 'eliminarRevista']);
 
