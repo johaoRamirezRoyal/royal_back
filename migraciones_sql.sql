@@ -159,3 +159,17 @@ ALTER TABLE `encuestas_respuestas`
   ADD COLUMN `id_reserva` int(11) DEFAULT NULL AFTER `id_salon`,
   ADD KEY `fk_enc_respuestas_reserva` (`id_reserva`),
   ADD CONSTRAINT `fk_enc_respuestas_reserva` FOREIGN KEY (`id_reserva`) REFERENCES `reservas` (`id`) ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- 2026_09_23_100000_seed_opcion_vinculacion_estudiante_padre.php
+-- Opción propia del módulo "Vinculación Estudiante - Padre" (Académico, módulo
+-- 14) — VinculacionAcudienteController. No se reutiliza la 73 ("Estudiantes",
+-- legacy Matricula) porque está otorgada al perfil Acudiente (6). Solo Super
+-- Admin por defecto. Id real asignado en esta BD: 131.
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`nombre`, `id_modulo`, `activo`, `fechareg`)
+VALUES ('Vinculación Estudiante - Padre', 14, 1, NOW());
+SET @id_opcion_vinculacion = LAST_INSERT_ID();
+
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`)
+VALUES (@id_opcion_vinculacion, 1, 1, NOW());
