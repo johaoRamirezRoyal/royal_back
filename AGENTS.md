@@ -513,6 +513,33 @@ esquema (nivel); el matching de docente pasó a un resolver difuso compartido
 importar orden ni palabras de más — reutilízalo en cualquier seeder nuevo que necesite
 resolver un `Usuario` por nombre "limpio" contra datos reales sucios.
 
+### Vinculación Estudiante - Padre (`/vinculacion-acudientes` — `VinculacionAcudienteController`)
+
+Gestiona `estudiantes_padres` (tabla legacy, sin migración ni índice único) desde el
+módulo Académico. Opción **131** (`OPCION_VINCULACION`, `sinAcceso()` en cada método),
+creada por `2026_09_23_100000_seed_opcion_vinculacion_estudiante_padre` — **no** la `73`
+("Estudiantes", legacy Matricula), que está otorgada al perfil Acudiente.
+
+- `GET /` acudientes (perfil 6) paginados — reusa `UsuariosServices::mostrarAcudientesPaginados`.
+- `GET /estudiantes-buscar?s=&cursos[]=` estudiantes (perfil 16) activos — reusa
+  `mostrarUsuariosPaginados`, expuesto acá para no depender de `/usuarios/paginados` (sin
+  chequeo de permiso).
+- `GET /{idAcudiente}/estudiantes` vinculados activos + `otros_acudientes` de cada uno.
+- `POST /` / `DELETE /` `{ id_acudiente, id_estudiante }` — `VinculacionAcudienteService`.
+  Desvincular es **soft** (`activo=0`): llegadas tarde, enfermería y `/usuarios/paginados`
+  ya filtran `activo=1`. Re-vincular reactiva la fila existente del par en vez de crear
+  otra. `vincular` exige perfil 6/16 exactos, aunque en la tabla hay ~30 vínculos legacy
+  con `id_acudiente` de staff (Docente, Coordinador, …) que siguen visibles para esos
+  módulos pero no aparecen en este listado.
+- `POST /importar` (multipart `archivo`, xlsx/xls/csv, máx. 5 MB y 3000 filas) —
+  `importarExcel`: col A documento acudiente, col B documento estudiante, fila 1
+  encabezados (la plantilla la genera el frontend con exceljs). Documentos comparados
+  **normalizados** (solo alfanuméricos, `REGEXP_REPLACE` en MariaDB) porque en `usuarios`
+  hay documentos con `\t`, `\r\n` o puntos sobrantes; un documento que resuelve a más de
+  un usuario del perfil se reporta como ambiguo, nunca se adivina. Resultado por fila
+  (`vinculados`/`ya_vinculados`/`errores[{fila, mensaje}]`); las filas válidas se aplican
+  aunque otras fallen.
+
 ## Proceso de compra (`/proveedores` + `/solicitudes`)
 
 Módulo de compras en dos tablas paralelas: la solicitud inicial (`solicitudes_inicial`,

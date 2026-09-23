@@ -270,6 +270,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/certificados.php';
     });
 
+    // CAPACITACIÓN INSTITUCIONAL (Gestión Humana)
+    Route::prefix('/capacitaciones')->group(function () {
+        require __DIR__ . '/api/capacitaciones.php';
+    });
+
     // RECURSOS — Listado Maestro de documentos (Gestión Humana)
     Route::prefix('/recursos')->group(function () {
         require __DIR__ . '/api/recursos.php';
@@ -295,6 +300,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // ACUDIENTES (gestión admin de los acudientes auto-registrados vía Admisiones)
     Route::prefix('/acudientes-admin')->group(function () {
         require __DIR__ . '/api/acudientes-admin.php';
+    });
+
+    // VINCULACIÓN ESTUDIANTE - PADRE (estudiantes_padres, opción 131)
+    Route::prefix('/vinculacion-acudientes')->group(function () {
+        require __DIR__ . '/api/vinculacion-acudientes.php';
     });
 
     // MODULOS (métricas de módulos más visitados — Home)
