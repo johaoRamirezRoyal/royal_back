@@ -21,7 +21,7 @@ class EncuestasServices
     public function listarTiposPregunta(): array
     {
         try {
-            $data = EvaluacionTipoPregunta::orderBy('nombre')->get();
+            $data = EvaluacionTipoPregunta::with('opciones')->orderBy('nombre')->get();
             return ['error' => false, 'message' => 'ok', 'data' => $data];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];

@@ -980,10 +980,19 @@ Todos bajo prefijo `/api/evaluaciones`, middleware `auth:api` + `system:general`
 
 | Método | Ruta | Gate | Uso |
 |--------|------|------|-----|
-| `GET` | `/tipos-pregunta` | 102, 101 | Listar tipos de pregunta |
+| `GET` | `/tipos-pregunta` | 102, 101 | Listar tipos de pregunta (con `opciones` por defecto anidadas; Encuestas usa el mismo payload) |
+| `POST` | `/tipos-pregunta` | 122 | Crear tipo (`nombre`; `slug` derivado con `Str::slug(nombre, '_')`, único). Un slug desconocido se responde como selección única |
+| `POST` | `/tipos-pregunta/{idTipo}/opciones` | 122 | Crear opción por defecto (`texto`, `valor`, `orden` opcional) |
+| `PUT` | `/tipos-pregunta/opciones/{id}` | 122 | Editar opción por defecto |
+| `DELETE` | `/tipos-pregunta/opciones/{id}` | 122 | Eliminar opción por defecto |
 
-**Catálogo de solo lectura desde la API** — no hay `crear`/`actualizar`/
-`eliminar` para `evaluaciones_tipos_pregunta` en el controller; una fila nueva
+Las opciones por defecto (`evaluaciones_tipos_pregunta_opciones`) solo las usa el
+frontend para precargar las opciones al crear una pregunta — se copian, así que
+editarlas no cambia preguntas existentes. `valor` es el puntaje de Evaluaciones;
+Encuestas lo ignora.
+
+**Tipos: solo alta desde la API** — no hay `actualizar`/`eliminar` para
+`evaluaciones_tipos_pregunta`; los tipos con comportamiento especial (slugs abajo) se agregan por migración; una fila nueva
 se agrega por migración (`DB::table('evaluaciones_tipos_pregunta')->insert()`,
 idempotente por `slug`), siguiendo el mismo patrón que
 `grant_opciones_evaluaciones_a_coordinador`. Slugs conocidos consumidos por el

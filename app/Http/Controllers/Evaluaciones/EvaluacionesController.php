@@ -105,6 +105,70 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->listarTiposPregunta());
     }
 
+    public function crearTipoPregunta(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'nombre' => 'required|string|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->crearTipoPregunta(trim($request->input('nombre'))));
+    }
+
+    public function crearOpcionTipoPregunta(Request $request, int $idTipo): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'texto' => 'required|string|max:255',
+            'valor' => 'sometimes|numeric',
+            'orden' => 'sometimes|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->crearOpcionTipoPregunta($idTipo, $validator->validated()));
+    }
+
+    public function actualizarOpcionTipoPregunta(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'texto' => 'sometimes|string|max:255',
+            'valor' => 'sometimes|numeric',
+            'orden' => 'sometimes|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->actualizarOpcionTipoPregunta($id, $validator->validated()));
+    }
+
+    public function eliminarOpcionTipoPregunta(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->eliminarOpcionTipoPregunta($id));
+    }
+
     // ─── Evaluaciones ──────────────────────────────────────────
 
     public function listar(Request $request): JsonResponse

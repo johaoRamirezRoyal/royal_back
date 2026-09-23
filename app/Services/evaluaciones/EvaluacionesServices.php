@@ -11,6 +11,7 @@ use App\Models\Evaluaciones\EvaluacionRespuestaPregunta;
 use App\Models\Evaluaciones\EvaluacionSeccion;
 use App\Models\Evaluaciones\EvaluacionServicio;
 use App\Models\Evaluaciones\EvaluacionTipoPregunta;
+use App\Models\Evaluaciones\EvaluacionTipoPreguntaOpcion;
 use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\Periodo;
 use App\Models\Usuarios\Usuario;
@@ -22,6 +23,7 @@ use App\Pdf\Evaluaciones\EvaluacionRespuestaPdfService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class EvaluacionesServices
 {
@@ -188,8 +190,74 @@ class EvaluacionesServices
     public function listarTiposPregunta(): array
     {
         try {
-            $data = EvaluacionTipoPregunta::orderBy('nombre')->get();
+            $data = EvaluacionTipoPregunta::with('opciones')->orderBy('nombre')->get();
             return ['error' => false, 'message' => 'ok', 'data' => $data];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Tipo nuevo creado desde la UI: el slug se deriva del nombre. El frontend solo trata
+     * de forma especial `texto_libre`/`seleccion_multiple`; cualquier otro slug se responde
+     * como selección única usando las opciones de la pregunta.
+     */
+    public function crearTipoPregunta(string $nombre): array
+    {
+        try {
+            $slug = Str::slug($nombre, '_');
+            if ($slug === '') return ['error' => true, 'message' => 'Nombre inválido', 'status' => 422];
+            if (EvaluacionTipoPregunta::where('slug', $slug)->exists()) {
+                return ['error' => true, 'message' => 'Ya existe un tipo de pregunta con ese nombre', 'status' => 422];
+            }
+
+            $tipo = EvaluacionTipoPregunta::create(['nombre' => $nombre, 'slug' => $slug]);
+            return ['error' => false, 'message' => 'Tipo de pregunta creado', 'data' => $tipo->load('opciones')];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    // ─── Opciones por defecto de un tipo de pregunta ─────────────
+    // Solo alimentan el autocompletado al crear preguntas (Evaluaciones y Encuestas);
+    // cambiarlas no modifica las opciones ya copiadas a preguntas existentes.
+
+    public function crearOpcionTipoPregunta(int $idTipo, array $datos): array
+    {
+        try {
+            if (!EvaluacionTipoPregunta::find($idTipo)) {
+                return ['error' => true, 'message' => 'Tipo de pregunta no encontrado', 'status' => 404];
+            }
+
+            $datos['orden'] ??= (int) EvaluacionTipoPreguntaOpcion::where('id_tipo_pregunta', $idTipo)->max('orden') + 1;
+            $opcion = EvaluacionTipoPreguntaOpcion::create($datos + ['id_tipo_pregunta' => $idTipo]);
+            return ['error' => false, 'message' => 'Opción creada', 'data' => $opcion];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarOpcionTipoPregunta(int $id, array $datos): array
+    {
+        try {
+            $opcion = EvaluacionTipoPreguntaOpcion::find($id);
+            if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+
+            $opcion->update($datos);
+            return ['error' => false, 'message' => 'Opción actualizada', 'data' => $opcion];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function eliminarOpcionTipoPregunta(int $id): array
+    {
+        try {
+            $opcion = EvaluacionTipoPreguntaOpcion::find($id);
+            if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+
+            $opcion->delete();
+            return ['error' => false, 'message' => 'Opción eliminada'];
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }

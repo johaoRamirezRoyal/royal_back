@@ -11,6 +11,10 @@ Route::delete('/servicios/{id}', [EvaluacionesController::class, 'eliminarServic
 
 // ─── Tipos de pregunta ────────────────────────────────────
 Route::get('/tipos-pregunta', [EvaluacionesController::class, 'listarTiposPregunta']);
+Route::post('/tipos-pregunta', [EvaluacionesController::class, 'crearTipoPregunta']);
+Route::post('/tipos-pregunta/{idTipo}/opciones', [EvaluacionesController::class, 'crearOpcionTipoPregunta']);
+Route::put('/tipos-pregunta/opciones/{id}', [EvaluacionesController::class, 'actualizarOpcionTipoPregunta']);
+Route::delete('/tipos-pregunta/opciones/{id}', [EvaluacionesController::class, 'eliminarOpcionTipoPregunta']);
 
 // ─── Evaluaciones ─────────────────────────────────────────
 Route::get('/mis-evaluaciones', [EvaluacionesController::class, 'misEvaluaciones']);
