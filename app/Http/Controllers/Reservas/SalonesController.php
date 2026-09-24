@@ -12,6 +12,7 @@ use App\Services\Reservas\ReservasServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SalonesController extends Controller
 {
@@ -34,12 +35,28 @@ class SalonesController extends Controller
         return $tienePermiso ? null : $this->error('No tienes permiso para administrar salones', 403);
     }
 
+    /**
+     * `token_encuesta`/`encuesta_titulo` vienen null salvo que el salón tenga asignada una
+     * encuesta ACTIVA (encuestas_salon + encuestas.activo=1) — CreateReservaModal los usa
+     * para decidir si ofrece "Mostrar encuesta" y para armar el QR (/encuestas/{token}).
+     * Exponer el token a cualquier autenticado no abre nada nuevo: es el mismo que va
+     * impreso en el QR público del salón.
+     */
     public function listarSalones()
     {
+        $salones = Salones::where('salones.activo', 1)
+            ->leftJoin('encuestas_salon as es', 'es.id_salon', '=', 'salones.id')
+            ->leftJoin('encuestas as e', fn ($j) => $j->on('e.id', '=', 'es.id_encuesta')->where('e.activo', 1))
+            ->get([
+                'salones.id', 'salones.nombre', 'salones.portatil', 'salones.sonido',
+                DB::raw('CASE WHEN e.id IS NULL THEN NULL ELSE es.token_publico END AS token_encuesta'),
+                'e.titulo as encuesta_titulo',
+            ]);
+
         return $this->apiResponse([
             'error' => false,
             'message' => 'Salones obtenidos correctamente.',
-            'data' => Salones::activo()->get(['id', 'nombre', 'portatil', 'sonido'])
+            'data' => $salones,
         ]);
     }
 

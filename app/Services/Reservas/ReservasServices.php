@@ -2,6 +2,8 @@
 
 namespace App\Services\Reservas;
 
+use App\Mail\ReservaEncuestaMail;
+use App\Models\Encuestas\EncuestaSalon;
 use App\Models\Inventario\Inventario;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Reservas\ConfiguracionReservas;
@@ -9,6 +11,7 @@ use App\Models\Reservas\Horas;
 use App\Models\Reservas\Reservas;
 use App\Models\Reservas\Salones;
 use App\Models\Usuarios\Usuario;
+use App\Services\MailService;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
 use Carbon\Carbon;
@@ -211,6 +214,43 @@ class ReservasServices extends Service
                 'message' => 'Error al asignar portátil(es): ' . $e->getMessage(),
                 'data' => []
             ];
+        }
+    }
+
+    /**
+     * Envía al usuario que generó la reserva un correo con su información y, abajo, el
+     * JPG (armado en el frontend: info de la reserva + QR de la encuesta del salón) para
+     * que lo comparta con los asistentes. `$reservas` es el `data` de crearReserva() (una
+     * fila por franja, todas del mismo salón). Revalida que el salón tenga una encuesta
+     * activa y que la imagen sea realmente un JPEG — no se confía en el frontend.
+     */
+    public function enviarCorreoEncuesta(array $reservas, string $imagenDataUrl, Usuario $usuario): bool
+    {
+        try {
+            $primera = $reservas[0] ?? null;
+            if (!$primera || empty($usuario->correo)) return false;
+
+            $filaSalon = EncuestaSalon::with('encuesta:id,titulo,activo')->where('id_salon', $primera['id_salon'])->first();
+            if (!$filaSalon?->encuesta?->activo) return false;
+
+            $jpg = base64_decode(preg_replace('#^data:image/jpe?g;base64,#', '', $imagenDataUrl), true);
+            if ($jpg === false || (@getimagesizefromstring($jpg)['mime'] ?? null) !== 'image/jpeg') return false;
+
+            $horas = Horas::whereIn('id', array_column($reservas, 'hora_reserva'))->orderBy('id')->pluck('horas')->all();
+            $fechas = array_values(array_unique(array_column($reservas, 'fecha_reserva')));
+
+            return app(MailService::class)->send($usuario->correo, new ReservaEncuestaMail([
+                'nombre' => trim($usuario->nombre . ' ' . $usuario->apellido),
+                'salon' => Salones::find($primera['id_salon'])?->nombre ?? '',
+                'titulo' => $primera['titulo'] ?? null,
+                'detalle' => $primera['detalle_reserva'] ?? null,
+                'fechas' => array_map(fn ($f) => Carbon::parse($f)->locale('es')->translatedFormat('l j \d\e F \d\e Y'), $fechas),
+                'horas' => $horas,
+                'encuesta' => $filaSalon->encuesta->titulo,
+            ], $jpg));
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al enviar el correo de la encuesta de la reserva');
+            return false;
         }
     }
 

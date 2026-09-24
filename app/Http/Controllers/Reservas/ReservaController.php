@@ -52,9 +52,20 @@ class ReservaController extends Controller
 
     public function crearReserva(StoreReservaRequest $request)
     {
-        return $this->apiResponse(
-            $this->reservasServices->crearReserva($request->validated())
-        );
+        $datos = $request->validated();
+        $imagenEncuesta = !empty($datos['mostrar_encuesta']) ? $datos['imagen_encuesta'] : null;
+        unset($datos['mostrar_encuesta'], $datos['imagen_encuesta']);
+
+        $resultado = $this->reservasServices->crearReserva($datos);
+
+        // El correo es un extra: si falla, la reserva ya quedó creada y solo se avisa.
+        if (!$resultado['error'] && $imagenEncuesta) {
+            $resultado['message'] .= $this->reservasServices->enviarCorreoEncuesta($resultado['data'], $imagenEncuesta, $request->user())
+                ? ' Se envió a tu correo el QR de la encuesta.'
+                : ' No se pudo enviar el correo con el QR de la encuesta.';
+        }
+
+        return $this->apiResponse($resultado);
     }
 
     // Igual que crearReserva/listarReservas: acceso general, sin opción de permisos —
