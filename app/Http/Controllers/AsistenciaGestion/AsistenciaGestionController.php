@@ -23,6 +23,8 @@ class AsistenciaGestionController extends Controller
     // alcance lo pidió explícitamente así, sin incluir Administrador).
     private const PERFILES_REVOCAR_LLEGADA_TARDE = [1, 8];
 
+    private const PERFIL_COORDINADOR = 26;
+
     public function __construct(
         private AsistenciaGestionService $asistenciaService,
         private UsuariosServices $usuariosService,
@@ -91,7 +93,19 @@ class AsistenciaGestionController extends Controller
     public function obtenerAsistencia(FiltroAsistenciaGestionRequest $request): JsonResponse
     {
         $filtros = $request->validated();
-        $filtros['id_usuario'] = $this->idUsuarioPermitido($request, $filtros['id_usuario'] ?? null);
+
+        // Coordinador: ve a todos los usuarios de SU nivel (asistencias y faltantes), y solo
+        // ese nivel — se pisa cualquier id_nivel del cliente, incluso si tuviera OPCION_VER_TODAS.
+        if ((int) $request->user()->perfil === self::PERFIL_COORDINADOR) {
+            $filtros['id_nivel'] = $request->user()->id_nivel;
+        } elseif ((int) $request->user()->perfil === AsistenciaGestionService::PERFIL_DIRECTOR_ADMINISTRATIVO) {
+            // Director administrativo: solo los niveles que le corresponden; si el cliente
+            // pide uno de ellos se respeta, cualquier otro se ignora.
+            $niveles = AsistenciaGestionService::NIVELES_DIRECTOR_ADMINISTRATIVO;
+            $filtros['id_nivel'] = in_array((int) ($filtros['id_nivel'] ?? 0), $niveles, true) ? (int) $filtros['id_nivel'] : $niveles;
+        } else {
+            $filtros['id_usuario'] = $this->idUsuarioPermitido($request, $filtros['id_usuario'] ?? null);
+        }
 
         // El componente de tabla remota del frontend (DataTable) manda el tamaño de
         // página como "per-page" (guion) por convención genérica — FiltroAsistenciaGestionRequest
