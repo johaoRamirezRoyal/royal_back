@@ -1876,6 +1876,7 @@ class InventarioServices
                     'c.nombre as nom_categoria',
                     'ar.nombre as nom_area',
                     'rp.id as reporte_id',
+                    'iv.id as id_inventario',
                     // 1 = correctivo (reporte de daño), 2 = preventivo (mantenimiento) — se
                     // filtraba por esta columna más abajo pero no se devolvía, así que el
                     // frontend no podía distinguir el tipo fila por fila.
