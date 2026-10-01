@@ -38,7 +38,7 @@ class AsistenciaGestionService extends Service
     // Director administrativo: ve la asistencia y recibe el aviso de llegada tarde de estos
     // niveles (fijo, no depende de su propio id_nivel).
     public const PERFIL_DIRECTOR_ADMINISTRATIVO = 7;
-    public const NIVELES_DIRECTOR_ADMINISTRATIVO = [1, 2];
+    public const NIVELES_DIRECTOR_ADMINISTRATIVO = [1, 6];
 
     // Tope de destinatarios del aviso de llegada tarde: un solo correo a un grupo enorme
     // dispararía el límite del proveedor (ver el incidente de rate-limit de Noticias) — por
