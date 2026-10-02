@@ -58,6 +58,10 @@ class ReservaController extends Controller
 
         $resultado = $this->reservasServices->crearReserva($datos);
 
+        if (!$resultado['error']) {
+            $this->reservasServices->enviarCorreoAvisoReserva($resultado['data'], $request->user());
+        }
+
         // El correo es un extra: si falla, la reserva ya quedó creada y solo se avisa.
         if (!$resultado['error'] && $imagenEncuesta) {
             $resultado['message'] .= $this->reservasServices->enviarCorreoEncuesta($resultado['data'], $imagenEncuesta, $request->user())
