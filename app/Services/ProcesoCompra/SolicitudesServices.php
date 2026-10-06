@@ -305,7 +305,16 @@ class SolicitudesServices
                 ->get()
                 ->groupBy('id_compra');
 
-            $solicitudes->each(function (Solicitud $solicitud) use ($inventariosPorCompra) {
+            // Ingresos del sistema legacy: `agregar_inv_product` guarda por compra+producto
+            // la cantidad ya ingresada (`consumo`), sin `detalles` en `inventario`.
+            $legacyPorCompra = DB::table('agregar_inv_product')
+                ->select('id_compra', 'id_producto', DB::raw('SUM(consumo) as total'))
+                ->whereIn('id_compra', $solicitudes->pluck('id'))
+                ->groupBy('id_compra', 'id_producto')
+                ->get()
+                ->groupBy('id_compra');
+
+            $solicitudes->each(function (Solicitud $solicitud) use ($inventariosPorCompra, $legacyPorCompra) {
                 $solicitud->setAttribute('fecha_mostrar', $solicitud->fecha_aplazado ?? $solicitud->fecha_solicitud);
                 $solicitud->setAttribute('url_cotizacion', $this->fileStorage->url($solicitud->cotizacion_doc));
                 $solicitud->setAttribute('url_factura', $this->fileStorage->url($solicitud->verificacion?->factura_doc));
@@ -314,9 +323,11 @@ class SolicitudesServices
                 // para saber cuántas restan y cuáles filas se crearon en el seguimiento.
                 $inventarios = $inventariosPorCompra->get($solicitud->id, collect());
 
-                $solicitud->productos->each(function (SolicitudProducto $producto) use ($inventarios) {
+                $legacy = $legacyPorCompra->get($solicitud->id, collect())->keyBy('id_producto');
+
+                $solicitud->productos->each(function (SolicitudProducto $producto) use ($inventarios, $legacy) {
                     $ids = $inventarios->where('detalles', (string) $producto->id)->pluck('id');
-                    $producto->setAttribute('ingresado', $ids->count());
+                    $producto->setAttribute('ingresado', $ids->count() + (int) ($legacy->get($producto->id)->total ?? 0));
                     $producto->setAttribute('inventario_ids', $ids->values());
                 });
             });

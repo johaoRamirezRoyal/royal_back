@@ -829,7 +829,12 @@ class InventarioServices
                     $disponible = (int) $producto->cantidad;
                     $yaIngresado = Inventario::where('id_compra', $idSolicitud)
                         ->where('detalles', (string) $producto->id)
-                        ->count() + ($ingresadoEnRequest[$producto->id] ?? 0);
+                        ->count()
+                        + (int) DB::table('agregar_inv_product')
+                            ->where('id_compra', $idSolicitud)
+                            ->where('id_producto', $producto->id)
+                            ->sum('consumo')
+                        + ($ingresadoEnRequest[$producto->id] ?? 0);
 
                     $cantidad = (int) $articulo['cantidad'];
                     $restante = $disponible - $yaIngresado;
