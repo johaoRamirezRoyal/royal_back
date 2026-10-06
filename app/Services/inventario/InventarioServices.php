@@ -366,6 +366,66 @@ class InventarioServices
     }
 
     /**
+     * Búsqueda libre del listado (compartida por obtenerListadoConsolidado y conteoPorEstado).
+     * Requiere los alias u (usuarios), c (categoria) y a (areas) en el query.
+     */
+    private function buscarEnListado($q, string $s)
+    {
+        // El "código" que ve el usuario (columna "Código" de Mis Inventarios,
+        // buscador de hoja de vida) es el id del ítem cuando no tiene código
+        // físico impreso — igual que el legado (`historial.php`:
+        // `$codigo = $datos_articulo['id']`) — así que este buscador general
+        // también debe encontrar el grupo por código físico o por id, no solo
+        // por descripción/usuario/categoría/área.
+        return $q->where(function ($q) use ($s) {
+            $q->where('inventario.descripcion', 'like', "%{$s}%")
+                ->orWhere('inventario.codigo', 'like', "%{$s}%")
+                ->orWhereRaw('CAST(inventario.id AS CHAR) LIKE ?', ["%{$s}%"])
+                ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$s}%"])
+                ->orWhere('u.documento', 'like', "%{$s}%")
+                ->orWhere('c.nombre', 'like', "%{$s}%")
+                ->orWhere('a.nombre', 'like', "%{$s}%");
+        });
+    }
+
+    /**
+     * Conteo por estado del listado (Total / Liberados / Reportados / Mant. preventivo) con los
+     * mismos filtros de búsqueda del listado — replica ControlInventario::conteoPorEstadoControl
+     * del SAMI legacy (commit 6618664): cuenta todo el inventario activo no descontinuado.
+     */
+    public function conteoPorEstado(array $filtros): array
+    {
+        try {
+            $conteo = Inventario::query()
+                ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
+                ->leftJoin('areas as a', 'inventario.id_area', '=', 'a.id')
+                ->leftJoin('categoria as c', 'inventario.id_categoria', '=', 'c.id')
+                ->where('inventario.activo', 1)
+                ->where('inventario.estado', '!=', 5)
+                ->where('a.activo', 1)
+                ->where('c.tipo_categoria', '!=', 3)
+                ->when($filtros['id_usuario'] ?? null, fn ($q, $v) => $q->where('inventario.id_user', $v))
+                ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_area', $v))
+                ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
+                ->when($filtros['s'] ?? null, fn ($q, $s) => $this->buscarEnListado($q, $s))
+                ->selectRaw('COUNT(*) as total')
+                ->selectRaw('COALESCE(SUM(inventario.estado = 4), 0) as liberados')
+                ->selectRaw('COALESCE(SUM(inventario.estado = 2), 0) as reportados')
+                ->selectRaw('COALESCE(SUM(inventario.estado = 6), 0) as preventivo')
+                ->first();
+
+            return ['error' => false, 'message' => 'Conteo por estado obtenido', 'data' => [
+                'total' => (int) $conteo->total,
+                'liberados' => (int) $conteo->liberados,
+                'reportados' => (int) $conteo->reportados,
+                'preventivo' => (int) $conteo->preventivo,
+            ]];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => null];
+        }
+    }
+
+    /**
      * Listado consolidado: sin 'descripcion' agrupa por (usuario, área, descripción)
      * con cantidad; con 'descripcion' trae los ítems individuales de ese grupo.
      * @param array $filtros {id_usuario, id_area, id_categoria, tipo_categoria, estado, s, descripcion}
@@ -404,23 +464,7 @@ class InventarioServices
                     fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
                 )
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
-                ->when($filtros['s'] ?? null, function ($q, $s) {
-                    // El "código" que ve el usuario (columna "Código" de Mis Inventarios,
-                    // buscador de hoja de vida) es el id del ítem cuando no tiene código
-                    // físico impreso — igual que el legado (`historial.php`:
-                    // `$codigo = $datos_articulo['id']`) — así que este buscador general
-                    // también debe encontrar el grupo por código físico o por id, no solo
-                    // por descripción/usuario/categoría/área.
-                    $q->where(function ($q) use ($s) {
-                        $q->where('inventario.descripcion', 'like', "%{$s}%")
-                            ->orWhere('inventario.codigo', 'like', "%{$s}%")
-                            ->orWhereRaw('CAST(inventario.id AS CHAR) LIKE ?', ["%{$s}%"])
-                            ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", ["%{$s}%"])
-                            ->orWhere('u.documento', 'like', "%{$s}%")
-                            ->orWhere('c.nombre', 'like', "%{$s}%")
-                            ->orWhere('a.nombre', 'like', "%{$s}%");
-                    });
-                });
+                ->when($filtros['s'] ?? null, fn ($q, $s) => $this->buscarEnListado($q, $s));
 
             // Modo detalle: ítems sueltos de un grupo (query 2, usado por "Inspeccionar"),
             // o de TODOS los grupos que matcheen los filtros (query 2b, usado por la
@@ -2466,23 +2510,17 @@ class InventarioServices
                 ->get();
 
             $porCategoria = $categorias->map(function ($categoria) use ($idAnio, $idPeriodo) {
-                $totalEquipos = Inventario::where('id_categoria', $categoria->id)
-                    ->where('activo', 1)
-                    ->where('estado', '!=', 5)
-                    ->count();
+                // Igual que el SAMI legacy (commit 6618664): el indicador cuenta TODO el
+                // inventario de la categoría, también el descontinuado/inactivo, para que el
+                // histórico de un periodo no cambie cuando un equipo se descontinúa después.
+                $totalEquipos = Inventario::where('id_categoria', $categoria->id)->count();
 
                 // "Realizados" = tienen una solución vinculada (estado 3), no solo
                 // programados — antes contaba cualquier reporte original sin importar si
                 // seguía pendiente, inflando la cifra que la tarjeta llama "realizados".
-                // También se exige que el ÍTEM siga activo y no descontinuado (mismo
-                // filtro que total_equipos): sin esto, un equipo con mantenimiento
-                // realizado que luego fue descontinuado/desactivado se seguía contando acá
-                // pero ya no en el denominador, pudiendo superar el 100%.
                 $totalMantenimientos = DB::table('reportes as r')
                     ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
                     ->where('i.id_categoria', $categoria->id)
-                    ->where('i.activo', 1)
-                    ->where('i.estado', '!=', 5)
                     ->where('r.tipo_reporte', 2)
                     ->whereNull('r.id_reporte')
                     ->whereExists(function ($q) {
@@ -2495,11 +2533,6 @@ class InventarioServices
                     ->when($idPeriodo, fn ($q) => $q->where('r.periodo', $idPeriodo))
                     ->distinct()
                     ->count('r.id_inventario');
-
-                // Salvaguarda de visualización: "realizados" nunca debe superar el total de
-                // equipos de la categoría — no cambia lo que se cuenta arriba, solo evita
-                // que un caso no previsto muestre un porcentaje incoherente (>100%).
-                $totalMantenimientos = min($totalMantenimientos, $totalEquipos);
 
                 return [
                     'id_categoria' => $categoria->id,

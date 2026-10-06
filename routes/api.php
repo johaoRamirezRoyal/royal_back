@@ -186,6 +186,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/inventario.php';
     });
 
+    // INDICADORES DE GESTIÓN (mantenimiento Sistemas / Operativos)
+    Route::prefix('indicadores-gestion')->group(function () {
+        require __DIR__ . '/api/indicadoresGestion.php';
+    });
+
     // PRÉSTAMOS
     Route::prefix('prestamos')->group(function () {
         require __DIR__.'/api/prestamos.php';

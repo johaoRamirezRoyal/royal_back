@@ -299,9 +299,10 @@ class SolicitudesServices
 
             // Todas las entradas de inventario ya generadas por estas compras, precargadas
             // en una sola query y agrupadas por id_compra (evita una query por solicitud).
-            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles')
+            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles', 'descripcion', 'estado', 'id_area', 'id_user')
+                ->with(['area:id,nombre', 'usuario:id_user,nombre,apellido'])
                 ->whereIn('id_compra', $solicitudes->pluck('id'))
-                ->whereNotNull('detalles')
+                ->orderBy('id')
                 ->get()
                 ->groupBy('id_compra');
 
@@ -323,11 +324,24 @@ class SolicitudesServices
                 // para saber cuántas restan y cuáles filas se crearon en el seguimiento.
                 $inventarios = $inventariosPorCompra->get($solicitud->id, collect());
 
+                // Todo lo asignado a esta compra (flujo nuevo y legacy) para la tabla "Inventario Asignado".
+                $solicitud->setAttribute('inventarios', $inventarios->map(fn ($i) => [
+                    'id' => $i->id,
+                    'descripcion' => $i->descripcion,
+                    'estado' => $i->estado,
+                    'area' => $i->area?->nombre,
+                    'usuario' => $i->usuario ? trim("{$i->usuario->nombre} {$i->usuario->apellido}") : null,
+                ])->values());
+
                 $legacy = $legacyPorCompra->get($solicitud->id, collect())->keyBy('id_producto');
 
                 $solicitud->productos->each(function (SolicitudProducto $producto) use ($inventarios, $legacy) {
-                    $ids = $inventarios->where('detalles', (string) $producto->id)->pluck('id');
-                    $producto->setAttribute('ingresado', $ids->count() + (int) ($legacy->get($producto->id)->total ?? 0));
+                    // Flujo nuevo: `detalles` = id del producto. Legacy: sin `detalles`, se asocia
+                    // por descripción igual al nombre del producto.
+                    $desc = mb_substr($producto->producto, 0, 200);
+                    $ids = $inventarios->filter(fn ($i) => $i->detalles === (string) $producto->id
+                        || (($i->detalles === null || $i->detalles === '') && $i->descripcion === $desc))->pluck('id');
+                    $producto->setAttribute('ingresado', $inventarios->where('detalles', (string) $producto->id)->count() + (int) ($legacy->get($producto->id)->total ?? 0));
                     $producto->setAttribute('inventario_ids', $ids->values());
                 });
             });
