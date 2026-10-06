@@ -44,10 +44,10 @@ class MarcaDominioService extends Service
         }
     }
 
-    public function crear(array $datos, UploadedFile $logo): array
+    public function crear(array $datos, UploadedFile $logo, ?UploadedFile $imagen = null): array
     {
         try {
-            $errorValidacion = $this->validarLogo($logo);
+            $errorValidacion = $this->validarLogo($logo) ?? ($imagen ? $this->validarLogo($imagen, 'La imagen') : null);
             if ($errorValidacion) {
                 return ['error' => true, 'message' => $errorValidacion, 'data' => []];
             }
@@ -63,6 +63,14 @@ class MarcaDominioService extends Service
                 return ['error' => true, 'message' => 'Error al subir el logo a Cloudinary.', 'data' => []];
             }
 
+            $subidaImagen = null;
+            if ($imagen) {
+                $subidaImagen = $this->subirLogo($imagen);
+                if (!$subidaImagen) {
+                    return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
+                }
+            }
+
             $marca = MarcaDominio::create([
                 'dominio' => $dominio,
                 'nombre' => $datos['nombre'] ?? null,
@@ -70,6 +78,8 @@ class MarcaDominioService extends Service
                 'color' => empty($datos['color']) ? null : $datos['color'],
                 'logo_path' => $subido['url'],
                 'logo_public_id' => $subido['public_id'],
+                'imagen_fondo_path' => $subidaImagen['url'] ?? null,
+                'imagen_fondo_public_id' => $subidaImagen['public_id'] ?? null,
                 'activo' => true,
             ]);
 
@@ -81,7 +91,7 @@ class MarcaDominioService extends Service
         }
     }
 
-    public function actualizar(int $id, array $datos, ?UploadedFile $logo = null): array
+    public function actualizar(int $id, array $datos, ?UploadedFile $logo = null, ?UploadedFile $imagen = null, bool $quitarImagen = false): array
     {
         try {
             $marca = MarcaDominio::find($id);
@@ -90,11 +100,9 @@ class MarcaDominioService extends Service
                 return ['error' => true, 'message' => 'La marca no existe.', 'data' => []];
             }
 
-            if ($logo) {
-                $errorValidacion = $this->validarLogo($logo);
-                if ($errorValidacion) {
-                    return ['error' => true, 'message' => $errorValidacion, 'data' => []];
-                }
+            $errorValidacion = ($logo ? $this->validarLogo($logo) : null) ?? ($imagen ? $this->validarLogo($imagen, 'La imagen') : null);
+            if ($errorValidacion) {
+                return ['error' => true, 'message' => $errorValidacion, 'data' => []];
             }
 
             $dominio = isset($datos['dominio']) ? $this->normalizarDominio($datos['dominio']) : $marca->dominio;
@@ -104,6 +112,7 @@ class MarcaDominioService extends Service
             }
 
             $publicIdAnterior = $marca->logo_public_id;
+            $imagenIdAnterior = $marca->imagen_fondo_public_id;
 
             $marca->dominio = $dominio;
             $marca->nombre = $datos['nombre'] ?? $marca->nombre;
@@ -119,10 +128,26 @@ class MarcaDominioService extends Service
                 $marca->logo_public_id = $subido['public_id'];
             }
 
+            if ($imagen) {
+                $subidaImagen = $this->subirLogo($imagen);
+                if (!$subidaImagen) {
+                    return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
+                }
+                $marca->imagen_fondo_path = $subidaImagen['url'];
+                $marca->imagen_fondo_public_id = $subidaImagen['public_id'];
+            } elseif ($quitarImagen) {
+                $marca->imagen_fondo_path = null;
+                $marca->imagen_fondo_public_id = null;
+            }
+
             $marca->save();
 
             if ($logo && $publicIdAnterior && $publicIdAnterior !== $marca->logo_public_id) {
                 $this->cloudinaryService->deleteFile($publicIdAnterior, 'image');
+            }
+
+            if ($imagenIdAnterior && $imagenIdAnterior !== $marca->imagen_fondo_public_id) {
+                $this->cloudinaryService->deleteFile($imagenIdAnterior, 'image');
             }
 
             return ['error' => false, 'message' => 'Marca actualizada correctamente.', 'data' => $marca];
@@ -161,6 +186,9 @@ class MarcaDominioService extends Service
 
             foreach ($marcas as $marca) {
                 $this->cloudinaryService->deleteFile($marca->logo_public_id, 'image');
+                if ($marca->imagen_fondo_public_id) {
+                    $this->cloudinaryService->deleteFile($marca->imagen_fondo_public_id, 'image');
+                }
             }
 
             MarcaDominio::whereIn('id', $ids)->delete();
@@ -183,11 +211,13 @@ class MarcaDominioService extends Service
      * {@see resolverRutaLocalPorCorreo} en su lugar — TCPDF/PhpSpreadsheet necesitan una
      * ruta de archivo local, no una URL remota.
      *
-     * @return array{url: ?string, nombre: ?string, descripcion: ?string, color: ?string}
+     * `imagen` es la imagen de referencia (fondo del friso del Login), opcional.
+     *
+     * @return array{url: ?string, nombre: ?string, descripcion: ?string, color: ?string, imagen: ?string}
      */
     public function resolverPorCorreo(?string $correo): array
     {
-        $sinMatch = ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null];
+        $sinMatch = ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null, 'imagen' => null];
 
         $dominio = $this->dominioDeCorreo($correo);
         if (!$dominio) {
@@ -200,7 +230,7 @@ class MarcaDominioService extends Service
             return $sinMatch;
         }
 
-        return ['url' => $marca->logo_path, 'nombre' => $marca->nombre, 'descripcion' => $marca->descripcion, 'color' => $marca->color];
+        return ['url' => $marca->logo_path, 'nombre' => $marca->nombre, 'descripcion' => $marca->descripcion, 'color' => $marca->color, 'imagen' => $marca->imagen_fondo_path];
     }
 
     /**
@@ -252,10 +282,10 @@ class MarcaDominioService extends Service
         return mb_strtolower(end($partes));
     }
 
-    private function validarLogo(UploadedFile $logo): ?string
+    private function validarLogo(UploadedFile $logo, string $etiqueta = 'El logo'): ?string
     {
         if ($logo->getSize() > self::TAMANO_MAXIMO) {
-            return 'El logo excede 5MB.';
+            return "{$etiqueta} excede 5MB.";
         }
 
         $extension = strtolower($logo->getClientOriginalExtension());

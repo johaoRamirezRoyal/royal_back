@@ -24,6 +24,8 @@ class MarcaDominio extends Model
         'color',
         'logo_path',
         'logo_public_id',
+        'imagen_fondo_path',
+        'imagen_fondo_public_id',
         'activo',
     ];
 

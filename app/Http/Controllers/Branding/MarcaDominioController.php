@@ -38,9 +38,14 @@ class MarcaDominioController extends Controller
             'descripcion' => ['nullable', 'string', 'max:190'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo' => ['required', 'file', 'image', 'max:5120'],
+            'imagen' => ['nullable', 'file', 'image', 'max:5120'],
         ]);
 
-        return $this->apiResponse($this->service->crear($request->only(['dominio', 'nombre', 'descripcion', 'color']), $request->file('logo')));
+        return $this->apiResponse($this->service->crear(
+            $request->only(['dominio', 'nombre', 'descripcion', 'color']),
+            $request->file('logo'),
+            $request->file('imagen'),
+        ));
     }
 
     public function actualizar(Request $request)
@@ -52,12 +57,16 @@ class MarcaDominioController extends Controller
             'descripcion' => ['nullable', 'string', 'max:190'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'logo' => ['nullable', 'file', 'image', 'max:5120'],
+            'imagen' => ['nullable', 'file', 'image', 'max:5120'],
+            'quitar_imagen' => ['sometimes', 'boolean'],
         ]);
 
         return $this->apiResponse($this->service->actualizar(
             $request->integer('id'),
             $request->only(['dominio', 'nombre', 'descripcion', 'color']),
             $request->file('logo'),
+            $request->file('imagen'),
+            $request->boolean('quitar_imagen'),
         ));
     }
 

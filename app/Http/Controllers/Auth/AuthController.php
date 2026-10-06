@@ -85,6 +85,7 @@ class AuthController extends Controller
                 'descripcion_marca' => $marca['descripcion'],
                 'color_marca' => $marca['color'],
                 'logo_marca' => $marca['url'],
+                'imagen_marca' => $marca['imagen'],
             ],
         ]);
     }
