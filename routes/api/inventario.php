@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario']);
 Route::get('/listado-consolidado', [InventariosController::class, 'listadoConsolidado']);
+Route::get('/listado-consolidado/conteo', [InventariosController::class, 'conteoPorEstado']);
 Route::put('/listado-consolidado/descripcion', [InventariosController::class, 'editarDescripcionGrupo']);
 Route::post('/listado-consolidado/incrementar', [InventariosController::class, 'incrementarCantidadGrupo']);
 Route::post('/listado-consolidado/disminuir', [InventariosController::class, 'disminuirCantidadGrupo']);

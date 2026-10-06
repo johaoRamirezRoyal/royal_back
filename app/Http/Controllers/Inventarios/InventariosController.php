@@ -144,6 +144,19 @@ class InventariosController extends Controller
         ]);
     }
 
+    // GET /inventario/listado-consolidado/conteo — Total / Liberados / Reportados / Mant. preventivo
+    // con los mismos filtros del listado (SAMI legacy: conteoPorEstadoControl).
+    public function conteoPorEstado(ListadoInventarioRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse(
+            $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_categoria', 's']))
+        );
+    }
+
     public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request){
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
