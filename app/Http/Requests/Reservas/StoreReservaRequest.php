@@ -32,6 +32,11 @@ class StoreReservaRequest extends FormRequest
             'titulo' => ['nullable', 'string', 'max:255'],
             'detalle_reserva' => ['nullable', 'string', 'max:1000'],
             'reserva_grupo' => ['nullable', 'boolean'],
+            // "Mostrar encuesta": JPG (data URL base64) armado en el frontend con la info de
+            // la reserva + QR de la encuesta del salón, que se envía por correo al usuario.
+            // ~5 MB de base64 ≈ 3.7 MB de imagen, de sobra para 1080px de ancho.
+            'mostrar_encuesta' => ['nullable', 'boolean'],
+            'imagen_encuesta' => ['nullable', 'required_if_accepted:mostrar_encuesta', 'string', 'max:5000000'],
         ];
     }
 
@@ -58,6 +63,9 @@ class StoreReservaRequest extends FormRequest
             'titulo.max' => 'El título no debe superar los 255 caracteres.',
             'detalle_reserva.max' => 'El detalle no debe superar los 1000 caracteres.',
             'reserva_grupo.boolean' => 'El campo reserva_grupo debe ser verdadero o falso.',
+            'mostrar_encuesta.boolean' => 'El campo mostrar_encuesta debe ser verdadero o falso.',
+            'imagen_encuesta.required_if_accepted' => 'Falta la imagen con el QR de la encuesta.',
+            'imagen_encuesta.max' => 'La imagen con el QR de la encuesta es demasiado grande.',
         ];
     }
 }

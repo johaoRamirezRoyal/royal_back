@@ -56,6 +56,12 @@ class Solicitud extends Model
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
     }
 
+    // Quien formalizó la orden de compra ("Elaborado por" en el PDF).
+    public function aprobador()
+    {
+        return $this->belongsTo(Usuario::class, 'id_log', 'id_user');
+    }
+
     public function proveedor()
     {
         return $this->belongsTo(ProveedorDetalle::class, 'id_proveedor', 'id_proveedor');

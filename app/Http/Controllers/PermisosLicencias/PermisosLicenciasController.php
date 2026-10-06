@@ -161,6 +161,9 @@ class PermisosLicenciasController extends Controller
             'fecha_desde' => $request->input('fecha_desde'),
             'fecha_hasta' => $request->input('fecha_hasta'),
             's' => $request->input('s') ? trim($request->input('s')) : null,
+            // Se suman (AND) al acotamiento por nivel de coordinación, nunca lo amplían.
+            'id_nivel' => $request->input('id_nivel'),
+            'perfil' => $request->input('perfil'),
         ];
 
         return $this->paginatedResponse($this->service->listar($filtros, $idNivelViewer, (int) $request->input('per-page', 15)));

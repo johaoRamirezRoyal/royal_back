@@ -134,6 +134,14 @@ class PermisosLicenciasServices
                 $query->where('id_user', (int) $filtros['id_user']);
             }
 
+            if (!empty($filtros['id_nivel'])) {
+                $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', (int) $filtros['id_nivel']));
+            }
+
+            if (!empty($filtros['perfil'])) {
+                $query->whereHas('usuario', fn ($u) => $u->where('perfil', (int) $filtros['perfil']));
+            }
+
             if (!empty($filtros['tipo_permiso'])) {
                 $query->where('tipo_permiso', (int) $filtros['tipo_permiso']);
             }

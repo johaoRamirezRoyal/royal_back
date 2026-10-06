@@ -155,7 +155,7 @@ class CapacitacionesController extends Controller
 
     // ─── Capacitaciones realizadas (93) ─────────────────────────
 
-    /** GET /api/capacitaciones/realizadas?per-page=&s= */
+    /** GET /api/capacitaciones/realizadas?per-page=&s=&id_nivel=&perfil= */
     public function realizadas(Request $request): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_REALIZADAS)) {
@@ -163,7 +163,11 @@ class CapacitacionesController extends Controller
         }
 
         return $this->paginatedResponse($this->capacitacionesServices->usuariosConCapacitaciones(
-            ['s' => $request->input('s') ? trim($request->input('s')) : null],
+            [
+                's' => $request->input('s') ? trim($request->input('s')) : null,
+                'id_nivel' => $request->input('id_nivel'),
+                'perfil' => $request->input('perfil'),
+            ],
             (int) $request->input('per-page', 15)
         ));
     }

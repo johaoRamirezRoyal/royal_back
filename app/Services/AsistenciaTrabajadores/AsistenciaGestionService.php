@@ -35,6 +35,11 @@ class AsistenciaGestionService extends Service
     private const PERFIL_RECURSOS_HUMANOS = 8;
     private const PERFIL_COORDINADOR = 26;
 
+    // Director administrativo: ve la asistencia y recibe el aviso de llegada tarde de estos
+    // niveles (fijo, no depende de su propio id_nivel).
+    public const PERFIL_DIRECTOR_ADMINISTRATIVO = 7;
+    public const NIVELES_DIRECTOR_ADMINISTRATIVO = [1, 6];
+
     // Tope de destinatarios del aviso de llegada tarde: un solo correo a un grupo enorme
     // dispararía el límite del proveedor (ver el incidente de rate-limit de Noticias) — por
     // encima de esto se omite ese correo y se registra en logs.
@@ -428,6 +433,22 @@ class AsistenciaGestionService extends Service
             }
         }
 
+        if ($config->notificar_coordinador_nivel && in_array((int) $usuario->id_nivel, self::NIVELES_DIRECTOR_ADMINISTRATIVO, true)) {
+            $correosDirector = array_diff(
+                Usuario::where('estado', 'activo')
+                    ->where('perfil', self::PERFIL_DIRECTOR_ADMINISTRATIVO)
+                    ->whereNotNull('correo')
+                    ->pluck('correo')
+                    ->all(),
+                [$usuario->correo],
+            );
+
+            if ($correosDirector) {
+                $correosDestino = array_merge($correosDestino, $correosDirector);
+                $nombresDestino[] = 'el director administrativo';
+            }
+        }
+
         $correosDestino = array_values(array_unique($correosDestino));
 
         if (count($correosDestino) > self::MAX_DESTINATARIOS_LLEGADA_TARDE) {
@@ -476,14 +497,14 @@ class AsistenciaGestionService extends Service
      * existe una fila en asistencia_gestion para ellos (a diferencia de una llegada,
      * una falta no deja registro propio, se infiere por ausencia).
      */
-    private function obtenerFaltantesDelDia(string $fecha, ?int $idNivel, ?int $idUsuario): array
+    private function obtenerFaltantesDelDia(string $fecha, int|array|null $idNivel, ?int $idUsuario): array
     {
         $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
 
         $usuariosFaltantes = Usuario::where('estado', 'activo')
             ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
             ->whereNotIn('id_user', $idsConAsistencia)
-            ->when($idNivel, fn ($q) => $q->where('id_nivel', $idNivel))
+            ->when($idNivel, fn ($q) => $q->whereIn('id_nivel', (array) $idNivel))
             ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))
             ->get(['id_user', 'nombre', 'apellido', 'documento', 'perfil', 'id_nivel']);
 

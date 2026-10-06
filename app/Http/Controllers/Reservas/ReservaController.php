@@ -15,7 +15,7 @@ class ReservaController extends Controller
 {
     // cron_opciones bajo id_modulo=7 (Reservas) — ver migración
     // 2026_09_14_130000_seed_opcion_editar_reservas.
-    private const OPCION_EDITAR_RESERVAS = 118;
+    private const OPCION_EDITAR_RESERVAS = 120;
 
     // Opción "/reservas" (41) — quien la tiene gestiona cancelar/finalizar de
     // cualquier reserva, sin la restricción de autoservicio de abajo.
@@ -33,7 +33,7 @@ class ReservaController extends Controller
      * El propio dueño de la reserva puede editarla/cancelarla sin permiso especial,
      * pero solo mientras falten más de DIAS_MIN_AUTOSERVICIO días para la fecha
      * reservada — evita cambios de último momento que ya no le da tiempo de re-planear
-     * a quien gestiona el salón. Quien tiene el permiso correspondiente (118/41) no
+     * a quien gestiona el salón. Quien tiene el permiso correspondiente (120/41) no
      * pasa por esta restricción, como ya no pasaba antes de este cambio.
      */
     private function puedeAutogestionar(Reservas $reserva, Request $request): bool
@@ -52,9 +52,24 @@ class ReservaController extends Controller
 
     public function crearReserva(StoreReservaRequest $request)
     {
-        return $this->apiResponse(
-            $this->reservasServices->crearReserva($request->validated())
-        );
+        $datos = $request->validated();
+        $imagenEncuesta = !empty($datos['mostrar_encuesta']) ? $datos['imagen_encuesta'] : null;
+        unset($datos['mostrar_encuesta'], $datos['imagen_encuesta']);
+
+        $resultado = $this->reservasServices->crearReserva($datos);
+
+        if (!$resultado['error']) {
+            $this->reservasServices->enviarCorreoAvisoReserva($resultado['data'], $request->user());
+        }
+
+        // El correo es un extra: si falla, la reserva ya quedó creada y solo se avisa.
+        if (!$resultado['error'] && $imagenEncuesta) {
+            $resultado['message'] .= $this->reservasServices->enviarCorreoEncuesta($resultado['data'], $imagenEncuesta, $request->user())
+                ? ' Se envió a tu correo el QR de la encuesta.'
+                : ' No se pudo enviar el correo con el QR de la encuesta.';
+        }
+
+        return $this->apiResponse($resultado);
     }
 
     // Igual que crearReserva/listarReservas: acceso general, sin opción de permisos —
@@ -104,7 +119,7 @@ class ReservaController extends Controller
         }
 
         // Cancelar/finalizar y edición completa admiten dos rutas: quien tiene el
-        // permiso del módulo (118 para editar, 41 para cancelar/finalizar) gestiona
+        // permiso del módulo (120 para editar, 41 para cancelar/finalizar) gestiona
         // cualquier reserva sin restricción; el propio dueño puede autogestionar la
         // suya (ver "Mis reservas") solo si faltan más de DIAS_MIN_AUTOSERVICIO días.
         $cancelarOFinalizar = $request->boolean('cancelar') || $request->boolean('finalizar');

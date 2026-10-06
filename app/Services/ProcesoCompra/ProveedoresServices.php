@@ -176,7 +176,14 @@ class ProveedoresServices
                 return ['error' => true, 'message' => 'Proveedor no encontrado', 'status' => 404];
             }
 
-            $compras = Solicitud::with(['usuario:id_user,nombre,apellido', 'proveedor', 'area:id,nombre', 'verificacion'])
+            $compras = Solicitud::with([
+                'usuario:id_user,nombre,apellido',
+                'aprobador:id_user,nombre,apellido',
+                'proveedor',
+                'area:id,nombre',
+                'productos',
+                'verificacion.usuario:id_user,nombre,apellido',
+            ])
                 ->where('id_proveedor', $proveedor->id_proveedor)
                 ->orderByDesc('id')
                 ->get();

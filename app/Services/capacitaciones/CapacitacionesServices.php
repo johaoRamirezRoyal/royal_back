@@ -7,6 +7,7 @@ use App\Models\Capacitaciones\CapCurso;
 use App\Models\Capacitaciones\CapModulo;
 use App\Models\Capacitaciones\CapPregunta;
 use App\Models\Usuarios\Usuario;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\FileStorageService;
 use Exception;
 use Illuminate\Http\UploadedFile;
@@ -27,7 +28,20 @@ class CapacitacionesServices
     // Super Admin ve todas las capacitaciones sin estar asignado en capacitacion_perfil (igual que el legado).
     private const PERFIL_SUPER_ADMIN = 1;
 
-    public function __construct(private FileStorageService $fileStorage) {}
+    public function __construct(
+        private FileStorageService $fileStorage,
+        private CloudinaryService $cloudinary,
+    ) {}
+
+    /**
+     * Migración a Cloudinary: las imágenes nuevas se guardan como URL completa de Cloudinary
+     * (carpeta `capacitaciones`); las antiguas siguen siendo un nombre de archivo en el disco
+     * de uploads del servidor viejo y se resuelven como siempre.
+     */
+    private function imagenUrl(?string $imagen): ?string
+    {
+        return $imagen && str_starts_with($imagen, 'http') ? $imagen : $this->fileStorage->url($imagen);
+    }
 
     // ─── Usuario: realizar capacitaciones ─────────────────────────
 
@@ -43,7 +57,7 @@ class CapacitacionesServices
             $completados = $this->completados($usuario->id_user)->pluck('id_curso');
 
             $cursos->each(function (CapCurso $curso) use ($avance, $completados) {
-                $curso->imagen_url = $this->fileStorage->url($curso->imagen);
+                $curso->imagen_url = $this->imagenUrl($curso->imagen);
                 $curso->total_contenidos = $avance[$curso->id]['total'] ?? 0;
                 $curso->vistos = $avance[$curso->id]['vistos'] ?? 0;
                 $curso->completado = $completados->contains($curso->id);
@@ -74,7 +88,7 @@ class CapacitacionesServices
                 }
             }
 
-            $curso->imagen_url = $this->fileStorage->url($curso->imagen);
+            $curso->imagen_url = $this->imagenUrl($curso->imagen);
             $curso->total_contenidos = $total;
             $curso->vistos = $vistos->count();
             $curso->aprobado = $this->aprobado($usuario->id_user, $idCurso);
@@ -201,7 +215,7 @@ class CapacitacionesServices
                 ->orderBy('nombre')
                 ->get(['id', 'nombre', 'descripcion', 'imagen'])
                 ->each(function (CapCurso $curso) use ($completados) {
-                    $curso->imagen_url = $this->fileStorage->url($curso->imagen);
+                    $curso->imagen_url = $this->imagenUrl($curso->imagen);
                     $curso->fecha_finalizacion = $completados[$curso->id]['fecha'];
                 });
 
@@ -252,6 +266,14 @@ class CapacitacionesServices
                     ->orWhere('documento', 'like', "%{$search}%"));
             }
 
+            if (!empty($filtros['id_nivel'])) {
+                $query->where('id_nivel', (int) $filtros['id_nivel']);
+            }
+
+            if (!empty($filtros['perfil'])) {
+                $query->where('perfil', (int) $filtros['perfil']);
+            }
+
             $paginator = $query->paginate($perPage);
             $paginator->getCollection()->each(function (Usuario $u) use ($conteo) {
                 $u->total_capacitaciones = $conteo[$u->id_user] ?? 0;
@@ -281,7 +303,7 @@ class CapacitacionesServices
             }
 
             $paginator = $query->paginate($perPage);
-            $paginator->getCollection()->each(fn ($c) => $c->imagen_url = $this->fileStorage->url($c->imagen));
+            $paginator->getCollection()->each(fn ($c) => $c->imagen_url = $this->imagenUrl($c->imagen));
 
             return ['error' => false, 'message' => 'Capacitaciones obtenidas correctamente', 'data' => $paginator];
         } catch (Exception $e) {
@@ -303,11 +325,31 @@ class CapacitacionesServices
                 'descripcion' => $data['descripcion'] ?? 'Sin descripción',
             ]);
 
-            if ($imagen) {
-                $curso->imagen = $this->fileStorage->reemplazar($imagen, $curso->imagen, 'capacitaciones')['ruta'];
-            }
+            DB::transaction(function () use ($curso, $imagen) {
+                $curso->save();
 
-            $curso->save();
+                if (!$imagen) {
+                    return;
+                }
+
+                // public_id fijo por curso (`capacitaciones/curso_{id}`, con overwrite): cambiar la
+                // imagen reemplaza el mismo recurso en Cloudinary en vez de dejar huérfanos.
+                // ponytail: URL completa (~90 chars) en `imagen` varchar(100) — ampliar la columna si el cloud_name crece.
+                $subida = $this->cloudinary->uploadFile($imagen, 'capacitaciones', 'curso_' . $curso->id);
+
+                if ($subida['error']) {
+                    throw new Exception($subida['message']);
+                }
+
+                $anterior = $curso->imagen;
+                $curso->imagen = $subida['data']['url'];
+                $curso->save();
+
+                // Imagen antigua del servidor viejo: ya no se usa, se borra del disco.
+                if ($anterior && !str_starts_with($anterior, 'http')) {
+                    $this->fileStorage->eliminar($anterior);
+                }
+            });
 
             return ['error' => false, 'message' => 'Capacitación guardada correctamente', 'data' => $curso];
         } catch (Exception $e) {

@@ -5,7 +5,7 @@ namespace App\Models\Capacitaciones;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** Tabla legacy `capacitacion_curso` — una capacitación. `imagen` = ruta en el disco de uploads. */
+/** Tabla legacy `capacitacion_curso` — una capacitación. `imagen` = URL de Cloudinary (nuevas) o ruta en el disco de uploads (antiguas). */
 class CapCurso extends Model
 {
     protected $table = 'capacitacion_curso';

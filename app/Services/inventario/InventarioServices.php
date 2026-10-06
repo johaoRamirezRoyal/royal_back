@@ -829,7 +829,12 @@ class InventarioServices
                     $disponible = (int) $producto->cantidad;
                     $yaIngresado = Inventario::where('id_compra', $idSolicitud)
                         ->where('detalles', (string) $producto->id)
-                        ->count() + ($ingresadoEnRequest[$producto->id] ?? 0);
+                        ->count()
+                        + (int) DB::table('agregar_inv_product')
+                            ->where('id_compra', $idSolicitud)
+                            ->where('id_producto', $producto->id)
+                            ->sum('consumo')
+                        + ($ingresadoEnRequest[$producto->id] ?? 0);
 
                     $cantidad = (int) $articulo['cantidad'];
                     $restante = $disponible - $yaIngresado;
@@ -1876,6 +1881,7 @@ class InventarioServices
                     'c.nombre as nom_categoria',
                     'ar.nombre as nom_area',
                     'rp.id as reporte_id',
+                    'iv.id as id_inventario',
                     // 1 = correctivo (reporte de daño), 2 = preventivo (mantenimiento) — se
                     // filtraba por esta columna más abajo pero no se devolvía, así que el
                     // frontend no podía distinguir el tipo fila por fila.
