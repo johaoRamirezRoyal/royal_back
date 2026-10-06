@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 class EnfermeriaController extends Controller
 {
-    // Opciones del frontend (ver CLAUDE.md "Enfermería"): 54 = /enfermeria/categorias,
+    // Opciones del frontend (ver AGENTS.md del frontend, "Enfermería"): 54 = /enfermeria/categorias,
     // 57 = /enfermeria/atencion-medica + /listado + /historial (comparten permiso),
     // 64 = /enfermeria/metricas. Este controller respalda las tres, así que a diferencia
     // de GestionAcademicaController no alcanza un único chequeo en el constructor — cada

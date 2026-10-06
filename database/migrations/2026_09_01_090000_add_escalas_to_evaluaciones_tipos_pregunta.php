@@ -11,7 +11,7 @@ return new class extends Migration
      * (escala_likert/escala_real/si_no/calificacion_numerica) — la migración original
      * (2026_08_21_090100) solo sembró seleccion_unica/seleccion_multiple/texto_libre.
      * De paso renombra "seleccion_unica" a "opcion_multiple", que es el slug real que
-     * documenta el frontend (CLAUDE.md) para "una opción entre varias" — el nombre
+     * documenta el frontend (AGENTS.md) para "una opción entre varias" — el nombre
      * anterior fue un supuesto equivocado al reconstruir el catálogo perdido.
      */
     public function up(): void

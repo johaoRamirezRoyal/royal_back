@@ -534,7 +534,7 @@ class EvaluacionesController extends Controller
 
     // Autoservicio: evaluaciones que el usuario autenticado recibió (es el evaluado). Sin
     // gate por opción — cualquier usuario puede ver sus propios resultados (mismo criterio
-    // que otras rutas self-scoped del sistema, ver frontend CLAUDE.md).
+    // que otras rutas self-scoped del sistema, ver frontend AGENTS.md).
     public function misResultados(Request $request): JsonResponse
     {
         return $this->apiResponse(

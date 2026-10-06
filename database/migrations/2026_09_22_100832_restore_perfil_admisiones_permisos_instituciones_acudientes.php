@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Restaura dos otorgamientos que sus migraciones de seed originales ya intentaron dar al
  * perfil Admisiones (9) pero que en esta BD no están (confirmado contra `cron_permisos`
- * el 2026-09-22, mismo tipo de drift/resync de `insertGetId` documentado en CLAUDE.md
+ * el 2026-09-22, mismo tipo de drift/resync de `insertGetId` documentado en el AGENTS.md del frontend
  * para Noticias e Instituciones):
  * - "Ver Instituciones y Documentos" (2026_08_31_190000_seed_opcion_ver_instituciones_documentos).
  * - "Gestión de Acudientes" (2026_09_02_120000_seed_opcion_gestion_acudientes).

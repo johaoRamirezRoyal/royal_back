@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Config;
  * a su connection real y se switchea `database.default` ANTES de que AdmissionsController
  * toque cualquier modelo de negocio, mismo requisito que JwtFromCookie/SwitchActiveConnection.
  *
- * Fail-closed a propósito (ver "Everything here is fail-closed" en CLAUDE.md): sin header
+ * Fail-closed a propósito (ver "Everything here is fail-closed" en el AGENTS.md del frontend): sin header
  * o con un slug que no resuelve a un colegio activo, se corta acá con 400/404 en vez de
  * caer silenciosamente a `mysql` — evitar que una petición admisiones de un colegio B
  * termine escribiendo en la base del colegio A por un slug ausente/mal tipeado.
