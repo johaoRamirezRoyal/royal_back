@@ -11,4 +11,5 @@ Route::get('/configuracion', [InstitucionAdminController::class, 'configuracion'
 Route::put('/configuracion', [InstitucionAdminController::class, 'actualizarConfiguracion']);
 Route::put('/{id}', [InstitucionAdminController::class, 'update']);
 Route::get('/{id}/cartas', [InstitucionAdminController::class, 'cartas']);
+Route::post('/{id}/recordatorio', [InstitucionAdminController::class, 'enviarRecordatorio']);
 Route::delete('/{institucionId}/cartas/{cartaId}', [InstitucionAdminController::class, 'eliminarCarta']);

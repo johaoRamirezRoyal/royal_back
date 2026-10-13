@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Instituciones;
 
+use App\Exceptions\MailRateLimitException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Instituciones\InstitucionAdminRequest;
+use App\Mail\Instituciones\RecordatorioDocumentoInstitucionMail;
 use App\Models\Instituciones\CartaRecomendacion;
 use App\Models\Instituciones\ConfiguracionInstituciones;
 use App\Models\Instituciones\Institucion;
 use App\Services\Cloudinary\CloudinaryService;
+use App\Services\MailService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +34,7 @@ class InstitucionAdminController extends Controller
     public function __construct(
         private UsuariosServices $usuariosService,
         private CloudinaryService $cloudinaryService,
+        private MailService $mailService,
     ) {
     }
 
@@ -235,6 +239,48 @@ class InstitucionAdminController extends Controller
      * prefiere no depender de que la opción quede bien otorgada en `cron_permisos`
      * (el drift de ids 104/105→106/111 de este mismo controller ya mordió una vez).
      */
+    /**
+     * Envía a la institución un correo recordándole diligenciar y enviar su carta de
+     * recomendación desde el portal. Solo para quien gestiona Instituciones (opción de
+     * gestión, no la de solo lectura). Un correo por llamada: el frontend recorre las
+     * seleccionadas una a una y se detiene si el hosting corta por límite de envíos (429).
+     */
+    public function enviarRecordatorio(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        $institucion = Institucion::withCount('cartas')->find($id);
+
+        if (! $institucion) {
+            return $this->error('Institución no encontrada.', 404);
+        }
+
+        if (! $institucion->activo) {
+            return $this->error('La institución está inactiva: actívala antes de enviarle recordatorios.', 422);
+        }
+
+        if (! $institucion->email) {
+            return $this->error('La institución no tiene correo registrado.', 422);
+        }
+
+        try {
+            $enviado = $this->mailService->send(
+                $institucion->email,
+                new RecordatorioDocumentoInstitucionMail($institucion, (int) $institucion->cartas_count),
+            );
+        } catch (MailRateLimitException) {
+            return $this->error('El servidor de correo alcanzó su límite de envíos por hora. Intenta de nuevo más tarde.', 429);
+        }
+
+        if (! $enviado) {
+            return $this->error('No se pudo enviar el correo de recordatorio.', 500);
+        }
+
+        return $this->success('Recordatorio enviado', ['email' => $institucion->email]);
+    }
+
     public function eliminarCarta(Request $request, int $institucionId, int $cartaId)
     {
         if ((int) $request->user()->perfil !== self::PERFIL_SUPER_ADMIN) {
