@@ -26,7 +26,9 @@ class MantenimientoChecklistPdfService
      *   es_computadores: bool,
      *   responsable_nombre: string,
      *   con_solucion: bool,
-     *   equipos: array<int, array{id: int|string, descripcion: string, area: string}>,
+     *   fecha?: string|null,                // d-m-Y a imprimir; por defecto hoy
+     *   subtitulo?: string|null,            // ej. "Año 2025 - 2026 · Periodo II" (guía de mantenimiento)
+     *   equipos: array<int, array{id: int|string, descripcion: string, area: string, fecha?: string|null}>,
      * } $data
      */
     public function generate(array $data): string
@@ -56,6 +58,7 @@ class MantenimientoChecklistPdfService
             : '';
 
         $tipoLabel = strtoupper($data['tipo_categoria_label']);
+        $fecha = $data['fecha'] ?? now()->format('d-m-Y');
 
         $encabezado = '
         <table style="width:100%;" border="1" cellpadding="3">
@@ -66,9 +69,10 @@ class MantenimientoChecklistPdfService
                     <p>REPORTE ' . $tipoLabel . '</p>
                     <br>
                     <p>Seguimiento de equipos de ' . e($data['categoria_nombre']) . '</p>
+                    ' . (!empty($data['subtitulo']) ? '<p>' . e($data['subtitulo']) . '</p>' : '') . '
                 </td>
                 <td colspan="1" style="border:none; width:20%;">
-                    <br>VERSIÓN 01<br>' . now()->format('d-m-Y') . '<br>1-1
+                    <br>VERSIÓN 01<br>' . $fecha . '<br>1-1
                 </td>
             </tr>
         </table>';
@@ -81,7 +85,7 @@ class MantenimientoChecklistPdfService
             <tr>
                 <td style="width:33%;"><strong>Responsable:</strong> ' . e($data['responsable_nombre']) . '</td>
                 <td style="width:33%;"><strong>Check Mantenimiento de ' . e($data['tipo_categoria_label']) . '</strong></td>
-                <td style="width:33%;"><strong>Fecha:</strong> ' . now()->format('d-m-Y') . '</td>
+                <td style="width:33%;"><strong>Fecha:</strong> ' . $fecha . '</td>
             </tr>
         </table>';
 
@@ -96,28 +100,32 @@ class MantenimientoChecklistPdfService
             $columnas = ['Revisión de funcionamiento', 'Limpieza general'];
         }
 
-        $anchoFijo = 10 + 25 + 25; // ID + Descripción + Área
+        // Guía de mantenimiento: si los equipos traen fecha programada se agrega esa columna.
+        $conFecha = collect($data['equipos'])->contains(fn ($e) => !empty($e['fecha']));
+        $anchoFijo = 10 + 25 + 25 + ($conFecha ? 15 : 0); // ID + Descripción + Área (+ Fecha)
         $anchoChecklist = (100 - $anchoFijo) / count($columnas);
 
         $tabla = '<table cellpadding="2" border="1" style="width:100%; font-size:8px;">
             <tr style="text-align:center; font-weight:bold; text-transform:uppercase;">
                 <th style="width:10%;">ID</th>
                 <th style="width:25%;">Descripción</th>
-                <th style="width:25%;">Área</th>';
+                <th style="width:25%;">Área</th>'
+            . ($conFecha ? '<th style="width:15%;">Fecha programada</th>' : '');
         foreach ($columnas as $col) {
             $tabla .= '<th style="width:' . $anchoChecklist . '%;">' . e($col) . '</th>';
         }
         $tabla .= '</tr>';
 
         if (empty($data['equipos'])) {
-            $tabla .= '<tr><td colspan="' . (3 + count($columnas)) . '" style="text-align:center;">Sin equipos</td></tr>';
+            $tabla .= '<tr><td colspan="' . (3 + ($conFecha ? 1 : 0) + count($columnas)) . '" style="text-align:center;">Sin equipos</td></tr>';
         }
 
         foreach ($data['equipos'] as $equipo) {
             $tabla .= '<tr style="text-align:center;">
                 <td>' . e((string) $equipo['id']) . '</td>
                 <td style="text-align:left;">' . e($equipo['descripcion']) . '</td>
-                <td>' . e($equipo['area']) . '</td>';
+                <td>' . e($equipo['area']) . '</td>'
+                . ($conFecha ? '<td>' . e($equipo['fecha'] ?? '') . '</td>' : '');
             foreach ($columnas as $col) {
                 $tabla .= '<td>' . $marca . '</td>';
             }
@@ -137,7 +145,7 @@ class MantenimientoChecklistPdfService
                 </td>
                 <td style="width:35%; text-align:center; vertical-align:bottom;">
                     <b>Fecha</b><br><br>
-                    <span style="border-bottom:1px solid #000; display:inline-block; width:80%;">' . now()->format('d-m-Y') . '</span>
+                    <span style="border-bottom:1px solid #000; display:inline-block; width:80%;">' . $fecha . '</span>
                 </td>
             </tr>
         </table>';

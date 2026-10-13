@@ -223,6 +223,26 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
+    // GET /inventario/{id}/hoja-vida/pdf — mismos permisos que historialInventario (ambos
+    // alimentan la misma "hoja de vida" del frontend).
+    public function hojaVidaPdf(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->generarHojaVidaPdf($id);
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
     public function descontinuarInventario(Request $request){
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
@@ -379,8 +399,11 @@ class InventariosController extends Controller
         }
 
         $resultado = $this->inventario_services->reportesPendientesVistoBueno(
-            $request->input('search'),
-            $request->input('per_page')
+            $request->input('search', $request->input('s')),
+            // El DataTable remoto manda `per-page` (con guion) y `s`; antes solo se leían
+            // `per_page`/`search`, así que nunca paginaba y cargaba TODOS los reportes
+            // solucionados en memoria (OOM en JsonResponse). Siempre se pagina.
+            (int) $request->input('per_page', $request->input('per-page', 10))
         );
 
         return $this->apiResponse($resultado);
@@ -490,6 +513,99 @@ class InventariosController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="' . $resultado['data']['nombre_archivo'] . '"',
         ]);
+    }
+
+    // GET /inventario/mantenimiento/periodos?id_anio= — periodos con mantenimiento programado
+    // en ese año (selector del modal de la guía de mantenimiento).
+    public function periodosMantenimiento(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer',
+            'id_categoria' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->inventario_services->periodosConMantenimiento(
+            (int) $request->input('id_anio'),
+            $request->filled('id_categoria') ? (int) $request->input('id_categoria') : null
+        ));
+    }
+
+    // POST /inventario/mantenimiento/guia-pdf — guía de mantenimiento (checklist en blanco)
+    // de lo programado en un año, periodo y categoría.
+    public function guiaMantenimientoPdf(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer|exists:anio_escolar,id',
+            'id_periodo' => 'required|integer|exists:periodos,id',
+            'id_categoria' => 'required|integer|exists:categoria,id',
+            'fecha' => 'required|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $data = $validator->validated();
+
+        $resultado = $this->inventario_services->generarGuiaMantenimientoPdf(
+            $data['id_anio'],
+            $data['id_periodo'],
+            $data['id_categoria'],
+            $request->user()->id_user,
+            $data['fecha']
+        );
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
+    // GET /inventario/mantenimiento/sin-mantenimiento — equipos de la categoría sin
+    // mantenimiento preventivo generado en el año y periodo indicados (pestaña del historial).
+    public function sinMantenimiento(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer',
+            'id_periodo' => 'required|integer',
+            'tipo_categoria' => 'nullable|integer',
+            'id_categoria' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $resultado = $this->inventario_services->inventariosSinMantenimiento(
+            (int) $request->input('id_anio'),
+            (int) $request->input('id_periodo'),
+            $request->filled('tipo_categoria') ? (int) $request->input('tipo_categoria') : null,
+            $request->filled('id_categoria') ? (int) $request->input('id_categoria') : null,
+            $request->input('search', $request->input('s')),
+            (int) $request->input('per_page', $request->input('per-page', 20))
+        );
+
+        return $this->apiResponse($resultado);
     }
 
     // GET /inventario/mantenimiento/indicador — % de cumplimiento por categoría (equipos

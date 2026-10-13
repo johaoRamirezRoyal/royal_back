@@ -36,10 +36,14 @@ Route::put('/reportes/visto-bueno', [InventariosController::class, 'vistoBuenoGe
 Route::put('/reportes/{id}/visto-bueno', [InventariosController::class, 'vistoBuenoReporte'])->whereNumber('id');
 Route::post('/mantenimiento', [InventariosController::class, 'programarMantenimientoPreventivo']);
 Route::post('/mantenimiento/pdf', [InventariosController::class, 'generarMantenimientoPdf']);
+Route::post('/mantenimiento/guia-pdf', [InventariosController::class, 'guiaMantenimientoPdf']);
+Route::get('/mantenimiento/periodos', [InventariosController::class, 'periodosMantenimiento']);
+Route::get('/mantenimiento/sin-mantenimiento', [InventariosController::class, 'sinMantenimiento']);
 Route::get('/mantenimiento/indicador', [InventariosController::class, 'indicadorMantenimiento']);
 Route::get('/mantenimiento/grafica', [InventariosController::class, 'graficaMantenimiento']);
 
 // Rutas con {id} al final para no interceptar las rutas estáticas de arriba
 // (Laravel matchea en orden de registro, no por especificidad).
 Route::get('/{id}/historial', [InventariosController::class, 'historialInventario'])->whereNumber('id');
+Route::get('/{id}/hoja-vida/pdf', [InventariosController::class, 'hojaVidaPdf'])->whereNumber('id');
 Route::put('/{id}', [InventariosController::class, 'actualizarInventario'])->whereNumber('id');

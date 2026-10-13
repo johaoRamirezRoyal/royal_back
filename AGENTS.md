@@ -1600,6 +1600,19 @@ $this->app->singleton(CategoriasServices::class);
 { "error": true, "error_type": "logic|database|connection", "message": "...", "file": "...", "line": 123 }
 ```
 
+## Logo en PDFs
+
+Todo PDF institucional nuevo debe usar **siempre** este logo fijo, no el de la marca por
+dominio (`MarcaDominioService::resolverRutaLocalPorCorreo`):
+
+```php
+public_path('storage/royal-school/logotipoBackground.png')   // escudo + "COLEGIO REAL / ROYAL SCHOOL", fondo transparente
+```
+
+Ejemplo: `App\Pdf\Inventario\HojaVidaPdfService` (hoja de vida de inventario,
+`GET /inventario/{id}/hoja-vida/pdf`). Los PDFs anteriores que aún resuelven el logo por
+dominio (p. ej. `MantenimientoChecklistPdfService`) no se tocaron.
+
 ## Cloudinary (`app/Services/Cloudinary/CloudinaryService.php`)
 
 | Método | Uso |
