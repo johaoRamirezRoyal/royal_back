@@ -15,6 +15,7 @@ use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 
 class hikvisionattendanceService
@@ -85,7 +86,33 @@ class hikvisionattendanceService
      */
     protected function obtenerGroupIdPorPerfil(int $idPerfil): ?int
     {
-        return self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null;
+        // HIKVISION_GROUP_IDS ("perfil:groupId,...") pisa el mapa fijo sin tocar código; un
+        // groupId vacío ("16:") deja de enviarlo para ese perfil (p. ej. si el grupo no
+        // existe en el dispositivo y este responde badJsonContent).
+        // ponytail: no se valida contra el dispositivo — no hay endpoint ISAPI de Person
+        // Groups confirmado para este modelo; agregarlo si se confirma uno.
+        $override = [];
+        foreach (array_filter(explode(',', (string) config('services.hikvision.group_ids'))) as $par) {
+            [$perfil, $grupo] = array_pad(explode(':', trim($par), 2), 2, '');
+            $override[(int) $perfil] = $grupo === '' ? null : (int) $grupo;
+        }
+
+        return array_key_exists($idPerfil, $override)
+            ? $override[$idPerfil]
+            : (self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null);
+    }
+
+    /**
+     * Nombre apto para UserInfo.name: tildes/ñ transliteradas a ASCII (el resto de
+     * caracteres especiales se descarta, como antes), espacios/tabs/saltos colapsados a
+     * uno solo, sin espacios en los bordes y máximo 32 caracteres (límite ISAPI).
+     */
+    public static function sanitizarNombre(?string $nombre): string
+    {
+        $nombre = Str::ascii(preg_replace('/\s+/u', ' ', (string) $nombre));
+        $nombre = preg_replace('/ +/', ' ', preg_replace('/[^A-Za-z0-9 ]/', '', $nombre));
+
+        return trim(mb_substr(trim($nombre), 0, 32));
     }
 
     /**
@@ -93,10 +120,19 @@ class hikvisionattendanceService
      * del documento del usuario (el dispositivo acepta entre 4 y 8 caracteres).
      * Si el usuario no tiene documento registrado, se genera una contraseña
      * aleatoria de 4 dígitos para no bloquear el registro.
+     *
+     * Única regla de contraseña del servicio: con HIKVISION_PASSWORD_NUMERICA (true por
+     * defecto) solo se toman los dígitos del documento — un documento como "116954HO"
+     * daba "54HO" y el dispositivo rechazaba el alta con badJsonContent. Con menos de 4
+     * dígitos cae a la aleatoria.
      */
     protected function construirPasswordAsistencia(?string $documento): string
     {
-        if (!empty($documento)) {
+        $documento = config('services.hikvision.password_numerica', true)
+            ? preg_replace('/\D/', '', (string) $documento)
+            : trim((string) $documento);
+
+        if (strlen($documento) >= 4) {
             return substr($documento, -4);
         }
 
@@ -337,7 +373,8 @@ class hikvisionattendanceService
     private function extraerMensajeError(\Throwable $e): string
     {
         if (method_exists($e, 'getResponse') && $e->getResponse()) {
-            return $e->getResponse()->getBody()->getContents();
+            // (string) rebobina el stream: getContents() devolvía '' a partir de la segunda lectura.
+            return (string) $e->getResponse()->getBody();
         }
 
         return $e->getMessage();
@@ -637,7 +674,7 @@ class hikvisionattendanceService
         $payload = [
             'UserInfo' => [
                 'employeeNo' => (string) $datos_empleado['id_user'],
-                'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $datos_empleado['nombre']), 0, 30),
+                'name' => self::sanitizarNombre($datos_empleado['nombre']),
                 'userType' => 'normal',
                 'password' => $this->construirPasswordAsistencia((string) $datos_empleado['documento']),
                 'gender' => 'male',
@@ -665,7 +702,7 @@ class hikvisionattendanceService
             $payload['UserInfo']['groupId'] = $groupId;
         }
 
-        $resultado = $this->fanOut(function (Client $client) use ($payload, $datos_empleado) {
+        $resultado = $this->fanOut(function (Client $client, string $deviceId) use ($payload, $datos_empleado) {
             try {
                 $response = $client->post(
                     '/ISAPI/AccessControl/UserInfo/Record?format=json',
@@ -700,17 +737,23 @@ class hikvisionattendanceService
                 // registrarEmpleado que ya había tenido éxito en este terminal pero
                 // falló en otro): el objetivo real ("que esté en el dispositivo") ya
                 // se cumple, así que se trata como éxito en vez de bloquear el reintento.
-                $bodyDecoded = json_decode($this->extraerMensajeError($e), true);
+                $body = $this->extraerMensajeError($e);
+                $bodyDecoded = json_decode($body, true);
 
                 if (($bodyDecoded['subStatusCode'] ?? null) === 'employeeNoAlreadyExist') {
                     return ['error' => false, 'message' => 'Ya estaba registrado en el dispositivo'];
                 }
 
-                Log::error('Error registrando al empleado: ' . $e->getMessage(), [
-                    'payload' => $payload,
+                // Body completo del dispositivo + payload final, por dispositivo (fanOut ya
+                // aísla el fallo: los demás terminales siguen registrando).
+                Log::error("Error registrando al empleado en el dispositivo {$deviceId}", [
+                    'dispositivo' => $deviceId,
+                    'excepcion' => $e->getMessage(),
+                    'respuesta' => $body,
+                    'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
                 ]);
 
-                return ['error' => true, 'message' => $this->extraerMensajeError($e)];
+                return ['error' => true, 'message' => $body];
             }
         });
 
@@ -790,7 +833,7 @@ class hikvisionattendanceService
                 $data = [
                     'UserInfo' => [
                         'employeeNo'    => (string) $usuario['id_user'],
-                        'name'          => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
+                        'name'          => self::sanitizarNombre($usuario['nombre']),
                         'userType'      => 'normal',
                         'password'      => $this->construirPasswordAsistencia((string) $usuario['documento']),
                         'gender'        => 'male',
@@ -846,7 +889,7 @@ class hikvisionattendanceService
                     'json' => [
                         'UserInfo' => [
                             'employeeNo' => (string) $usuario['id_user'],
-                            'name' => substr(preg_replace('/[^A-Za-z0-9 ]/', '', $usuario['nombre']), 0, 30),
+                            'name' => self::sanitizarNombre($usuario['nombre']),
                             'userType' => 'normal',
                             'Valid' => [
                                 'enable' => true,
@@ -864,7 +907,7 @@ class hikvisionattendanceService
                 ];
             },
 
-            'rejected' => function ($reason, $index) use (&$result, $usuarios) {
+            'rejected' => function ($reason, $index) use (&$result, $usuarios, $client) {
 
                 $usuario = $usuarios[$index];
 
@@ -872,7 +915,7 @@ class hikvisionattendanceService
                     ? $reason->getResponse()
                     : null;
 
-                $body = $response ? $response->getBody()->getContents() : null;
+                $body = $response ? (string) $response->getBody() : null;
                 $bodyDecoded = $body ? json_decode($body, true) : null;
 
                 // El dispositivo ya tiene a este employeeNo (registrado por fuera de esta app,
@@ -888,6 +931,7 @@ class hikvisionattendanceService
                 }
 
                 Log::error('Hikvision FULL ERROR', [
+                    'dispositivo' => (string) $client->getConfig('base_uri'),
                     'usuario' => $usuario,
                     'response' => $body
                 ]);
@@ -1480,7 +1524,7 @@ class hikvisionattendanceService
 
             // Limpieza de nombre si viene en el payload (máximo 32 caracteres según ISAPI)
             if (isset($payload_user['name'])) {
-                $payload_user['name'] = substr(preg_replace('/[^A-Za-z0-9 ]/', '', $payload_user['name']), 0, 32);
+                $payload_user['name'] = self::sanitizarNombre($payload_user['name']);
             }
 
             // Confirmado contra el dispositivo real: si el PUT no incluye "Valid",
