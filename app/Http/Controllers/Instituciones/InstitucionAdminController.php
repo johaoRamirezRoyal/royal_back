@@ -66,6 +66,12 @@ class InstitucionAdminController extends Controller
             'bloqueada' => $institucion->estaBloqueada(),
             'bloqueo_fecha' => $institucion->fechaBloqueo()?->toIso8601String(),
             'created_at' => $institucion->created_at?->toIso8601String(),
+            // Solo vienen calculados en index() (withCount/withMax); en store/update el
+            // frontend vuelve a pedir el listado, así que ahí basta con el valor por defecto.
+            'cartas_count' => (int) ($institucion->cartas_count ?? 0),
+            'ultima_carta_at' => $institucion->cartas_max_created_at
+                ? \Illuminate\Support\Carbon::parse($institucion->cartas_max_created_at)->toIso8601String()
+                : null,
         ];
     }
 
@@ -75,7 +81,11 @@ class InstitucionAdminController extends Controller
             return $rechazo;
         }
 
+        // Cuántos documentos envió cada institución y cuándo fue el último: así el listado
+        // muestra de un vistazo quién ya cumplió, sin abrir "Ver documentos" una por una.
         $instituciones = Institucion::query()
+            ->withCount('cartas')
+            ->withMax('cartas', 'created_at')
             ->orderBy('nombre')
             ->get()
             ->map(fn (Institucion $i) => $this->conEstadoDerivado($i));

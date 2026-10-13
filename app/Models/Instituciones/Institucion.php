@@ -31,6 +31,12 @@ class Institucion extends Model
         'primer_ingreso_at' => 'datetime',
     ];
 
+    /** Cartas de recomendación (PDF) que la institución ha enviado desde su portal. */
+    public function cartas(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CartaRecomendacion::class, 'id_institucion');
+    }
+
     public function fechaBloqueo(): ?\Illuminate\Support\Carbon
     {
         if (! $this->primer_ingreso_at) return null;
