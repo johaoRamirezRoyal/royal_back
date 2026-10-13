@@ -2751,7 +2751,7 @@ class InventarioServices
      * MantenimientoChecklistPdfService (misma recreación del legacy mantenimientosEquipos.php)
      * agregando la columna de fecha programada.
      */
-    public function generarGuiaMantenimientoPdf(int $idAnio, int $idPeriodo, int $idCategoria, int $idLog, ?string $fecha = null): array
+    public function generarGuiaMantenimientoPdf(int $idAnio, int $idPeriodo, int $idCategoria, int $idLog, ?string $fecha = null, bool $solucionado = false): array
     {
         try {
             $categoria = Categoria::find($idCategoria);
@@ -2793,7 +2793,8 @@ class InventarioServices
                 'categoria_nombre' => $categoria->nombre,
                 'es_computadores' => str_contains(strtolower($categoria->nombre ?? ''), 'computador'),
                 'responsable_nombre' => trim(($responsable->nombre ?? '') . ' ' . ($responsable->apellido ?? '')) ?: 'N/A',
-                'con_solucion' => false,
+                // "Solucionado" en el modal: marca con X todas las casillas del checklist.
+                'con_solucion' => $solucionado,
                 'subtitulo' => $subtitulo,
                 // Fecha de generación elegida en el modal (por defecto hoy).
                 'fecha' => ($fecha ? Carbon::parse($fecha) : now())->format('d-m-Y'),

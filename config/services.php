@@ -51,6 +51,10 @@ return [
     // bloques cuál terminal tiene esa IP antes de saber a qué tenant pertenece.
     'hikvision' => [
         'device_type' => 'DS-K1T321MFWX-B',
+        // Contraseña de asistencia solo con dígitos del documento (ver construirPasswordAsistencia).
+        'password_numerica' => env('HIKVISION_PASSWORD_NUMERICA', true),
+        // Override del mapa perfil→groupId ("16:8,3:9"; "16:" = no enviar groupId para ese perfil).
+        'group_ids' => env('HIKVISION_GROUP_IDS'),
 
         'mysql' => [
             'protocol' => env('HIKVISION_PROTOCOL', 'http'),

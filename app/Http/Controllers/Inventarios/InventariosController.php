@@ -551,6 +551,7 @@ class InventariosController extends Controller
             'id_periodo' => 'required|integer|exists:periodos,id',
             'id_categoria' => 'required|integer|exists:categoria,id',
             'fecha' => 'required|date',
+            'solucionado' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -564,7 +565,8 @@ class InventariosController extends Controller
             $data['id_periodo'],
             $data['id_categoria'],
             $request->user()->id_user,
-            $data['fecha']
+            $data['fecha'],
+            (bool) ($data['solucionado'] ?? false)
         );
 
         if ($resultado['error']) {
