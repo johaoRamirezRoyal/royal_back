@@ -243,6 +243,25 @@ class InventariosController extends Controller
         ]);
     }
 
+    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado.
+    public function reportePdf(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->inventario_services->generarReportePdf($id);
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
     public function descontinuarInventario(Request $request){
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;

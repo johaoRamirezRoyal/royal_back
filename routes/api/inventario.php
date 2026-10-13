@@ -34,6 +34,7 @@ Route::put('/reportes/solucionar', [InventariosController::class, 'solucionarRep
 Route::get('/reportes/visto-bueno', [InventariosController::class, 'reportesPendientesVistoBueno']);
 Route::put('/reportes/visto-bueno', [InventariosController::class, 'vistoBuenoGeneral']);
 Route::put('/reportes/{id}/visto-bueno', [InventariosController::class, 'vistoBuenoReporte'])->whereNumber('id');
+Route::get('/reportes/{id}/pdf', [InventariosController::class, 'reportePdf'])->whereNumber('id');
 Route::post('/mantenimiento', [InventariosController::class, 'programarMantenimientoPreventivo']);
 Route::post('/mantenimiento/pdf', [InventariosController::class, 'generarMantenimientoPdf']);
 Route::post('/mantenimiento/guia-pdf', [InventariosController::class, 'guiaMantenimientoPdf']);
