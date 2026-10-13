@@ -42,4 +42,5 @@ Route::get('/mantenimiento/grafica', [InventariosController::class, 'graficaMant
 // Rutas con {id} al final para no interceptar las rutas estáticas de arriba
 // (Laravel matchea en orden de registro, no por especificidad).
 Route::get('/{id}/historial', [InventariosController::class, 'historialInventario'])->whereNumber('id');
+Route::get('/{id}/hoja-vida/pdf', [InventariosController::class, 'hojaVidaPdf'])->whereNumber('id');
 Route::put('/{id}', [InventariosController::class, 'actualizarInventario'])->whereNumber('id');

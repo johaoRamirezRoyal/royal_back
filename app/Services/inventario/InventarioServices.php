@@ -18,6 +18,7 @@ use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\HistorialChecksPdfService;
+use App\Pdf\Inventario\HojaVidaPdfService;
 use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\MailService;
@@ -1825,6 +1826,8 @@ class InventarioServices
                 ? 'solucionado'
                 : ($estado_solucion === 'todos' ? 'todos' : 'pendiente');
 
+            $fechaMantenimiento = $this->fechaMantenimientoSql('rp', 'rp.fechareg');
+
             $query = DB::table('inventario as iv')
                 ->join('reportes as rp', 'rp.id_inventario', '=', 'iv.id')
                 ->leftJoin('usuarios as u', 'u.id_user', '=', 'iv.id_user')
@@ -1887,7 +1890,9 @@ class InventarioServices
                     // datos del ÍTEM en vez del REPORTE/mantenimiento puntual de cada fila:
                     // la misma fecha de creación y la misma descripción en todo el historial
                     // de un ítem, sin importar cuándo se programó/realizó cada mantenimiento.
-                    'rp.fechareg as fechareg',
+                    // Mantenimiento (tipo 2): fecha_respuesta (de la solución si ya se hizo, si
+                    // no la programada); correctivos siguen usando rp.fechareg.
+                    DB::raw("CASE WHEN rp.tipo_reporte = 2 THEN {$fechaMantenimiento} ELSE rp.fechareg END AS fechareg"),
                     'rp.descripcion as descripcion',
                     'rp.periodo as periodo',
                     // `rp.periodo` guarda el id real de `periodos` (no un ordinal) — se
@@ -2002,7 +2007,7 @@ class InventarioServices
                 // arriba) en vez de fecha_reporte — esa subconsulta está hardcodeada a
                 // estado=2 (reportes de daño) y para mantenimiento (estado 6) siempre da
                 // NULL, dejando el orden del historial de mantenimiento indefinido.
-                ->orderByDesc('rp.fechareg');
+                ->orderByRaw("CASE WHEN rp.tipo_reporte = 2 THEN {$fechaMantenimiento} ELSE rp.fechareg END DESC");
 
             $reportes = $per_page
                 ? $query->paginate($per_page)
@@ -2089,7 +2094,7 @@ class InventarioServices
                 // original), no "ahora" — el mantenimiento ya ocurrió en esa fecha, el
                 // técnico solo lo está registrando/confirmando después.
                 if ($reporte->tipo_reporte === 2 && $fecha_respuesta === null) {
-                    $datosSolucion['fecha_respuesta'] = $reporte->fechareg;
+                    $datosSolucion['fecha_respuesta'] = $reporte->fecha_respuesta ?? $reporte->fechareg;
                     $datosSolucion['fechareg'] = $reporte->fechareg;
                 }
 
@@ -2329,6 +2334,9 @@ class InventarioServices
                         'id_anio' => $idAnio,
                         'periodo' => $periodo,
                         'fechareg' => $fecha,
+                        // La fecha del mantenimiento (programado o solucionado) se lee siempre de
+                        // `fecha_respuesta` — ver fechaMantenimientoSql().
+                        'fecha_respuesta' => $fecha,
                     ]);
 
                     $inventario->update([
@@ -2449,6 +2457,78 @@ class InventarioServices
     }
 
     /**
+     * PDF de hoja de vida de un equipo — recreación del legacy
+     * (imprimir/listado_hoja_de_vida/hojaDeVida.php): datos del equipo + historial completo de
+     * `reportes` (originales y filas de solución), con el tiempo de respuesta de cada solución.
+     */
+    public function generarHojaVidaPdf(int $idInventario): array
+    {
+        try {
+            $item = Inventario::with(['usuario:id_user,nombre,apellido', 'area:id,nombre'])->find($idInventario);
+
+            if (!$item) {
+                return ['error' => true, 'message' => 'No se encontró el artículo de inventario.', 'data' => []];
+            }
+
+            $estados = Estado::pluck('nombre', 'id');
+
+            // Mantenimiento programado que aún no tiene solución (legacy verMantenimientosPendientes).
+            $idPendiente = Reportes::where('id_inventario', $idInventario)
+                ->where('estado', 6)
+                ->whereDoesntHave('solucion', fn ($q) => $q->where('estado', 3))
+                ->value('id');
+
+            $historial = Reportes::where('id_inventario', $idInventario)
+                ->with(['usuario:id_user,nombre,apellido', 'area:id,nombre', 'reportePadre:id,fechareg'])
+                ->orderByDesc('fechareg')
+                ->get()
+                ->map(function ($r) use ($estados, $idPendiente) {
+                    $tiempo = '';
+                    if ($r->fecha_respuesta && $r->reportePadre?->fechareg) {
+                        $tiempo = $r->reportePadre->fechareg->diff($r->fecha_respuesta)->format('%d dias %h hrs');
+                    }
+
+                    // Correcciones de datos migrados que ya hacía el legacy al imprimir.
+                    $corregir = fn (?string $t) => str_replace(['Correciñonado', 'Correciñoporte'], 'Correctivo', (string) $t);
+                    $fecha = $r->estado == 3 ? $r->fecha_respuesta : $r->fechareg;
+
+                    return [
+                        'fecha' => $fecha?->format('Y-m-d H:i:s') ?? '',
+                        'usuario' => trim(($r->usuario->nombre ?? '') . ' ' . ($r->usuario->apellido ?? '')),
+                        'area' => str_replace('Pracicante', 'Practicante', $r->area->nombre ?? ''),
+                        'estado' => $corregir($estados[$r->estado] ?? ''),
+                        'observacion' => trim($corregir($r->observacion) . ($idPendiente === $r->id ? ' (Programacion)' : '')),
+                        'tiempo' => $tiempo,
+                    ];
+                })->all();
+
+            $contenido = app(HojaVidaPdfService::class)->generate([
+                'equipo' => [
+                    'descripcion' => $item->descripcion ?? '',
+                    'id' => $item->id,
+                    'marca' => $item->marca ?? '',
+                    'modelo' => $item->modelo ?? '',
+                    'codigo' => (string) ($item->codigo ?? ''),
+                    'usuario' => trim(($item->usuario->nombre ?? '') . ' ' . ($item->usuario->apellido ?? '')),
+                    'area' => $item->area->nombre ?? '',
+                ],
+                'historial' => $historial,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'PDF generado correctamente',
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => 'hoja_vida_equipo_' . ($item->codigo ?: 'sin_codigo') . '.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
      * Un correo por responsable (no uno por equipo) resumiendo cuántos mantenimientos se le
      * programaron en este lote — evita spam cuando se programan muchos equipos a la vez.
      * Falla en silencio (no revierte la programación) si el envío da error.
@@ -2513,7 +2593,14 @@ class InventarioServices
                 // Igual que el SAMI legacy (commit 6618664): el indicador cuenta TODO el
                 // inventario de la categoría, también el descontinuado/inactivo, para que el
                 // histórico de un periodo no cambie cuando un equipo se descontinúa después.
-                $totalEquipos = Inventario::where('id_categoria', $categoria->id)->count();
+                // Solo equipos vigentes: activo=1, con responsable asignado y no descontinuados
+                // (estado 5).
+                $totalEquipos = Inventario::where('id_categoria', $categoria->id)
+                    ->where('activo', 1)
+                    ->whereNotNull('id_user')
+                    ->where('id_user', '>', 0)
+                    ->where('estado', '!=', 5)
+                    ->count();
 
                 // "Realizados" = tienen una solución vinculada (estado 3), no solo
                 // programados — antes contaba cualquier reporte original sin importar si
@@ -2521,6 +2608,11 @@ class InventarioServices
                 $totalMantenimientos = DB::table('reportes as r')
                     ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
                     ->where('i.id_categoria', $categoria->id)
+                    // Mismo universo que $totalEquipos, para que el % no pase de 100.
+                    ->where('i.activo', 1)
+                    ->whereNotNull('i.id_user')
+                    ->where('i.id_user', '>', 0)
+                    ->where('i.estado', '!=', 5)
                     ->where('r.tipo_reporte', 2)
                     ->whereNull('r.id_reporte')
                     ->whereExists(function ($q) {
@@ -2573,6 +2665,8 @@ class InventarioServices
     public function graficaMantenimientoPorMes(?int $tipoCategoria, ?int $idAnio, ?int $idCategoria = null): array
     {
         try {
+            $fechaMes = $this->fechaMantenimientoSql('r', 'r.fechareg');
+
             $porMes = DB::table('reportes as r')
                 ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
                 ->join('categoria as c', 'c.id', '=', 'i.id_categoria')
@@ -2588,10 +2682,10 @@ class InventarioServices
                 ->when($idCategoria, fn ($q) => $q->where('i.id_categoria', $idCategoria))
                 ->when($idAnio, fn ($q) => $q->where('r.id_anio', $idAnio))
                 ->select(
-                    DB::raw('MONTH(r.fechareg) as mes'),
+                    DB::raw("MONTH({$fechaMes}) as mes"),
                     DB::raw('COUNT(DISTINCT r.id_inventario) as total')
                 )
-                ->groupBy(DB::raw('MONTH(r.fechareg)'))
+                ->groupBy('mes')
                 ->orderBy('mes')
                 ->get();
 
@@ -2607,6 +2701,19 @@ class InventarioServices
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Expresión SQL de la fecha de un mantenimiento: `fecha_respuesta` de su solución si ya
+     * se realizó, si no la del propio reporte (fecha programada). Cae a $fallback en filas
+     * legacy sin fecha_respuesta (NULL o '0000-00-00 00:00:00').
+     */
+    private function fechaMantenimientoSql(string $alias, string $fallback): string
+    {
+        $valida = fn (string $col) => "IF(CAST({$col} AS CHAR) = '0000-00-00 00:00:00', NULL, {$col})";
+        $solucion = "(SELECT " . $valida('s.fecha_respuesta') . " FROM reportes s WHERE s.id_reporte = {$alias}.id AND s.estado = 3 ORDER BY s.id DESC LIMIT 1)";
+
+        return "COALESCE({$solucion}, " . $valida("{$alias}.fecha_respuesta") . ", {$fallback})";
     }
 
     /**
