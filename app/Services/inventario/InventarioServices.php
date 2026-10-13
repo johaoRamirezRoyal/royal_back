@@ -2717,6 +2717,83 @@ class InventarioServices
     }
 
     /**
+     * Equipos de la categoría (o del tipo, si no se elige categoría) sin mantenimiento
+     * preventivo REALIZADO (sin solución, `tipo_reporte = 2`) en ese año y periodo — incluye
+     * los programados aún pendientes (`programado = 1`) y los que ni se programaron. Mismo universo de equipos que
+     * indicadorMantenimiento(): activo=1, con responsable y estado distinto de 5.
+     */
+    public function inventariosSinMantenimiento(int $idAnio, int $idPeriodo, ?int $tipoCategoria, ?int $idCategoria, ?string $search, int $perPage): array
+    {
+        try {
+            $equipos = DB::table('inventario as iv')
+                ->join('categoria as c', 'c.id', '=', 'iv.id_categoria')
+                ->leftJoin('areas as ar', 'ar.id', '=', 'iv.id_area')
+                ->leftJoin('usuarios as u', 'u.id_user', '=', 'iv.id_user')
+                ->leftJoin('estado as e', 'e.id', '=', 'iv.estado')
+                ->where('iv.activo', 1)
+                ->where('iv.id_user', '>', 0)
+                ->where('iv.estado', '!=', 5)
+                ->when(
+                    $tipoCategoria,
+                    fn ($q) => $q->where('c.tipo_categoria', $tipoCategoria),
+                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
+                )
+                ->when($idCategoria, fn ($q) => $q->where('iv.id_categoria', $idCategoria))
+                ->whereNotExists(function ($q) use ($idAnio, $idPeriodo) {
+                    $q->select(DB::raw(1))
+                        ->from('reportes as r')
+                        ->whereColumn('r.id_inventario', 'iv.id')
+                        ->where('r.tipo_reporte', 2)
+                        ->whereNull('r.id_reporte')
+                        ->where('r.id_anio', $idAnio)
+                        ->where('r.periodo', $idPeriodo)
+                        // "Realizado" = con solución vinculada (estado 3), igual que el indicador:
+                        // un mantenimiento programado pero pendiente cuenta como NO realizado.
+                        ->whereExists(function ($sq) {
+                            $sq->select(DB::raw(1))
+                                ->from('reportes as s')
+                                ->whereColumn('s.id_reporte', 'r.id')
+                                ->where('s.estado', 3);
+                        });
+                })
+                ->when($search, function ($q) use ($search) {
+                    $q->where(function ($q) use ($search) {
+                        $q->where('iv.descripcion', 'like', "%{$search}%")
+                            ->orWhere('iv.codigo', 'like', "%{$search}%")
+                            ->orWhere('iv.marca', 'like', "%{$search}%")
+                            ->orWhere('iv.modelo', 'like', "%{$search}%")
+                            ->orWhere('iv.id', 'like', "%{$search}%");
+                    });
+                })
+                ->select(
+                    'iv.id',
+                    'iv.descripcion',
+                    'iv.codigo',
+                    'iv.marca',
+                    'iv.modelo',
+                    'iv.estado',
+                    'e.nombre as nom_estado',
+                    'ar.nombre as nom_area',
+                    'c.nombre as nom_categoria',
+                    DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_usuario"),
+                    // 1 = ya tiene el mantenimiento programado pero sin solucionar; 0 = sin programar.
+                    DB::raw("EXISTS (SELECT 1 FROM reportes r2 WHERE r2.id_inventario = iv.id AND r2.tipo_reporte = 2 AND r2.id_reporte IS NULL AND r2.id_anio = {$idAnio} AND r2.periodo = {$idPeriodo}) as programado")
+                )
+                ->orderBy('iv.descripcion')
+                ->orderBy('iv.id')
+                ->paginate($perPage);
+
+            return [
+                'error' => false,
+                'message' => 'Equipos sin mantenimiento obtenidos correctamente.',
+                'data' => $equipos,
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
      * Fecha aleatoria dentro de [inicio, fin], cualquier día excepto domingo (L-S), y
      * hora entre 07:30 y 15:45. Áreas Comunes manda como rango el mes completo elegido
      * por el usuario (ver ConfirmarAccionesModal.parts.tsx en el frontend) — este método

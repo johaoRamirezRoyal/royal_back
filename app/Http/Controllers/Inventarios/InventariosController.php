@@ -515,6 +515,37 @@ class InventariosController extends Controller
         ]);
     }
 
+    // GET /inventario/mantenimiento/sin-mantenimiento — equipos de la categoría sin
+    // mantenimiento preventivo generado en el año y periodo indicados (pestaña del historial).
+    public function sinMantenimiento(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer',
+            'id_periodo' => 'required|integer',
+            'tipo_categoria' => 'nullable|integer',
+            'id_categoria' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $resultado = $this->inventario_services->inventariosSinMantenimiento(
+            (int) $request->input('id_anio'),
+            (int) $request->input('id_periodo'),
+            $request->filled('tipo_categoria') ? (int) $request->input('tipo_categoria') : null,
+            $request->filled('id_categoria') ? (int) $request->input('id_categoria') : null,
+            $request->input('search', $request->input('s')),
+            (int) $request->input('per_page', $request->input('per-page', 20))
+        );
+
+        return $this->apiResponse($resultado);
+    }
+
     // GET /inventario/mantenimiento/indicador — % de cumplimiento por categoría (equipos
     // con mantenimiento registrado en el periodo / total de equipos activos).
     public function indicadorMantenimiento(MantenimientoIndicadorRequest $request)
