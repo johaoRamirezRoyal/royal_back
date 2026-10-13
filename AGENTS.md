@@ -1363,7 +1363,7 @@ constructor único — ver "Sistema de permisos" arriba):
 
 | Opción | Otorgada a | Alcance |
 |--------|-----------|---------|
-| 106 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos |
+| 106 "Gestión de Instituciones" | Super Admin (perfil 1) | Todo — CRUD, estado, configuración, ver documentos, enviar recordatorios |
 | 111 "Ver Instituciones y Documentos" | Admisiones (perfil 9) | Solo `index()`/`cartas()` — sin crear/editar/activar-desactivar/configuración |
 
 106 se sembró primero con Super Admin **y** Admisiones
@@ -1383,6 +1383,27 @@ asumiendo que sería el id de "Gestión de Acudientes" (`2026_09_02_120000_seed_
 otorgada a Super Admin y Admisiones), pero en esta BD 106 ya estaba tomado por "Gestión de
 Instituciones" — el id real de "Gestión de Acudientes" es **112**. Corregido junto con lo
 anterior el 2026-09-22.
+
+### Seguimiento de documentos y recordatorios (módulo admin)
+
+- **Conteo en el listado**: `index()` agrega a cada institución `cartas_count` y
+  `ultima_carta_at` (`withCount('cartas')` + `withMax('cartas', 'created_at')` sobre la
+  relación `Institucion::cartas()` → `cartas_recomendacion.id_institucion`), en la misma
+  consulta — el panel de Admisiones muestra quién ya envió documentos sin pedir
+  `cartas()` institución por institución. `conEstadoDerivado()` siempre incluye ambos
+  campos, pero solo vienen calculados desde `index()`: en `store()`/`update()` salen en
+  `0`/`null` (el frontend vuelve a pedir el listado después). Es un **conteo**, no un
+  "completo/incompleto": no hay un número esperado de documentos por institución.
+- **Recordatorio**: `POST /api/instituciones-admin/{id}/recordatorio`
+  (`enviarRecordatorio()`, solo 106 — no la de solo lectura). Envía un correo
+  `RecordatorioDocumentoInstitucionMail` (vista `emails.recordatorioDocumentoInstitucion`)
+  con el documento esperado según `tipo_documento`, cuántos ha enviado y el enlace al
+  portal (`config('app.frontend_url')` + `/admissions?tipo=institucion`). Rechaza 404
+  (no existe), 422 (inactiva o sin `email`; un correo **sin verificar** sí se acepta) y
+  devuelve **429** si `MailService::send()` lanza `MailRateLimitException` (límite por
+  hora del hosting — ver "Noticias"). **Un correo por llamada, a propósito**: el envío en
+  lote lo hace el frontend recorriendo las seleccionadas y se detiene en el primer 429;
+  no conviertas esto en un loop server-side sin conservar ese corte.
 
 ## Convenciones de código
 
