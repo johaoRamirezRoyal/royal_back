@@ -16,14 +16,18 @@ use App\Models\Inventario\InventarioLog;
 use App\Models\Inventario\Reportes;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\HistorialChecksPdfService;
 use App\Pdf\Inventario\HojaVidaPdfService;
 use App\Pdf\Inventario\MantenimientoChecklistPdfService;
+use App\Pdf\Inventario\ReporteOperativoPdfService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class InventarioServices
@@ -2525,6 +2529,96 @@ class InventarioServices
             ];
         } catch (\Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
+     * PDF "Reporte operativo" de un reporte de inventario — recreación del legacy
+     * (imprimir/reporte.php): quién reportó, área y estado actual del ítem, observación.
+     */
+    public function generarReportePdf(int $idReporte): array
+    {
+        try {
+            $reporte = Reportes::with(['usuario:id_user,nombre,apellido', 'inventario.area:id,nombre'])->find($idReporte);
+
+            if (!$reporte || !$reporte->inventario) {
+                return ['error' => true, 'message' => 'No se encontró el reporte.', 'data' => []];
+            }
+
+            $item = $reporte->inventario;
+
+            // Reporte ya solucionado (historial /inventario/reportes): llena la sección
+            // "Solucionado Por" con quién, cuándo, qué se hizo y su firma registrada.
+            $solucion = Reportes::with('responsable:id_user,nombre,apellido')
+                ->where('id_reporte', $reporte->id)
+                ->where('estado', 3)
+                ->latest('id')
+                ->first();
+
+            $datosSolucion = null;
+            if ($solucion) {
+                $fechaSolucion = $solucion->fecha_respuesta;
+                $datosSolucion = [
+                    'responsable' => trim(($solucion->responsable->nombre ?? '') . ' ' . ($solucion->responsable->apellido ?? '')),
+                    'fecha' => $fechaSolucion?->format('d-m-Y H:i') ?? '',
+                    'tiempo' => $fechaSolucion && $reporte->fechareg
+                        ? $reporte->fechareg->diff($fechaSolucion)->format('%a días %h horas %i minutos')
+                        : '',
+                    // Soluciones migradas del legacy guardan el texto en observacion (ver AGENTS.md).
+                    'descripcion' => $solucion->descripcion ?: ($solucion->observacion ?? ''),
+                    'firma' => $this->descargarFirma($solucion->id_resp),
+                ];
+            }
+
+            $contenido = app(ReporteOperativoPdfService::class)->generate([
+                'usuario' => trim(($reporte->usuario->nombre ?? '') . ' ' . ($reporte->usuario->apellido ?? '')),
+                'area' => $item->area->nombre ?? '',
+                'fecha' => $reporte->fechareg?->format('d-m-Y') ?? '',
+                'id' => $item->id,
+                'descripcion' => $item->descripcion ?? '',
+                'marca' => $item->marca ?? '',
+                'estado' => Estado::where('id', $item->estado)->value('nombre') ?? '',
+                'observacion' => $reporte->observacion ?? '',
+                'solucion' => $datosSolucion,
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'PDF generado correctamente',
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => 'reporte_' . $reporte->id . '.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
+     * Bytes de la firma activa del usuario (tabla `firmas`), o null si no tiene o no se pudo
+     * leer — el PDF sale igual, con la línea de firma en blanco. Las firmas subidas desde
+     * OMNIA traen `url` (Cloudinary); las del legacy solo `nombre`, un archivo en
+     * public/upload de SAMI (disco `sami`, igual que imprimirInventario.php).
+     */
+    private function descargarFirma(?int $idUser): ?string
+    {
+        $firma = $idUser ? Firma::where('id_user', $idUser)->where('activo', 1)->first() : null;
+        if (!$firma) {
+            return null;
+        }
+
+        try {
+            if ($firma->url) {
+                $res = Http::timeout(5)->get($firma->url);
+                return $res->successful() ? $res->body() : null;
+            }
+
+            $disco = Storage::disk('sami');
+            return $firma->nombre && $disco->exists($firma->nombre) ? $disco->get($firma->nombre) : null;
+        } catch (\Throwable $e) {
+            Log::warning("No se pudo descargar la firma del usuario {$idUser}: " . $e->getMessage());
+            return null;
         }
     }
 
