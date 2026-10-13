@@ -345,6 +345,32 @@ la fila única `configuracion_asistencia` (id=1):
 
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 
+### Consulta de asistencias de clases (opción 132, controller aparte)
+
+`ConsultaAsistenciaClaseController` + `ConsultaAsistenciaClaseService`, rutas
+`GET /gestion-academica/consulta-asistencias` (listado paginado con el contrato de
+DataTable remoto: `page`, `per-page`, `s`, `sort`, `dir` + `fecha_inicio`, `fecha_fin`,
+`id_curso`, `id_docente`, `id_asignatura`, `estado`), `.../{id}` (registro por estudiante
+de una sesión) y `.../filtros` (catálogos de curso/asignatura/docente). **Solo lectura**:
+ver las asistencias de cualquier clase sin ser el docente. Acepta la opción **132**
+("Consulta de asistencias de clases", sembrada para Super Admin por
+`2026_10_13_100000_seed_opcion_consulta_asistencias_clases`) **o** la 99 completa.
+
+- **Por qué un controller aparte**: el constructor de `GestionAcademicaController` aborta
+  todo para quien no tenga la 99 (o sea docente en `METODOS_DOCENTE`); meter la consulta
+  ahí habría obligado a abrir otro hueco en ese chequeo. Con un controller propio, dar la
+  132 a coordinación no le da acceso a nada más del módulo.
+- **Id explícito en la migración**: inserta `cron_opciones.id = 132` en vez de
+  `insertGetId`, y falla con un mensaje claro si ese id ya está ocupado por otra opción —
+  para no repetir el desfase de ids de Noticias/Instituciones/Acudientes.
+- **Datos**: una fila por `academico_asistencia_clase`; el docente sale de
+  `COALESCE(ca.id_docente, da.id_docente)` (cubre la carga "suelta" sin asignatura);
+  ausentes/tardanzas/permisos por subconsulta sobre las excepciones;
+  `total_estudiantes` son los estudiantes activos **hoy** en el curso (no hay foto
+  histórica del curso por fecha), y el `% de asistencia` solo se calcula en clases
+  `DICTADA`. El detalle une los activos del curso con cualquier estudiante que tenga una
+  excepción en esa sesión aunque ya no esté en el curso.
+
 ### Autoservicio del Docente (tercer patrón de permisos, además de (a)/(b) arriba)
 
 El perfil Docente (`id_perfil` `3`) normalmente NO tiene la opción `99` otorgada en

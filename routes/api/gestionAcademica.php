@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GestionAcademica\GestionAcademicaController;
+use App\Http\Controllers\GestionAcademica\ConsultaAsistenciaClaseController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -487,3 +488,12 @@ Route::post('/anios-escolares', [GestionAcademicaController::class, 'crearAnioEs
  * Body: { "id": 8, "activo": false }
  */
 Route::put('/anios-escolares/estado', [GestionAcademicaController::class, 'actualizarEstadoAnioEscolar']);
+
+/**
+ * Consulta de asistencias de clases (solo lectura, opción 132 o 99) — ver
+ * ConsultaAsistenciaClaseController. Controller aparte para no abrir el resto del módulo.
+ * http://localhost:8000/api/gestion-academica/consulta-asistencias?fecha_inicio=2026-10-01&fecha_fin=2026-10-13&id_curso=1&page=1&per-page=20
+ */
+Route::get('/consulta-asistencias/filtros', [ConsultaAsistenciaClaseController::class, 'filtros']);
+Route::get('/consulta-asistencias', [ConsultaAsistenciaClaseController::class, 'index']);
+Route::get('/consulta-asistencias/{id}', [ConsultaAsistenciaClaseController::class, 'show'])->whereNumber('id');
