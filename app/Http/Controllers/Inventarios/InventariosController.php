@@ -515,6 +515,68 @@ class InventariosController extends Controller
         ]);
     }
 
+    // GET /inventario/mantenimiento/periodos?id_anio= — periodos con mantenimiento programado
+    // en ese año (selector del modal de la guía de mantenimiento).
+    public function periodosMantenimiento(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer',
+            'id_categoria' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->inventario_services->periodosConMantenimiento(
+            (int) $request->input('id_anio'),
+            $request->filled('id_categoria') ? (int) $request->input('id_categoria') : null
+        ));
+    }
+
+    // POST /inventario/mantenimiento/guia-pdf — guía de mantenimiento (checklist en blanco)
+    // de lo programado en un año, periodo y categoría.
+    public function guiaMantenimientoPdf(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'id_anio' => 'required|integer|exists:anio_escolar,id',
+            'id_periodo' => 'required|integer|exists:periodos,id',
+            'id_categoria' => 'required|integer|exists:categoria,id',
+            'fecha' => 'required|date',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $data = $validator->validated();
+
+        $resultado = $this->inventario_services->generarGuiaMantenimientoPdf(
+            $data['id_anio'],
+            $data['id_periodo'],
+            $data['id_categoria'],
+            $request->user()->id_user,
+            $data['fecha']
+        );
+
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+        ]);
+    }
+
     // GET /inventario/mantenimiento/sin-mantenimiento — equipos de la categoría sin
     // mantenimiento preventivo generado en el año y periodo indicados (pestaña del historial).
     public function sinMantenimiento(Request $request)

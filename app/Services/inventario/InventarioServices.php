@@ -2717,6 +2717,107 @@ class InventarioServices
     }
 
     /**
+     * Periodos con mantenimiento preventivo programado en un año escolar. Sale de `reportes`
+     * y no del catálogo `periodos` por año: los mantenimientos legacy (p. ej. 2025-2026)
+     * guardan ids de periodo que en `periodos` pertenecen a otro año, así que filtrar el
+     * catálogo por `id_anio` devolvía vacío.
+     */
+    public function periodosConMantenimiento(int $idAnio, ?int $idCategoria = null): array
+    {
+        try {
+            $periodos = DB::table('reportes as r')
+                ->join('periodos as p', 'p.id', '=', 'r.periodo')
+                ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
+                ->where('r.tipo_reporte', 2)
+                ->whereNull('r.id_reporte')
+                ->where('r.id_anio', $idAnio)
+                ->when($idCategoria, fn ($q) => $q->where('i.id_categoria', $idCategoria))
+                ->groupBy('p.id', 'p.numero')
+                ->orderBy('p.id')
+                // Rango de fechas programadas: distingue ids de periodo con el mismo número.
+                ->select('p.id', 'p.numero', DB::raw('MIN(r.fechareg) as desde'), DB::raw('MAX(r.fechareg) as hasta'))
+                ->get();
+
+            return ['error' => false, 'message' => 'Periodos obtenidos correctamente.', 'data' => $periodos];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
+     * Guía de mantenimiento (PDF): checklist en blanco con los equipos que tienen un
+     * mantenimiento preventivo programado (reporte original, `tipo_reporte = 2`) en el año,
+     * periodo y categoría elegidos, ordenados por fecha programada. Reusa
+     * MantenimientoChecklistPdfService (misma recreación del legacy mantenimientosEquipos.php)
+     * agregando la columna de fecha programada.
+     */
+    public function generarGuiaMantenimientoPdf(int $idAnio, int $idPeriodo, int $idCategoria, int $idLog, ?string $fecha = null): array
+    {
+        try {
+            $categoria = Categoria::find($idCategoria);
+            if (!$categoria) {
+                return ['error' => true, 'message' => 'Categoría no encontrada.', 'data' => []];
+            }
+
+            $programados = DB::table('reportes as r')
+                ->join('inventario as i', 'i.id', '=', 'r.id_inventario')
+                ->leftJoin('areas as ar', 'ar.id', '=', 'i.id_area')
+                ->where('r.tipo_reporte', 2)
+                ->whereNull('r.id_reporte')
+                ->where('r.id_anio', $idAnio)
+                ->where('r.periodo', $idPeriodo)
+                ->where('i.id_categoria', $idCategoria)
+                ->where('i.activo', 1)
+                ->whereNotIn('i.estado', [4, 5])
+                ->orderBy('r.fechareg')
+                ->orderBy('i.id')
+                ->get(['i.id', 'i.descripcion', 'ar.nombre as area', 'r.fechareg']);
+
+            if ($programados->isEmpty()) {
+                return ['error' => true, 'message' => 'No hay mantenimientos programados para ese año, periodo y categoría.', 'data' => []];
+            }
+
+            $anio = Anio::find($idAnio);
+            $periodo = Periodo::find($idPeriodo);
+            $subtitulo = trim(
+                ($anio ? "Año {$anio->anio_inicio} - {$anio->anio_fin}" : '')
+                . ($periodo ? ' · Periodo ' . $periodo->numero : '')
+            );
+
+            $responsable = Usuario::find($idLog);
+
+            $contenido = app(MantenimientoChecklistPdfService::class)->generate([
+                // Logo institucional fijo — ver AGENTS.md "Logo en PDFs".
+                'logo_path' => public_path('storage/royal-school/logotipoBackground.png'),
+                'tipo_categoria_label' => $categoria->tipo_categoria === 2 ? 'Operativos' : 'Sistemas',
+                'categoria_nombre' => $categoria->nombre,
+                'es_computadores' => str_contains(strtolower($categoria->nombre ?? ''), 'computador'),
+                'responsable_nombre' => trim(($responsable->nombre ?? '') . ' ' . ($responsable->apellido ?? '')) ?: 'N/A',
+                'con_solucion' => false,
+                'subtitulo' => $subtitulo,
+                // Fecha de generación elegida en el modal (por defecto hoy).
+                'fecha' => ($fecha ? Carbon::parse($fecha) : now())->format('d-m-Y'),
+                'equipos' => $programados->unique('id')->map(fn ($e) => [
+                    'id' => $e->id,
+                    'descripcion' => $e->descripcion ?? '',
+                    'area' => $e->area ?? '',
+                ])->values()->all(),
+            ]);
+
+            return [
+                'error' => false,
+                'message' => 'PDF generado correctamente',
+                'data' => [
+                    'contenido' => $contenido,
+                    'nombre_archivo' => 'guia_mantenimiento_' . now()->format('Y-m-d_H-i-s') . '.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
      * Equipos de la categoría (o del tipo, si no se elige categoría) sin mantenimiento
      * preventivo REALIZADO (sin solución, `tipo_reporte = 2`) en ese año y periodo — incluye
      * los programados aún pendientes (`programado = 1`) y los que ni se programaron. Mismo universo de equipos que
