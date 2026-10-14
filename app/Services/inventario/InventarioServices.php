@@ -223,7 +223,7 @@ class InventarioServices
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
-                            'fecha_compra', inventario.fecha_compra,
+                            'fecha_compra', DATE(COALESCE(NULLIF(inventario.fecha_compra, '0000-00-00'), inventario.fechareg)),
                             'fecha_descontinuacion', idesc.fecha_descontinuacion,
                             'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
                                 'id', ur.id,
