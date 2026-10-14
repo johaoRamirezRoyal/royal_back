@@ -12,6 +12,7 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Pool;
+use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Psr7\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +34,12 @@ class hikvisionattendanceService
     protected string $password;
 
     // Tipos de verificación
+    /** Máximo de usuarios que devuelve un terminal por página de UserInfo/Search (pedir más igual devuelve 30). */
+    private const ISAPI_PAGINA_USUARIOS = 30;
+
+    /** Segundos que se reutiliza el listado de GET /hikvision/getList (ver obtenerEmpleadosRegistrados). */
+    private const CACHE_EMPLEADOS_SEGUNDOS = 300;
+
     const VERIFICACION_TIPO = [
         '0' => 'Facial',
         '1' => 'Huella',
@@ -951,26 +958,38 @@ class hikvisionattendanceService
     }
 
     /**
-     * Summary of obtenerEmpleadosRegistrados
-     * @param int $pageSize
-     * @param int $pagina
-     * @return array{data: array, error: bool, message: string|array{data: null, error: bool, message: string}}
-     */
-    /**
      * Une los empleados registrados de TODOS los terminales, deduplicados por
      * employeeNo (un mismo empleado suele existir en varios terminales por el
      * modelo fan-out).
+     *
+     * Rendimiento: los terminales devuelven 30 usuarios por página, así que ~600
+     * personas en 3 terminales son ~60 llamadas ISAPI. Hechas en serie tardaban ~16 s;
+     * buscarEmpleadosEnTerminales() las hace en paralelo (~5 s). Además el resultado se
+     * reutiliza CACHE_EMPLEADOS_SEGUNDOS por tenant + terminales, y se olvida en cada
+     * escritura (middleware OlvidarEmpleadosHikvision en las rutas /hikvision no-GET, y
+     * eliminarTodosLosUsuariosDelDispositivo para el comando wipe-all). `$fresco` ignora
+     * la caché (botón de recarga de la página). Un cambio hecho directo en el terminal,
+     * sin pasar por OMNIA, se ve al vencer la caché o al recargar.
      */
-    public function obtenerEmpleadosRegistrados(int $pageSize = 30, int $pagina = 1)
+    public function obtenerEmpleadosRegistrados(int $pageSize = 30, int $pagina = 1, bool $fresco = false)
     {
+        $cacheKey = $this->cacheKeyEmpleados();
+
+        if (!$fresco && is_array($enCache = Cache::get($cacheKey))) {
+            return $enCache;
+        }
+
         $todosLosEmpleados = [];
         $vistos = [];
+        $huboFallos = false;
+        $porDispositivo = $this->buscarEmpleadosEnTerminales($this->deviceIds());
 
         foreach ($this->devices as $device) {
-            try {
-                $empleadosDispositivo = $this->obtenerEmpleadosRegistradosDeDispositivo($device['id']);
-            } catch (\Exception $e) {
-                Log::error('Error obteniendo empleados de un dispositivo: ' . $e->getMessage(), ['device' => $device['id']]);
+            $empleadosDispositivo = $porDispositivo[$device['id']] ?? [];
+
+            if ($empleadosDispositivo instanceof \Throwable) {
+                Log::error('Error obteniendo empleados de un dispositivo: ' . $empleadosDispositivo->getMessage(), ['device' => $device['id']]);
+                $huboFallos = true;
 
                 continue;
             }
@@ -996,11 +1015,31 @@ class hikvisionattendanceService
             }
         }
 
-        return [
+        $resultado = [
             'error' => false,
             'message' => 'Usuarios registrados obtenidos',
             'data' => $todosLosEmpleados,
         ];
+
+        // Un listado parcial (algún terminal no respondió) no se guarda: el próximo
+        // intento vuelve a preguntarles a todos.
+        if (!$huboFallos) {
+            Cache::put($cacheKey, $resultado, self::CACHE_EMPLEADOS_SEGUNDOS);
+        }
+
+        return $resultado;
+    }
+
+    /** Olvida el listado cacheado de obtenerEmpleadosRegistrados (tras cualquier escritura en los terminales). */
+    public function olvidarEmpleadosRegistrados(): void
+    {
+        Cache::forget($this->cacheKeyEmpleados());
+    }
+
+    // Por tenant y por terminales configurados: el store de caché es compartido entre tenants.
+    private function cacheKeyEmpleados(): string
+    {
+        return 'hikvision:empleados-registrados:' . config('database.default', 'mysql') . ':' . md5(implode(',', $this->deviceIds()));
     }
 
     /**
@@ -1036,33 +1075,87 @@ class hikvisionattendanceService
      */
     private function obtenerEmpleadosRegistradosDeDispositivo(string $deviceId): array
     {
-        $client = $this->client($deviceId);
-        $todosLosEmpleados = [];
-        $pageSize = 30;
-        $offset = 0;
+        $empleados = $this->buscarEmpleadosEnTerminales([$deviceId])[$deviceId];
 
-        do {
-            $response = $client->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
+        if ($empleados instanceof \Throwable) {
+            throw $empleados instanceof \Exception ? $empleados : new \RuntimeException($empleados->getMessage(), 0, $empleados);
+        }
+
+        return $empleados;
+    }
+
+    /**
+     * Todas las páginas de ISAPI UserInfo/Search de los terminales indicados, en paralelo:
+     * primero la página 0 de cada uno (trae totalMatches) y luego el resto de páginas de
+     * todos a la vez. Probado contra los 3 terminales reales: 58 páginas simultáneas sin
+     * fallos. Un terminal con cualquier página fallida queda entero como error (igual que
+     * antes, cuando la excepción cortaba su listado).
+     *
+     * ponytail: sin límite de concurrencia (~20 páginas por terminal hoy); con miles de
+     * usuarios por terminal, pasar a GuzzleHttp\Promise\Each::ofLimit.
+     *
+     * @param  string[]  $deviceIds
+     * @return array<string, array|\Throwable> empleados por terminal, o el error de ese terminal
+     */
+    private function buscarEmpleadosEnTerminales(array $deviceIds): array
+    {
+        $pagina = fn (string $deviceId, int $offset) => $this->client($deviceId)
+            ->postAsync('/ISAPI/AccessControl/UserInfo/Search?format=json', [
                 'json' => [
                     'UserInfoSearchCond' => [
                         'searchID' => '1',
                         'searchResultPosition' => $offset,
-                        'maxResults' => $pageSize,
+                        'maxResults' => self::ISAPI_PAGINA_USUARIOS,
                     ],
                 ],
-            ]);
+            ])
+            ->then(fn ($response) => json_decode($response->getBody()->getContents(), true)['UserInfoSearch'] ?? []);
 
-            $data = json_decode($response->getBody()->getContents(), true);
+        $comoError = fn ($reason) => $reason instanceof \Throwable ? $reason : new \RuntimeException((string) $reason);
 
-            $usuarios = $data['UserInfoSearch']['UserInfo'] ?? [];
-            $totalMatch = $data['UserInfoSearch']['totalMatches'] ?? 0;
+        $paginas = [];
+        $resto = [];
+        $primeras = [];
+        foreach ($deviceIds as $deviceId) {
+            $primeras[$deviceId] = $pagina($deviceId, 0);
+        }
 
-            $todosLosEmpleados = array_merge($todosLosEmpleados, $usuarios);
+        foreach (Utils::settle($primeras)->wait() as $deviceId => $r) {
+            if ($r['state'] !== 'fulfilled') {
+                $paginas[$deviceId] = $comoError($r['reason']);
 
-            $offset += $pageSize;
-        } while ($offset < $totalMatch);
+                continue;
+            }
 
-        return $todosLosEmpleados;
+            $paginas[$deviceId] = [0 => $r['value']['UserInfo'] ?? []];
+            $total = (int) ($r['value']['totalMatches'] ?? 0);
+
+            for ($offset = self::ISAPI_PAGINA_USUARIOS; $offset < $total; $offset += self::ISAPI_PAGINA_USUARIOS) {
+                $resto[] = ['device' => $deviceId, 'offset' => $offset, 'promise' => $pagina($deviceId, $offset)];
+            }
+        }
+
+        foreach (Utils::settle(array_column($resto, 'promise'))->wait() as $i => $r) {
+            ['device' => $deviceId, 'offset' => $offset] = $resto[$i];
+
+            if ($paginas[$deviceId] instanceof \Throwable) {
+                continue;
+            }
+
+            $paginas[$deviceId] = $r['state'] === 'fulfilled'
+                ? $paginas[$deviceId] + [$offset => $r['value']['UserInfo'] ?? []]
+                : $comoError($r['reason']);
+        }
+
+        return array_map(function ($porOffset) {
+            if ($porOffset instanceof \Throwable) {
+                return $porOffset;
+            }
+
+            ksort($porOffset);
+
+            return array_merge(...array_values($porOffset));
+        }, $paginas);
     }
 
     /**
@@ -1390,6 +1483,9 @@ class hikvisionattendanceService
         if (!in_array($deviceId, $this->deviceIds(), true)) {
             return ['error' => true, 'message' => "Dispositivo desconocido: {$deviceId}"];
         }
+
+        // El comando hikvision:wipe-all no pasa por las rutas HTTP (que ya invalidan).
+        $this->olvidarEmpleadosRegistrados();
 
         try {
             $empleados = $this->obtenerEmpleadosRegistradosDeDispositivo($deviceId);

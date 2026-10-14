@@ -227,7 +227,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     });
 
     // HIKVISION
-    Route::prefix('/hikvision')->group(function () {
+    // OlvidarEmpleadosHikvision: toda escritura (no-GET) borra la caché de /getList.
+    Route::prefix('/hikvision')->middleware(\App\Http\Middleware\OlvidarEmpleadosHikvision::class)->group(function () {
         require __DIR__ . '/api/hikvision.php';
     });
 

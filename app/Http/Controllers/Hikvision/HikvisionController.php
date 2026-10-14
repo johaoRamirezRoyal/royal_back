@@ -166,7 +166,8 @@ class HikvisionController extends Controller
 
         Log::info('[hikvision] Solicitud de empleados registrados', ['pageSize' => $pageSize]);
 
-        $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize);
+        // ?fresco=1 (botón de recarga) ignora la caché del listado.
+        $usuarios = $this->hikvision_service->obtenerEmpleadosRegistrados($pageSize, fresco: $request->boolean('fresco'));
 
         return $this->apiResponse($usuarios);
     }

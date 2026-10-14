@@ -1702,6 +1702,20 @@ Almacenamiento local de archivos subidos (vs Cloudinary). Usado en: `DocumentosV
 - `client(string $deviceId)` memoiza client por terminal
 - `GET /hikvision/devices` lista terminales
 - Config en `.env`: `HIKVISION_HOST/PORT/PROTOCOL/USERNAME/PASSWORD`, `HIKVISION_HOSTS` (formato `"Nombre@host:port,Nombre2@host2:port2"`)
+- **Listado de empleados (`GET /hikvision/getList`) — paralelo + caché**: los terminales
+  devuelven **máx. 30 usuarios por página** de `UserInfo/Search` (pedir más igual devuelve
+  30), así que ~600 personas × 3 terminales eran ~60 llamadas en serie (**~16 s**).
+  `buscarEmpleadosEnTerminales()` pide la página 0 de cada terminal y luego todas las
+  demás a la vez con `GuzzleHttp\Promise\Utils::settle` (**~4,5 s**, medido contra los
+  terminales reales sin fallos); `obtenerEmpleadosRegistradosDeDispositivo` también lo usa.
+  `obtenerEmpleadosRegistrados` cachea el resultado **300 s** (clave por tenant
+  `config('database.default')` + terminales configurados: el store es compartido) y no
+  guarda listados parciales (si algún terminal falló). Se invalida con el middleware
+  `OlvidarEmpleadosHikvision` en todo el grupo `/hikvision` (cualquier POST/PUT/DELETE) y
+  en `eliminarTodosLosUsuariosDelDispositivo` (comando `hikvision:wipe-all`); `?fresco=1`
+  la ignora (el frontend lo manda al recargar). Una escritura nueva que no pase por esas
+  rutas tiene que llamar `olvidarEmpleadosRegistrados()`. Cambios hechos directo en el
+  terminal se ven al vencer la caché o al recargar.
 
 ## Email
 
