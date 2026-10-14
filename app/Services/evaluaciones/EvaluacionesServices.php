@@ -266,11 +266,11 @@ class EvaluacionesServices
     // ─── Evaluaciones (CRUD + estructura completa) ───────────────
 
     /**
-     * Listado de evaluaciones para la pantalla de configuración. Fuera de Super Admin (1) y
-     * Administrador (2), cada usuario solo ve evaluaciones de su propio nivel (o sin nivel
-     * configurado, que aplican a todos) — mismo criterio de scoping que
-     * listarDisponiblesParaCoordinador, pero sin la excepción "las que él mismo creó" porque
-     * esta pantalla es de gestión, no de "evaluaciones que puedo responder".
+     * Listado de evaluaciones para la pantalla de configuración. Super Admin (1),
+     * Administrador (2) y Gestión Humana (8) ven todas; el resto solo ve las que creó o las
+     * de su propio nivel (o sin nivel configurado, que aplican a todos) — mismo criterio de
+     * scoping que listarDisponiblesParaCoordinador. Sin la excepción del creador, quien
+     * creaba una evaluación para un nivel distinto al suyo no podía volver a verla.
      */
     public function listar(array $filtros, ?Usuario $solicitante = null): array
     {
@@ -278,10 +278,11 @@ class EvaluacionesServices
             $query = Evaluacion::with(['servicio', 'niveles', 'perfiles', 'secciones'])
                 ->withCount('respuestas');
 
-            if ($solicitante && !in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true)) {
+            if ($solicitante && !in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN, self::PERFIL_GESTION_HUMANA], true)) {
                 $idNivel = $solicitante->id_nivel;
-                $query->where(function ($q) use ($idNivel) {
-                    $q->whereDoesntHave('niveles')
+                $query->where(function ($q) use ($solicitante, $idNivel) {
+                    $q->where('id_user', $solicitante->id_user)
+                      ->orWhereDoesntHave('niveles')
                       ->orWhereHas('niveles', fn ($nq) => $nq->where('nivel.id', $idNivel));
                 });
             }
