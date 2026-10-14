@@ -695,7 +695,12 @@ columna `cantidad`). El endpoint (`SolicitudesController::agregarInventario` →
 que la cantidad a ingresar no supere lo solicitado:
 
 - El rastreo de "ya ingresado" usa `inventario.id_compra` = id de la solicitud final y
-  `inventario.detalles` = id del `solicitud_productos`.
+  `inventario.detalles` = `"<id_producto>-<descripcion_producto>-<id_compra>"`
+  (`Inventario::detalleCompra`; desde 2026-10, antes era solo `"<id_producto>"`). Para
+  contar/asociar filas a un producto usar `Inventario::detalleEsDeProducto` (o en SQL
+  `detalles = id OR detalles LIKE 'id-%'`), que acepta ambos formatos — comparar
+  `detalles` contra el id a secas deja de contar las filas nuevas y permite ingresar más
+  de lo comprado.
 - Por artículo: `disponible = solicitud_productos.cantidad`; si `yaIngresado + cantidad
   > disponible` → error 422 con el detalle. Acumula dentro del mismo request.
 - Cada fila: `descripcion` = nombre del producto (máx 200), `precio` = el del artículo
@@ -703,7 +708,8 @@ que la cantidad a ingresar no supere lo solicitado:
   `detalles`, y `id_area`/`id_usuario`/`id_categoria`/`fecha_compra` del request.
   Registra `inventario_log` vía `registrarLog`. Todo en una transacción.
 - Request: `articulos[]` con `id_producto` (debe pertenecer a la solicitud), `cantidad`
-  ≥ 1, `id_area` activa, `id_usuario` activo, `id_categoria`; opcionales `estado`,
+  ≥ 1, `id_area` activa (el frontend la deja cambiar; por defecto la de la solicitud),
+  `id_usuario` activo, `id_categoria` (obligatoria); opcionales `estado`,
   `precio`, `fecha_compra`.
 - Respuesta: `articulos_creados` + `resumen[]` con `solicitado`/`ingresado`/`restante`.
 

@@ -14,7 +14,7 @@ class HojaVidaPdfService
 {
     /**
      * @param array{
-     *   equipo: array{descripcion: string, id: int|string, marca: string, modelo: string, codigo: string, usuario: string, area: string},
+     *   equipo: array{descripcion: string, id: int|string, marca: string, modelo: string, codigo: string, usuario: string, area: string, observacion: string},
      *   historial: array<int, array{fecha: string, usuario: string, area: string, estado: string, observacion: string, tiempo: string}>,
      * } $data
      */
@@ -56,12 +56,13 @@ class HojaVidaPdfService
 
         $filas = [
             'Nombre del equipo:' => $equipo['descripcion'],
-            'Identificador:' => (string) $equipo['id'],
+            'ID:' => (string) $equipo['id'],
             'Marca:' => $equipo['marca'],
             'Modelo:' => $equipo['modelo'],
             'Código Serial:' => $equipo['codigo'] !== '' ? $equipo['codigo'] : 'No registrado',
             'Usuario responsable:' => $equipo['usuario'],
             'Área:' => $equipo['area'],
+            'Observación:' => $equipo['observacion'] !== '' ? $equipo['observacion'] : 'Sin observaciones',
         ];
 
         $info = '

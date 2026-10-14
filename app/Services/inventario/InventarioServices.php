@@ -840,8 +840,9 @@ class InventarioServices
      * Agrega al inventario los artículos de una solicitud de compra (tabla `solicitudes`).
      * Cada unidad = una fila en `inventario` (el inventario cuenta por filas). Valida que
      * la cantidad a ingresar no supere lo solicitado, descontando lo ya ingresado para esa
-     * compra (se rastrea con `id_compra` = id de la solicitud y `detalles` = id del
-     * `solicitud_productos`). Todo en una transacción.
+     * compra (se rastrea con `id_compra` = id de la solicitud y `detalles` =
+     * "<id_producto>-<descripcion>-<id_compra>", ver Inventario::detalleCompra; las filas
+     * anteriores traen solo "<id_producto>"). Todo en una transacción.
      *
      * @param int $idSolicitud id de la solicitud final
      * @param array $articulos [{id_producto, cantidad, id_area, id_usuario, id_categoria, estado?, precio?, fecha_compra?}]
@@ -877,7 +878,8 @@ class InventarioServices
 
                     $disponible = (int) $producto->cantidad;
                     $yaIngresado = Inventario::where('id_compra', $idSolicitud)
-                        ->where('detalles', (string) $producto->id)
+                        ->where(fn ($q) => $q->where('detalles', (string) $producto->id)
+                            ->orWhere('detalles', 'like', "{$producto->id}-%"))
                         ->count()
                         + (int) DB::table('agregar_inv_product')
                             ->where('id_compra', $idSolicitud)
@@ -914,7 +916,7 @@ class InventarioServices
                             'user_log' => $idLog,
                             'confirmado' => 1,
                             'id_compra' => $idSolicitud,
-                            'detalles' => (string) $producto->id,
+                            'detalles' => Inventario::detalleCompra($producto->id, $producto->producto, $idSolicitud),
                         ]);
                     }
 
@@ -2515,6 +2517,7 @@ class InventarioServices
                     'codigo' => (string) ($item->codigo ?? ''),
                     'usuario' => trim(($item->usuario->nombre ?? '') . ' ' . ($item->usuario->apellido ?? '')),
                     'area' => $item->area->nombre ?? '',
+                    'observacion' => trim((string) ($item->observacion ?? '')),
                 ],
                 'historial' => $historial,
             ]);

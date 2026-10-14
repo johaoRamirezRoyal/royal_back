@@ -336,12 +336,13 @@ class SolicitudesServices
                 $legacy = $legacyPorCompra->get($solicitud->id, collect())->keyBy('id_producto');
 
                 $solicitud->productos->each(function (SolicitudProducto $producto) use ($inventarios, $legacy) {
-                    // Flujo nuevo: `detalles` = id del producto. Legacy: sin `detalles`, se asocia
-                    // por descripción igual al nombre del producto.
+                    // Flujo nuevo: `detalles` empieza por el id del producto (Inventario::detalleEsDeProducto).
+                    // Legacy: sin `detalles`, se asocia por descripción igual al nombre del producto.
                     $desc = mb_substr($producto->producto, 0, 200);
-                    $ids = $inventarios->filter(fn ($i) => $i->detalles === (string) $producto->id
+                    $delProducto = $inventarios->filter(fn ($i) => Inventario::detalleEsDeProducto($i->detalles, $producto->id));
+                    $ids = $inventarios->filter(fn ($i) => Inventario::detalleEsDeProducto($i->detalles, $producto->id)
                         || (($i->detalles === null || $i->detalles === '') && $i->descripcion === $desc))->pluck('id');
-                    $producto->setAttribute('ingresado', $inventarios->where('detalles', (string) $producto->id)->count() + (int) ($legacy->get($producto->id)->total ?? 0));
+                    $producto->setAttribute('ingresado', $delProducto->count() + (int) ($legacy->get($producto->id)->total ?? 0));
                     $producto->setAttribute('inventario_ids', $ids->values());
                 });
             });

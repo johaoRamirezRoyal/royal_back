@@ -26,7 +26,7 @@ class AgregarInventarioSolicitudRequest extends FormRequest
             'articulos.*.cantidad' => ['required', 'integer', 'min:1'],
             'articulos.*.id_area' => ['required', 'integer', Rule::exists('areas', 'id')->where('activo', 1)],
             'articulos.*.id_usuario' => ['required', 'integer', Rule::exists('usuarios', 'id_user')->where('estado', 'activo')],
-            'articulos.*.id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
+            'articulos.*.id_categoria' => ['required', 'integer', Rule::exists('categoria', 'id')],
             'articulos.*.marca' => ['nullable', 'string', 'max:200'],
             'articulos.*.modelo' => ['nullable', 'string', 'max:200'],
             'articulos.*.estado' => ['nullable', 'integer', Rule::exists('estado', 'id')],

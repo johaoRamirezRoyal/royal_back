@@ -37,6 +37,13 @@ class ActualizarInventarioRequest extends FormRequest
             "codigo" => ['sometimes', 'nullable', 'string', 'max:200'],
 
             "detalles" => ['sometimes', 'nullable', 'string', 'max:300'],
+
+            "observacion" => ['sometimes', 'nullable', 'string', 'max:1200'],
+
+            "id_categoria" => ['sometimes', 'required', 'integer', 'exists:categoria,id'],
+
+            // "Fecha asignado" en la hoja de vida — fecha de registro del ítem.
+            "fechareg" => ['sometimes', 'required', 'date'],
         ];
     }
 
@@ -63,6 +70,15 @@ class ActualizarInventarioRequest extends FormRequest
 
             'detalles.string' => 'Los detalles deben ser un texto',
             'detalles.max' => 'Los detalles no pueden superar los 300 caracteres',
+
+            'observacion.string' => 'La observación debe ser un texto',
+            'observacion.max' => 'La observación no puede superar los 1200 caracteres',
+
+            'id_categoria.required' => 'La categoría es obligatoria',
+            'id_categoria.exists' => 'La categoría seleccionada no existe',
+
+            'fechareg.required' => 'La fecha asignado es obligatoria',
+            'fechareg.date' => 'La fecha asignado debe ser una fecha válida',
         ];
     }
 
@@ -74,6 +90,6 @@ class ActualizarInventarioRequest extends FormRequest
      */
     public function toInventarioUpdate(): array
     {
-        return $this->only(['descripcion', 'marca', 'modelo', 'precio', 'fecha_compra', 'codigo', 'detalles']);
+        return $this->only(['descripcion', 'marca', 'modelo', 'precio', 'fecha_compra', 'codigo', 'detalles', 'id_categoria', 'fechareg', 'observacion']);
     }
 }
