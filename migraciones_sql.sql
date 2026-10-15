@@ -212,3 +212,13 @@ INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) 
 INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
   (133, 1, 1, NOW()), (133, 21, 1, NOW()), (133, 24, 1, NOW()), (133, 25, 1, NOW()), (133, 26, 1, NOW()),
   (134, 1, 1, NOW()), (134, 21, 1, NOW()), (134, 24, 1, NOW()), (134, 25, 1, NOW()), (134, 26, 1, NOW());
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_100000_seed_opcion_observaciones_solo_consulta.php
+-- Opción 135 "Observaciones — solo consulta" (módulo 15 Gestión Convivencial):
+-- ve todas las observaciones y no registra/edita/elimina, aunque sea docente o
+-- tenga la 133/99. No se otorga a ningún perfil (se asigna desde /permisos).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 135, 'Observaciones — solo consulta', 15, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 135);

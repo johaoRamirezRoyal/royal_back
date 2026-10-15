@@ -13,7 +13,7 @@ use Throwable;
  * observaciones de ese periodo.
  *
  * Reglas:
- * - El periodo de una observación sale de su fecha (periodo activo que la contiene); una
+ * - El periodo de una observación sale de su fecha (periodo que la contiene; si ya terminó, se rechaza como cerrado); una
  *   fecha fuera de todo periodo se rechaza.
  * - Periodo cerrado = su fecha_fin ya pasó: su acta se consulta pero no se modifica (ni
  *   crear, ni editar, ni eliminar).
@@ -89,20 +89,25 @@ class ObservacionEstudianteService
                 self::nombre('doc', 'docente'),
                 'o.id_periodo_academico',
                 'p.nombre as periodo',
-                DB::raw('p.fecha_fin < CURDATE() as periodo_cerrado'),
+                // Fecha de la app (America/Bogota), no CURDATE(): si MySQL estuviera en otra
+                // zona, editar/eliminar cerrarían a otra hora que registrar (preparar()).
+                DB::raw("p.fecha_fin < '" . Carbon::today()->toDateString() . "' as periodo_cerrado"),
                 'o.created_at',
                 'o.updated_at',
             ]);
     }
 
-    /** Periodos académicos activos, del más reciente al más antiguo, con `cerrado` y `actual`. */
+    /**
+     * Periodos visibles en Observaciones, del más reciente al más antiguo, con `cerrado` y
+     * `actual`. Ver periodosVisibles() para cuáles.
+     */
     public function periodos(): array
     {
         $hoy = Carbon::today()->toDateString();
 
         $periodos = DB::table('periodo_academico as p')
             ->leftJoin('anio_escolar as a', 'a.id', '=', 'p.id_anio_escolar')
-            ->where('p.activo', 1)
+            ->where(fn ($q) => self::periodosVisibles($q, $hoy, 'p.'))
             ->orderByDesc('p.fecha_inicio')
             ->get(['p.id', 'p.nombre', 'p.fecha_inicio', 'p.fecha_fin', DB::raw("CONCAT(a.anio_inicio, '-', a.anio_fin) as anio_escolar")]);
 
@@ -121,10 +126,24 @@ class ObservacionEstudianteService
         ])->values()->all();
     }
 
+    /**
+     * Activos + los que ya terminaron aunque estén inactivos: el comando diario
+     * `periodos:desactivar-vencidos` pone activo=0 a todo periodo cuya fecha_fin pasó, y sin
+     * esto sus actas desaparecían al día siguiente de cerrar. Un periodo desactivado a mano
+     * que aún no termina sigue oculto (probablemente es un error de configuración).
+     */
+    private static function periodosVisibles($q, string $hoy, string $alias = ''): void
+    {
+        $q->where("{$alias}activo", 1)->orWhere("{$alias}fecha_fin", '<', $hoy);
+    }
+
+    /** Periodo que contiene la fecha. Si ya terminó, preparar() lo rechaza como cerrado. */
     private function periodoDeFecha(string $fecha): ?object
     {
+        $hoy = Carbon::today()->toDateString();
+
         return DB::table('periodo_academico')
-            ->where('activo', 1)
+            ->where(fn ($q) => self::periodosVisibles($q, $hoy))
             ->where('fecha_inicio', '<=', $fecha)
             ->where('fecha_fin', '>=', $fecha)
             ->first(['id', 'nombre', 'fecha_fin']);
@@ -255,7 +274,7 @@ class ObservacionEstudianteService
                     ->orderByDesc('o.fecha')
                     ->orderByDesc('o.id')
                     ->get()
-                    ->map(fn ($o) => ['periodo_cerrado' => (bool) $o->periodo_cerrado, 'editable' => ! $o->periodo_cerrado && (int) $o->id_docente === $idUsuario] + (array) $o)
+                    ->map(fn ($o) => ['periodo_cerrado' => (bool) $o->periodo_cerrado, 'editable' => $acceso->puedeRegistrar && ! $o->periodo_cerrado && (int) $o->id_docente === $idUsuario] + (array) $o)
                 : collect();
 
             return [
@@ -355,6 +374,12 @@ class ObservacionEstudianteService
     /** Observación propia, visible y de un periodo abierto — o el error de por qué no. */
     private function propiaEditable(AccesoObservaciones $acceso, int $id): array
     {
+        // Sin permiso de registrar (p. ej. opción 135 "solo consulta") tampoco se tocan las
+        // propias que registró antes.
+        if (! $acceso->puedeRegistrar) {
+            return [self::fallo('Tu permiso solo permite consultar observaciones, no modificarlas.', 403), null];
+        }
+
         $obs = $this->observaciones($acceso->soloDocente())->where('o.id', $id)->first();
 
         if (! $obs) {

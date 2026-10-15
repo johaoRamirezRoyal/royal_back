@@ -599,10 +599,29 @@ pero las rutas cuelgan del prefijo propio.
 | Opción **133** "Observaciones de estudiantes" | cualquier estudiante activo | solo las suyas |
 | Opción **99** (Gestión Académica) | igual que la 133 | solo las suyas |
 | Opción **134** "Ver todas las observaciones" | nadie si no tiene otro permiso (sola es de solo lectura) | las de **todos** los profesores en todos los cursos |
+| Opción **135** "Observaciones — solo consulta" | **nadie**, aunque además sea docente o tenga la 133/99 (gana sobre ellas) | las de **todos** |
 
 Las observaciones **no son globales: son de quien las registra.** La 133 y la 134 están
 otorgadas a Super Admin (1), Psicóloga Preescolar/Primaria/Secundaria (21/24/25) y
 Coordinador (26). Nadie edita ni elimina las observaciones de otro, ni siquiera con la 134.
+La 135 (`2026_10_15_100000_seed_opcion_observaciones_solo_consulta`) no se otorga a ningún
+perfil por migración: se asigna desde `/permisos`. Con ella `puedeRegistrar` es false y
+`verTodas` true; `propiaEditable` también rechaza editar/eliminar las propias registradas
+antes, y el acta marca `editable: false` en todas.
+
+### Periodos cerrados: bloqueo e historial
+
+- **Cerrado = su `fecha_fin` ya pasó** (no "empezó el siguiente": si dos periodos se
+  solapan, el anterior sigue editable hasta su propia `fecha_fin`; Configuración académica no
+  impide solaparlos). Cerrado bloquea registrar, editar, mover a esa fecha y eliminar.
+- Toda comparación usa la fecha de la app (`Carbon::today()`, America/Bogota), **no**
+  `CURDATE()`: `periodo_cerrado` (que decide editar/eliminar) y `preparar()` (registrar)
+  tienen que cerrar a la misma hora aunque MySQL esté en otra zona.
+- **El comando diario `periodos:desactivar-vencidos` pone `activo = 0` a todo periodo
+  vencido.** Por eso `periodos()`/`periodoDeFecha()` no filtran solo `activo = 1` sino
+  `activo = 1 OR fecha_fin < hoy` (`periodosVisibles()`): con el filtro anterior, las actas
+  de un periodo desaparecían al día siguiente de cerrarse. Un periodo desactivado a mano que
+  aún no termina sigue oculto.
 
 El constructor resuelve todo esto una sola vez en un `AccesoObservaciones` (`idUsuario`,
 `verTodas`, `puedeRegistrar` y `idsCursosRegistro`, que es null cuando puede registrar a

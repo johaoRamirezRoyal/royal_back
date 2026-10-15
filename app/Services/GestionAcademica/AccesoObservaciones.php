@@ -11,7 +11,8 @@ final class AccesoObservaciones
     /**
      * @param  bool  $verTodas  Opción 134: ve las observaciones de TODOS los profesores. Sin ella,
      *                          cada quien ve solo las que registró.
-     * @param  bool  $puedeRegistrar  Docente, opción 133 u opción 99.
+     * @param  bool  $puedeRegistrar  Docente, opción 133 u opción 99 — siempre false con la 135
+     *                                 ("solo consulta"), que además implica $verTodas.
      * @param  array<int>|null  $idsCursosRegistro  Cursos donde puede registrar: null = todos
      *                                               (133/99), array = los suyos (docente).
      */

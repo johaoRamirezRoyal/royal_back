@@ -20,6 +20,9 @@ use Illuminate\Validation\Rule;
  *   "Observaciones de estudiantes" u opción 99 (cualquier estudiante).
  * - Ver: cada quien solo lo que registró; la opción 134 "Ver todas las observaciones" ve
  *   las de todos los profesores en todos los cursos (sola, es de solo lectura).
+ * - Opción 135 "Observaciones — solo consulta": ve todas y NO actúa sobre ninguna, aunque
+ *   también sea docente o tenga la 133/99 (gana sobre ellas). Para quien debe auditar sin
+ *   registrar (rectoría, por ejemplo).
  * Controller aparte de GestionAcademicaController por el mismo motivo que
  * ConsultaAsistenciaClaseController: su constructor exige la 99.
  */
@@ -30,6 +33,8 @@ class ObservacionEstudianteController extends Controller
     private const OPCION_VER_TODAS = 134;
 
     private const OPCION_GESTION_ACADEMICA = 99;
+
+    private const OPCION_SOLO_CONSULTA = 135;
 
     private const PERFILES_DOCENTE = [3, 14];
 
@@ -44,12 +49,13 @@ class ObservacionEstudianteController extends Controller
         $usuario = $request->user();
         $tiene = fn (int $opcion) => (bool) ($usuariosService->tienePermiso($opcion, $usuario->perfil)['permiso'] ?? false);
 
-        $registraTodos = $tiene(self::OPCION_OBSERVACIONES) || $tiene(self::OPCION_GESTION_ACADEMICA);
-        $esDocente = in_array($usuario->perfil, self::PERFILES_DOCENTE, true);
+        $soloConsulta = $tiene(self::OPCION_SOLO_CONSULTA);
+        $registraTodos = ! $soloConsulta && ($tiene(self::OPCION_OBSERVACIONES) || $tiene(self::OPCION_GESTION_ACADEMICA));
+        $esDocente = ! $soloConsulta && in_array($usuario->perfil, self::PERFILES_DOCENTE, true);
 
         $this->acceso = new AccesoObservaciones(
             idUsuario: $usuario->id_user,
-            verTodas: $tiene(self::OPCION_VER_TODAS),
+            verTodas: $soloConsulta || $tiene(self::OPCION_VER_TODAS),
             puedeRegistrar: $registraTodos || $esDocente,
             idsCursosRegistro: $registraTodos
                 ? null
