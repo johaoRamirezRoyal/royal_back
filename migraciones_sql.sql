@@ -222,3 +222,43 @@ INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VAL
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
 SELECT 135, 'Observaciones — solo consulta', 15, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 135);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_100000_create_actas_estudiante_table.php
+-- Registro de actas de estudiantes (diálogo formativo / convivencial) por periodo
+-- académico y año escolar — ActasEstudianteController. id_curso = curso del
+-- estudiante al registrar el acta. Sin FK a periodo_academico (es MyISAM).
+-- ---------------------------------------------------------------------------
+CREATE TABLE `actas_estudiante` (
+  `id` int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `id_estudiante` int NOT NULL,
+  `id_curso` int NOT NULL,
+  `id_periodo_academico` int NOT NULL,
+  `id_anio_escolar` int NOT NULL,
+  `tipo` enum('dialogo_formativo','convivencial') NOT NULL,
+  `fecha` date NOT NULL,
+  `observacion` text NULL,
+  `id_usuario_registra` int NULL,
+  `created_at` timestamp NULL,
+  `updated_at` timestamp NULL
+) DEFAULT CHARACTER SET utf8mb4 COLLATE 'utf8mb4_unicode_ci';
+ALTER TABLE `actas_estudiante` ADD CONSTRAINT `actas_estudiante_id_estudiante_foreign` FOREIGN KEY (`id_estudiante`) REFERENCES `usuarios` (`id_user`) ON DELETE RESTRICT;
+ALTER TABLE `actas_estudiante` ADD CONSTRAINT `actas_estudiante_id_curso_foreign` FOREIGN KEY (`id_curso`) REFERENCES `curso` (`id`) ON DELETE RESTRICT;
+ALTER TABLE `actas_estudiante` ADD CONSTRAINT `actas_estudiante_id_anio_escolar_foreign` FOREIGN KEY (`id_anio_escolar`) REFERENCES `anio_escolar` (`id`) ON DELETE RESTRICT;
+ALTER TABLE `actas_estudiante` ADD CONSTRAINT `actas_estudiante_id_usuario_registra_foreign` FOREIGN KEY (`id_usuario_registra`) REFERENCES `usuarios` (`id_user`) ON DELETE SET NULL;
+ALTER TABLE `actas_estudiante` ADD INDEX `idx_actas_est_periodo_tipo` (`id_estudiante`, `id_periodo_academico`, `tipo`);
+ALTER TABLE `actas_estudiante` ADD INDEX `idx_actas_anio_curso` (`id_anio_escolar`, `id_curso`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_100100_seed_opciones_actas_estudiante.php
+-- Opciones del módulo "Registro de actas" (Académico, 14), ids fijos:
+-- 136 = ver (listado y gráficas), 137 = gestionar (crear/editar/eliminar).
+-- Solo Super Admin por defecto; el resto se otorga desde Permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) VALUES
+  (136, 'Ver actas de estudiantes', 14, 1, NOW()),
+  (137, 'Gestionar actas de estudiantes', 14, 1, NOW());
+
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+  (136, 1, 1, NOW()),
+  (137, 1, 1, NOW());

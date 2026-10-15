@@ -346,6 +346,34 @@ la fila única `configuracion_asistencia` (id=1):
 
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 
+### Registro de actas (opciones 136/137, controller aparte)
+
+`ActasEstudianteController` + `ActasEstudianteService`, tabla `actas_estudiante` (modelo
+`App\Models\GestionAcademica\ActaEstudiante`). El docente hace el acta en papel; un usuario
+con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
+(`dialogo_formativo` | `convivencial`) y observación opcional.
+
+- **Permisos** (sembrados para Super Admin por `2026_10_15_100100_seed_opciones_actas_estudiante`):
+  **136** "Ver actas de estudiantes" (listado, conteo, gráficas) y **137** "Gestionar actas
+  de estudiantes" (crear/editar/eliminar; también da lectura). Chequeo por método (`sinAcceso`).
+- **Periodo y año no se envían**: salen de la `fecha` (el `periodo_academico` que la contiene;
+  422 si no cae en ninguno). `id_curso` es la foto del curso del estudiante al registrar
+  (solo se recalcula si al editar cambia el estudiante) — así las gráficas históricas no se
+  mueven cuando el estudiante pasa de curso. Sin FK a `periodo_academico` (es MyISAM).
+- **Máximo 3 actas de diálogo formativo por estudiante y periodo**
+  (`ActaEstudiante::MAX_DIALOGO_FORMATIVO`): **no se bloquea**; crear/actualizar devuelven
+  `conteo_dialogo` + `advertencia` (desde la 2.ª), y `GET .../conteo` permite avisar antes de guardar.
+- Endpoints (`/gestion-academica/actas`): `GET /` (DataTable remoto: `page`, `per-page`, `s`,
+  `sort`, `dir`), `GET /estadisticas` (resumen, `por_nivel`, `por_curso`, `por_periodo`,
+  `por_anio` — histórico, ignora año/periodo —, `top_estudiantes`), `GET /filtros`
+  (años, periodos, niveles, cursos y estudiantes activos con su curso),
+  `GET /conteo?id_estudiante=&fecha=[&excluir_id=]` (diálogo formativo y convivenciales del
+  periodo), `POST /` (**lote**: `{ actas: [...] }`, hasta 50, en una transacción — si una falla
+  no se guarda ninguna; devuelve `advertencias` por estudiante calculadas tras insertar todo el
+  lote), `PUT /{id}` (una), `DELETE /{id}`.
+  Filtros de listado y estadísticas: `id_anio_escolar` (por defecto el habilitado),
+  `id_periodo_academico`, `id_nivel`, `id_curso`, `id_estudiante`, `tipo`.
+
 ### Consulta de asistencias de clases (opción 132, controller aparte)
 
 `ConsultaAsistenciaClaseController` + `ConsultaAsistenciaClaseService`, rutas
