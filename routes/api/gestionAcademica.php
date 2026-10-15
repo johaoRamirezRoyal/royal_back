@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GestionAcademica\GestionAcademicaController;
 use App\Http\Controllers\GestionAcademica\ConsultaAsistenciaClaseController;
+use App\Http\Controllers\GestionAcademica\ActasEstudianteController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -497,3 +498,23 @@ Route::put('/anios-escolares/estado', [GestionAcademicaController::class, 'actua
 Route::get('/consulta-asistencias/filtros', [ConsultaAsistenciaClaseController::class, 'filtros']);
 Route::get('/consulta-asistencias', [ConsultaAsistenciaClaseController::class, 'index']);
 Route::get('/consulta-asistencias/{id}', [ConsultaAsistenciaClaseController::class, 'show'])->whereNumber('id');
+
+/**
+ * Registro de actas de estudiantes (diálogo formativo / convivencial) — ver
+ * ActasEstudianteController. Lectura: opción 133 o 134; escritura: 134.
+ * Filtros (listado y estadísticas): id_anio_escolar (por defecto el habilitado),
+ * id_periodo_academico, id_nivel, id_curso, id_estudiante, tipo.
+ * POST body (varias a la vez, todo o nada, máx. 50):
+ *   { "actas": [ { "id_estudiante": 120, "fecha": "2026-10-15", "tipo": "dialogo_formativo", "observacion": null } ] }
+ * PUT body (una): { "id_estudiante": 120, "fecha": "2026-10-15", "tipo": "convivencial", "observacion": null }
+ * El periodo y el año salen de la fecha; el curso, del estudiante.
+ */
+Route::prefix('actas')->group(function () {
+    Route::get('/filtros', [ActasEstudianteController::class, 'filtros']);
+    Route::get('/estadisticas', [ActasEstudianteController::class, 'estadisticas']);
+    Route::get('/conteo', [ActasEstudianteController::class, 'conteo']);
+    Route::get('/', [ActasEstudianteController::class, 'index']);
+    Route::post('/', [ActasEstudianteController::class, 'store']);
+    Route::put('/{id}', [ActasEstudianteController::class, 'update'])->whereNumber('id');
+    Route::delete('/{id}', [ActasEstudianteController::class, 'destroy'])->whereNumber('id');
+});
