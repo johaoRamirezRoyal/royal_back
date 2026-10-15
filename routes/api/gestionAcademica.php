@@ -501,7 +501,7 @@ Route::get('/consulta-asistencias/{id}', [ConsultaAsistenciaClaseController::cla
 
 /**
  * Registro de actas de estudiantes (diálogo formativo / convivencial) — ver
- * ActasEstudianteController. Lectura: opción 133 o 134; escritura: 134.
+ * ActasEstudianteController. Lectura: opción 136 o 137; escritura: 137.
  * Filtros (listado y estadísticas): id_anio_escolar (por defecto el habilitado),
  * id_periodo_academico, id_nivel, id_curso, id_estudiante, tipo.
  * POST body (varias a la vez, todo o nada, máx. 50):

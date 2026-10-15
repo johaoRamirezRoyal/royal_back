@@ -346,7 +346,7 @@ la fila única `configuracion_asistencia` (id=1):
 
 ## Gestión Académica (`/gestion-academica` — `GestionAcademicaController`)
 
-### Registro de actas (opciones 133/134, controller aparte)
+### Registro de actas (opciones 136/137, controller aparte)
 
 `ActasEstudianteController` + `ActasEstudianteService`, tabla `actas_estudiante` (modelo
 `App\Models\GestionAcademica\ActaEstudiante`). El docente hace el acta en papel; un usuario
@@ -354,7 +354,7 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
 (`dialogo_formativo` | `convivencial`) y observación opcional.
 
 - **Permisos** (sembrados para Super Admin por `2026_10_15_100100_seed_opciones_actas_estudiante`):
-  **133** "Ver actas de estudiantes" (listado, conteo, gráficas) y **134** "Gestionar actas
+  **136** "Ver actas de estudiantes" (listado, conteo, gráficas) y **137** "Gestionar actas
   de estudiantes" (crear/editar/eliminar; también da lectura). Chequeo por método (`sinAcceso`).
 - **Periodo y año no se envían**: salen de la `fecha` (el `periodo_academico` que la contiene;
   422 si no cae en ninguno). `id_curso` es la foto del curso del estudiante al registrar

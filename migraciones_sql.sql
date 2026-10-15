@@ -240,13 +240,13 @@ ALTER TABLE `actas_estudiante` ADD INDEX `idx_actas_anio_curso` (`id_anio_escola
 -- ---------------------------------------------------------------------------
 -- 2026_10_15_100100_seed_opciones_actas_estudiante.php
 -- Opciones del módulo "Registro de actas" (Académico, 14), ids fijos:
--- 133 = ver (listado y gráficas), 134 = gestionar (crear/editar/eliminar).
+-- 136 = ver (listado y gráficas), 137 = gestionar (crear/editar/eliminar).
 -- Solo Super Admin por defecto; el resto se otorga desde Permisos.
 -- ---------------------------------------------------------------------------
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) VALUES
-  (133, 'Ver actas de estudiantes', 14, 1, NOW()),
-  (134, 'Gestionar actas de estudiantes', 14, 1, NOW());
+  (136, 'Ver actas de estudiantes', 14, 1, NOW()),
+  (137, 'Gestionar actas de estudiantes', 14, 1, NOW());
 
 INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
-  (133, 1, 1, NOW()),
-  (134, 1, 1, NOW());
+  (136, 1, 1, NOW()),
+  (137, 1, 1, NOW());

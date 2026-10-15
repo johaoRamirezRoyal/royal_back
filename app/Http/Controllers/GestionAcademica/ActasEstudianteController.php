@@ -11,14 +11,14 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 /**
- * Registro de actas de estudiantes. Lectura (listado, conteo, gráficas): opción 133 o 134.
- * Escritura (crear/editar/eliminar): opción 134. Ver ActasEstudianteService.
+ * Registro de actas de estudiantes. Lectura (listado, conteo, gráficas): opción 136 o 137.
+ * Escritura (crear/editar/eliminar): opción 137. Ver ActasEstudianteService.
  */
 class ActasEstudianteController extends Controller
 {
-    private const OPCION_VER = 133;
+    private const OPCION_VER = 136;
 
-    private const OPCION_GESTIONAR = 134;
+    private const OPCION_GESTIONAR = 137;
 
     public function __construct(
         private ActasEstudianteService $service,

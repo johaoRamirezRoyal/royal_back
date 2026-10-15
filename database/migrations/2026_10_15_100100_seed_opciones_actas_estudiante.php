@@ -5,17 +5,17 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Opciones del módulo "Registro de actas" (Académico, 14) — ver ActasEstudianteController:
- *  - 133 Ver actas de estudiantes: listado, conteos y gráficas.
- *  - 134 Gestionar actas de estudiantes: crear, editar y eliminar (también da lectura).
+ *  - 136 Ver actas de estudiantes: listado, conteos y gráficas.
+ *  - 137 Gestionar actas de estudiantes: crear, editar y eliminar (también da lectura).
  *
- * Ids explícitos, mismo patrón que la 132: el frontend y el controller usan el id fijo. Si
+ * Ids explícitos, mismo patrón que la 132 (133-135 son de Observaciones, módulo 15): el frontend y el controller usan el id fijo. Si
  * alguno ya está ocupado por otra opción, la migración falla en vez de usar otro id.
  */
 return new class extends Migration
 {
     private const OPCIONES = [
-        133 => 'Ver actas de estudiantes',
-        134 => 'Gestionar actas de estudiantes',
+        136 => 'Ver actas de estudiantes',
+        137 => 'Gestionar actas de estudiantes',
     ];
 
     private const ID_MODULO_ACADEMICO = 14;
