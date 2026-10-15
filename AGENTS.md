@@ -934,7 +934,7 @@ reintroducir esos ids acá.
 Reportar un daño, programar mantenimiento preventivo o registrar un check semestral
 sobre un ítem de Área Común (`categoria.tipo_categoria = 3`) dispara un correo
 **adicional** al genérico que ya enviaba cada flujo (ese sigue intacto, va a
-`cronograma.sistemas@...` + responsable/reportador) — este es específico del módulo,
+grupo `CRONOGRAMA_SISTEMAS` + responsable/reportador) — este es específico del módulo,
 asunto `"Notificación | Área Común — {movimiento}"`, y siempre se refiere al ítem como
 "Área común", nunca como "inventario".
 
@@ -1831,6 +1831,30 @@ Almacenamiento local de archivos subidos (vs Cloudinary). Usado en: `DocumentosV
 - `sendGeneric($to, $titulo, $contenido)` — envía `GenericMail`
 - `send($to, Mailable $mailable)` — envía mailable
 - **Filtra correos inválidos** antes de enviar (evita excepciones que bloquean todo el lote)
+
+### Destinatarios fijos: nunca hardcodeados (`App\Enums\Mails`)
+Todo destinatario interno fijo sale de `correos_institucionales` vía
+`Mails::GRUPO->recipients()` — **ninguna dirección de correo en el código** (ni en
+servicios ni sembrada en migraciones): cada BD/institución carga las suyas a mano con SQL.
+Grupo vacío = ese aviso no se envía (`MailService` ya ignora listas vacías).
+
+Se administran desde el frontend en "Administración del sistema › Correos institucionales"
+(`/administracion/correos-institucionales`), contra `GET|POST /api/admin-management/correos-institucionales`
+y `PUT|DELETE .../{id}` (`CorreosInstitucionalesController`, perfil 1 + `admin.access`). Solo
+acepta grupos del enum (`Mails::cases()`, etiqueta en `Mails::label()`): al agregar un case
+nuevo, dale también su `label()`. Edita la tabla de la connection activa (BD elegida en
+"Bases de datos").
+
+| Grupo | Uso |
+|-------|-----|
+| `COPIA_GESTOR` | BCC de `MailService::sendGeneric()` y `send(..., copiaGestor: true)` |
+| `VICERRECTORIA` | `LlegadasTarde::enviarNotificacionLlegadaTarde` (escalación por límite) |
+| `RESERVAS_SISTEMAS` / `RESERVAS_MAKER_LAB` / `RESERVAS_BIBLIOTECA` / `RESERVAS_CAFETERIA` | `ReservasServices::enviarCorreoAvisoReserva` (siempre sistemas + el del salón) |
+| `CRONOGRAMA_SISTEMAS` | Avisos de Inventario (`InventarioServices`) y Préstamos (`PrestamosService`) |
+| `ADMISIONES_ESTADO` | `AdmisionesServices::actualizarEstadoDeInscripcionAspirante` |
+| `RRHH_ASISTENCIA` | `AsistenciaGestionService::cerrarAsistenciasVencidas` (si `notificar_rh`) |
+| `NOTICIAS_TODOS` | También fallback de `BannerInformativoService::enviarCorreo` sin `destinatario_correo` |
+| `DIRECCION_ADMINISTRATIVA`, `NOTICIAS_*` | Ver Áreas Comunes / Noticias |
 
 ### Eventos → Listeners
 | Evento | Listener | Queue | Retries |

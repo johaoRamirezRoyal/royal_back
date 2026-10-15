@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AdminManagement\BannerInformativoController;
 use App\Http\Controllers\AdminManagement\BasesDatosController;
+use App\Http\Controllers\AdminManagement\CorreosInstitucionalesController;
 use App\Http\Controllers\AdminManagement\LlaveMaestraController;
 use App\Http\Controllers\AdminManagement\LogDominioController;
 use Illuminate\Support\Facades\Route;
@@ -36,4 +37,12 @@ Route::prefix('banner-informativo')->group(function () {
     // Envía el mensaje YA GUARDADO por correo — acción explícita separada del guardado
     // (ver BannerInformativoService::enviarCorreo), no dispara sola al tocar 'activo'.
     Route::post('/enviar-correo', [BannerInformativoController::class, 'enviarCorreo']);
+});
+
+// Destinatarios fijos de cada módulo (App\Enums\Mails) en la BD de la connection activa.
+Route::prefix('correos-institucionales')->group(function () {
+    Route::get('/', [CorreosInstitucionalesController::class, 'listar']);
+    Route::post('/', [CorreosInstitucionalesController::class, 'crear']);
+    Route::put('/{id}', [CorreosInstitucionalesController::class, 'actualizar']);
+    Route::delete('/{id}', [CorreosInstitucionalesController::class, 'eliminar']);
 });

@@ -2,6 +2,7 @@
 
 namespace App\Services\Prestamos;
 
+use App\Enums\Mails;
 use App\Models\Inventario\Inventario;
 use App\Models\Inventario\InventarioLog;
 use App\Models\Prestamos\PrestamosInventario;
@@ -19,12 +20,12 @@ class PrestamosService extends Service
         private MailService $mailService,
     ) {}
 
-    // Mismo correo fijo de sistemas que InventarioServices::$mailTo — el equipo que
+    // Mismo grupo de sistemas que InventarioServices (CRONOGRAMA_SISTEMAS) — el equipo que
     // monitorea el resto de los procesos de inventario también debe ver los préstamos.
     private function destinatarios(?string ...$correos): array
     {
         $destinatarios = array_merge(
-            ['cronograma.sistemas@royalschool.edu.co'],
+            Mails::CRONOGRAMA_SISTEMAS->recipients(),
             array_filter($correos),
         );
 

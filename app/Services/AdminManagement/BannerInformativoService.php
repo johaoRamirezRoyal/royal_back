@@ -2,6 +2,7 @@
 
 namespace App\Services\AdminManagement;
 
+use App\Enums\Mails;
 use App\Models\BannerInformativo;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
@@ -68,10 +69,10 @@ class BannerInformativoService
      * después de un `actualizar()` con `enviar_correo=true` (se reenvía en CADA guardado
      * mientras esa casilla siga marcada, aunque el cambio sea solo el color; quien no quiera
      * eso debe desmarcarla antes de guardar un ajuste menor) como desde el botón aparte
-     * "Reenviar correo ahora" del panel, para reenviar sin tocar ningún otro campo. Un solo
-     * destinatario (alias de distribución del lado del proveedor, ver
-     * BannerInformativo::DESTINATARIO_CORREO_DEFAULT) — no hay loop por-usuario que pueda
-     * repetir el incidente de rate-limit de Noticias.
+     * "Reenviar correo ahora" del panel, para reenviar sin tocar ningún otro campo. Sin
+     * `destinatario_correo` cae al grupo NOTICIAS_TODOS de `correos_institucionales` (alias
+     * de distribución del lado del proveedor) — no hay loop por-usuario que pueda repetir
+     * el incidente de rate-limit de Noticias.
      */
     public function enviarCorreo(): array
     {
@@ -81,7 +82,7 @@ class BannerInformativoService
             return ['error' => true, 'message' => 'El banner no tiene mensaje para enviar.', 'data' => []];
         }
 
-        $destinatario = $banner->destinatario_correo ?: BannerInformativo::DESTINATARIO_CORREO_DEFAULT;
+        $destinatario = $banner->destinatario_correo ?: Mails::NOTICIAS_TODOS->recipients();
 
         return $this->mailService->sendGeneric($destinatario, 'Aviso institucional', $banner->mensaje);
     }

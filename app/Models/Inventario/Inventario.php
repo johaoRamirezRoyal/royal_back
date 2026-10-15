@@ -47,10 +47,12 @@ class Inventario extends Model
 
     // Sin cast `date` a propósito: ~22k filas legacy traen '0000-00-00', que Carbon
     // convertía en "-000001-11-30T04:56:16Z", y una fecha válida salía como ISO en UTC.
-    // Se expone siempre como "YYYY-MM-DD" o null.
+    // Se expone siempre como "YYYY-MM-DD" o null. Sin fecha de compra se usa `fechareg`
+    // (fecha de registro), igual que COALESCE en el listado de InventarioServices.
     protected function fechaCompra(): Attribute
     {
-        return Attribute::get(fn ($valor) => $valor && !str_starts_with($valor, '0000-00-00') ? substr($valor, 0, 10) : null);
+        $fecha = fn ($v) => $v && !str_starts_with($v, '0000-00-00') ? substr($v, 0, 10) : null;
+        return Attribute::get(fn ($valor, $attrs) => $fecha($valor) ?? $fecha($attrs['fechareg'] ?? null));
     }
 
     // `detalles` de un ítem que entró por compra: "<id_producto>-<descripcion>-<id_compra>"

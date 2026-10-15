@@ -36,17 +36,9 @@ class InventarioServices
         private MailService $mailService,
     ) {}
 
-    /**
-     * Summary of mailTo
-     * @var array
-     */
-    private array $mailTo = [
-        'cronograma.sistemas@royalschool.edu.co'
-    ];
-
     private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null, ?string $solucionadorCorreo = null): array
     {
-        $destinatarios = $this->mailTo;
+        $destinatarios = Mails::CRONOGRAMA_SISTEMAS->recipients();
         foreach (array_filter([$responsableCorreo, $reportadorCorreo, $solucionadorCorreo]) as $correo) {
             $destinatarios[] = $correo;
         }
@@ -223,7 +215,7 @@ class InventarioServices
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
-                            'fecha_compra', inventario.fecha_compra,
+                            'fecha_compra', DATE(COALESCE(NULLIF(inventario.fecha_compra, '0000-00-00'), inventario.fechareg)),
                             'fecha_descontinuacion', idesc.fecha_descontinuacion,
                             'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
                                 'id', ur.id,
@@ -1529,7 +1521,7 @@ class InventarioServices
                     $contenido .= InventarioEmailHelper::detalle($inv, $nombreEstado, $actor, InventarioEmailHelper::nombreUsuario($inv->id_user), $fecha) . "\n\n";
                 }
 
-                $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
+                $this->mailService->sendGeneric(Mails::CRONOGRAMA_SISTEMAS->recipients(), $titulo, $contenido);
             }
 
             return $result;
@@ -1597,7 +1589,7 @@ class InventarioServices
 
                 $titulo = "Notificación | Inventario Liberado";
                 $contenido = "Se han liberado los siguientes elementos:\n\n";
-                $destinatarios = $this->mailTo;
+                $destinatarios = Mails::CRONOGRAMA_SISTEMAS->recipients();
 
                 foreach ($result['data'] as $inv) {
                     // El responsable/reportador se resuelven ANTES del liberado (el bulk
@@ -1679,7 +1671,7 @@ class InventarioServices
                 $contenido .= InventarioEmailHelper::detalle($inv, $nombreEstado, $actor, $responsableNombre, $fecha) . "\n\n";
             }
 
-            $this->mailService->sendGeneric($this->mailTo, $titulo, $contenido);
+            $this->mailService->sendGeneric(Mails::CRONOGRAMA_SISTEMAS->recipients(), $titulo, $contenido);
 
             return [
                 'data' => $inventario_liberado->toArray(),
@@ -2134,7 +2126,7 @@ class InventarioServices
                 // Correo con el mismo contenido/destinatarios que el legacy
                 // (ControlReportes::solucionarReporteControl): a quien reportó, al
                 // responsable actual del ítem y a quien solucionó — más el correo fijo de
-                // sistemas (ya incluido por defecto en $this->mailTo).
+                // sistemas (grupo CRONOGRAMA_SISTEMAS, incluido por destinatarios()).
                 $reporteFresco = Reportes::with('inventario.usuario', 'inventario.area', 'inventario.categoria')->find($id_reporte);
                 $inventario = $reporteFresco?->inventario;
                 $responsable = $inventario?->usuario?->correo;

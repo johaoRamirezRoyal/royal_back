@@ -2,6 +2,7 @@
 
 namespace App\Services\AsistenciaTrabajadores;
 
+use App\Enums\Mails;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
@@ -18,10 +19,6 @@ class AsistenciaGestionService extends Service
     public function __construct(
         private MailService $mailService,
     ) {}
-
-    // Mismo patrón que AdmisionesServices/LlegadasTarde: correo fijo del encargado de RH
-    // que se notifica cuando el sistema cierra una salida automáticamente.
-    private array $mailTo = ['hernando.ramirez@royalschool.edu.co'];
 
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
     public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
@@ -1016,7 +1013,7 @@ class AsistenciaGestionService extends Service
 
                 if ($horario->notificar_rh) {
                     $this->mailService->sendGeneric(
-                        $this->mailTo,
+                        Mails::RRHH_ASISTENCIA->recipients(),
                         'Salida automática registrada',
                         "El usuario {$nombreCompleto} (documento {$usuario->documento}) no registró su salida el {$fecha} antes de la hora esperada ({$horaEsperada}). El sistema la marcó automáticamente a esa hora."
                     );

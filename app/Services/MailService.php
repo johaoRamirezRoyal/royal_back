@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\Mails;
 use App\Exceptions\MailRateLimitException;
 use App\Mail\GenericMail;
 use Illuminate\Mail\Mailable;
@@ -13,13 +14,12 @@ class MailService
     /**
      * Gestión administrativa recibe copia oculta de toda notificación institucional
      * (sendGeneric siempre; send() solo con $copiaGestor). Nunca en sendView: son OTP
-     * y verificaciones de correo, que no deben salir del buzón del titular.
+     * y verificaciones de correo, que no deben salir del buzón del titular. Destinatarios
+     * en `correos_institucionales`, grupo COPIA_GESTOR.
      */
-    private const COPIA_GESTOR = 'gestor.administrativo@royalschool.edu.co';
-
     private function bccGestor(array $recipients): array
     {
-        return in_array(self::COPIA_GESTOR, $recipients, true) ? [] : [self::COPIA_GESTOR];
+        return array_values(array_diff(Mails::COPIA_GESTOR->recipients(), $recipients));
     }
 
     /**

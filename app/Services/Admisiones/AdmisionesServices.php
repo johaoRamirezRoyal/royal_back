@@ -2,6 +2,7 @@
 
 namespace App\Services\Admisiones;
 
+use App\Enums\Mails;
 use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\CitaPsicologia;
@@ -28,13 +29,6 @@ class AdmisionesServices extends Service
         private MailService $mailService,
         private NotificacionesService $notificacionesService
     ) {}
-
-    /**
-     * Summary of mailTo
-     */
-    private array $mailTo = [
-        'hernando.ramirez@royalschool.edu.co',
-    ];
 
     /**
      * IDs de perfil de psicóloga por nivel, con los grados que cada una atiende.
@@ -451,7 +445,7 @@ class AdmisionesServices extends Service
 
             $estado_nuevo = $inscripcion->estadoInscripcion?->nombre;
 
-            $mailTo = collect($this->mailTo ?? [])
+            $mailTo = collect(Mails::ADMISIONES_ESTADO->recipients())
                 ->push($correo_acudiente)
                 ->filter()
                 ->values()
