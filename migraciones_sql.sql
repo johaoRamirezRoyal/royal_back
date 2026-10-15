@@ -262,3 +262,29 @@ INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) 
 INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
   (136, 1, 1, NOW()),
   (137, 1, 1, NOW());
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_110000_add_id_docente_solicita_to_actas_estudiante_table.php
+-- Docente que solicita el acta (quien la diligenció en papel; perfiles 3/14,
+-- lo valida ActasEstudianteService). Nullable: las actas previas no lo tienen.
+-- Se imprime en "Nombre del docente" del PDF.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `actas_estudiante` ADD `id_docente_solicita` int NULL AFTER `observacion`;
+ALTER TABLE `actas_estudiante` ADD CONSTRAINT `actas_estudiante_id_docente_solicita_foreign` FOREIGN KEY (`id_docente_solicita`) REFERENCES `usuarios` (`id_user`) ON DELETE SET NULL;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_120000_add_asunto_to_actas_estudiante_table.php
+-- Asunto del acta (texto corto que la identifica; "Asunto" del PDF). Obligatorio
+-- al crear/editar (lo valida el controller); nullable para las actas previas.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `actas_estudiante` ADD `asunto` varchar(200) NULL AFTER `tipo`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_15_130000_seed_opcion_actas_mis_estudiantes.php
+-- Opción 138 "Ver actas de mis estudiantes" (módulo 15): solo lectura de las
+-- actas de los estudiantes de los cursos con carga académica activa del
+-- usuario. No se otorga a ningún perfil (se asigna desde /permisos).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 138, 'Ver actas de mis estudiantes', 15, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 138);

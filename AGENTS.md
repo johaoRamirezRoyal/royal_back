@@ -356,10 +356,39 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
 - **Permisos** (sembrados para Super Admin por `2026_10_15_100100_seed_opciones_actas_estudiante`):
   **136** "Ver actas de estudiantes" (listado, conteo, gráficas) y **137** "Gestionar actas
   de estudiantes" (crear/editar/eliminar; también da lectura). Chequeo por método (`sinAcceso`).
+- **138 "Ver actas de mis estudiantes"** (`2026_10_15_130000_seed_opcion_actas_mis_estudiantes`,
+  sin otorgar por defecto): solo lectura limitada a los estudiantes que **hoy** están en los
+  cursos con carga académica activa del usuario (`CargaAcademicaService::obtenerCursosDocente`,
+  el mismo de Observaciones). Las cuatro lecturas pasan por `sinLectura()`, que con 136/137
+  no limita y con solo la 138 llama `ActasEstudianteService::limitarACursos($ids)`: lo aplica
+  `filtrar()` (listado, agrupado y gráficas), `filtros()` (cursos y estudiantes del catálogo) y
+  `conteo()` (403 si el estudiante no está en sus cursos). Escribir sigue exigiendo la 137.
+- **Docente asociado** (`DOCENTE_ASOCIADO_SQL`): el docente que solicita tiene carga académica
+  activa (por asignatura o suelta) en `a.id_curso`, el curso del estudiante al registrar. El
+  listado devuelve `docente_asociado` (null sin docente, 0/1) y el agrupado
+  `no_asociadas_total`. Filtros `id_docente_solicita` y `asociacion` (`no_asociado` |
+  `asociado`) en listado y estadísticas. **La 138 incluye además las actas que el propio
+  docente solicitó** (`limitarACursos($cursos, $idDocente)`): las ve en el listado, sus
+  estudiantes entran en el catálogo y `conteo()` no las rechaza.
 - **Periodo y año no se envían**: salen de la `fecha` (el `periodo_academico` que la contiene;
   422 si no cae en ninguno). `id_curso` es la foto del curso del estudiante al registrar
   (solo se recalcula si al editar cambia el estudiante) — así las gráficas históricas no se
   mueven cuando el estudiante pasa de curso. Sin FK a `periodo_academico` (es MyISAM).
+- **Listado agrupado** (`GET /?agrupar=1`): una fila por estudiante —su acta más reciente
+  (`ROW_NUMBER() OVER (PARTITION BY id_estudiante …)`, MariaDB 10.2+/MySQL 8) más
+  `total_actas`, `dialogo_total` y `convivencial_total` de las actas que cumplen los filtros y
+  la búsqueda—. Ordenable también por `total_actas` (`ORDENES_AGRUPADO`). El detalle de un
+  estudiante es el listado normal con `id_estudiante`.
+- **Asunto** (`asunto`, varchar 200; migración
+  `2026_10_15_120000_add_asunto_to_actas_estudiante_table`): obligatorio en `POST`/`PUT`
+  (lo valida el controller), nullable en la tabla solo por las actas previas. Se devuelve en
+  el listado y entra en la búsqueda.
+- **Docente que solicita** (`id_docente_solicita`, nullable, FK a `usuarios` con `SET NULL`;
+  migración `2026_10_15_110000_add_id_docente_solicita_to_actas_estudiante_table`): quien
+  diligenció el acta en papel, distinto de `id_usuario_registra` (quien la digita). Opcional
+  en `POST`/`PUT`; si viene, `resolver()` exige un docente activo
+  (`ActaEstudiante::PERFILES_DOCENTE` = 3, 14). El listado devuelve `docente_solicita`
+  (nombre, ordenable y buscable) y `/filtros` trae `docentes` para el formulario.
 - **Máximo 3 actas de diálogo formativo por estudiante y periodo**
   (`ActaEstudiante::MAX_DIALOGO_FORMATIVO`): **no se bloquea**; crear/actualizar devuelven
   `conteo_dialogo` + `advertencia` (desde la 2.ª), y `GET .../conteo` permite avisar antes de guardar.

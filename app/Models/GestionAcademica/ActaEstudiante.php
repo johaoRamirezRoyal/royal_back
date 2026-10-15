@@ -18,6 +18,9 @@ class ActaEstudiante extends Model
 
     public const TIPOS = [self::TIPO_DIALOGO_FORMATIVO, self::TIPO_CONVIVENCIAL];
 
+    /** Perfiles que pueden figurar como docente que solicita el acta (Docente, Docente ICT). */
+    public const PERFILES_DOCENTE = [3, 14];
+
     /** Máximo de actas de diálogo formativo por estudiante y periodo (se avisa, no se bloquea). */
     public const MAX_DIALOGO_FORMATIVO = 3;
 
@@ -27,10 +30,17 @@ class ActaEstudiante extends Model
         'id_periodo_academico',
         'id_anio_escolar',
         'tipo',
+        'asunto',
         'fecha',
         'observacion',
+        'id_docente_solicita',
         'id_usuario_registra',
     ];
+
+    public function docenteSolicita()
+    {
+        return $this->belongsTo(Usuario::class, 'id_docente_solicita', 'id_user');
+    }
 
     public function estudiante()
     {
