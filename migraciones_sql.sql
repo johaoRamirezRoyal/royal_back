@@ -173,3 +173,42 @@ SET @id_opcion_vinculacion = LAST_INSERT_ID();
 
 INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`)
 VALUES (@id_opcion_vinculacion, 1, 1, NOW());
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_14_100000_create_academico_observacion_estudiante_table.php
+-- Gestión Convivencial: observaciones de estudiantes por día (POSITIVA/NEGATIVA),
+-- agrupadas en actas por periodo académico (ObservacionEstudianteService). Cada
+-- fila es de quien la registró (id_docente). id_curso = curso del estudiante al
+-- registrarla (las actas pasadas conservan el curso de entonces).
+-- id_periodo_academico e id_asignatura SIN FK: periodo_academico y
+-- academico_asignatura son MyISAM (no admiten llaves foráneas); los valida el
+-- servicio. FK reales solo hacia usuarios y curso (InnoDB).
+-- ---------------------------------------------------------------------------
+create table `academico_observacion_estudiante` (`id` int not null auto_increment, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_docente` int not null, `id_asignatura` int null, `id_curso` int null, `fecha` date not null, `tipo` varchar(10) not null, `motivo` text not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_observacion_estudiante` add constraint `academico_observacion_estudiante_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_observacion_estudiante` add constraint `academico_observacion_estudiante_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_observacion_estudiante` add constraint `academico_observacion_estudiante_id_curso_foreign` foreign key (`id_curso`) references `curso` (`id`) on delete set null;
+alter table `academico_observacion_estudiante` add index `ix_obs_estudiante_periodo`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_observacion_estudiante` add index `ix_obs_fecha`(`fecha`);
+alter table `academico_observacion_estudiante` add index `academico_observacion_estudiante_id_periodo_academico_index`(`id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_14_100100_seed_opcion_observaciones_estudiantes.php
+-- Módulo "Gestión Convivencial" (cron_modulos.id 15) y sus opciones, con ids
+-- explícitos (la migración falla si alguno ya está ocupado por otra cosa):
+--   133 "Observaciones de estudiantes" — registrar a cualquier estudiante.
+--   134 "Ver todas las observaciones"  — ver las de todos los profesores.
+-- Otorgadas a Super Admin (1), Psicóloga Preescolar/Primaria/Secundaria
+-- (21/24/25) y Coordinador (26). La migración solo inserta lo que falte (no
+-- duplica módulo/opción/permiso si ya existen).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_modulos` (`id`, `nombre`, `activo`, `fechareg`)
+VALUES (15, 'Gestión Convivencial', 1, NOW());
+
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) VALUES
+  (133, 'Observaciones de estudiantes', 15, 1, NOW()),
+  (134, 'Ver todas las observaciones', 15, 1, NOW());
+
+INSERT INTO `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) VALUES
+  (133, 1, 1, NOW()), (133, 21, 1, NOW()), (133, 24, 1, NOW()), (133, 25, 1, NOW()), (133, 26, 1, NOW()),
+  (134, 1, 1, NOW()), (134, 21, 1, NOW()), (134, 24, 1, NOW()), (134, 25, 1, NOW()), (134, 26, 1, NOW());

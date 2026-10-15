@@ -97,6 +97,7 @@ comentarios ya presentes ahí). No hace falta tocar `down()`.
 | `/tipos-documentos` | `api/TipoDocumentos.php` |
 | `/llegadas-tarde` | `api/llegadasTarde.php` |
 | `/gestion-academica` | `api/gestionAcademica.php` |
+| `/gestion-convivencial` | `api/gestionConvivencial.php` |
 | `/documentos-varios` | `api/documentosVarios.php` |
 | `/asistencia-gestion` | `api/asistenciaGestion.php` |
 | `/enfermeria` | `api/enfermeria.php` |
@@ -565,6 +566,103 @@ creada por `2026_09_23_100000_seed_opcion_vinculacion_estudiante_padre` — **no
   un usuario del perfil se reporta como ambiguo, nunca se adivina. Resultado por fila
   (`vinculados`/`ya_vinculados`/`errores[{fila, mensaje}]`); las filas válidas se aplican
   aunque otras fallen.
+
+## Gestión Convivencial (`/gestion-convivencial` — `ObservacionEstudianteController`)
+
+Sección nueva (módulo **15** "Gestión Convivencial" en `cron_modulos`). Su primer módulo es
+**Observaciones de estudiantes**. Archivos: `routes/api/gestionConvivencial.php`,
+`App\Http\Controllers\GestionAcademica\ObservacionEstudianteController`,
+`App\Services\GestionAcademica\ObservacionEstudianteService` y `AccesoObservaciones`.
+Tabla `academico_observacion_estudiante`. Frontend: `/gestion-convivencial/observaciones`.
+El controller vive en el namespace `GestionAcademica` porque se reusa la carga académica,
+pero las rutas cuelgan del prefijo propio.
+
+### Modelo
+
+- Una fila = una observación de un día: `fecha`, `tipo` (`POSITIVA`|`NEGATIVA`), `motivo`,
+  `id_asignatura` (nullable), `id_docente` (quien la registró), `id_curso` (curso del
+  estudiante **al registrarla**, para que las actas pasadas conserven el de entonces) e
+  `id_periodo_academico`.
+- **Acta** = observaciones de un estudiante en un periodo. Se usa `periodo_academico`
+  (los periodos de Configuración académica), **no** la tabla legacy `periodos` de
+  Evaluaciones.
+- `periodo_academico` y `academico_asignatura` son **MyISAM**, así que no tienen FK desde
+  esta tabla: el servicio las valida. Solo hay FK reales hacia `usuarios` y `curso`
+  (InnoDB). Un `Schema::create` con FK hacia una tabla MyISAM falla con
+  `errno: 150 "Foreign key constraint is incorrectly formed"` y deja la tabla a medio crear.
+
+### Permisos (ids explícitos, `2026_10_14_100100_seed_opcion_observaciones_estudiantes`)
+
+| Quién | Registra a | Ve |
+|---|---|---|
+| Docente (perfiles 3, 14), autoservicio sin `/permisos` | estudiantes de sus cursos con carga activa (`CargaAcademicaService::obtenerCursosDocente`) | solo las suyas |
+| Opción **133** "Observaciones de estudiantes" | cualquier estudiante activo | solo las suyas |
+| Opción **99** (Gestión Académica) | igual que la 133 | solo las suyas |
+| Opción **134** "Ver todas las observaciones" | nadie si no tiene otro permiso (sola es de solo lectura) | las de **todos** los profesores en todos los cursos |
+
+Las observaciones **no son globales: son de quien las registra.** La 133 y la 134 están
+otorgadas a Super Admin (1), Psicóloga Preescolar/Primaria/Secundaria (21/24/25) y
+Coordinador (26). Nadie edita ni elimina las observaciones de otro, ni siquiera con la 134.
+
+El constructor resuelve todo esto una sola vez en un `AccesoObservaciones` (`idUsuario`,
+`verTodas`, `puedeRegistrar` y `idsCursosRegistro`, que es null cuando puede registrar a
+todos). El servicio recibe ese objeto y nunca lee permisos del request:
+- `soloDocente()` filtra por autor salvo con la 134.
+- `idsCursosEstudiantes()` define a qué estudiantes puede buscar o abrir.
+
+Sin registro ni 134 → 403.
+
+### Reglas (todas en `ObservacionEstudianteService`)
+
+- **Periodo**: sale de la fecha, buscando el periodo activo que la contiene. Si la fecha
+  no cae en ninguno → 400.
+- **Periodo cerrado** (`fecha_fin < hoy`): no se crea, edita ni elimina nada en él (403).
+  Su acta se puede seguir consultando. No hay cierre manual.
+- **Fecha futura**: se permite. El aviso es solo del frontend.
+- **Asignatura**: la de quien registra en el curso del estudiante.
+  - Si dicta varias, es obligatoria (422).
+  - Si dicta una, se asigna sola.
+  - Si no dicta ninguna (psicología, coordinación), va null.
+  - Una asignatura que no dicta en ese curso → 422.
+  - Al editar se valida contra el `id_curso` guardado, no contra el curso actual.
+- Solo el autor edita o elimina; la observación de otro ni siquiera se encuentra (404).
+
+### Endpoints (`/gestion-convivencial/observaciones`)
+
+- `GET /` — **una fila por estudiante** con observaciones en el rango filtrado, con su
+  **última** observación (por `fecha DESC, id DESC`). Además trae `total_rango`,
+  `positivas_rango` y `negativas_rango`, calculados con `ROW_NUMBER()`/`COUNT() OVER
+  (PARTITION BY id_estudiante)`; requiere MariaDB ≥ 10.2 (local: 10.4).
+  - Contrato DataTable remoto: `page`, `per-page`, `s`, `sort`, `dir`.
+  - Filtros: `id_periodo`, `fecha_inicio`, `fecha_fin`, `id_curso`, `tipo`, `id_estudiante`.
+  - El frontend manda lunes–domingo de la semana actual por defecto.
+  - La búsqueda (`s`) mira el estudiante, el curso y el motivo de la última observación.
+- `GET /catalogos` — cursos visibles, periodos (con `cerrado`/`actual`) y los flags
+  `ver_todas`/`puede_registrar`.
+  - `actual` es el periodo que contiene hoy.
+  - En vacaciones entre periodos, `actual` es el último que ya empezó.
+- `GET /estudiantes?s=` — búsqueda (máx. 20) para abrir el acta de quien aún no tiene
+  observaciones.
+- `GET /estudiantes/{id}/acta?id_periodo=` — devuelve:
+  - el estudiante y el periodo (por defecto el actual) con la lista de periodos;
+  - las observaciones visibles, cada una con `editable`;
+  - el `resumen` de positivas/negativas;
+  - `mis_asignaturas` y `puede_registrar` (para ESTE estudiante) y `ver_todas`.
+- `POST /` `{ id_estudiante, fecha, tipo, motivo, id_asignatura? }`, `PUT /{id}` (lo mismo
+  sin `id_estudiante`), `DELETE /{id}`.
+
+### Historia de este módulo (2026-10-14)
+
+Pasó por tres versiones el mismo día, antes de llegar a ningún entorno:
+1. Un texto único por estudiante, editable por todos sus docentes, con control de
+   concurrencia por `updated_at`.
+2. Una bitácora por día en actas por periodo, visible para todos.
+3. La actual: observaciones propias de cada docente más la opción 134 para ver todo, en
+   su propia sección.
+
+La tabla y el seed se reescribieron en el lugar (no hay migraciones de "corrección"), así
+que en una BD que haya corrido una versión intermedia hay que borrar la tabla, la opción
+133 y sus registros en `migrations` antes de volver a migrar.
 
 ## Proceso de compra (`/proveedores` + `/solicitudes`)
 
