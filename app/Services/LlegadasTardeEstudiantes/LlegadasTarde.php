@@ -2,6 +2,7 @@
 
 namespace App\Services\LlegadasTardeEstudiantes;
 
+use App\Enums\Mails;
 use App\Mail\LlegadaTardeAvisoInternoMail;
 use App\Mail\LlegadaTardeEstadoMail;
 use App\Mail\LlegadaTardeMail;
@@ -35,8 +36,6 @@ class LlegadasTarde extends Service
         'quinto' => 5,
         'sexto' => 6,
     ];
-
-    private array $mailToVicerrectoria = ['alfredo.canas@royalschool.edu.co'];
 
     public function __construct(
         private MailService $mailService,
@@ -685,7 +684,7 @@ class LlegadasTarde extends Service
      * persiste en `enviado` el caller — este método no toca la fila, solo envía); el
      * resultado del WhatsApp no se propaga porque `enviado` en la fila históricamente
      * solo trackea el correo. Si `$avisarVicerrectoria` es true, además notifica a
-     * Vicerrectoría (correo fijo en `$mailToVicerrectoria`), Directivo Docente (perfil
+     * Vicerrectoría (`Mails::VICERRECTORIA`), Directivo Docente (perfil
      * 20) y Asistentes de Nivel (perfil 11) por separado con `LlegadaTardeAvisoInternoMail`
      * (mismo estilo visual, pero ese envío no cuenta para el resultado devuelto: es una
      * escalación interna, no la carta al acudiente) — el caller solo pasa true la primera vez que
@@ -746,7 +745,7 @@ class LlegadasTarde extends Service
                 ->all();
 
             $this->mailService->send(
-                array_values(array_unique(array_merge($this->mailToVicerrectoria, $correosInternos))),
+                array_values(array_unique(array_merge(Mails::VICERRECTORIA->recipients(), $correosInternos))),
                 new LlegadaTardeAvisoInternoMail(
                     nombreEstudiante: trim("{$estudiante->nombre} {$estudiante->apellido}"),
                     documento: (string) $estudiante->documento,

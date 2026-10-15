@@ -2,6 +2,7 @@
 
 namespace App\Services\Reservas;
 
+use App\Enums\Mails;
 use App\Mail\ReservaEncuestaMail;
 use App\Models\Encuestas\EncuestaSalon;
 use App\Models\Inventario\Inventario;
@@ -224,7 +225,7 @@ class ReservasServices extends Service
 
     /**
      * Aviso interno de reserva (una sola vez por solicitud, aunque tenga varias franjas).
-     * Siempre va a reservas.sistemas; según el salón se suman otros destinatarios (y, para
+     * Siempre va al grupo RESERVAS_SISTEMAS; según el salón se suma su grupo RESERVAS_* (y, para
      * Maker Lab y Biblioteca, el propio usuario). Maker Lab añade la alerta de aprobación
      * previa. Es un extra: si falla solo se registra y no afecta la reserva.
      * `$reservas` es el `data` de crearReserva().
@@ -236,14 +237,12 @@ class ReservasServices extends Service
             if (!$primera) return false;
 
             $idSalon = (int) $primera['id_salon'];
-            $correos = ['reservas.sistemas@royalschool.edu.co'];
-
-            match ($idSalon) {
-                self::SALON_MAKER_LAB => array_push($correos, 'mario.esmeral@royalschool.edu.co', $usuario->correo),
-                self::SALON_BIBLIOTECA => array_push($correos, 'biblioteca@royalschool.edu.co', 'library@royalschool.edu.co', $usuario->correo),
-                self::SALON_CAFETERIA => $correos[] = 'cafeteria@royalschool.edu.co',
-                default => null,
-            };
+            $correos = array_merge(Mails::RESERVAS_SISTEMAS->recipients(), match ($idSalon) {
+                self::SALON_MAKER_LAB => [...Mails::RESERVAS_MAKER_LAB->recipients(), $usuario->correo],
+                self::SALON_BIBLIOTECA => [...Mails::RESERVAS_BIBLIOTECA->recipients(), $usuario->correo],
+                self::SALON_CAFETERIA => Mails::RESERVAS_CAFETERIA->recipients(),
+                default => [],
+            });
 
             $nombreSalon = Salones::find($idSalon)?->nombre ?? '';
             $horas = Horas::whereIn('id', array_column($reservas, 'hora_reserva'))->orderBy('id')->pluck('horas')->all();

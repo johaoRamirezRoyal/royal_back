@@ -50,15 +50,6 @@ class AdmissionsController extends Controller
         $this->mail_service = $mail_service;
     }
 
-    public function testEmail(Request $request)
-    {
-        //$message = $request->input("message");
-
-        $mail = $this->mail_service->sendGeneric(['casaloboblanco@gmail.com', 'djhoniersamir@gmail.com'], "Probando el Email aquí jeje", "Contenido del correo xd");
-
-        return $this->apiResponse($mail);
-    }
-
     public function requestVerification(Request $request)
     {
         $request->validate(
