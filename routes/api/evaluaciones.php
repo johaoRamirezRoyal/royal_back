@@ -29,6 +29,7 @@ Route::get('/{id}', [EvaluacionesController::class, 'obtenerPorId']);
 Route::put('/{id}', [EvaluacionesController::class, 'actualizar']);
 Route::delete('/{id}', [EvaluacionesController::class, 'eliminar']);
 Route::put('/{id}/toggle-activo', [EvaluacionesController::class, 'toggleActivo']);
+Route::post('/{id}/duplicar', [EvaluacionesController::class, 'duplicar']);
 Route::get('/{id}/evaluables', [EvaluacionesController::class, 'obtenerEvaluables']);
 
 // ─── Secciones ────────────────────────────────────────────

@@ -567,6 +567,66 @@ class EvaluacionesServices
     }
 
     /**
+     * Crea una copia de la evaluación (secciones, preguntas, opciones, niveles y
+     * perfiles) titulada "<título> (Copia n)". Queda inactiva para poder ajustarla
+     * antes de que los coordinadores la vean. Reusa crear() con el mismo payload
+     * anidado que envía el frontend al crear una evaluación nueva.
+     */
+    public function duplicar(int $id, int $idUser): array
+    {
+        try {
+            $original = Evaluacion::with(['niveles', 'perfiles', 'secciones.preguntas.opciones'])->find($id);
+            if (!$original) return ['error' => true, 'message' => 'Evaluación no encontrada', 'status' => 404];
+
+            // Copiar una copia sigue la numeración de la original, no "(Copia 1) (Copia 1)".
+            $base = preg_replace('/ \(Copia \d+\)$/', '', $original->titulo);
+            $n = 1;
+            do {
+                $sufijo = " (Copia $n)";
+                $titulo = mb_substr($base, 0, 255 - mb_strlen($sufijo)) . $sufijo;
+                $n++;
+            } while (Evaluacion::withTrashed()->where('titulo', $titulo)->exists());
+
+            $resultado = $this->crear([
+                'titulo' => $titulo,
+                'descripcion' => $original->descripcion,
+                'id_servicio' => $original->id_servicio,
+                'id_user' => $idUser,
+                'activo' => 0,
+                'es_satisfaccion' => $original->es_satisfaccion,
+                'fecha_inicio' => $original->fecha_inicio,
+                'fecha_fin' => $original->fecha_fin,
+                'niveles' => $original->niveles->pluck('id')->all(),
+                'perfiles' => $original->perfiles->pluck('id_perfil')->all(),
+                'secciones' => $original->secciones->map(fn ($s) => [
+                    'titulo' => $s->titulo,
+                    'descripcion' => $s->descripcion,
+                    'porcentaje' => $s->porcentaje,
+                    'orden' => $s->orden,
+                    'activo' => $s->activo,
+                    'preguntas' => $s->preguntas->map(fn ($p) => [
+                        'id_tipo_pregunta' => $p->id_tipo_pregunta,
+                        'texto' => $p->texto,
+                        'obligatoria' => $p->obligatoria,
+                        'permite_comentario' => $p->permite_comentario,
+                        'orden' => $p->orden,
+                        'opciones' => $p->opciones->map(fn ($o) => [
+                            'texto' => $o->texto,
+                            'valor' => $o->valor,
+                            'orden' => $o->orden,
+                        ])->all(),
+                    ])->all(),
+                ])->all(),
+            ]);
+
+            if (!$resultado['error']) $resultado['message'] = 'Evaluación duplicada';
+            return $resultado;
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Usuarios que pueden ser evaluados en una evaluación, cruzando los
      * perfiles y niveles configurados en ella contra la tabla `usuarios`.
      * Si el solicitante es Coordinador (perfil 26), se restringe además a su

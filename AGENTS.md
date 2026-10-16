@@ -412,6 +412,12 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
   no limita y con solo la 138 llama `ActasEstudianteService::limitarACursos($ids)`: lo aplica
   `filtrar()` (listado, agrupado y gráficas), `filtros()` (cursos y estudiantes del catálogo) y
   `conteo()` (403 si el estudiante no está en sus cursos). Escribir sigue exigiendo la 137.
+- **Docente (perfil 3/14) sin 136/137**: entra sin ninguna opción y ve **solo las actas que él
+  solicitó** — `sinLectura()` llama `limitarACursos([], $idUser)` (cursos vacíos = solo el
+  `orWhere a.id_docente_solicita`), antes de mirar la 138; con eso listado, filtros,
+  estadísticas y conteo quedan limitados igual que con la 138, sin otra lógica en el servicio.
+  `/filtros` devuelve en `docentes` también `foto_carnet` y `perfil` (nombre, de `perfiles`)
+  para la tarjeta del docente del formulario.
 - **Docente asociado** (`DOCENTE_ASOCIADO_SQL`): el docente que solicita tiene carga académica
   activa (por asignatura o suelta) en `a.id_curso`, el curso del estudiante al registrar. El
   listado devuelve `docente_asociado` (null sin docente, 0/1) y el agrupado
@@ -442,7 +448,8 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
   (`ActaEstudiante::MAX_DIALOGO_FORMATIVO`): **no se bloquea**; crear/actualizar devuelven
   `conteo_dialogo` + `advertencia` (desde la 2.ª), y `GET .../conteo` permite avisar antes de guardar.
 - Endpoints (`/gestion-academica/actas`): `GET /` (DataTable remoto: `page`, `per-page`, `s`,
-  `sort`, `dir`), `GET /estadisticas` (resumen, `por_nivel`, `por_curso`, `por_periodo`,
+  `sort`, `dir`), `GET /estadisticas` (resumen, `por_nivel`, `por_curso`, `por_periodo` — cada uno con
+  `niveles`, su reparto por nivel —,
   `por_anio` — histórico, ignora año/periodo —, `top_estudiantes`), `GET /filtros`
   (años, periodos, niveles, cursos y estudiantes activos con su curso),
   `GET /conteo?id_estudiante=&fecha=[&excluir_id=]` (diálogo formativo y convivenciales del
@@ -1269,6 +1276,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `PUT` | `/{id}` | 101 | Actualizar campos + niveles/perfiles (solo si la key existe en el payload) |
 | `DELETE` | `/{id}` | 101 | Soft delete (`Evaluacion` usa `SoftDeletes`) |
 | `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
+| `POST` | `/{id}/duplicar` | 122 | Copia completa (niveles, perfiles, secciones→preguntas→opciones con `porcentaje`/`valor`/`orden`) titulada `"<título> (Copia n)"` (n libre, contando soft-deleted; copiar una copia sigue la numeración de la base), creada **inactiva**. `duplicar()` arma el payload anidado y reusa `crear()` |
 | `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` de la evaluación **más reciente** a ese usuario para ESTA evaluación (cualquier periodo, no solo el activo — así "Editar respuesta"/"Reenviar correo"/"Descargar PDF" en el frontend siempre operan sobre la última, y "Evaluar" queda libre para registrar una nueva en un periodo distinto), + `ultima_evaluacion` (mismo `id`, con periodo/año escolar, para la columna informativa del listado) |
 | `GET` | `/mis-evaluaciones` | 103, 101 | Evaluaciones activas disponibles para el solicitante (ver `listarDisponiblesParaCoordinador`), con `evaluables_count`/`evaluados_count` del periodo activo |
 | `GET` | `/periodos` | sin gate | Catálogo de periodos institucionales (con año escolar), filtrable por `activo`; lógica en `PeriodoServices::listar()` (ver "Periodo institucional" arriba) |

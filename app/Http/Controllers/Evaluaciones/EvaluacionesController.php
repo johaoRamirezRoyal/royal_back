@@ -292,6 +292,15 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->toggleActivo($id));
     }
 
+    public function duplicar(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->duplicar($id, $request->user()->id_user));
+    }
+
     public function obtenerEvaluables(Request $request, int $id): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN, self::OPCION_RESPONDER)) {
