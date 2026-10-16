@@ -118,11 +118,55 @@ class EncuestasServices
 
             $encuesta->update([
                 'titulo' => $datos['titulo'] ?? $encuesta->titulo,
-                'descripcion' => $datos['descripcion'] ?? $encuesta->descripcion,
+                // array_key_exists: borrar la descripción llega como null y debe quedar vacía.
+                'descripcion' => array_key_exists('descripcion', $datos) ? $datos['descripcion'] : $encuesta->descripcion,
                 'activo' => $datos['activo'] ?? $encuesta->activo,
             ]);
 
             return ['error' => false, 'message' => 'Encuesta actualizada', 'data' => $encuesta];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Copia la encuesta con sus preguntas y opciones, titulada "<título> (Copia n)" e
+     * inactiva. No copia salones asignados ni respuestas. Mismo criterio que
+     * EvaluacionesServices::duplicar, reusando crear().
+     */
+    public function duplicar(int $id): array
+    {
+        try {
+            $original = Encuesta::with('preguntas.opciones')->find($id);
+            if (!$original) return ['error' => true, 'message' => 'Encuesta no encontrada', 'status' => 404];
+
+            // Copiar una copia sigue la numeración de la original, no "(Copia 1) (Copia 1)".
+            $base = preg_replace('/ \(Copia \d+\)$/', '', $original->titulo);
+            $n = 1;
+            do {
+                $sufijo = " (Copia $n)";
+                $titulo = mb_substr($base, 0, 255 - mb_strlen($sufijo)) . $sufijo;
+                $n++;
+            } while (Encuesta::where('titulo', $titulo)->exists());
+
+            $resultado = $this->crear([
+                'titulo' => $titulo,
+                'descripcion' => $original->descripcion,
+                'activo' => 0,
+                'preguntas' => $original->preguntas->map(fn (EncuestaPregunta $p) => [
+                    'id_tipo_pregunta' => $p->id_tipo_pregunta,
+                    'texto' => $p->texto,
+                    'obligatoria' => $p->obligatoria,
+                    'orden' => $p->orden,
+                    'opciones' => $p->opciones->map(fn (EncuestaOpcionPregunta $o) => [
+                        'texto' => $o->texto,
+                        'orden' => $o->orden,
+                    ])->all(),
+                ])->all(),
+            ]);
+
+            if (!$resultado['error']) $resultado['message'] = 'Encuesta duplicada';
+            return $resultado;
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -373,6 +417,16 @@ class EncuestasServices
 
     // ─── Flujo público (sin auth, anónimo) ───────────────────────────
 
+    /**
+     * Una pregunta de opciones sin ninguna opción (p. ej. creada con un tipo sin opciones
+     * por defecto y nunca completada) no se puede responder: se oculta en el flujo público
+     * y no cuenta como obligatoria, para no bloquear el envío de toda la encuesta.
+     */
+    private function esRespondible(EncuestaPregunta $pregunta): bool
+    {
+        return $pregunta->tipo?->slug === 'texto_libre' || $pregunta->opciones->isNotEmpty();
+    }
+
     public function obtenerEncuestaPublica(string $token): array
     {
         try {
@@ -389,6 +443,10 @@ class EncuestasServices
             if (!$encuesta) {
                 return ['error' => true, 'message' => 'No hay una encuesta activa para este salón', 'status' => 404];
             }
+
+            // Nombre del salón para que el visitante vea dónde está respondiendo.
+            $encuesta->setAttribute('salon', $filaSalon->salon?->nombre);
+            $encuesta->setRelation('preguntas', $encuesta->preguntas->filter(fn ($p) => $this->esRespondible($p))->values());
 
             return ['error' => false, 'message' => 'ok', 'data' => $encuesta];
         } catch (\Exception $e) {
@@ -448,7 +506,7 @@ class EncuestasServices
                 return ['error' => true, 'message' => 'No hay una encuesta activa para este salón', 'status' => 404];
             }
 
-            $encuesta = Encuesta::with('preguntas')
+            $encuesta = Encuesta::with(['preguntas.tipo', 'preguntas.opciones'])
                 ->where('id', $filaSalon->id_encuesta)
                 ->where('activo', 1)
                 ->first();
@@ -473,7 +531,7 @@ class EncuestasServices
 
             $respuestasPorPregunta = collect($respuestas)->keyBy('id_pregunta');
             foreach ($encuesta->preguntas as $pregunta) {
-                if (!$pregunta->obligatoria) continue;
+                if (!$pregunta->obligatoria || !$this->esRespondible($pregunta)) continue;
 
                 $resp = $respuestasPorPregunta->get($pregunta->id);
                 $sinResponder = !$resp || (empty($resp['id_opcion']) && empty(trim((string) ($resp['valor_texto'] ?? ''))));

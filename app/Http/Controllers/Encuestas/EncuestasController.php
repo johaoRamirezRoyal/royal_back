@@ -76,7 +76,7 @@ class EncuestasController extends Controller
 
         $validator = Validator::make($request->all(), [
             'titulo' => 'required|string|max:255',
-            'descripcion' => 'nullable|string',
+            'descripcion' => 'nullable|string|max:5000',
             'activo' => 'sometimes|integer',
             'preguntas' => 'sometimes|array',
             'preguntas.*.id_tipo_pregunta' => 'required_with:preguntas|integer|exists:evaluaciones_tipos_pregunta,id',
@@ -102,7 +102,7 @@ class EncuestasController extends Controller
 
         $validator = Validator::make($request->all(), [
             'titulo' => 'sometimes|string|max:255',
-            'descripcion' => 'nullable|string',
+            'descripcion' => 'nullable|string|max:5000',
             'activo' => 'sometimes|integer',
         ]);
 
@@ -129,6 +129,15 @@ class EncuestasController extends Controller
         }
 
         return $this->apiResponse($this->encuestasServices->toggleActivo($id));
+    }
+
+    public function duplicar(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->encuestasServices->duplicar($id));
     }
 
     // ─── Preguntas ────────────────────────────────────────────────

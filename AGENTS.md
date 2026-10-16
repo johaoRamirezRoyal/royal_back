@@ -1433,6 +1433,28 @@ pantalla aún.
   compatibilidad con código viejo, pero solo `tipo` viene poblado en
   respuestas reales del API.
 
+## Encuestas (`/encuestas` — `EncuestasController`)
+
+Encuestas de satisfacción **anónimas** por salón (QR pegado en el salón, flujo público
+`/api/encuestas/publica/{token}`), en Gestión Humana. Opciones **129** (admin) y **130**
+(ver), patrón (b) `sinAcceso()`.
+
+- **Tablas propias** (InnoDB, con migración): `encuestas`, `encuestas_preguntas`,
+  `encuestas_opciones_pregunta`, `encuestas_salon` (encuesta activa por salón + token del
+  QR), `encuestas_respuestas` (sin `id_user`, con `id_salon`/`id_reserva`),
+  `encuestas_respuestas_pregunta`. **Reusa** `evaluaciones_tipos_pregunta` (+ sus opciones
+  por defecto), `salones` y `reservas`.
+- `encuestas.descripcion` es `TEXT` (máx. 5000 en el controller) y
+  `encuestas_preguntas.texto` `VARCHAR(500)` desde
+  `2026_10_16_140000_alter_encuestas_textos_largos` — antes eran VARCHAR(255) y un texto
+  largo fallaba con SQLSTATE 1406.
+- `POST /{id}/duplicar` (129): copia preguntas y opciones, «<título> (Copia n)», inactiva;
+  no copia salones ni respuestas. Reusa `crear()`, como `EvaluacionesServices::duplicar`.
+- **Flujo público**: `obtenerEncuestaPublica` devuelve también `salon` (nombre) y oculta
+  las preguntas que no se pueden responder (de opciones y sin ninguna opción —
+  `esRespondible()`); `responderPublica` no las exige aunque sean obligatorias. Sin esto,
+  una pregunta así bloqueaba el envío de toda la encuesta.
+
 ## Login: verificación de dispositivo por OTP y llave maestra de recuperación
 
 Dos mecanismos nuevos alrededor de `AuthController::login` (sistema general, no toca el

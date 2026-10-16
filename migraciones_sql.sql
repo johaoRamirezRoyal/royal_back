@@ -306,3 +306,13 @@ ALTER TABLE `evaluaciones_respuestas_pregunta` ADD `no_aplica` tinyint NOT NULL 
 -- sin marcarlas una por una. Se suma (OR) al flag de cada pregunta.
 -- ---------------------------------------------------------------------------
 ALTER TABLE `evaluaciones_secciones` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `porcentaje`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_140000_alter_encuestas_textos_largos.php
+-- Encuestas: `descripcion` era VARCHAR(255) sin máximo en el controller y una
+-- descripción larga fallaba con SQLSTATE 1406 "Data too long"; pasa a TEXT
+-- (el controller ahora limita a 5000). `encuestas_preguntas.texto` era
+-- VARCHAR(255) pero el controller acepta hasta 500: mismo error, pasa a 500.
+-- ---------------------------------------------------------------------------
+ALTER TABLE encuestas MODIFY descripcion TEXT NULL;
+ALTER TABLE encuestas_preguntas MODIFY texto VARCHAR(500) NOT NULL;
