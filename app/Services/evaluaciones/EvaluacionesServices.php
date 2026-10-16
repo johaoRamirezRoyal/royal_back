@@ -425,6 +425,7 @@ class EvaluacionesServices
                 'servicio',
                 'niveles',
                 'perfiles',
+                'secciones.preguntas' => fn ($q) => $q->withCount('respuestas'),
                 'secciones.preguntas.tipo',
                 'secciones.preguntas.opciones',
             ])->withCount('respuestas')->find($id);
@@ -800,13 +801,30 @@ class EvaluacionesServices
             $pregunta = EvaluacionPregunta::find($idPregunta);
             if (!$pregunta) return ['error' => true, 'message' => 'Pregunta no encontrada', 'status' => 404];
 
+            $idTipo = (int) ($datos['id_tipo_pregunta'] ?? $pregunta->id_tipo_pregunta);
+            $tipoCambia = $idTipo !== $pregunta->id_tipo_pregunta;
+            if ($tipoCambia && $this->preguntaTieneRespuestas($idPregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
+
             $pregunta->update([
-                'id_tipo_pregunta' => $datos['id_tipo_pregunta'] ?? $pregunta->id_tipo_pregunta,
+                'id_tipo_pregunta' => $idTipo,
                 'texto' => $datos['texto'] ?? $pregunta->texto,
                 'obligatoria' => $datos['obligatoria'] ?? $pregunta->obligatoria,
                 'permite_comentario' => $datos['permite_comentario'] ?? $pregunta->permite_comentario,
                 'orden' => $datos['orden'] ?? $pregunta->orden,
             ]);
+
+            // Con cambio de tipo, las opciones del tipo anterior se reemplazan por las por
+            // defecto del nuevo aquí (antes lo hacía el frontend con un DELETE/POST por
+            // opción). Sin transacción: preguntas/opciones son MyISAM, no la soportan.
+            if ($tipoCambia) {
+                $pregunta->opciones()->delete();
+                $defaults = EvaluacionTipoPreguntaOpcion::where('id_tipo_pregunta', $idTipo)->orderBy('orden')->orderBy('id')->get();
+                foreach ($defaults as $idx => $def) {
+                    $pregunta->opciones()->create(['texto' => $def->texto, 'valor' => $def->valor, 'orden' => $idx]);
+                }
+            }
 
             return ['error' => false, 'message' => 'Pregunta actualizada', 'data' => $pregunta->fresh(['tipo', 'opciones'])];
         } catch (\Exception $e) {
@@ -829,11 +847,25 @@ class EvaluacionesServices
 
     // ─── Opciones de pregunta ───────────────────────────────────
 
+    // Una pregunta ya respondida tiene tipo y opciones inmutables: cambiarlos movería
+    // los puntajes ya calculados (el máximo sale de las opciones), y borrar una opción
+    // respondida deja la respuesta huérfana sin aviso: las tablas son MyISAM, la FK
+    // de evaluaciones_respuestas_pregunta.id_opcion no existe en BD.
+    private const MENSAJE_PREGUNTA_RESPONDIDA = 'Esta pregunta ya tiene respuestas registradas; no se pueden cambiar su tipo ni sus opciones. Usa «Añadir copia» para crear una versión nueva de la evaluación.';
+
+    private function preguntaTieneRespuestas(int $idPregunta): bool
+    {
+        return EvaluacionRespuestaPregunta::where('id_pregunta', $idPregunta)->exists();
+    }
+
     public function crearOpcion(int $idPregunta, array $datos): array
     {
         try {
             $pregunta = EvaluacionPregunta::find($idPregunta);
             if (!$pregunta) return ['error' => true, 'message' => 'Pregunta no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($idPregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion = $pregunta->opciones()->create([
                 'texto' => $datos['texto'],
@@ -852,6 +884,9 @@ class EvaluacionesServices
         try {
             $opcion = EvaluacionOpcionPregunta::find($idOpcion);
             if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($opcion->id_pregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion->update($datos);
             return ['error' => false, 'message' => 'Opción actualizada', 'data' => $opcion];
@@ -865,6 +900,9 @@ class EvaluacionesServices
         try {
             $opcion = EvaluacionOpcionPregunta::find($idOpcion);
             if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($opcion->id_pregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion->delete();
             return ['error' => false, 'message' => 'Opción eliminada'];

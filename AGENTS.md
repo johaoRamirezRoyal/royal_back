@@ -1382,8 +1382,21 @@ pantalla aún.
 
 - **Validación inline** — no hay FormRequest classes; todo es `Validator::make()`
   en el controller con `response()->json()` directo (no usa `$this->error()`).
-- **Hard delete** en secciones/preguntas/opciones — no hay cascade explícito;
-  depende de FKs en BD (no confirmable sin migraciones). `Evaluacion` y su
+- **Pregunta respondida = tipo y opciones inmutables** (2026-10-16):
+  `actualizarPregunta` (si cambia `id_tipo_pregunta`), `crearOpcion`,
+  `actualizarOpcion` y `eliminarOpcion` responden 422 si la pregunta tiene filas en
+  `evaluaciones_respuestas_pregunta` (`preguntaTieneRespuestas()`); texto y
+  `permite_comentario` siguen editables. Motivo: el máximo de cada pregunta sale de
+  sus opciones, así que tocarlas cambiaba puntajes ya calculados, y borrar una opción
+  respondida dejaba la respuesta huérfana sin aviso (al revisarlo había 8 de 22
+  respuestas apuntando a opciones borradas). Sin respuestas, cambiar el tipo
+  reemplaza las opciones por las por defecto del tipo nuevo en el mismo `PUT`. `GET /{id}`
+  trae `respuestas_count` por pregunta para que el frontend oculte esas acciones.
+- **Hard delete** en secciones/preguntas/opciones — no hay cascade ni FK reales:
+  `evaluaciones_preguntas` y `evaluaciones_opciones_pregunta` son **MyISAM**
+  (confirmado 2026-10-16), así que las FK declaradas en la migración de
+  `evaluaciones_respuestas_pregunta` no existen en BD y `DB::transaction` no las protege.
+  `eliminarPregunta`/`eliminarSeccion` todavía no tienen la protección de arriba. `Evaluacion` y su
   tabla de respuestas sí son soft/append-only por diseño (SoftDeletes en la
   primera, nunca se borran respuestas vía API).
 - **`eliminarServicio`** es soft-disable (`activo=0`) pero `eliminar` evaluación
