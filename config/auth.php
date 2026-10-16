@@ -112,4 +112,9 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    // Verificación por código de los equipos no reconocidos en el login general. Solo se
+    // puede apagar con APP_ENV=local (ver AuthController::login): en cualquier otro entorno
+    // este valor se ignora y el código se pide siempre.
+    'device_otp' => env('AUTH_DEVICE_OTP', true),
+
 ];

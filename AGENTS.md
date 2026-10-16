@@ -1352,6 +1352,11 @@ OTP-por-correo, ver secciones de Admisiones/Instituciones):
 
 ### Verificación de equipo nuevo (`dispositivos_confiables`)
 
+**En local se puede apagar**: con `APP_ENV=local` **y** `AUTH_DEVICE_OTP=false`
+(`config('auth.device_otp')`), `login()` otorga la sesión directo sin pedir código (en local
+`MAIL_MAILER=log` deja el código en `storage/logs/mail/`, no en el correo). Fuera de `local`
+la variable se ignora y el código se pide siempre.
+
 `login()` ya no otorga la cookie `token` directo tras validar la contraseña: revisa la
 cookie `device_token` del request contra `AuthServices::dispositivoEsConfiable`
 (hash sha256 del token vs. `(id_user, token_hash)` en `dispositivos_confiables`, tabla

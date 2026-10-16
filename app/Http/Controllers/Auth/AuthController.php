@@ -246,8 +246,11 @@ class AuthController extends Controller
         // sin match, se exige el código por correo antes de otorgar sesión — ver
         // verifyLoginOtp().
         $deviceToken = $request->cookie('device_token');
+        // En local se puede saltar el código (AUTH_DEVICE_OTP=false): el correo va al log y
+        // pedirlo en cada navegador nuevo solo estorba. Fuera de local no aplica nunca.
+        $sinVerificacion = app()->environment('local') && ! config('auth.device_otp');
 
-        if ($deviceToken && $this->service_auth->dispositivoEsConfiable($connection, $usuario->id_user, $deviceToken)) {
+        if ($sinVerificacion || ($deviceToken && $this->service_auth->dispositivoEsConfiable($connection, $usuario->id_user, $deviceToken))) {
             // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla)
             $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
 
