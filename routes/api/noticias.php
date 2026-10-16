@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Route;
 // puede verlas (alimenta el contenedor de noticias del Home).
 Route::get('/para-mostrar', [NoticiasController::class, 'paraMostrar']);
 
+Route::get('/configuracion', [NoticiasController::class, 'configuracion']);
+Route::put('/configuracion', [NoticiasController::class, 'actualizarConfiguracion']);
+
 Route::get('/general', [NoticiasController::class, 'obtenerGeneral']);
 Route::put('/general', [NoticiasController::class, 'actualizarGeneral']);
 
@@ -27,5 +30,6 @@ Route::get('/', [NoticiasController::class, 'listar']);
 Route::post('/', [NoticiasController::class, 'crear']);
 Route::put('/', [NoticiasController::class, 'actualizar']);
 Route::post('/estado', [NoticiasController::class, 'cambiarEstado']);
+Route::post('/repetir-anual', [NoticiasController::class, 'cambiarRepeticionAnual']);
 Route::post('/imagen', [NoticiasController::class, 'subirImagen']);
 Route::get('/imagen/{ruta}', [NoticiasController::class, 'verImagen'])->where('ruta', '.*');

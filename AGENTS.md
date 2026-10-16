@@ -241,12 +241,33 @@ los `cron_permisos` de esa opción para no dejar filas huérfanas.
 `NoticiasController`/`NoticiasService` (`app/Http/Controllers/Noticias/`,
 `app/Services/Noticias/NoticiasService.php`). Dos formas de contenido: el "mensaje
 general" (una sola fila siempre vigente, `asistencia_mensaje_general`) y las "noticias
-programadas" (`asistencia_mensaje`, por `fecha`). Un comando diario
+programadas" (`asistencia_mensaje`, por `fecha`). Un comando que corre cada hora
 (`EnviarNoticiasDiariasCommand`, `noticias:enviar-diarias`) envía por correo lo que esté
 activo y no se haya enviado aún.
 
-- **Probarlo manualmente**: `routes/console.php` programa el comando con `->daily()`
-  (una vez a las 00:00) — correr `php artisan schedule:run` en cualquier otro momento no
+- **Solo se repiten los cumpleaños con `repetir_anual`** (default false): producción tiene
+  ~290 cumpleaños previos (2022–2026, una fila nueva por persona cada año, nunca enviados);
+  repetirlos todos mandaría varias felicitaciones a la misma persona el mismo día. Esos
+  siguen con fecha única (correo en su fecha exacta, Home en su ventana original) hasta que
+  se conviertan desde el formulario o con la acción masiva `POST /api/noticias/repetir-anual`
+  (`cambiarRepeticionAnual`, ignora lo que no sea cumpleaños). Filtro `repetir_anual` en el
+  listado. Con la marca: `enviarProgramadosDelDia` compara solo mes y día
+  de `fecha` (desde el año de esa fecha en adelante) y `enviado_at` guarda el **último**
+  envío — una fila está pendiente si no se envió este año. Un 29 de febrero se envía el 28
+  en años no bisiestos. En el Home también se repiten: su ventana (`dias_visualizacion`)
+  cuenta desde el aniversario más reciente (`aniversarioVisible`), no desde la `fecha`
+  original. Las de tipo `normal` no se envían por correo (solo se muestran en el Home, por
+  su ventana `fecha` + `dias_visualizacion`).
+- **Interruptor de correos** (`configuracion_noticias.enviar_correos_programadas`, fila
+  singleton, `GET|PUT /api/noticias/configuracion`, opción 69): apagado,
+  `enviarProgramadosDelDia` no envía nada **ni marca `enviado_at`** — si se enciende el
+  mismo día, la siguiente ejecución horaria manda los de hoy. No afecta al mensaje general.
+- **`asistencia_mensaje` es MyISAM** (tabla legacy): no soporta transacciones, un
+  `DB::beginTransaction()`/`rollBack()` alrededor de una prueba **no** deshace nada. Para
+  probar contra esa tabla, borra a mano lo que crees.
+- **Probarlo manualmente**: `routes/console.php` programa el comando con `->hourly()`
+  (al minuto 0 de cada hora; antes era `->daily()` a las 00:00, y una noticia programada
+  para hoy pero creada después de medianoche no se enviaba nunca) — correr `php artisan schedule:run` en cualquier otro momento no
   hace nada, porque el scheduler solo dispara tareas cuyo horario coincide con el minuto
   exacto en que se invoca (así está pensado para un cron real cada minuto, no para una
   prueba puntual). Para probar el envío ya mismo, salta el scheduler y corre el comando
