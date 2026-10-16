@@ -49,8 +49,8 @@ Schedule::command('logs-dominio:purgar-antiguos')->cron('15 2 */3 * *');
 // real hasta este comando. Corre cada hora, no una vez al día: con `daily()` (00:00) una
 // noticia programada para hoy pero creada después de medianoche, o un día en que el
 // servidor estuvo apagado a esa hora, nunca se enviaba. Repetirlo es seguro: cada fila
-// se marca como enviada (enviado_at/ultimo_envio_fecha) y no se reenvía el mismo día. `withoutOverlapping()`: el envío es
-// síncrono, uno por destinatario (ver el comentario en NoticiaMail sobre por qué no
+// se marca como enviada (enviado_at/ultimo_envio_fecha) y no se reenvía el mismo día.
+// `withoutOverlapping()`: el envío es síncrono, uno por destinatario (ver el comentario en NoticiaMail sobre por qué no
 // está encolado) — probado con ~2500 usuarios activos y tardó ~3 minutos solo con el
 // driver `log`; con SMTP real puede tardar bastante más, así que si el comando de una
 // hora todavía sigue corriendo a la hora del siguiente disparo, no debe arrancar un

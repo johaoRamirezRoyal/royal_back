@@ -413,17 +413,21 @@ class NoticiasService
     public function cambiarRepeticionAnual(array $ids, bool $repetir): array
     {
         try {
-            $actualizadas = MensajeProgramado::whereIn('id', $ids)
-                ->where('tipo', 'cumpleanos')
-                ->update(['repetir_anual' => $repetir]);
-            $omitidas = count(array_unique($ids)) - MensajeProgramado::whereIn('id', $ids)->where('tipo', 'cumpleanos')->count();
+            $cumpleanos = MensajeProgramado::whereIn('id', $ids)->where('tipo', 'cumpleanos');
+            // Se cuenta antes de actualizar: el UPDATE de MySQL solo informa las filas que
+            // cambiaron, así que las que ya estaban así no entrarían en el mensaje.
+            $coinciden = (clone $cumpleanos)->count();
+            $cumpleanos->update(['repetir_anual' => $repetir]);
+            $omitidas = count(array_unique($ids)) - $coinciden;
 
-            $plural = $actualizadas === 1 ? '' : 'n';
+            $plural = $coinciden === 1 ? '' : 'n';
             $mensaje = $repetir
-                ? "{$actualizadas} cumpleaños se repetirá{$plural} cada año"
-                : "{$actualizadas} cumpleaños dejará{$plural} de repetirse";
+                ? "{$coinciden} cumpleaños se repetirá{$plural} cada año"
+                : "{$coinciden} cumpleaños dejará{$plural} de repetirse";
             if ($omitidas > 0) {
-                $mensaje .= " ({$omitidas} no son cumpleaños y no se cambiaron)";
+                $mensaje .= $omitidas === 1
+                    ? ' (1 no es cumpleaños y no se cambió)'
+                    : " ({$omitidas} no son cumpleaños y no se cambiaron)";
             }
 
             return ['error' => false, 'message' => $mensaje];
@@ -434,9 +438,10 @@ class NoticiasService
 
     /**
      * Envía por correo el mensaje general (si está activo y no se envió hoy) y los
-     * cumpleaños programados cuyo mes y día son hoy (si están activos y no se enviaron
-     * este año — se repiten cada año, ver enviarProgramadosDelDia) — pensado para correr una vez al día desde un comando programado (ver
-     * EnviarNoticiasDiariasCommand). Nunca lanza: cada envío individual ya maneja sus
+     * cumpleaños programados de hoy (los marcados `repetir_anual` por mes y día, una vez
+     * al año; el resto, una sola vez en su fecha exacta — ver enviarProgramadosDelDia).
+     * Corre cada hora desde un comando programado (ver EnviarNoticiasDiariasCommand).
+     * Nunca lanza: cada envío individual ya maneja sus
      * propios errores (MailService::send), así que un correo inválido o un fallo de SMTP
      * puntual no debe tumbar el resto del lote.
      */
