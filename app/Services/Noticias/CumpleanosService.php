@@ -210,7 +210,7 @@ class CumpleanosService
             return ['error' => true, 'message' => 'La imagen de la plantilla no existe'];
         }
 
-        $persona = $idUser ? $this->personal()->firstWhere('id_user', $idUser) : null;
+        $persona = $idUser ? $this->personal($idUser)->first() : null;
         if ($idUser && !$persona) {
             return ['error' => true, 'message' => 'La persona elegida no está en el personal activo'];
         }
@@ -234,8 +234,9 @@ class CumpleanosService
     /**
      * Personal activo (sin estudiantes, egresados, acudientes ni perfil 28 — los mismos
      * excluidos de la asistencia de trabajadores) con sus datos de cumpleaños y qué les falta.
+     * Con `$idUser`, solo esa persona (colección vacía si no es del personal activo).
      */
-    public function personal(): \Illuminate\Support\Collection
+    public function personal(?int $idUser = null): \Illuminate\Support\Collection
     {
         $hoy = Carbon::today();
         $excluidos = DB::table('cumpleanos_excluidos')->pluck('id_user')->flip();
@@ -247,6 +248,7 @@ class CumpleanosService
             ->leftJoin('perfiles as p', 'p.id_perfil', '=', 'u.perfil')
             ->where('u.estado', 'activo')
             ->whereNotIn('u.perfil', AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA)
+            ->when($idUser, fn ($q) => $q->where('u.id_user', $idUser))
             ->select([
                 'u.id_user', 'u.nombre', 'u.apellido', 'u.foto_carnet', 'u.perfil',
                 'p.nombre as nombre_perfil', 'ia.fecha_nacimiento', 'ia.genero',
@@ -317,7 +319,7 @@ class CumpleanosService
 
     public function actualizarDatosPersona(int $idUser, ?string $fechaNacimiento, ?string $genero): array
     {
-        if (!$this->personal()->contains('id_user', $idUser)) {
+        if ($this->personal($idUser)->isEmpty()) {
             return ['error' => true, 'message' => 'La persona no está en el personal activo'];
         }
 
@@ -326,7 +328,7 @@ class CumpleanosService
             ['fecha_nacimiento' => $fechaNacimiento, 'genero' => $genero],
         );
 
-        return ['error' => false, 'message' => 'Datos de cumpleaños guardados', 'data' => $this->personal()->firstWhere('id_user', $idUser)];
+        return ['error' => false, 'message' => 'Datos de cumpleaños guardados', 'data' => $this->personal($idUser)->first()];
     }
 
     public function cambiarParticipacion(array $ids, bool $participa): array
@@ -532,7 +534,7 @@ class CumpleanosService
     /** Borra la felicitación generada (noticia + imagen) de una persona y la vuelve a generar con la plantilla actual. */
     public function regenerar(int $idUser): array
     {
-        $p = $this->personal()->firstWhere('id_user', $idUser);
+        $p = $this->personal($idUser)->first();
         if (!$p || !$p['proximo_cumpleanos']) {
             return ['error' => true, 'message' => 'La persona no está en el personal activo o no tiene fecha de nacimiento'];
         }

@@ -162,7 +162,7 @@ class CumpleanosController extends Controller
     {
         $request->validate(['foto' => 'required|file|mimes:jpg,jpeg,png,webp|max:4096']);
 
-        if (!$this->service->personal()->contains('id_user', $idUser)) {
+        if ($this->service->personal($idUser)->isEmpty()) {
             return $this->apiResponse(['error' => true, 'message' => 'La persona no está en el personal activo']);
         }
 
@@ -174,7 +174,7 @@ class CumpleanosController extends Controller
         return $this->apiResponse([
             'error' => false,
             'message' => 'Foto guardada',
-            'data' => $this->service->personal()->firstWhere('id_user', $idUser),
+            'data' => $this->service->personal($idUser)->first(),
         ]);
     }
 
