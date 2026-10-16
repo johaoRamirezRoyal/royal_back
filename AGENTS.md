@@ -1227,6 +1227,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `PUT` | `/{id}` | 101 | Actualizar campos + niveles/perfiles (solo si la key existe en el payload) |
 | `DELETE` | `/{id}` | 101 | Soft delete (`Evaluacion` usa `SoftDeletes`) |
 | `PUT` | `/{id}/toggle-activo` | 101 | Alterna `activo` 0↔1 |
+| `POST` | `/{id}/duplicar` | 122 | Copia completa (niveles, perfiles, secciones→preguntas→opciones con `porcentaje`/`valor`/`orden`) titulada `"<título> (Copia n)"` (n libre, contando soft-deleted; copiar una copia sigue la numeración de la base), creada **inactiva**. `duplicar()` arma el payload anidado y reusa `crear()` |
 | `GET` | `/{id}/evaluables` | 101, 103 | Usuarios evaluables (perfil+nivel de la evaluación, ver scoping arriba) + flag `evaluado`/`id_respuesta` de la evaluación **más reciente** a ese usuario para ESTA evaluación (cualquier periodo, no solo el activo — así "Editar respuesta"/"Reenviar correo"/"Descargar PDF" en el frontend siempre operan sobre la última, y "Evaluar" queda libre para registrar una nueva en un periodo distinto), + `ultima_evaluacion` (mismo `id`, con periodo/año escolar, para la columna informativa del listado) |
 | `GET` | `/mis-evaluaciones` | 103, 101 | Evaluaciones activas disponibles para el solicitante (ver `listarDisponiblesParaCoordinador`), con `evaluables_count`/`evaluados_count` del periodo activo |
 | `GET` | `/periodos` | sin gate | Catálogo de periodos institucionales (con año escolar), filtrable por `activo`; lógica en `PeriodoServices::listar()` (ver "Periodo institucional" arriba) |
