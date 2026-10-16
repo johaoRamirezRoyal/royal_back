@@ -21,6 +21,7 @@ Route::get('/{id}', [EncuestasController::class, 'obtenerPorId']);
 Route::put('/{id}', [EncuestasController::class, 'actualizar']);
 Route::delete('/{id}', [EncuestasController::class, 'eliminar']);
 Route::put('/{id}/toggle-activo', [EncuestasController::class, 'toggleActivo']);
+Route::post('/{id}/duplicar', [EncuestasController::class, 'duplicar']);
 Route::get('/{id}/resultados', [EncuestasController::class, 'resultados']);
 Route::get('/{id}/salones-con-respuestas', [EncuestasController::class, 'salonesConRespuestas']);
 Route::get('/{id}/reservas-con-respuestas', [EncuestasController::class, 'reservasConRespuestas']);

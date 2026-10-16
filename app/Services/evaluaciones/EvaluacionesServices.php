@@ -425,6 +425,7 @@ class EvaluacionesServices
                 'servicio',
                 'niveles',
                 'perfiles',
+                'secciones.preguntas' => fn ($q) => $q->withCount('respuestas'),
                 'secciones.preguntas.tipo',
                 'secciones.preguntas.opciones',
             ])->withCount('respuestas')->find($id);
@@ -473,6 +474,7 @@ class EvaluacionesServices
                             'titulo' => $secData['titulo'],
                             'descripcion' => $secData['descripcion'] ?? null,
                             'porcentaje' => $secData['porcentaje'] ?? 0,
+                            'permite_no_aplica' => $secData['permite_no_aplica'] ?? 0,
                             'orden' => $secData['orden'] ?? $idx,
                             'activo' => $secData['activo'] ?? 1,
                         ]);
@@ -484,6 +486,7 @@ class EvaluacionesServices
                                     'texto' => $pregData['texto'],
                                     'obligatoria' => $pregData['obligatoria'] ?? 1,
                                     'permite_comentario' => $pregData['permite_comentario'] ?? 0,
+                                    'permite_no_aplica' => $pregData['permite_no_aplica'] ?? 0,
                                     'orden' => $pregData['orden'] ?? $pregIdx,
                                 ]);
 
@@ -602,6 +605,7 @@ class EvaluacionesServices
                     'titulo' => $s->titulo,
                     'descripcion' => $s->descripcion,
                     'porcentaje' => $s->porcentaje,
+                    'permite_no_aplica' => $s->permite_no_aplica,
                     'orden' => $s->orden,
                     'activo' => $s->activo,
                     'preguntas' => $s->preguntas->map(fn ($p) => [
@@ -609,6 +613,7 @@ class EvaluacionesServices
                         'texto' => $p->texto,
                         'obligatoria' => $p->obligatoria,
                         'permite_comentario' => $p->permite_comentario,
+                        'permite_no_aplica' => $p->permite_no_aplica,
                         'orden' => $p->orden,
                         'opciones' => $p->opciones->map(fn ($o) => [
                             'texto' => $o->texto,
@@ -717,6 +722,7 @@ class EvaluacionesServices
                 'titulo' => $datos['titulo'],
                 'descripcion' => $datos['descripcion'] ?? null,
                 'porcentaje' => $datos['porcentaje'] ?? 0,
+                'permite_no_aplica' => $datos['permite_no_aplica'] ?? 0,
                 'orden' => $datos['orden'] ?? $evaluacion->secciones()->count(),
                 'activo' => $datos['activo'] ?? 1,
             ]);
@@ -775,6 +781,7 @@ class EvaluacionesServices
                 'texto' => $datos['texto'],
                 'obligatoria' => $datos['obligatoria'] ?? 1,
                 'permite_comentario' => $datos['permite_comentario'] ?? 0,
+                'permite_no_aplica' => $datos['permite_no_aplica'] ?? 0,
                 'orden' => $datos['orden'] ?? $seccion->preguntas()->count(),
             ]);
 
@@ -800,13 +807,31 @@ class EvaluacionesServices
             $pregunta = EvaluacionPregunta::find($idPregunta);
             if (!$pregunta) return ['error' => true, 'message' => 'Pregunta no encontrada', 'status' => 404];
 
+            $idTipo = (int) ($datos['id_tipo_pregunta'] ?? $pregunta->id_tipo_pregunta);
+            $tipoCambia = $idTipo !== $pregunta->id_tipo_pregunta;
+            if ($tipoCambia && $this->preguntaTieneRespuestas($idPregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
+
             $pregunta->update([
-                'id_tipo_pregunta' => $datos['id_tipo_pregunta'] ?? $pregunta->id_tipo_pregunta,
+                'id_tipo_pregunta' => $idTipo,
                 'texto' => $datos['texto'] ?? $pregunta->texto,
                 'obligatoria' => $datos['obligatoria'] ?? $pregunta->obligatoria,
                 'permite_comentario' => $datos['permite_comentario'] ?? $pregunta->permite_comentario,
+                'permite_no_aplica' => $datos['permite_no_aplica'] ?? $pregunta->permite_no_aplica,
                 'orden' => $datos['orden'] ?? $pregunta->orden,
             ]);
+
+            // Con cambio de tipo, las opciones del tipo anterior se reemplazan por las por
+            // defecto del nuevo aquí (antes lo hacía el frontend con un DELETE/POST por
+            // opción). Sin transacción: preguntas/opciones son MyISAM, no la soportan.
+            if ($tipoCambia) {
+                $pregunta->opciones()->delete();
+                $defaults = EvaluacionTipoPreguntaOpcion::where('id_tipo_pregunta', $idTipo)->orderBy('orden')->orderBy('id')->get();
+                foreach ($defaults as $idx => $def) {
+                    $pregunta->opciones()->create(['texto' => $def->texto, 'valor' => $def->valor, 'orden' => $idx]);
+                }
+            }
 
             return ['error' => false, 'message' => 'Pregunta actualizada', 'data' => $pregunta->fresh(['tipo', 'opciones'])];
         } catch (\Exception $e) {
@@ -829,11 +854,25 @@ class EvaluacionesServices
 
     // ─── Opciones de pregunta ───────────────────────────────────
 
+    // Una pregunta ya respondida tiene tipo y opciones inmutables: cambiarlos movería
+    // los puntajes ya calculados (el máximo sale de las opciones), y borrar una opción
+    // respondida deja la respuesta huérfana sin aviso: las tablas son MyISAM, la FK
+    // de evaluaciones_respuestas_pregunta.id_opcion no existe en BD.
+    private const MENSAJE_PREGUNTA_RESPONDIDA = 'Esta pregunta ya tiene respuestas registradas; no se pueden cambiar su tipo ni sus opciones. Usa «Añadir copia» para crear una versión nueva de la evaluación.';
+
+    private function preguntaTieneRespuestas(int $idPregunta): bool
+    {
+        return EvaluacionRespuestaPregunta::where('id_pregunta', $idPregunta)->exists();
+    }
+
     public function crearOpcion(int $idPregunta, array $datos): array
     {
         try {
             $pregunta = EvaluacionPregunta::find($idPregunta);
             if (!$pregunta) return ['error' => true, 'message' => 'Pregunta no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($idPregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion = $pregunta->opciones()->create([
                 'texto' => $datos['texto'],
@@ -852,6 +891,9 @@ class EvaluacionesServices
         try {
             $opcion = EvaluacionOpcionPregunta::find($idOpcion);
             if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($opcion->id_pregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion->update($datos);
             return ['error' => false, 'message' => 'Opción actualizada', 'data' => $opcion];
@@ -865,6 +907,9 @@ class EvaluacionesServices
         try {
             $opcion = EvaluacionOpcionPregunta::find($idOpcion);
             if (!$opcion) return ['error' => true, 'message' => 'Opción no encontrada', 'status' => 404];
+            if ($this->preguntaTieneRespuestas($opcion->id_pregunta)) {
+                return ['error' => true, 'message' => self::MENSAJE_PREGUNTA_RESPONDIDA, 'status' => 422];
+            }
 
             $opcion->delete();
             return ['error' => false, 'message' => 'Opción eliminada'];
@@ -883,6 +928,10 @@ class EvaluacionesServices
             $periodo = Periodo::find($datos['id_periodo'] ?? null);
             if (!$periodo || !$periodo->activo) {
                 return ['error' => true, 'message' => 'Selecciona un periodo activo válido', 'status' => 422];
+            }
+
+            if ($error = $this->validarNoAplica($datos['respuestas'] ?? [])) {
+                return ['error' => true, 'message' => $error, 'status' => 422];
             }
 
             // El año escolar de la respuesta es, por defecto, el vigente AHORA (tabla
@@ -976,13 +1025,34 @@ class EvaluacionesServices
         $respuestaEval->respuestasPreguntas()->delete();
 
         foreach ($respuestas as $respData) {
+            $noAplica = !empty($respData['no_aplica']);
             $respuestaEval->respuestasPreguntas()->create([
                 'id_pregunta' => $respData['id_pregunta'],
-                'id_opcion' => $respData['id_opcion'] ?? null,
-                'valor_texto' => $respData['valor_texto'] ?? null,
+                // Una pregunta «No aplica» es una sola fila sin respuesta: no puntúa.
+                'id_opcion' => $noAplica ? null : ($respData['id_opcion'] ?? null),
+                'valor_texto' => $noAplica ? null : ($respData['valor_texto'] ?? null),
+                'no_aplica' => $noAplica ? 1 : 0,
                 'comentario' => $respData['comentario'] ?? null,
             ]);
         }
+    }
+
+    /**
+     * Solo aceptan «No aplica» las preguntas con `permite_no_aplica` propio o de su sección
+     * (que lo habilita para todas sus preguntas) — sin esto, un request directo podría sacar
+     * del promedio cualquier pregunta. Se valida antes de escribir: las tablas son MyISAM
+     * y la transacción no deshace nada.
+     */
+    private function validarNoAplica(array $respuestas): ?string
+    {
+        $ids = collect($respuestas)->filter(fn ($r) => !empty($r['no_aplica']))->pluck('id_pregunta')->unique();
+        if ($ids->isEmpty()) return null;
+
+        $noPermitidas = EvaluacionPregunta::whereIn('id', $ids)
+            ->where('permite_no_aplica', 0)
+            ->whereHas('seccion', fn ($q) => $q->where('permite_no_aplica', 0))
+            ->count();
+        return $noPermitidas > 0 ? 'Hay preguntas marcadas como «No aplica» que no lo permiten' : null;
     }
 
     /**
@@ -1158,6 +1228,10 @@ class EvaluacionesServices
                     return ['error' => true, 'message' => 'No tienes acceso a esta respuesta', 'status' => 403];
                 }
 
+                if ($error = $this->validarNoAplica($datos['respuestas'] ?? [])) {
+                    return ['error' => true, 'message' => $error, 'status' => 422];
+                }
+
                 $this->guardarRespuestasPreguntas($respuesta, $datos['respuestas'] ?? []);
 
                 return ['error' => false, 'message' => 'Respuesta actualizada', 'data' => $respuesta->fresh(['respuestasPreguntas.opcion'])];
@@ -1258,9 +1332,9 @@ class EvaluacionesServices
      */
     public function calcularPuntajeRespuesta(EvaluacionRespuestaEvaluacion $respuesta): array
     {
-        $sumaGeneral = 0;
+        $noAplica = $this->preguntasNoAplica($respuesta);
 
-        $porSeccion = ($respuesta->evaluacion->secciones ?? collect())->map(function ($seccion) use ($respuesta, &$sumaGeneral) {
+        $porSeccion = ($respuesta->evaluacion->secciones ?? collect())->map(function ($seccion) use ($respuesta, $noAplica) {
             $preguntasIds = $seccion->preguntas->pluck('id')->toArray();
 
             $puntajeObtenido = 0;
@@ -1270,13 +1344,7 @@ class EvaluacionesServices
                 }
             }
 
-            $maxPosible = 0;
-            foreach ($seccion->preguntas as $pregunta) {
-                $maxPosible += $this->maxPosiblePregunta($pregunta);
-            }
-
-            $promedioSeccion = $maxPosible > 0 ? round(($puntajeObtenido / $maxPosible) * 100, 2) : 0;
-            $sumaGeneral += $promedioSeccion * ($seccion->porcentaje / 100);
+            [$maxPosible, $huboNoAplica] = $this->maxPosibleSeccion($seccion, $noAplica);
 
             return [
                 'id_seccion' => $seccion->id,
@@ -1284,14 +1352,59 @@ class EvaluacionesServices
                 'porcentaje_ponderacion' => $seccion->porcentaje,
                 'puntaje_obtenido' => round($puntajeObtenido, 2),
                 'puntaje_maximo' => round($maxPosible, 2),
-                'promedio' => $promedioSeccion,
+                'promedio' => $maxPosible > 0 ? round(($puntajeObtenido / $maxPosible) * 100, 2) : 0,
+                'no_aplica' => $maxPosible == 0 && $huboNoAplica,
             ];
         })->values();
 
         return [
-            'promedio_general' => round($sumaGeneral, 2),
+            'promedio_general' => $this->promedioPonderado($porSeccion),
             'por_seccion' => $porSeccion,
         ];
+    }
+
+    /** Ids de las preguntas que esta respuesta marcó «No aplica». */
+    private function preguntasNoAplica(EvaluacionRespuestaEvaluacion $respuesta): array
+    {
+        return $respuesta->respuestasPreguntas->where('no_aplica', 1)->pluck('id_pregunta')->all();
+    }
+
+    /**
+     * Máximo posible de una sección sin las preguntas «No aplica», y si alguna pregunta
+     * puntuable quedó fuera por eso. Máximo 0 + hubo N/A = la sección entera no aplica;
+     * una sección en 0 solo por ser de texto libre sigue contando como antes.
+     *
+     * @return array{0: float, 1: bool}
+     */
+    private function maxPosibleSeccion($seccion, array $noAplica): array
+    {
+        $max = 0;
+        $huboNoAplica = false;
+        foreach ($seccion->preguntas as $pregunta) {
+            $maxPregunta = $this->maxPosiblePregunta($pregunta);
+            if (in_array($pregunta->id, $noAplica)) {
+                $huboNoAplica = $huboNoAplica || $maxPregunta > 0;
+                continue;
+            }
+            $max += $maxPregunta;
+        }
+        return [$max, $huboNoAplica];
+    }
+
+    /**
+     * Promedio general ponderado por `porcentaje`. El % de las secciones «No aplica» se
+     * reparte entre las demás en proporción a su peso: se escala por (Σ% de todas / Σ% de
+     * las que aplican). Sin secciones N/A el factor es 1 y el resultado es el de siempre.
+     */
+    private function promedioPonderado($porSeccion): float
+    {
+        $pctTotal = $porSeccion->sum(fn ($s) => (float) $s['porcentaje_ponderacion']);
+        $aplican = $porSeccion->where('no_aplica', false);
+        $pctAplican = $aplican->sum(fn ($s) => (float) $s['porcentaje_ponderacion']);
+        if ($pctAplican <= 0) return 0;
+
+        $suma = $aplican->sum(fn ($s) => $s['promedio'] * ((float) $s['porcentaje_ponderacion'] / 100));
+        return round($suma * ($pctTotal / $pctAplican), 2);
     }
 
     public function calcularResultados(int $idEvaluacion): array
@@ -1314,12 +1427,17 @@ class EvaluacionesServices
             }
 
             $totalRespuestas = $respuestas->count();
-            $sumaGeneral = 0;
 
-            $porSeccion = $evaluacion->secciones->map(function ($seccion) use ($respuestas, $totalRespuestas, &$sumaGeneral) {
+            $porSeccion = $evaluacion->secciones->map(function ($seccion) use ($respuestas) {
                 $preguntasIds = $seccion->preguntas->pluck('id')->toArray();
                 $totalPuntosSeccion = 0;
                 $respuestasEnSeccion = 0;
+                // El máximo se suma respuesta por respuesta: $totalPuntosSeccion suma los
+                // puntos de TODAS, así que compararlo contra el máximo de una sola inflaba
+                // el promedio sobre 100% (bug real, visto en producción). Por respuesta,
+                // además, cada una descuenta sus propias preguntas «No aplica».
+                $maxPosible = 0;
+                $huboNoAplica = false;
 
                 foreach ($respuestas as $respuesta) {
                     foreach ($respuesta->respuestasPreguntas as $rp) {
@@ -1328,20 +1446,10 @@ class EvaluacionesServices
                             $respuestasEnSeccion++;
                         }
                     }
+                    [$max, $noAplica] = $this->maxPosibleSeccion($seccion, $this->preguntasNoAplica($respuesta));
+                    $maxPosible += $max;
+                    $huboNoAplica = $huboNoAplica || $noAplica;
                 }
-
-                // El máximo de una sola respuesta multiplicado por el total de respuestas
-                // registradas — $totalPuntosSeccion suma los puntos de TODAS las
-                // respuestas, así que compararlo contra el máximo de una sola inflaba el
-                // promedio muy por encima de 100% (bug real, visto en producción).
-                $maxPosible = 0;
-                foreach ($seccion->preguntas as $pregunta) {
-                    $maxPosible += $this->maxPosiblePregunta($pregunta);
-                }
-                $maxPosible *= $totalRespuestas;
-
-                $promedioSeccion = $maxPosible > 0 ? round(($totalPuntosSeccion / $maxPosible) * 100, 2) : 0;
-                $sumaGeneral += $promedioSeccion * ($seccion->porcentaje / 100);
 
                 return [
                     'id_seccion' => $seccion->id,
@@ -1350,7 +1458,9 @@ class EvaluacionesServices
                     'total_respuestas' => $respuestasEnSeccion,
                     'puntaje_obtenido' => round($totalPuntosSeccion, 2),
                     'puntaje_maximo' => round($maxPosible, 2),
-                    'promedio' => $promedioSeccion,
+                    'promedio' => $maxPosible > 0 ? round(($totalPuntosSeccion / $maxPosible) * 100, 2) : 0,
+                    // Solo si no le aplicó a ningún evaluado.
+                    'no_aplica' => $maxPosible == 0 && $huboNoAplica,
                 ];
             });
 
@@ -1371,7 +1481,7 @@ class EvaluacionesServices
                 'id_evaluacion' => $evaluacion->id,
                 'titulo' => $evaluacion->titulo,
                 'total_respuestas' => $totalRespuestas,
-                'promedio_general' => round($sumaGeneral, 2),
+                'promedio_general' => $this->promedioPonderado($porSeccion),
                 'por_seccion' => $porSeccion,
                 'distribucion_niveles' => $distribucionNiveles,
             ]];

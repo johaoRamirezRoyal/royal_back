@@ -288,3 +288,31 @@ ALTER TABLE `actas_estudiante` ADD `asunto` varchar(200) NULL AFTER `tipo`;
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
 SELECT 138, 'Ver actas de mis estudiantes', 15, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 138);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_120000_add_no_aplica_to_evaluaciones.php
+-- «No aplica» en evaluaciones: una evaluación compartida (p. ej. psicólogas)
+-- tiene secciones que no le corresponden a todos. permite_no_aplica = la
+-- pregunta ofrece «No aplica» al responder; no_aplica = se marcó así y la
+-- pregunta sale del máximo de su sección (y una sección toda en N/A no pondera).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `evaluaciones_preguntas` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `permite_comentario`;
+ALTER TABLE `evaluaciones_respuestas_pregunta` ADD `no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `valor_texto`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_130000_add_permite_no_aplica_to_evaluaciones_secciones.php
+-- «No aplica» por sección: con el flag, todas las preguntas de la sección
+-- (también las que se agreguen después) permiten «No aplica» al responder,
+-- sin marcarlas una por una. Se suma (OR) al flag de cada pregunta.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `evaluaciones_secciones` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `porcentaje`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_140000_alter_encuestas_textos_largos.php
+-- Encuestas: `descripcion` era VARCHAR(255) sin máximo en el controller y una
+-- descripción larga fallaba con SQLSTATE 1406 "Data too long"; pasa a TEXT
+-- (el controller ahora limita a 5000). `encuestas_preguntas.texto` era
+-- VARCHAR(255) pero el controller acepta hasta 500: mismo error, pasa a 500.
+-- ---------------------------------------------------------------------------
+ALTER TABLE encuestas MODIFY descripcion TEXT NULL;
+ALTER TABLE encuestas_preguntas MODIFY texto VARCHAR(500) NOT NULL;

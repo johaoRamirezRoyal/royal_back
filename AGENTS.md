@@ -1396,7 +1396,26 @@ regenera el PDF desde el estado vigente de la respuesta).
 ### Score (`calcularResultados`)
 
 Suma `opcion.valor` de cada respuesta, divide por el máximo posible (mayor
-valor por pregunta), ponderado por el `porcentaje` de cada sección. Solo
+valor por pregunta), ponderado por el `porcentaje` de cada sección.
+
+**«No aplica»** (2026-10-16, migración `2026_10_16_120000_add_no_aplica_to_evaluaciones`):
+para evaluaciones compartidas donde no todas las secciones le corresponden a cada
+evaluado (p. ej. psicólogas). `evaluaciones_preguntas.permite_no_aplica` habilita la
+opción por pregunta (se configura como `permite_comentario`, también en `duplicar`), y
+`evaluaciones_secciones.permite_no_aplica` (migración
+`2026_10_16_130000_add_permite_no_aplica_to_evaluaciones_secciones`) la habilita para
+**todas** las preguntas de la sección, también las que se agreguen después. La regla es
+OR: pregunta o sección (`validarNoAplica`; el frontend hace lo mismo al responder);
+una pregunta marcada se guarda como **una** fila `evaluaciones_respuestas_pregunta` con
+`no_aplica = 1` y `id_opcion`/`valor_texto` en null (`validarNoAplica` rechaza con 422
+si la pregunta no lo permite, antes de escribir). En el puntaje (`maxPosibleSeccion`,
+`promedioPonderado`, compartidos por `calcularPuntajeRespuesta` y `calcularResultados`):
+- la pregunta N/A sale del máximo de su sección (una sin responder sigue contando 0);
+- si todas las puntuables de una sección son N/A, la sección sale `no_aplica: true` y no
+  pondera: el general se escala por `Σ% de todas / Σ% de las que aplican`, o sea su %
+  se reparte entre las demás. Sin N/A el factor es 1 — las notas previas no cambian;
+- en el agregado el máximo se suma por respuesta (cada una con sus N/A), y una sección
+  solo es `no_aplica` si no le aplicó a nadie. El PDF muestra «No aplica / No pondera». Solo
 cuenta respuestas con opción seleccionada (multiple choice) — respuestas
 de texto libre no aportan puntaje. **Sin consumidor en el frontend todavía**
 — la página `/evaluaciones/resultados` está "en construcción"
@@ -1407,8 +1426,21 @@ pantalla aún.
 
 - **Validación inline** — no hay FormRequest classes; todo es `Validator::make()`
   en el controller con `response()->json()` directo (no usa `$this->error()`).
-- **Hard delete** en secciones/preguntas/opciones — no hay cascade explícito;
-  depende de FKs en BD (no confirmable sin migraciones). `Evaluacion` y su
+- **Pregunta respondida = tipo y opciones inmutables** (2026-10-16):
+  `actualizarPregunta` (si cambia `id_tipo_pregunta`), `crearOpcion`,
+  `actualizarOpcion` y `eliminarOpcion` responden 422 si la pregunta tiene filas en
+  `evaluaciones_respuestas_pregunta` (`preguntaTieneRespuestas()`); texto y
+  `permite_comentario` siguen editables. Motivo: el máximo de cada pregunta sale de
+  sus opciones, así que tocarlas cambiaba puntajes ya calculados, y borrar una opción
+  respondida dejaba la respuesta huérfana sin aviso (al revisarlo había 8 de 22
+  respuestas apuntando a opciones borradas). Sin respuestas, cambiar el tipo
+  reemplaza las opciones por las por defecto del tipo nuevo en el mismo `PUT`. `GET /{id}`
+  trae `respuestas_count` por pregunta para que el frontend oculte esas acciones.
+- **Hard delete** en secciones/preguntas/opciones — no hay cascade ni FK reales:
+  `evaluaciones_preguntas` y `evaluaciones_opciones_pregunta` son **MyISAM**
+  (confirmado 2026-10-16), así que las FK declaradas en la migración de
+  `evaluaciones_respuestas_pregunta` no existen en BD y `DB::transaction` no las protege.
+  `eliminarPregunta`/`eliminarSeccion` todavía no tienen la protección de arriba. `Evaluacion` y su
   tabla de respuestas sí son soft/append-only por diseño (SoftDeletes en la
   primera, nunca se borran respuestas vía API).
 - **`eliminarServicio`** es soft-disable (`activo=0`) pero `eliminar` evaluación
@@ -1425,6 +1457,28 @@ pantalla aún.
   `tipo_pregunta` — el tipo TS del frontend declara ambos campos por
   compatibilidad con código viejo, pero solo `tipo` viene poblado en
   respuestas reales del API.
+
+## Encuestas (`/encuestas` — `EncuestasController`)
+
+Encuestas de satisfacción **anónimas** por salón (QR pegado en el salón, flujo público
+`/api/encuestas/publica/{token}`), en Gestión Humana. Opciones **129** (admin) y **130**
+(ver), patrón (b) `sinAcceso()`.
+
+- **Tablas propias** (InnoDB, con migración): `encuestas`, `encuestas_preguntas`,
+  `encuestas_opciones_pregunta`, `encuestas_salon` (encuesta activa por salón + token del
+  QR), `encuestas_respuestas` (sin `id_user`, con `id_salon`/`id_reserva`),
+  `encuestas_respuestas_pregunta`. **Reusa** `evaluaciones_tipos_pregunta` (+ sus opciones
+  por defecto), `salones` y `reservas`.
+- `encuestas.descripcion` es `TEXT` (máx. 5000 en el controller) y
+  `encuestas_preguntas.texto` `VARCHAR(500)` desde
+  `2026_10_16_140000_alter_encuestas_textos_largos` — antes eran VARCHAR(255) y un texto
+  largo fallaba con SQLSTATE 1406.
+- `POST /{id}/duplicar` (129): copia preguntas y opciones, «<título> (Copia n)», inactiva;
+  no copia salones ni respuestas. Reusa `crear()`, como `EvaluacionesServices::duplicar`.
+- **Flujo público**: `obtenerEncuestaPublica` devuelve también `salon` (nombre) y oculta
+  las preguntas que no se pueden responder (de opciones y sin ninguna opción —
+  `esRespondible()`); `responderPublica` no las exige aunque sean obligatorias. Sin esto,
+  una pregunta así bloqueaba el envío de toda la encuesta.
 
 ## Login: verificación de dispositivo por OTP y llave maestra de recuperación
 

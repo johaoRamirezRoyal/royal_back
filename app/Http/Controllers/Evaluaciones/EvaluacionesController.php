@@ -226,12 +226,14 @@ class EvaluacionesController extends Controller
             'secciones.*.titulo' => 'required_with:secciones|string|max:255',
             'secciones.*.descripcion' => 'nullable|string',
             'secciones.*.porcentaje' => 'required_with:secciones|numeric|min:0|max:100',
+            'secciones.*.permite_no_aplica' => 'sometimes|integer',
             'secciones.*.orden' => 'nullable|integer',
             'secciones.*.preguntas' => 'sometimes|array',
             'secciones.*.preguntas.*.id_tipo_pregunta' => 'required_with:secciones.*.preguntas|integer|exists:evaluaciones_tipos_pregunta,id',
             'secciones.*.preguntas.*.texto' => 'required_with:secciones.*.preguntas|string|max:500',
             'secciones.*.preguntas.*.obligatoria' => 'sometimes|integer',
             'secciones.*.preguntas.*.permite_comentario' => 'sometimes|integer',
+            'secciones.*.preguntas.*.permite_no_aplica' => 'sometimes|integer',
             'secciones.*.preguntas.*.opciones' => 'sometimes|array',
             'secciones.*.preguntas.*.opciones.*.texto' => 'required_with:secciones.*.preguntas.*.opciones|string|max:255',
             'secciones.*.preguntas.*.opciones.*.valor' => 'required_with:secciones.*.preguntas.*.opciones|numeric',
@@ -361,6 +363,7 @@ class EvaluacionesController extends Controller
             'titulo' => 'required|string|max:255',
             'descripcion' => 'nullable|string',
             'porcentaje' => 'required|numeric|min:0|max:100',
+            'permite_no_aplica' => 'sometimes|integer',
             'orden' => 'nullable|integer',
             'activo' => 'sometimes|integer',
         ]);
@@ -382,6 +385,7 @@ class EvaluacionesController extends Controller
             'titulo' => 'sometimes|string|max:255',
             'descripcion' => 'nullable|string',
             'porcentaje' => 'sometimes|numeric|min:0|max:100',
+            'permite_no_aplica' => 'sometimes|integer',
             'orden' => 'nullable|integer',
             'activo' => 'sometimes|integer',
         ]);
@@ -415,6 +419,7 @@ class EvaluacionesController extends Controller
             'texto' => 'required|string|max:500',
             'obligatoria' => 'sometimes|integer',
             'permite_comentario' => 'sometimes|integer',
+            'permite_no_aplica' => 'sometimes|integer',
             'orden' => 'nullable|integer',
             'opciones' => 'sometimes|array',
             'opciones.*.texto' => 'required_with:opciones|string|max:255',
@@ -440,6 +445,7 @@ class EvaluacionesController extends Controller
             'texto' => 'sometimes|string|max:500',
             'obligatoria' => 'sometimes|integer',
             'permite_comentario' => 'sometimes|integer',
+            'permite_no_aplica' => 'sometimes|integer',
             'orden' => 'nullable|integer',
         ]);
 
@@ -527,6 +533,7 @@ class EvaluacionesController extends Controller
             'respuestas.*.id_opcion' => 'nullable|integer|exists:evaluaciones_opciones_pregunta,id',
             'respuestas.*.valor_texto' => 'nullable|string',
             'respuestas.*.comentario' => 'nullable|string',
+            'respuestas.*.no_aplica' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -554,6 +561,7 @@ class EvaluacionesController extends Controller
             'respuestas.*.id_opcion' => 'nullable|integer|exists:evaluaciones_opciones_pregunta,id',
             'respuestas.*.valor_texto' => 'nullable|string',
             'respuestas.*.comentario' => 'nullable|string',
+            'respuestas.*.no_aplica' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {

@@ -201,14 +201,20 @@ class EvaluacionRespuestaPdfService
         foreach (array_chunk($porSeccion->all(), 3) as $fila) {
             $html .= '<tr>';
             foreach ($fila as $seccion) {
-                $nivel = $this->nivel((float) $seccion['promedio']);
+                // Sección «No aplica»: no tiene nota ni pondera (su % se reparte entre las demás).
+                $noAplica = !empty($seccion['no_aplica']);
+                $nivel = $noAplica
+                    ? ['solid' => '#cbd5e1', 'text' => '#64748b']
+                    : $this->nivel((float) $seccion['promedio']);
+                $valor = $noAplica ? 'No aplica' : $seccion['promedio'] . '%';
+                $pie = $noAplica ? 'No pondera' : 'Pondera ' . $seccion['porcentaje_ponderacion'] . '% &middot; ' . $nivel['label'];
                 $html .= '
                 <td style="width:33%; vertical-align:top;">
                     <table cellpadding="5" style="width:100%; border:1px solid #e2e8f0; border-left:4px solid ' . $nivel['solid'] . ';">
                         <tr><td>
                             <span style="font-size:8.5pt; font-weight:bold;">' . e($seccion['titulo']) . '</span><br>
-                            <span style="font-size:16pt; font-weight:bold; color:' . $nivel['text'] . ';">' . $seccion['promedio'] . '%</span><br>
-                            <span style="font-size:7.5pt; color:#64748b;">Pondera ' . $seccion['porcentaje_ponderacion'] . '% &middot; ' . $nivel['label'] . '</span>
+                            <span style="font-size:16pt; font-weight:bold; color:' . $nivel['text'] . ';">' . $valor . '</span><br>
+                            <span style="font-size:7.5pt; color:#64748b;">' . $pie . '</span>
                         </td></tr>
                     </table>
                 </td>';

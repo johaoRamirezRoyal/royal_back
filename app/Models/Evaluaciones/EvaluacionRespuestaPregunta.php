@@ -15,6 +15,7 @@ class EvaluacionRespuestaPregunta extends Model
         'id_pregunta',
         'id_opcion',
         'valor_texto',
+        'no_aplica',
         'comentario',
     ];
 
@@ -22,6 +23,7 @@ class EvaluacionRespuestaPregunta extends Model
         'id_respuesta_evaluacion' => 'integer',
         'id_pregunta' => 'integer',
         'id_opcion' => 'integer',
+        'no_aplica' => 'integer',
     ];
 
     public function respuestaEvaluacion()
