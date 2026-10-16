@@ -55,6 +55,14 @@ class Inventario extends Model
         return Attribute::get(fn ($valor, $attrs) => $fecha($valor) ?? $fecha($attrs['fechareg'] ?? null));
     }
 
+    // Sin espacios al inicio/fin: el listado consolidado agrupa por descripción exacta, y
+    // "Silla " quedaba en un grupo aparte de "Silla". Cubre todo alta vía Eloquent
+    // (registro manual, compras, incrementar cantidad de un grupo).
+    protected function descripcion(): Attribute
+    {
+        return Attribute::set(fn ($valor) => is_string($valor) ? trim($valor) : $valor);
+    }
+
     // `detalles` de un ítem que entró por compra: "<id_producto>-<descripcion>-<id_compra>"
     // (antes solo "<id_producto>"). El id_producto inicial es lo que usan
     // agregarArticulosAInventario/SolicitudesServices para contar lo ya ingresado.

@@ -610,6 +610,8 @@ class InventarioServices
                 ];
             }
 
+            // update() masivo no pasa por el mutator del modelo: se recorta acá.
+            $nuevaDescripcion = trim($nuevaDescripcion);
             $query->update(['descripcion' => $nuevaDescripcion]);
 
             return [
