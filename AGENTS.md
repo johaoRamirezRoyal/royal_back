@@ -245,32 +245,20 @@ programadas" (`asistencia_mensaje`, por `fecha`). Un comando que corre cada hora
 (`EnviarNoticiasDiariasCommand`, `noticias:enviar-diarias`) envía por correo lo que esté
 activo y no se haya enviado aún.
 
-- **Cumpleaños anuales (`asistencia_mensaje.repetir_anual`, default false)** — solo los
-  cumpleaños marcados se repiten cada año:
-  - **Correo** (`enviarProgramadosDelDia`): con la marca, compara solo mes y día de `fecha`
-    (desde el año de esa fecha en adelante) y `enviado_at` pasa a guardar el **último**
-    envío — una fila está pendiente si no se envió este año. Sin la marca, el
-    comportamiento de siempre: una sola vez, en su fecha exacta (`whereNull('enviado_at')`).
-    Un 29 de febrero se envía el 28 en años no bisiestos.
-  - **Home** (`programadasVisiblesDeTipo('cumpleanos')` + `aniversarioVisible`): con la
-    marca, la ventana (`dias_visualizacion`, default 10) cuenta desde el aniversario más
-    reciente (revisa también el del año anterior, para ventanas que cruzan año nuevo); sin
-    ella, la ventana única desde `fecha`. Los de fecha única se filtran ya en SQL para no
-    traer los ~290 históricos en cada carga del Home; el aniversario se calcula en PHP
-    (`ponytail:`, pocos anuales — pasar a SQL si llegan a miles).
-  - **Por qué default false — datos de producción**: hay ~290 cumpleaños previos
-    (2022–2026, todos `tipo='cumpleanos'`, activos, `enviado_at` NULL; en local esas filas
-    son `normal`, la migración del `tipo` las dejaba así y en producción se cambiaron a
-    mano). Antes se creaba una fila nueva por persona cada año, así que repetirlos todos
-    mandaría varias felicitaciones a la misma persona el mismo día (p. ej. 4 el 31 de
-    octubre: #3, #89, #162, #259) a nivel 0, con riesgo de repetir el incidente de abajo si
-    "Todos" no tiene lista de distribución. Esos siguen con fecha única hasta que Gestión
-    Humana convierta **una fila por persona**: desde el formulario (guardar un cumpleaños
-    lo marca) o con la acción masiva `POST /api/noticias/repetir-anual`
-    (`cambiarRepeticionAnual`, ignora lo que no sea cumpleaños e informa cuántos omitió).
-    Filtro `repetir_anual` en `listarProgramados`. No hace falta desactivarlos.
-  - `crearProgramado`/`actualizarProgramado` solo guardan `repetir_anual` si `tipo` es
-    cumpleaños; al actualizar sin el campo, se conserva el valor que tenía.
+- **Cumpleaños: ya no se registran a mano ni se repiten** — las felicitaciones las genera
+  la Configuración de cumpleaños (abajo), una fila por persona y año. `crearProgramado`
+  siempre crea `tipo='normal'` (el campo `tipo` ya no se acepta) y `actualizarProgramado`
+  no cambia el tipo. Un cumpleaños se envía por correo **una sola vez, en su fecha exacta**
+  (`enviarProgramadosDelDia`: `whereDate(fecha, hoy)` + `enviado_at` NULL) y se muestra en
+  el Home con la misma ventana que las normales (`fecha` + `dias_visualizacion`).
+  - **Historia (retirada el 2026-10-16)**: hubo una repetición anual manual
+    (`asistencia_mensaje.repetir_anual`, acción masiva `repetir-anual`, ventana desde el
+    aniversario en el Home). Se retiró porque con la generación automática una persona con
+    su fila manual repetida recibiría dos felicitaciones el mismo día. La migración
+    `2026_10_16_130000_disable_repetir_anual_cumpleanos` pone `repetir_anual = 0` en todas
+    las filas (irreversible); la columna se conserva, siempre en 0, para no tocar la tabla
+    legacy. Los ~290 cumpleaños anteriores (2022–2026) quedan como fecha única ya pasada:
+    no se vuelven a enviar.
   - Las de tipo `normal` no se envían por correo (solo se muestran en el Home, por su
     ventana `fecha` + `dias_visualizacion`).
 - **Interruptor de correos** (`configuracion_noticias.enviar_correos_programadas`, fila
@@ -278,12 +266,13 @@ activo y no se haya enviado aún.
   opción 69): apagado, `enviarProgramadosDelDia` no envía nada **ni marca `enviado_at`** —
   si se enciende el mismo día, la siguiente ejecución horaria manda los de hoy. No afecta
   al mensaje general.
-- **Despliegue — migrar antes que el código**: `2026_10_16_100000_create_configuracion_noticias_table`
-  y `2026_10_16_110000_add_repetir_anual_to_asistencia_mensaje_table`. Sin ellas, el envío
-  horario falla (tabla `configuracion_noticias` inexistente) y `para-mostrar` también
-  (columna `repetir_anual`), así que la sección de noticias del Home falla para todos. Si
-  se aplican con SQL a mano, registrar ambas en `migrations` para que un `migrate`
-  posterior no las repita. En cada base de colegio que use Noticias.
+- **Despliegue — migrar antes que el código**: `2026_10_16_100000_create_configuracion_noticias_table`,
+  `2026_10_16_110000_add_repetir_anual_to_asistencia_mensaje_table` (la columna sigue
+  existiendo aunque ya no se use), `2026_10_16_120000_create_cumpleanos_plantillas_tables`
+  y `2026_10_16_130000_disable_repetir_anual_cumpleanos`. Sin ellas, el envío horario y
+  `para-mostrar` fallan, así que la sección de noticias del Home falla para todos. Si se
+  aplican con SQL a mano, registrarlas en `migrations` para que un `migrate` posterior no
+  las repita. En cada base de colegio que use Noticias.
 - **`asistencia_mensaje` es MyISAM** (tabla legacy): no soporta transacciones, un
   `DB::beginTransaction()`/`rollBack()` alrededor de una prueba **no** deshace nada (pasó
   de verdad el 2026-10-16: las filas de prueba quedaron guardadas). Para probar contra

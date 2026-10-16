@@ -56,6 +56,5 @@ Route::get('/', [NoticiasController::class, 'listar']);
 Route::post('/', [NoticiasController::class, 'crear']);
 Route::put('/', [NoticiasController::class, 'actualizar']);
 Route::post('/estado', [NoticiasController::class, 'cambiarEstado']);
-Route::post('/repetir-anual', [NoticiasController::class, 'cambiarRepeticionAnual']);
 Route::post('/imagen', [NoticiasController::class, 'subirImagen']);
 Route::get('/imagen/{ruta}', [NoticiasController::class, 'verImagen'])->where('ruta', '.*');

@@ -153,36 +153,6 @@ class NoticiasService
                 }
             });
 
-        // Los cumpleaños con `repetir_anual` se repiten cada año (igual que su envío por
-        // correo, ver enviarProgramadosDelDia): la ventana cuenta desde el aniversario más
-        // reciente de su `fecha`. Los demás (los previos a la repetición anual) conservan su
-        // ventana única desde `fecha` — por eso se filtran ya en SQL, para no traer los ~290
-        // históricos en cada carga del Home.
-        if ($tipo === 'cumpleanos') {
-            $hoyDia = now()->startOfDay();
-
-            // ponytail: el aniversario se calcula en PHP — los cumpleaños anuales son pocos.
-            // Si llegan a miles, pasar este cálculo a SQL.
-            return $query
-                ->where(function ($query) use ($hoy) {
-                    $query->where('repetir_anual', 1)
-                        ->orWhere(function ($unaVez) use ($hoy) {
-                            $unaVez->whereDate('fecha', '<=', $hoy)
-                                ->whereRaw(
-                                    'DATE_ADD(fecha, INTERVAL COALESCE(dias_visualizacion, ?) DAY) >= ?',
-                                    [self::DIAS_VISUALIZACION_DEFECTO, $hoy],
-                                );
-                        });
-                })
-                ->whereYear('fecha', '<=', $hoyDia->year)
-                ->get()
-                ->map(fn ($noticia) => [$noticia, $this->aniversarioVisible($noticia, $hoyDia)])
-                ->filter(fn ($par) => $par[1] !== null)
-                ->sortByDesc(fn ($par) => $par[1]->timestamp)
-                ->map(fn ($par) => $par[0])
-                ->values();
-        }
-
         return $query
             ->whereDate('fecha', '<=', $hoy)
             // fecha + COALESCE(dias_visualizacion, default) >= hoy — el default no se
@@ -195,35 +165,6 @@ class NoticiasService
             )
             ->orderByDesc('fecha')
             ->get();
-    }
-
-    /**
-     * Aniversario de un cumpleaños cuya ventana de visualización (`dias_visualizacion`, o
-     * el default) incluye hoy, o null si hoy no se muestra. Con `repetir_anual` se revisa
-     * el de este año y el del anterior (una ventana que empieza a fin de diciembre sigue en
-     * enero), nunca antes del año de su `fecha`; sin él, solo la fecha original. Un 29 de
-     * febrero cae el 28 en años no bisiestos.
-     */
-    private function aniversarioVisible(MensajeProgramado $noticia, Carbon $hoy): ?Carbon
-    {
-        $dias = $noticia->dias_visualizacion ?? self::DIAS_VISUALIZACION_DEFECTO;
-        $mes = $noticia->fecha->month;
-        $anios = $noticia->repetir_anual ? [$hoy->year, $hoy->year - 1] : [$noticia->fecha->year];
-
-        foreach ($anios as $anio) {
-            if ($anio < $noticia->fecha->year) {
-                continue;
-            }
-
-            $dia = min($noticia->fecha->day, Carbon::create($anio, $mes, 1)->daysInMonth);
-            $aniversario = Carbon::create($anio, $mes, $dia)->startOfDay();
-
-            if ($aniversario->lte($hoy) && $aniversario->copy()->addDays($dias)->gte($hoy)) {
-                return $aniversario;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -311,10 +252,6 @@ class NoticiasService
                 $query->where('activo', (int) $filtros['activo']);
             }
 
-            if (isset($filtros['repetir_anual']) && $filtros['repetir_anual'] !== null && $filtros['repetir_anual'] !== '') {
-                $query->where('tipo', 'cumpleanos')->where('repetir_anual', (int) $filtros['repetir_anual']);
-            }
-
             if (!empty($filtros['fecha_desde'])) {
                 $query->whereDate('fecha', '>=', $filtros['fecha_desde']);
             }
@@ -349,8 +286,8 @@ class NoticiasService
                 'mensaje' => $datos['mensaje'] ?? null,
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
-                'tipo' => $datos['tipo'] ?? 'normal',
-                'repetir_anual' => ($datos['tipo'] ?? 'normal') === 'cumpleanos' && !empty($datos['repetir_anual']),
+                // Solo noticias normales: los cumpleaños los genera CumpleanosService.
+                'tipo' => 'normal',
                 'dias_visualizacion' => $datos['dias_visualizacion'] ?? null,
                 'activo' => $datos['activo'] ?? true,
                 'id_log' => $idLog,
@@ -372,8 +309,6 @@ class NoticiasService
                 return ['error' => true, 'message' => 'Noticia programada no encontrada'];
             }
 
-            $tipo = $datos['tipo'] ?? $programado->tipo;
-
             $programado->update([
                 'fecha' => $datos['fecha'],
                 'titulo' => $datos['titulo'],
@@ -381,10 +316,9 @@ class NoticiasService
                 'mensaje' => $datos['mensaje'] ?? null,
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
-                'tipo' => $tipo,
-                // Solo un cumpleaños se repite; sin el campo se conserva lo que tenía.
-                'repetir_anual' => $tipo === 'cumpleanos'
-                    && (array_key_exists('repetir_anual', $datos) ? !empty($datos['repetir_anual']) : $programado->repetir_anual),
+                // El tipo no se cambia al editar, y la repetición anual se retiró (ver la
+                // migración disable_repetir_anual_cumpleanos).
+                'repetir_anual' => false,
                 'dias_visualizacion' => array_key_exists('dias_visualizacion', $datos) ? $datos['dias_visualizacion'] : $programado->dias_visualizacion,
                 'activo' => $datos['activo'] ?? true,
             ]);
@@ -407,39 +341,9 @@ class NoticiasService
     }
 
     /**
-     * Acción masiva "Repetir cada año" / "No repetir" de la tabla. Solo aplica a los
-     * cumpleaños: el resto de los ids seleccionados se ignora y se informa cuántos.
-     */
-    public function cambiarRepeticionAnual(array $ids, bool $repetir): array
-    {
-        try {
-            $cumpleanos = MensajeProgramado::whereIn('id', $ids)->where('tipo', 'cumpleanos');
-            // Se cuenta antes de actualizar: el UPDATE de MySQL solo informa las filas que
-            // cambiaron, así que las que ya estaban así no entrarían en el mensaje.
-            $coinciden = (clone $cumpleanos)->count();
-            $cumpleanos->update(['repetir_anual' => $repetir]);
-            $omitidas = count(array_unique($ids)) - $coinciden;
-
-            $plural = $coinciden === 1 ? '' : 'n';
-            $mensaje = $repetir
-                ? "{$coinciden} cumpleaños se repetirá{$plural} cada año"
-                : "{$coinciden} cumpleaños dejará{$plural} de repetirse";
-            if ($omitidas > 0) {
-                $mensaje .= $omitidas === 1
-                    ? ' (1 no es cumpleaños y no se cambió)'
-                    : " ({$omitidas} no son cumpleaños y no se cambiaron)";
-            }
-
-            return ['error' => false, 'message' => $mensaje];
-        } catch (\Exception $e) {
-            return ['error' => true, 'message' => $e->getMessage()];
-        }
-    }
-
-    /**
      * Envía por correo el mensaje general (si está activo y no se envió hoy) y los
-     * cumpleaños programados de hoy (los marcados `repetir_anual` por mes y día, una vez
-     * al año; el resto, una sola vez en su fecha exacta — ver enviarProgramadosDelDia).
+     * cumpleaños programados de hoy (una sola vez, en su fecha exacta — ver
+     * enviarProgramadosDelDia).
      * Corre cada hora desde un comando programado (ver EnviarNoticiasDiariasCommand).
      * Nunca lanza: cada envío individual ya maneja sus
      * propios errores (MailService::send), así que un correo inválido o un fallo de SMTP
@@ -532,37 +436,12 @@ class NoticiasService
             return 0;
         }
 
-        $hoy = now();
-
+        // Cada cumpleaños se envía una sola vez, en su fecha exacta. Las felicitaciones las
+        // genera CumpleanosService una por persona y año (la repetición anual manual se retiró).
         $pendientes = MensajeProgramado::where('activo', 1)
             ->where('tipo', 'cumpleanos')
-            ->where(function ($query) use ($hoy) {
-                // `repetir_anual`: coinciden por mes y día (no por la fecha completa), a
-                // partir del año de su `fecha`. `enviado_at` guarda el último envío, así que
-                // está pendiente si no se ha enviado este año.
-                $query->where(function ($anual) use ($hoy) {
-                    $anual->where('repetir_anual', 1)
-                        ->whereMonth('fecha', $hoy->month)
-                        ->where(function ($dia) use ($hoy) {
-                            $dia->whereDay('fecha', $hoy->day);
-                            // 29 de febrero: en los años no bisiestos se envía el 28.
-                            if ($hoy->month === 2 && $hoy->day === 28 && !$hoy->isLeapYear()) {
-                                $dia->orWhereDay('fecha', 29);
-                            }
-                        })
-                        ->whereYear('fecha', '<=', $hoy->year)
-                        ->where(function ($envio) use ($hoy) {
-                            $envio->whereNull('enviado_at')->orWhereYear('enviado_at', '<', $hoy->year);
-                        });
-                })
-                // Sin `repetir_anual` (los previos a la repetición anual): una sola vez, en
-                // su fecha exacta — el comportamiento de siempre.
-                ->orWhere(function ($unaVez) use ($hoy) {
-                    $unaVez->where('repetir_anual', 0)
-                        ->whereDate('fecha', $hoy->toDateString())
-                        ->whereNull('enviado_at');
-                });
-            })
+            ->whereDate('fecha', now()->toDateString())
+            ->whereNull('enviado_at')
             ->get();
 
         $enviadas = 0;
@@ -582,8 +461,8 @@ class NoticiasService
 
                 if (empty($correos)) {
                     Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
-                    // Se marca igual como enviada este año — sin destinatarios hoy, reintentar
-                    // cada hora no cambia nada; el próximo año se vuelve a intentar.
+                    // Se marca igual como enviada — sin destinatarios hoy, reintentar cada
+                    // hora no cambia nada.
                     $programado->update(['enviado_at' => now()]);
                     continue;
                 }

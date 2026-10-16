@@ -154,7 +154,6 @@ class NoticiasController extends Controller
             's' => $request->input('s') ? trim($request->input('s')) : null,
             'nivel' => $request->input('nivel'),
             'activo' => $request->input('activo'),
-            'repetir_anual' => $request->input('repetir_anual'),
             'fecha_desde' => $request->input('fecha_desde'),
             'fecha_hasta' => $request->input('fecha_hasta'),
         ];
@@ -175,8 +174,6 @@ class NoticiasController extends Controller
             'imagen' => 'nullable|string|max:250',
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
-            'tipo' => 'nullable|in:normal,cumpleanos',
-            'repetir_anual' => 'nullable|boolean',
             'dias_visualizacion' => 'nullable|integer|min:1',
             'activo' => 'required|boolean',
         ]);
@@ -198,8 +195,6 @@ class NoticiasController extends Controller
             'imagen' => 'nullable|string|max:250',
             'url' => 'nullable|string|max:200',
             'nivel' => 'nullable|integer',
-            'tipo' => 'nullable|in:normal,cumpleanos',
-            'repetir_anual' => 'nullable|boolean',
             'dias_visualizacion' => 'nullable|integer|min:1',
             'activo' => 'required|boolean',
         ]);
@@ -221,22 +216,6 @@ class NoticiasController extends Controller
 
         return $this->apiResponse(
             $this->service->cambiarEstadoProgramados($request->input('ids'), (int) $request->input('estado'))
-        );
-    }
-
-    /** POST /api/noticias/repetir-anual — acción masiva sobre los cumpleaños seleccionados. */
-    public function cambiarRepeticionAnual(Request $request): JsonResponse
-    {
-        $this->ensurePermisoGestion();
-
-        $request->validate([
-            'ids' => 'required|array|min:1',
-            'ids.*' => 'integer',
-            'repetir' => 'required|boolean',
-        ]);
-
-        return $this->apiResponse(
-            $this->service->cambiarRepeticionAnual($request->input('ids'), $request->boolean('repetir'))
         );
     }
 
