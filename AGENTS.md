@@ -1371,7 +1371,22 @@ regenera el PDF desde el estado vigente de la respuesta).
 ### Score (`calcularResultados`)
 
 Suma `opcion.valor` de cada respuesta, divide por el máximo posible (mayor
-valor por pregunta), ponderado por el `porcentaje` de cada sección. Solo
+valor por pregunta), ponderado por el `porcentaje` de cada sección.
+
+**«No aplica»** (2026-10-16, migración `2026_10_16_120000_add_no_aplica_to_evaluaciones`):
+para evaluaciones compartidas donde no todas las secciones le corresponden a cada
+evaluado (p. ej. psicólogas). `evaluaciones_preguntas.permite_no_aplica` habilita la
+opción por pregunta (se configura como `permite_comentario`, también en `duplicar`);
+una pregunta marcada se guarda como **una** fila `evaluaciones_respuestas_pregunta` con
+`no_aplica = 1` y `id_opcion`/`valor_texto` en null (`validarNoAplica` rechaza con 422
+si la pregunta no lo permite, antes de escribir). En el puntaje (`maxPosibleSeccion`,
+`promedioPonderado`, compartidos por `calcularPuntajeRespuesta` y `calcularResultados`):
+- la pregunta N/A sale del máximo de su sección (una sin responder sigue contando 0);
+- si todas las puntuables de una sección son N/A, la sección sale `no_aplica: true` y no
+  pondera: el general se escala por `Σ% de todas / Σ% de las que aplican`, o sea su %
+  se reparte entre las demás. Sin N/A el factor es 1 — las notas previas no cambian;
+- en el agregado el máximo se suma por respuesta (cada una con sus N/A), y una sección
+  solo es `no_aplica` si no le aplicó a nadie. El PDF muestra «No aplica / No pondera». Solo
 cuenta respuestas con opción seleccionada (multiple choice) — respuestas
 de texto libre no aportan puntaje. **Sin consumidor en el frontend todavía**
 — la página `/evaluaciones/resultados` está "en construcción"

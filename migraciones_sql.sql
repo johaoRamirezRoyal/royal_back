@@ -288,3 +288,13 @@ ALTER TABLE `actas_estudiante` ADD `asunto` varchar(200) NULL AFTER `tipo`;
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
 SELECT 138, 'Ver actas de mis estudiantes', 15, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 138);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_120000_add_no_aplica_to_evaluaciones.php
+-- «No aplica» en evaluaciones: una evaluación compartida (p. ej. psicólogas)
+-- tiene secciones que no le corresponden a todos. permite_no_aplica = la
+-- pregunta ofrece «No aplica» al responder; no_aplica = se marcó así y la
+-- pregunta sale del máximo de su sección (y una sección toda en N/A no pondera).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `evaluaciones_preguntas` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `permite_comentario`;
+ALTER TABLE `evaluaciones_respuestas_pregunta` ADD `no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `valor_texto`;

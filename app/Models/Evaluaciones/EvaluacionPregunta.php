@@ -16,6 +16,7 @@ class EvaluacionPregunta extends Model
         'texto',
         'obligatoria',
         'permite_comentario',
+        'permite_no_aplica',
         'orden',
     ];
 
@@ -24,12 +25,14 @@ class EvaluacionPregunta extends Model
         'id_tipo_pregunta' => 'integer',
         'obligatoria' => 'integer',
         'permite_comentario' => 'integer',
+        'permite_no_aplica' => 'integer',
         'orden' => 'integer',
     ];
 
     protected $attributes = [
         'obligatoria' => 1,
         'permite_comentario' => 0,
+        'permite_no_aplica' => 0,
         'orden' => 0,
     ];
 
