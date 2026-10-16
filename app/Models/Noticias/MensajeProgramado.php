@@ -17,7 +17,6 @@ class MensajeProgramado extends Model
         'url',
         'nivel',
         'tipo',
-        'repetir_anual',
         'dias_visualizacion',
         'id_log',
         'activo',
@@ -29,7 +28,6 @@ class MensajeProgramado extends Model
     protected $casts = [
         'fecha' => 'date:Y-m-d',
         'enviado_at' => 'datetime',
-        'repetir_anual' => 'boolean',
     ];
 
     protected $attributes = [

@@ -316,9 +316,7 @@ class NoticiasService
                 'mensaje' => $datos['mensaje'] ?? null,
                 'url' => $datos['url'] ?? null,
                 'nivel' => $datos['nivel'] ?? 0,
-                // El tipo no se cambia al editar, y la repetición anual se retiró (ver la
-                // migración disable_repetir_anual_cumpleanos).
-                'repetir_anual' => false,
+                // El tipo no se cambia al editar.
                 'dias_visualizacion' => array_key_exists('dias_visualizacion', $datos) ? $datos['dias_visualizacion'] : $programado->dias_visualizacion,
                 'activo' => $datos['activo'] ?? true,
             ]);

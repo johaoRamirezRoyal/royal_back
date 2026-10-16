@@ -590,7 +590,6 @@ class CumpleanosService
                 'mensaje' => null,
                 'nivel' => 0,
                 'tipo' => 'cumpleanos',
-                'repetir_anual' => false,
                 'activo' => 1,
             ]);
 
