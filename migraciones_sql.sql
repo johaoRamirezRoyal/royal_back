@@ -298,3 +298,11 @@ WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 138);
 -- ---------------------------------------------------------------------------
 ALTER TABLE `evaluaciones_preguntas` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `permite_comentario`;
 ALTER TABLE `evaluaciones_respuestas_pregunta` ADD `no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `valor_texto`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_130000_add_permite_no_aplica_to_evaluaciones_secciones.php
+-- «No aplica» por sección: con el flag, todas las preguntas de la sección
+-- (también las que se agreguen después) permiten «No aplica» al responder,
+-- sin marcarlas una por una. Se suma (OR) al flag de cada pregunta.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `evaluaciones_secciones` ADD `permite_no_aplica` tinyint NOT NULL DEFAULT '0' AFTER `porcentaje`;

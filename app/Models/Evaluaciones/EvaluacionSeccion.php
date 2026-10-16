@@ -15,6 +15,8 @@ class EvaluacionSeccion extends Model
         'titulo',
         'descripcion',
         'porcentaje',
+        // Todas sus preguntas (también las futuras) permiten «No aplica» al responder.
+        'permite_no_aplica',
         'orden',
         'activo',
     ];
@@ -22,12 +24,14 @@ class EvaluacionSeccion extends Model
     protected $casts = [
         'id_evaluacion' => 'integer',
         'porcentaje' => 'decimal:2',
+        'permite_no_aplica' => 'integer',
         'orden' => 'integer',
         'activo' => 'integer',
     ];
 
     protected $attributes = [
         'porcentaje' => '100.00',
+        'permite_no_aplica' => 0,
         'orden' => 0,
         'activo' => 1,
     ];

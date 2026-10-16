@@ -474,6 +474,7 @@ class EvaluacionesServices
                             'titulo' => $secData['titulo'],
                             'descripcion' => $secData['descripcion'] ?? null,
                             'porcentaje' => $secData['porcentaje'] ?? 0,
+                            'permite_no_aplica' => $secData['permite_no_aplica'] ?? 0,
                             'orden' => $secData['orden'] ?? $idx,
                             'activo' => $secData['activo'] ?? 1,
                         ]);
@@ -604,6 +605,7 @@ class EvaluacionesServices
                     'titulo' => $s->titulo,
                     'descripcion' => $s->descripcion,
                     'porcentaje' => $s->porcentaje,
+                    'permite_no_aplica' => $s->permite_no_aplica,
                     'orden' => $s->orden,
                     'activo' => $s->activo,
                     'preguntas' => $s->preguntas->map(fn ($p) => [
@@ -720,6 +722,7 @@ class EvaluacionesServices
                 'titulo' => $datos['titulo'],
                 'descripcion' => $datos['descripcion'] ?? null,
                 'porcentaje' => $datos['porcentaje'] ?? 0,
+                'permite_no_aplica' => $datos['permite_no_aplica'] ?? 0,
                 'orden' => $datos['orden'] ?? $evaluacion->secciones()->count(),
                 'activo' => $datos['activo'] ?? 1,
             ]);
@@ -1035,16 +1038,20 @@ class EvaluacionesServices
     }
 
     /**
-     * Solo las preguntas configuradas con `permite_no_aplica` aceptan «No aplica» — sin
-     * esto, un request directo podría sacar del promedio cualquier pregunta. Se valida
-     * antes de escribir: las tablas son MyISAM y la transacción no deshace nada.
+     * Solo aceptan «No aplica» las preguntas con `permite_no_aplica` propio o de su sección
+     * (que lo habilita para todas sus preguntas) — sin esto, un request directo podría sacar
+     * del promedio cualquier pregunta. Se valida antes de escribir: las tablas son MyISAM
+     * y la transacción no deshace nada.
      */
     private function validarNoAplica(array $respuestas): ?string
     {
         $ids = collect($respuestas)->filter(fn ($r) => !empty($r['no_aplica']))->pluck('id_pregunta')->unique();
         if ($ids->isEmpty()) return null;
 
-        $noPermitidas = EvaluacionPregunta::whereIn('id', $ids)->where('permite_no_aplica', 0)->count();
+        $noPermitidas = EvaluacionPregunta::whereIn('id', $ids)
+            ->where('permite_no_aplica', 0)
+            ->whereHas('seccion', fn ($q) => $q->where('permite_no_aplica', 0))
+            ->count();
         return $noPermitidas > 0 ? 'Hay preguntas marcadas como «No aplica» que no lo permiten' : null;
     }
 

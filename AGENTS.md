@@ -1376,7 +1376,11 @@ valor por pregunta), ponderado por el `porcentaje` de cada sección.
 **«No aplica»** (2026-10-16, migración `2026_10_16_120000_add_no_aplica_to_evaluaciones`):
 para evaluaciones compartidas donde no todas las secciones le corresponden a cada
 evaluado (p. ej. psicólogas). `evaluaciones_preguntas.permite_no_aplica` habilita la
-opción por pregunta (se configura como `permite_comentario`, también en `duplicar`);
+opción por pregunta (se configura como `permite_comentario`, también en `duplicar`), y
+`evaluaciones_secciones.permite_no_aplica` (migración
+`2026_10_16_130000_add_permite_no_aplica_to_evaluaciones_secciones`) la habilita para
+**todas** las preguntas de la sección, también las que se agreguen después. La regla es
+OR: pregunta o sección (`validarNoAplica`; el frontend hace lo mismo al responder);
 una pregunta marcada se guarda como **una** fila `evaluaciones_respuestas_pregunta` con
 `no_aplica = 1` y `id_opcion`/`valor_texto` en null (`validarNoAplica` rechaza con 422
 si la pregunta no lo permite, antes de escribir). En el puntaje (`maxPosibleSeccion`,
