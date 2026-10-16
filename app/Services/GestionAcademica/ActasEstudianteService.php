@@ -80,7 +80,7 @@ class ActasEstudianteService extends Service
      * Alcance de la opción 138 "Ver actas de mis estudiantes": los estudiantes que HOY están en
      * los cursos con carga académica activa del docente, más las actas que él mismo solicitó
      * (aunque el estudiante no esté en sus cursos). null = sin límite. Lo fija el controller
-     * antes de cada lectura; [] de cursos = solo las que solicitó.
+     * antes de cada lectura; [] de cursos = solo las que solicitó (docente sin 136/137).
      */
     private ?array $idsCursos = null;
 
@@ -464,13 +464,20 @@ class ActasEstudianteService extends Service
                         // Nombre de archivo; el frontend arma la URL con publicFileUrl.
                         'u.foto_carnet',
                     ]),
-                // Para "Docente que solicita" del formulario.
-                'docentes' => DB::table('usuarios')
-                    ->whereIn('perfil', ActaEstudiante::PERFILES_DOCENTE)
-                    ->where('estado', 'activo')
-                    ->orderBy('apellido')
-                    ->orderBy('nombre')
-                    ->get(['id_user as id', DB::raw("TRIM(CONCAT(COALESCE(nombre, ''), ' ', COALESCE(apellido, ''))) as nombre"), 'documento']),
+                // Para "Docente que solicita" del formulario (foto y perfil, para su tarjeta).
+                'docentes' => DB::table('usuarios as d')
+                    ->leftJoin('perfiles as pf', 'pf.id_perfil', '=', 'd.perfil')
+                    ->whereIn('d.perfil', ActaEstudiante::PERFILES_DOCENTE)
+                    ->where('d.estado', 'activo')
+                    ->orderBy('d.apellido')
+                    ->orderBy('d.nombre')
+                    ->get([
+                        'd.id_user as id',
+                        DB::raw("TRIM(CONCAT(COALESCE(d.nombre, ''), ' ', COALESCE(d.apellido, ''))) as nombre"),
+                        'd.documento',
+                        'd.foto_carnet',
+                        'pf.nombre as perfil',
+                    ]),
             ]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => 'Error al obtener los filtros: ' . $e->getMessage(), 'data' => []];
@@ -516,6 +523,13 @@ class ActasEstudianteService extends Service
                 ->map(fn ($filas) => $filas->max('n'));
             $max = ActaEstudiante::MAX_DIALOGO_FORMATIVO;
 
+            $porPeriodoNivel = $enteros($this->conteosPorTipo($filtrada())
+                ->addSelect('a.id_periodo_academico as id_periodo', 'c.id_nivel as id', DB::raw("COALESCE(n.nombre, 'Sin nivel') as nombre"))
+                ->groupBy('a.id_periodo_academico', 'c.id_nivel', 'n.nombre')
+                ->orderBy('c.id_nivel')
+                ->get())
+                ->groupBy('id_periodo');
+
             return ['error' => false, 'message' => 'Estadísticas obtenidas', 'data' => [
                 'resumen' => [
                     'total' => (int) $resumen->total,
@@ -536,11 +550,13 @@ class ActasEstudianteService extends Service
                     ->groupBy('a.id_curso', 'c.nombre')
                     ->orderBy('c.nombre')
                     ->get()),
+                // Cada periodo trae su reparto por nivel (`niveles`), para la torta de dos anillos.
                 'por_periodo' => $enteros($this->conteosPorTipo($filtrada())
                     ->addSelect('a.id_periodo_academico as id', 'p.nombre', 'p.fecha_inicio')
                     ->groupBy('a.id_periodo_academico', 'p.nombre', 'p.fecha_inicio')
                     ->orderBy('p.fecha_inicio')
-                    ->get()),
+                    ->get())
+                    ->each(fn ($f) => $f->niveles = $porPeriodoNivel->get($f->id, collect())->values()),
                 'por_anio' => $enteros($this->conteosPorTipo($this->filtrar($this->base(), $filtros, conAnio: false))
                     ->addSelect('a.id_anio_escolar as id', DB::raw("CONCAT(y.anio_inicio, '-', y.anio_fin) as nombre"), 'y.anio_inicio')
                     ->groupBy('a.id_anio_escolar', 'y.anio_inicio', 'y.anio_fin')

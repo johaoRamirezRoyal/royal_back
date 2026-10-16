@@ -13,7 +13,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * Registro de actas de estudiantes. Lectura (listado, conteo, gráficas): opción 136 o 137
- * (todas), u opción 138 (solo las de los estudiantes de los cursos del docente).
+ * (todas); un docente (perfil 3/14) sin ellas, solo las que él solicitó; u opción 138 (las de
+ * los estudiantes de los cursos del docente).
  * Escritura (crear/editar/eliminar): opción 137. Ver ActasEstudianteService.
  */
 class ActasEstudianteController extends Controller
@@ -36,14 +37,22 @@ class ActasEstudianteController extends Controller
     }
 
     /**
-     * Lectura: con 136/137 ve todas; con solo la 138, limita el servicio a los estudiantes de
-     * los cursos donde el usuario tiene carga académica activa más las actas que él solicitó.
-     * Sin ninguna, rechaza.
+     * Lectura: con 136/137 ve todas. Un docente (perfil 3/14) sin ellas ve solo las actas que él
+     * solicitó (`id_docente_solicita`), sin necesitar la 138. Con solo la 138, limita el servicio
+     * a los estudiantes de los cursos donde el usuario tiene carga académica activa más las actas
+     * que él solicitó. Sin ninguna, rechaza.
      */
     private function sinLectura(Request $request): ?JsonResponse
     {
         if ($this->tiene($request, self::OPCION_VER) || $this->tiene($request, self::OPCION_GESTIONAR)) {
             $this->service->limitarACursos(null);
+
+            return null;
+        }
+
+        // [] de cursos = solo las que solicitó (ver ActasEstudianteService::limitarACursos).
+        if (in_array((int) $request->user()->perfil, ActaEstudiante::PERFILES_DOCENTE, true)) {
+            $this->service->limitarACursos([], $request->user()->id_user);
 
             return null;
         }
