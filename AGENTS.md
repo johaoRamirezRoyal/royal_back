@@ -290,6 +290,42 @@ activo y no se haya enviado aún.
   esa tabla, usa instancias en memoria (`new MensajeProgramado([...])`) para la lógica de
   fechas, y si hace falta crear filas, ponles un título reconocible y bórralas en un
   `finally`. El `ALTER TABLE` también bloquea la tabla mientras corre.
+- **Configuración de cumpleaños (felicitaciones automáticas)** — `CumpleanosController`
+  (`/api/noticias/cumpleanos/*`, opción 69, Super Admin siempre pasa) + `CumpleanosService`
+  + `CumpleanosImagen`. Migración `2026_10_16_120000_create_cumpleanos_plantillas_tables`
+  (tablas `cumpleanos_plantillas`, `cumpleanos_generados`, `cumpleanos_excluidos` y columnas
+  `cumpleanos_*` en `configuracion_noticias`) — migrar antes de desplegar.
+  - **Plantillas por género** (`masculino`/`femenino`): imagen base (subida a
+    `noticias/cumpleanos/plantillas/`, 500–3000 px por lado; ancho, alto y si tiene
+    transparencia se leen del archivo al guardar, no del cliente) + `elementos` (JSON, todo en
+    fracciones de la imagen: posición/estilo del nombre y de la foto, ver el docblock de
+    `CumpleanosImagen`). `CumpleanosImagen::normalizar` acota todo lo que llega del cliente.
+  - **Composición con GD** (`CumpleanosImagen::componer`): el nombre con FreeType
+    (`resources/fonts/cumpleanos/`, ver su README; px = pt·96/72), la foto recortada a
+    círculo/rectángulo redondeado con antialias por supermuestreo, borde como anillo, y la
+    foto encima o **debajo** de la plantilla (debajo = PNG con hueco transparente). La vista
+    previa del editor (`POST .../vista-previa`, devuelve el JPEG) usa este mismo método: es
+    la imagen exacta que se publica. ~0,3 s por imagen de 900×1200.
+  - **Personal** = usuarios activos fuera de `AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA`
+    (sin estudiantes/acudientes). Fecha de nacimiento y género salen de
+    `info_adicional_usuarios` (los edita la pantalla con `updateOrCreate`, misma tabla que
+    "Mi perfil"); la foto, de `foto_perfil` activa o, si no hay, `usuarios.foto_carnet`, y
+    cuenta solo si el archivo existe en el disco (en local casi ninguno existe: todos salen
+    "falta foto"). Subir una foto desde aquí crea una `foto_perfil`
+    (`PerfilUsuarioService::agregarFotoPerfil`). Excluidos en `cumpleanos_excluidos`.
+  - **Generación** (`generarPendientes`, la llama `noticias:enviar-diarias` cada hora antes
+    de enviar): con `cumpleanos_automatico`, a quien esté completo y le falten
+    `cumpleanos_dias_anticipacion` días o menos para su cumpleaños le crea una fila normal en
+    `asistencia_mensaje` (tipo cumpleanos, nivel 0, `repetir_anual` false, fecha = el
+    cumpleaños, imagen ya compuesta en `noticias/cumpleanos/`, título con `{nombre}`) y la
+    registra en `cumpleanos_generados` (único por persona y año: no se repite). El envío por
+    correo y el Home no cambiaron: la noticia sale el día del cumpleaños por el flujo de
+    siempre (y respeta `enviar_correos_programadas`). Sin plantilla activa para su género
+    **no genera** (nunca usa la de otro género). Un error queda como `estado=error` y se
+    reintenta en la hora siguiente. `regenerar` borra la noticia aún no enviada y la vuelve a
+    componer (para cuando cambió la plantilla).
+  - Desactivar o eliminar una plantilla la quita de la configuración si era la elegida
+    (`soltarDeConfiguracionSiNoAplica`). Duplicar copia también el archivo de imagen.
 - **Probarlo manualmente**: `routes/console.php` programa el comando con `->hourly()`
   (al minuto 0 de cada hora, con `withoutOverlapping()`; antes era `->daily()` a las 00:00,
   y una noticia programada para hoy pero creada después de medianoche — o un día en que el

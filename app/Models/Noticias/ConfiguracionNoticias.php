@@ -14,10 +14,19 @@ class ConfiguracionNoticias extends Model
 
     protected $fillable = [
         'enviar_correos_programadas',
+        'cumpleanos_automatico',
+        'cumpleanos_plantilla_masculino',
+        'cumpleanos_plantilla_femenino',
+        'cumpleanos_dias_anticipacion',
+        'cumpleanos_titulo',
     ];
 
     protected $casts = [
         'enviar_correos_programadas' => 'boolean',
+        'cumpleanos_automatico' => 'boolean',
+        'cumpleanos_plantilla_masculino' => 'integer',
+        'cumpleanos_plantilla_femenino' => 'integer',
+        'cumpleanos_dias_anticipacion' => 'integer',
     ];
 
     protected $attributes = [
