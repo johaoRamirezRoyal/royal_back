@@ -2093,6 +2093,27 @@ nuevo, dale también su `label()`. Edita la tabla de la connection activa (BD el
 | `config/mail.php` | Default: `log` |
 | `config/services.php` | Google OAuth, Hikvision, SAMI SSO |
 
+## Laravel Boost (herramientas para agentes de IA, solo desarrollo)
+
+Instalado el 2026-10-17 como dependencia `require-dev` (`laravel/boost`) — no se
+despliega ni corre en producción. Lo que agregó al repo:
+
+- `boost.json` — configuración del instalador (agente `claude_code`, guidelines, MCP y
+  skills elegidas). Re-generar todo con `php artisan boost:install` / `boost:update`.
+- `.mcp.json` — registra el servidor MCP `laravel-boost` (`php artisan boost:mcp`), que da
+  al agente consultas de solo lectura a la BD, esquema, logs, URL absoluta y búsqueda en
+  la documentación de las versiones instaladas.
+- `CLAUDE.md` — Boost anexó sus guidelines debajo de `@AGENTS.md`, dentro del bloque
+  `<laravel-boost-guidelines>`. **No editar a mano ese bloque** (lo reescribe
+  `boost:update`); la documentación propia del proyecto sigue viviendo aquí, en
+  `AGENTS.md`. Varias reglas genéricas del bloque (tests con PHPUnit, `casts()`, API
+  Resources/versionado) no aplican tal cual a este repo: manda la convención existente
+  descrita en este archivo.
+- `.claude/skills/` — skills de Boost (`laravel-best-practices`, `testing-best-practices`,
+  `infer-conventions`, `deploying-to-cloud`, `socialite-development`,
+  `tailwindcss-development`).
+- `.claude/settings.local.json` queda fuera del repo (ignorado): es por máquina.
+
 ## Comandos útiles
 
 ```bash
