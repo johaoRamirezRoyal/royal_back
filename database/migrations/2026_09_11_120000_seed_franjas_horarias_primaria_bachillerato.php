@@ -6,13 +6,19 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration
 {
     private const ID_NIVEL_PRIMARIA = 2;    // nivel_academico: Educación básica primaria
+
     private const ID_NIVEL_SECUNDARIA = 3;  // nivel_academico: Educación básica secundaria
+
     private const ID_NIVEL_MEDIA = 4;       // nivel_academico: Educación media
 
     private const DIA_LUNES = 1;
+
     private const DIA_MARTES = 2;
+
     private const DIA_MIERCOLES = 3;
+
     private const DIA_JUEVES = 4;
+
     private const DIA_VIERNES = 5;
 
     /**
@@ -27,7 +33,7 @@ return new class extends Migration
     {
         $idAnioEscolar = DB::table('anio_escolar')->where('activo', 1)->value('id');
 
-        if (!$idAnioEscolar) {
+        if (! $idAnioEscolar) {
             return;
         }
 
@@ -86,6 +92,16 @@ return new class extends Migration
     /** @param array<int, array<int, array{0:string,1:string,2:?string,3:int,4:?string}>> $porDia */
     private function reemplazarFranjas(int $idEsquema, int $idAnioEscolar, array $porDia): void
     {
+        // Un esquema con horarios ya asignados es configuración real: no se pisa (la FK lo impediría igual).
+        $tieneHorarios = DB::table('academico_horario_clase as h')
+            ->join('academico_franja_horaria as f', 'f.id', '=', 'h.id_franja_horaria')
+            ->where('f.id_esquema', $idEsquema)
+            ->exists();
+
+        if ($tieneHorarios) {
+            return;
+        }
+
         DB::table('academico_franja_horaria')->where('id_esquema', $idEsquema)->delete();
 
         foreach ($porDia as $idDia => $franjas) {

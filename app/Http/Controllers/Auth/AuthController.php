@@ -15,7 +15,6 @@ use App\Services\Sami\SamiSsoService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -127,7 +126,7 @@ class AuthController extends Controller
                     'telefono' => null,
                     'asignatura' => null,
                     'user' => $googleUser->getEmail(),
-                    'pass' => Hash::make(uniqid()),
+                    'pass' => uniqid(), // Usuario::setPassAttribute la hashea
                     'perfil' => 10,
                     'id_nivel' => 1,
                     'fechareg' => now(),
@@ -148,7 +147,7 @@ class AuthController extends Controller
                 return redirect("{$frontendUrl}/?error=usuario_inactivo");
             }
 
-            return redirect("{$frontendUrl}/home")->withCookie("token", $this->jwt->generateToken($userModel));
+            return redirect("{$frontendUrl}/home")->withCookie('token', $this->jwt->generateToken($userModel));
 
         } catch (\Exception $e) {
             $frontendUrl = config('app.frontend_url');
@@ -185,7 +184,7 @@ class AuthController extends Controller
             'telefono' => $request->telefono ?? null,
             'asignatura' => $request->asignatura ?? null,
             'user' => $request->user,
-            'pass' => Hash::make($request->pass),
+            'pass' => $request->pass, // Usuario::setPassAttribute la hashea
             'perfil' => $request->perfil,
             'id_nivel' => $request->id_nivel,
             'fechareg' => now(),
@@ -287,7 +286,7 @@ class AuthController extends Controller
         Cache::put("auth_login_pending_{$token}", ['id' => $usuario->id_user, 'connection' => $connection], now()->addMinutes(15));
         Cache::put("auth_login_otp_{$token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
 
-        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — ' . config('app.name'), 'emails.sendDeviceLoginOtp', [
+        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — '.config('app.name'), 'emails.sendDeviceLoginOtp', [
             'verificationCode' => $code,
             'nombre' => $usuario->nombre,
             'dispositivo' => $this->service_auth->nombreDispositivoDesdeUserAgent($request->userAgent()),
@@ -350,7 +349,7 @@ class AuthController extends Controller
 
         Cache::put("auth_login_otp_{$request->token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
 
-        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — ' . config('app.name'), 'emails.sendDeviceLoginOtp', [
+        $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — '.config('app.name'), 'emails.sendDeviceLoginOtp', [
             'verificationCode' => $code,
             'nombre' => $usuario->nombre,
             'dispositivo' => $this->service_auth->nombreDispositivoDesdeUserAgent($request->userAgent()),
@@ -500,7 +499,7 @@ class AuthController extends Controller
 
         $visible = mb_substr($local, 0, 1);
 
-        return $visible . str_repeat('*', max(mb_strlen($local) - 1, 3)) . '@' . $dominio;
+        return $visible.str_repeat('*', max(mb_strlen($local) - 1, 3)).'@'.$dominio;
     }
 
     public function me()

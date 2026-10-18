@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -20,8 +21,11 @@ return new class extends Migration
             $table->integer('id_estudiante');
             $table->foreign('id_estudiante')->references('id_user')->on('usuarios')->restrictOnDelete();
 
+            // curso es MyISAM en algunas BD (no admite FK): ahí basta idx_actas_anio_curso.
             $table->integer('id_curso');
-            $table->foreign('id_curso')->references('id')->on('curso')->restrictOnDelete();
+            if (DB::selectOne("SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'curso'")?->ENGINE === 'InnoDB') {
+                $table->foreign('id_curso')->references('id')->on('curso')->restrictOnDelete();
+            }
 
             $table->integer('id_periodo_academico');
 

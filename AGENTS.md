@@ -453,7 +453,8 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
 - **Periodo y año no se envían**: salen de la `fecha` (el `periodo_academico` que la contiene;
   422 si no cae en ninguno). `id_curso` es la foto del curso del estudiante al registrar
   (solo se recalcula si al editar cambia el estudiante) — así las gráficas históricas no se
-  mueven cuando el estudiante pasa de curso. Sin FK a `periodo_academico` (es MyISAM).
+  mueven cuando el estudiante pasa de curso. Sin FK a `periodo_academico` (es MyISAM). La
+  FK a `curso` solo se crea si `curso` es InnoDB (ver Observaciones, abajo).
 - **Listado agrupado** (`GET /?agrupar=1`): una fila por estudiante —su acta más reciente
   (`ROW_NUMBER() OVER (PARTITION BY id_estudiante …)`, MariaDB 10.2+/MySQL 8) más
   `total_actas`, `dialogo_total` y `convivencial_total` de las actas que cumplen los filtros y
@@ -648,6 +649,15 @@ Si un `db:seed`/endpoint nuevo falla con "Base table ... doesn't exist" en una t
 Gestión Académica, es probable que sea este mismo patrón — revisa si tiene migración real
 antes de asumir que el dato está mal.
 
+### Seed de franjas: no pisa esquemas con horarios
+
+`2026_09_11_120000_seed_franjas_horarias_primaria_bachillerato` reemplaza (borra y vuelve
+a crear) las franjas de los esquemas de Primaria/Secundaria/Media del año activo. En una BD
+donde esos esquemas ya tenían horarios de clase asignados, el `delete` fallaba por la FK
+`academico_horario_clase_id_franja_horaria_foreign` y frenaba todo el `migrate` (pasó al
+migrar la BD local el 2026-10-18). Ahora `reemplazarFranjas` salta el esquema si alguna de
+sus franjas tiene horarios: esa es configuración real, y solo se siembran los vacíos.
+
 ### Bug de índice único corregido: `uq_franja_horaria`
 
 La migración original de `academico_franja_horaria` puso el unique en
@@ -725,8 +735,10 @@ pero las rutas cuelgan del prefijo propio.
   (los periodos de Configuración académica), **no** la tabla legacy `periodos` de
   Evaluaciones.
 - `periodo_academico` y `academico_asignatura` son **MyISAM**, así que no tienen FK desde
-  esta tabla: el servicio las valida. Solo hay FK reales hacia `usuarios` y `curso`
-  (InnoDB). Un `Schema::create` con FK hacia una tabla MyISAM falla con
+  esta tabla: el servicio las valida. Solo hay FK reales hacia `usuarios` y, si es InnoDB,
+  `curso`: `curso` es MyISAM en algunas BD (la local, por ejemplo), así que la migración
+  consulta `information_schema.TABLES` y, si no es InnoDB, deja solo el índice (mismo
+  criterio en `create_actas_estudiante_table`). Un `Schema::create` con FK hacia una tabla MyISAM falla con
   `errno: 150 "Foreign key constraint is incorrectly formed"` y deja la tabla a medio crear.
 
 ### Permisos (ids explícitos, `2026_10_14_100100_seed_opcion_observaciones_estudiantes`)
@@ -2136,3 +2148,10 @@ php artisan queue:listen --tries=1 --queue=emails,default
   OTP y llave maestra"); el resto de la lógica de auth (login, check, tokens) sigue en
   `AuthController`/`JwtService`, no está centralizada ahí.
 - `Authenticatable` vs `Model`: Usuario usa `Authenticatable` + `JWTSubject`; demás modelos usan `Model`.
+- **`Usuario::setPassAttribute` ya hashea (`bcrypt`)**: al crear o guardar un `Usuario`,
+  pasa la contraseña en claro — un `Hash::make` previo la deja con doble hash y nadie puede
+  entrar con ella. `AuthController::register` y el alta por Google lo hacían hasta el
+  2026-10-18 (corregido; quien se registró antes tiene que restablecerla). El `update()`
+  masivo del query builder (`Usuario::where(...)->update(...)`, como en
+  `PasswordResetController`) **no** pasa por el mutator: ahí sí va `Hash::make`. Prueba:
+  `tests/Unit/Usuarios/UsuarioPassTest.php`.
