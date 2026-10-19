@@ -465,6 +465,26 @@ class EvaluacionesController extends Controller
         return $this->apiResponse($this->evaluacionesServices->eliminarPregunta($idPregunta));
     }
 
+    public function reordenarPreguntas(Request $request, int $idEvaluacion): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'secciones' => 'required|array|min:1',
+            'secciones.*.id' => 'required|integer|distinct',
+            'secciones.*.preguntas' => 'required|array|min:1',
+            'secciones.*.preguntas.*' => 'integer|distinct',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->evaluacionesServices->reordenarPreguntas($idEvaluacion, $request->input('secciones')));
+    }
+
     // ─── Opciones ──────────────────────────────────────────────
 
     public function crearOpcion(Request $request, int $idPregunta): JsonResponse

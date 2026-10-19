@@ -1322,6 +1322,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `POST` | `/secciones/{idSeccion}/preguntas` | 101 | Crear pregunta + opciones anidadas |
 | `PUT` | `/preguntas/{idPregunta}` | 101 | Actualizar pregunta |
 | `DELETE` | `/preguntas/{idPregunta}` | 101 | Eliminar pregunta (hard delete) |
+| `PUT` | `/{id}/preguntas/orden` | 101 | Reordena en lote: `{ secciones: [{ id, preguntas: [ids] }] }`, solo las secciones que cambiaron (índice = `orden`). Cada lista debe traer exactamente las preguntas actuales de su sección (si no, 422): no cambia preguntas de sección. MyISAM: valida todo antes de escribir |
 
 #### Opciones
 
@@ -1473,6 +1474,8 @@ Encuestas de satisfacción **anónimas** por salón (QR pegado en el salón, flu
   `encuestas_preguntas.texto` `VARCHAR(500)` desde
   `2026_10_16_140000_alter_encuestas_textos_largos` — antes eran VARCHAR(255) y un texto
   largo fallaba con SQLSTATE 1406.
+- `PUT /{id}/preguntas/orden` (129): `{ preguntas: [ids] }` con **todas** las preguntas en
+  el orden nuevo (índice = `orden`); una lista que no coincide con las actuales → 422.
 - `POST /{id}/duplicar` (129): copia preguntas y opciones, «<título> (Copia n)», inactiva;
   no copia salones ni respuestas. Reusa `crear()`, como `EvaluacionesServices::duplicar`.
 - **Flujo público**: `obtenerEncuestaPublica` devuelve también `salon` (nombre) y oculta

@@ -2,6 +2,7 @@
 
 namespace App\Services\permisosLicencias;
 
+use App\Enums\Mails;
 use App\Models\PermisosLicencias\Permiso;
 use App\Models\PermisosLicencias\PermisoInstitucional;
 use App\Models\PermisosLicencias\PermisoLey;
@@ -37,6 +38,17 @@ class PermisosLicenciasServices
 
     /** Perfiles cuyo correo también se notifica cuando alguien de su mismo nivel solicita/actualiza un permiso, y que ven el listado acotado a su nivel. */
     private const PERFILES_COORDINACION_NIVEL = [26, 7];
+
+    /** Campos que `actualizar()` puede cambiar, con su etiqueta para el correo de edición. */
+    private const CAMPOS_EDITABLES = [
+        'fecha_permiso' => 'Fecha del permiso',
+        'fecha_retorno' => 'Día de ingreso',
+        'dias_permiso' => 'Cantidad de días de permiso',
+        'hora_salida' => 'Hora de salida',
+        'tiempo_permiso' => 'Tiempo del permiso',
+        'descripcion' => 'Descripción',
+        'evidencia_permiso' => 'Evidencia',
+    ];
 
     public function __construct(
         private FileStorageService $fileStorage,
@@ -249,6 +261,7 @@ class PermisosLicenciasServices
                 return ['error' => true, 'message' => 'No puedes editar la solicitud de otro usuario', 'status' => 403];
             }
 
+            $antes = $permiso->only(array_keys(self::CAMPOS_EDITABLES));
             $evidencia = $permiso->evidencia_permiso;
 
             if ($archivo) {
@@ -270,7 +283,15 @@ class PermisosLicenciasServices
                 'fecha_edit' => now(),
             ]);
 
+            // Sin id_edit/fecha_edit, que cambian siempre: solo lo que el usuario modificó.
+            $cambios = array_intersect_key($permiso->getChanges(), $antes);
+
             $permiso = $permiso->fresh(['usuario', 'tipo', 'motivo']);
+
+            if ($cambios) {
+                $this->notificarEdicion($permiso, $antes, $cambios, $actorId);
+            }
+
             $this->adjuntarUrl($permiso);
 
             return ['error' => false, 'message' => 'Solicitud actualizada correctamente', 'data' => $permiso];
@@ -328,6 +349,9 @@ class PermisosLicenciasServices
      * puntual; y cualquier beneficiario de nivel 1, 2 o 3 también notifica al directivo
      * (perfil 7) de su propio nivel. Si el propio beneficiario es coordinador, no se
      * notifica a la asistente de nivel (no aplica notificarse a sí misma sobre su jefe).
+     * Gestión Humana sale del grupo `GESTION_HUMANA` de `correos_institucionales`, y si
+     * otro usuario registró el permiso a nombre del beneficiario (opción 92), también se
+     * le notifica a él.
      */
     private function destinatariosNotificacion(Permiso $permiso): array
     {
@@ -336,10 +360,14 @@ class PermisosLicenciasServices
         $idNivel = $beneficiario?->id_nivel;
 
         $destinatarios = array_merge(
-            config('gestionHumana.correo_notificacion', []),
+            Mails::GESTION_HUMANA->recipients(),
             [$beneficiario?->correo],
             Usuario::correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
         );
+
+        if ($permiso->id_log && $permiso->id_log !== $permiso->id_user) {
+            $destinatarios[] = Usuario::find($permiso->id_log)?->correo;
+        }
 
         if ($idNivel === 1 || in_array($perfil, [23, 10, 32, 33], true) || $perfil === 11) {
             $destinatarios = array_merge($destinatarios, [
@@ -360,88 +388,27 @@ class PermisosLicenciasServices
 
     private function notificarCreacion(Permiso $permiso): void
     {
-        $beneficiario = $permiso->usuario;
-        $nombreCompleto = $beneficiario ? trim("{$beneficiario->nombre} {$beneficiario->apellido}") : "#{$permiso->id_user}";
-        $tipo = $permiso->tipo?->nombre ?? 'Permiso';
-        $motivo = $permiso->motivo?->nombre ?? '';
-        $esParcial = $permiso->tipo_permiso === 1;
-
         $lineas = [
             "Se ha solicitado un permiso/licencia #{$permiso->id}, con la siguiente información:",
             '',
-            "Usuario: {$nombreCompleto}",
-            'Documento: ' . ($beneficiario->documento ?? 'N/A'),
-            "Motivo: {$motivo}",
+            ...$this->lineasDetalle($permiso),
         ];
-
-        if ($permiso->tipo_permiso_detalle) {
-            $lineas[] = "Detalle del motivo: {$permiso->tipo_permiso_detalle}";
-        }
-
-        $lineas[] = "Tipo de permiso: {$tipo}";
-        $lineas[] = 'Fecha del permiso: ' . ($permiso->fecha_permiso?->format('Y-m-d') ?? 'N/A');
-
-        if ($permiso->hora_salida) {
-            $lineas[] = "Hora de salida: {$permiso->hora_salida}";
-        }
-
-        if ($permiso->fecha_retorno) {
-            $lineas[] = 'Día de ingreso: ' . $permiso->fecha_retorno->format('Y-m-d');
-        }
-
-        $lineas[] = $esParcial
-            ? 'Tiempo aproximado del permiso: ' . ($permiso->tiempo_permiso ? "{$permiso->tiempo_permiso} minutos" : 'N/A')
-            : 'Cantidad de días de permiso: ' . ($permiso->tiempo_permiso ?: ($permiso->dias_permiso ?: 'N/A'));
-
-        $lineas[] = 'Descripción: ' . ($permiso->descripcion ?: 'N/A');
-        $lineas[] = 'Evidencia adjunta: ' . ($permiso->evidencia_permiso ? 'Sí' : 'No');
-        $lineas[] = 'Fecha de la solicitud: ' . ($permiso->fechareg?->format('Y-m-d H:i') ?? 'N/A');
 
         $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Solicitud de permiso/licencia', implode("\n", $lineas));
     }
 
     private function notificarCambioEstado(Permiso $permiso): void
     {
-        $beneficiario = $permiso->usuario;
-        $nombreCompleto = $beneficiario ? trim("{$beneficiario->nombre} {$beneficiario->apellido}") : "#{$permiso->id_user}";
-        $tipo = $permiso->tipo?->nombre ?? 'Permiso';
-        $motivo = $permiso->motivo?->nombre ?? '';
         $estado = self::ESTADOS[$permiso->estado] ?? 'Actualizado';
-        $esParcial = $permiso->tipo_permiso === 1;
 
         $lineas = [
             "La solicitud de permiso/licencia #{$permiso->id} ha sido {$estado}, con la siguiente información:",
             '',
-            "Usuario: {$nombreCompleto}",
-            'Documento: ' . ($beneficiario->documento ?? 'N/A'),
-            "Motivo: {$motivo}",
+            ...$this->lineasDetalle($permiso),
+            '',
+            "Estado: {$estado}",
+            'Fecha de actualización: ' . ($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
         ];
-
-        if ($permiso->tipo_permiso_detalle) {
-            $lineas[] = "Detalle del motivo: {$permiso->tipo_permiso_detalle}";
-        }
-
-        $lineas[] = "Tipo de permiso: {$tipo}";
-        $lineas[] = 'Fecha del permiso: ' . ($permiso->fecha_permiso?->format('Y-m-d') ?? 'N/A');
-
-        if ($permiso->hora_salida) {
-            $lineas[] = "Hora de salida: {$permiso->hora_salida}";
-        }
-
-        if ($permiso->fecha_retorno) {
-            $lineas[] = 'Día de ingreso: ' . $permiso->fecha_retorno->format('Y-m-d');
-        }
-
-        $lineas[] = $esParcial
-            ? 'Tiempo aproximado del permiso: ' . ($permiso->tiempo_permiso ? "{$permiso->tiempo_permiso} minutos" : 'N/A')
-            : 'Cantidad de días de permiso: ' . ($permiso->tiempo_permiso ?: ($permiso->dias_permiso ?: 'N/A'));
-
-        $lineas[] = 'Descripción: ' . ($permiso->descripcion ?: 'N/A');
-        $lineas[] = 'Evidencia adjunta: ' . ($permiso->evidencia_permiso ? 'Sí' : 'No');
-        $lineas[] = 'Fecha de la solicitud: ' . ($permiso->fechareg?->format('Y-m-d H:i') ?? 'N/A');
-        $lineas[] = '';
-        $lineas[] = "Estado: {$estado}";
-        $lineas[] = 'Fecha de actualización: ' . ($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i'));
 
         if ($permiso->estado === 1 && $permiso->remunerado) {
             $lineas[] = 'Remunerado: ' . ($permiso->remunerado === 'si' ? 'Sí' : 'No');
@@ -452,6 +419,91 @@ class PermisosLicenciasServices
         }
 
         $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), "Permiso/licencia - {$estado}", implode("\n", $lineas));
+    }
+
+    /**
+     * @param array $antes   valores (casteados) de CAMPOS_EDITABLES antes del update
+     * @param array $cambios `getChanges()` acotado a CAMPOS_EDITABLES (solo se usan las claves)
+     */
+    private function notificarEdicion(Permiso $permiso, array $antes, array $cambios, int $actorId): void
+    {
+        $actor = Usuario::find($actorId);
+        $nombreActor = $actor ? trim("{$actor->nombre} {$actor->apellido}") : "#{$actorId}";
+
+        $lineas = [
+            "La solicitud de permiso/licencia #{$permiso->id} ha sido editada por {$nombreActor}.",
+            '',
+            'Cambios realizados:',
+        ];
+
+        foreach (array_keys($cambios) as $campo) {
+            $etiqueta = self::CAMPOS_EDITABLES[$campo];
+
+            // Nunca exponer la ruta del archivo en el correo.
+            $lineas[] = $campo === 'evidencia_permiso'
+                ? "{$etiqueta}: " . ($antes[$campo] ? 'se reemplazó el archivo' : 'se adjuntó un archivo')
+                : "{$etiqueta}: {$this->valorCorreo($antes[$campo])} → {$this->valorCorreo($permiso->{$campo})}";
+        }
+
+        $lineas = array_merge($lineas, [
+            '',
+            'Información vigente:',
+            ...$this->lineasDetalle($permiso),
+            '',
+            'Fecha de actualización: ' . ($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
+        ]);
+
+        $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Permiso/licencia - Editada', implode("\n", $lineas));
+    }
+
+    private function valorCorreo(mixed $valor): string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+
+        return ($valor === null || $valor === '') ? 'N/A' : (string) $valor;
+    }
+
+    /** Bloque común de datos de la solicitud para los correos de creación, cambio de estado y edición. */
+    private function lineasDetalle(Permiso $permiso): array
+    {
+        $beneficiario = $permiso->usuario;
+        $nombreCompleto = $beneficiario ? trim("{$beneficiario->nombre} {$beneficiario->apellido}") : "#{$permiso->id_user}";
+        $tipo = $permiso->tipo?->nombre ?? 'Permiso';
+        $motivo = $permiso->motivo?->nombre ?? '';
+        $esParcial = $permiso->tipo_permiso === 1;
+
+        $lineas = [
+            "Usuario: {$nombreCompleto}",
+            'Documento: ' . ($beneficiario->documento ?? 'N/A'),
+            "Motivo: {$motivo}",
+        ];
+
+        if ($permiso->tipo_permiso_detalle) {
+            $lineas[] = "Detalle del motivo: {$permiso->tipo_permiso_detalle}";
+        }
+
+        $lineas[] = "Tipo de permiso: {$tipo}";
+        $lineas[] = 'Fecha del permiso: ' . ($permiso->fecha_permiso?->format('Y-m-d') ?? 'N/A');
+
+        if ($permiso->hora_salida) {
+            $lineas[] = "Hora de salida: {$permiso->hora_salida}";
+        }
+
+        if ($permiso->fecha_retorno) {
+            $lineas[] = 'Día de ingreso: ' . $permiso->fecha_retorno->format('Y-m-d');
+        }
+
+        $lineas[] = $esParcial
+            ? 'Tiempo aproximado del permiso: ' . ($permiso->tiempo_permiso ? "{$permiso->tiempo_permiso} minutos" : 'N/A')
+            : 'Cantidad de días de permiso: ' . ($permiso->tiempo_permiso ?: ($permiso->dias_permiso ?: 'N/A'));
+
+        $lineas[] = 'Descripción: ' . ($permiso->descripcion ?: 'N/A');
+        $lineas[] = 'Evidencia adjunta: ' . ($permiso->evidencia_permiso ? 'Sí' : 'No');
+        $lineas[] = 'Fecha de la solicitud: ' . ($permiso->fechareg?->format('Y-m-d H:i') ?? 'N/A');
+
+        return $lineas;
     }
 
     private function adjuntarUrl(Permiso $permiso): void

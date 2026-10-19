@@ -41,6 +41,7 @@ Route::delete('/secciones/{idSeccion}', [EvaluacionesController::class, 'elimina
 Route::post('/secciones/{idSeccion}/preguntas', [EvaluacionesController::class, 'crearPregunta']);
 Route::put('/preguntas/{idPregunta}', [EvaluacionesController::class, 'actualizarPregunta']);
 Route::delete('/preguntas/{idPregunta}', [EvaluacionesController::class, 'eliminarPregunta']);
+Route::put('/{id}/preguntas/orden', [EvaluacionesController::class, 'reordenarPreguntas']);
 
 // ─── Opciones ─────────────────────────────────────────────
 Route::post('/preguntas/{idPregunta}/opciones', [EvaluacionesController::class, 'crearOpcion']);

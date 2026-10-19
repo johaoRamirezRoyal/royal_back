@@ -30,6 +30,7 @@ Route::get('/{id}/reservas-con-respuestas', [EncuestasController::class, 'reserv
 Route::post('/{idEncuesta}/preguntas', [EncuestasController::class, 'crearPregunta']);
 Route::put('/preguntas/{idPregunta}', [EncuestasController::class, 'actualizarPregunta']);
 Route::delete('/preguntas/{idPregunta}', [EncuestasController::class, 'eliminarPregunta']);
+Route::put('/{id}/preguntas/orden', [EncuestasController::class, 'reordenarPreguntas']);
 
 // ─── Opciones ───────────────────────────────────────────────
 Route::post('/preguntas/{idPregunta}/opciones', [EncuestasController::class, 'crearOpcion']);

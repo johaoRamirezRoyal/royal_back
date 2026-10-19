@@ -193,6 +193,24 @@ class EncuestasController extends Controller
         return $this->apiResponse($this->encuestasServices->eliminarPregunta($idPregunta));
     }
 
+    public function reordenarPreguntas(Request $request, int $idEncuesta): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'preguntas' => 'required|array|min:1',
+            'preguntas.*' => 'integer|distinct',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['error' => true, 'message' => $validator->errors()->first()], 422);
+        }
+
+        return $this->apiResponse($this->encuestasServices->reordenarPreguntas($idEncuesta, $request->input('preguntas')));
+    }
+
     // ─── Opciones de pregunta ─────────────────────────────────────
 
     public function crearOpcion(Request $request, int $idPregunta): JsonResponse
