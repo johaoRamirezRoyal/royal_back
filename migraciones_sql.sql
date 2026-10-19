@@ -316,3 +316,10 @@ ALTER TABLE `evaluaciones_secciones` ADD `permite_no_aplica` tinyint NOT NULL DE
 -- ---------------------------------------------------------------------------
 ALTER TABLE encuestas MODIFY descripcion TEXT NULL;
 ALTER TABLE encuestas_preguntas MODIFY texto VARCHAR(500) NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_16_150000_revoke_opcion_usuarios_a_coordinador.php
+-- Revoca la opción 2 ("Usuarios") al Coordinador (perfil 26): en producción la
+-- tenía otorgada y entraba a /users (gestión de usuarios).
+-- ---------------------------------------------------------------------------
+DELETE FROM cron_permisos WHERE id_opcion = 2 AND id_perfil = 26;
