@@ -17,14 +17,12 @@ return new class extends Migration
     {
         Schema::create('evaluaciones_tipos_pregunta_opciones', function (Blueprint $table) {
             $table->integer('id')->autoIncrement()->primary();
-            $table->integer('id_tipo_pregunta');
+            // Sin FK: evaluaciones_tipos_pregunta (y todo el módulo) es MyISAM, que no admite
+            // llaves foráneas — la FK hacía fallar la migración. Los tipos no se eliminan.
+            $table->integer('id_tipo_pregunta')->index();
             $table->string('texto');
             $table->decimal('valor', 5, 2)->default(0);
             $table->integer('orden')->default(0);
-
-            $table->foreign('id_tipo_pregunta')
-                ->references('id')->on('evaluaciones_tipos_pregunta')
-                ->cascadeOnDelete();
         });
 
         $defaults = [

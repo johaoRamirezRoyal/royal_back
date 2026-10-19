@@ -4,6 +4,7 @@ namespace App\Services\Usuarios;
 
 use App\Mail\NuevoUsuarioMail;
 use App\Models\Estudiantes\EstudiantesPadre;
+use App\Models\PerfilUsuario\InfoAdicionalUsuario;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
@@ -556,7 +557,13 @@ class UsuariosServices
     {
         try {
             $passPlano = $data['pass'] ?? null;
+            $genero = $data['genero'] ?? null;
+            unset($data['genero']);
             $usuario = Usuario::create($data);
+
+            if ($genero) {
+                InfoAdicionalUsuario::create(['id_user' => $usuario->id_user, 'genero' => $genero]);
+            }
 
             if ($passPlano) {
                 $this->mailService->send($usuario->correo, new NuevoUsuarioMail($usuario, $passPlano));

@@ -8,6 +8,8 @@ Route::get('/', [VinculacionAcudienteController::class, 'index']);
 // Estudiantes activos paginados: ?s=&cursos[]=&page=&per-page=
 Route::get('/estudiantes-buscar', [VinculacionAcudienteController::class, 'buscarEstudiantes']);
 Route::get('/{idAcudiente}/estudiantes', [VinculacionAcudienteController::class, 'estudiantes'])->where('idAcudiente', '[0-9]+');
+// Inverso: acudientes vinculados a un estudiante (lo usa la edición de usuario en /users)
+Route::get('/estudiante/{idEstudiante}/acudientes', [VinculacionAcudienteController::class, 'acudientes'])->where('idEstudiante', '[0-9]+');
 // { "id_acudiente": 10, "id_estudiante": 20 }
 Route::post('/', [VinculacionAcudienteController::class, 'vincular']);
 Route::delete('/', [VinculacionAcudienteController::class, 'desvincular']);

@@ -78,6 +78,20 @@ class VinculacionAcudienteService
         }
     }
 
+    public function acudientesVinculados(int $idEstudiante): array
+    {
+        return EstudiantesPadre::where('id_estudiante', $idEstudiante)
+            ->where('activo', 1)
+            ->with('acudiente:id_user,documento,nombre,apellido,correo,telefono')
+            ->get()
+            ->pluck('acudiente')
+            ->filter()
+            ->unique('id_user')
+            ->sortBy('nombre')
+            ->values()
+            ->all();
+    }
+
     public function vincular(int $idAcudiente, int $idEstudiante): array
     {
         if (!Usuario::where('id_user', $idAcudiente)->where('perfil', self::PERFIL_ACUDIENTE)->exists()) {

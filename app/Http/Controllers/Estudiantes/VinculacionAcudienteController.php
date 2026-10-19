@@ -99,6 +99,15 @@ class VinculacionAcudienteController extends Controller
         return $this->success($response['message'], $response['data']);
     }
 
+    public function acudientes(Request $request, int $idEstudiante)
+    {
+        if ($rechazo = $this->sinAcceso($request)) {
+            return $rechazo;
+        }
+
+        return $this->success('Datos obtenidos satisfactoriamente', $this->vinculacionService->acudientesVinculados($idEstudiante));
+    }
+
     public function vincular(Request $request)
     {
         if ($rechazo = $this->sinAcceso($request)) {

@@ -101,6 +101,12 @@ class RegistrarUsuarioRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+
+            // Se guarda en info_adicional_usuarios.genero (mismo dato de Mi perfil y Cumpleaños).
+            'genero' => [
+                'nullable',
+                Rule::in(['masculino', 'femenino']),
+            ],
         ];
     }
 
@@ -138,6 +144,8 @@ class RegistrarUsuarioRequest extends FormRequest
             'id_nivel_2.exists' => 'El segundo nivel seleccionado no existe',
 
             'id_curso.exists' => 'El curso seleccionado no existe',
+
+            'genero.in' => 'El sexo debe ser masculino o femenino',
         ];
     }
 
@@ -188,6 +196,7 @@ class RegistrarUsuarioRequest extends FormRequest
 
         if ($this->has('telefono')) $data['telefono'] = $this->telefono;
         if ($this->has('asignatura')) $data['asignatura'] = $this->asignatura;
+        if ($this->filled('genero')) $data['genero'] = $this->genero;
 
         $data['fecha_editado'] = now();
 
