@@ -129,6 +129,25 @@ class ActasEstudianteService extends Service
     public function listar(array $filtros, int $pagina = 1, int $porPagina = 20, ?string $busqueda = null, ?string $orden = null, ?string $direccion = null, bool $agrupar = false): array
     {
         try {
+            $conBusqueda = fn (Builder $q) => $q->when(filled($busqueda), function ($q) use ($busqueda) {
+                $like = '%' . $busqueda . '%';
+                $q->where(fn ($w) => $w
+                    ->where('u.nombre', 'like', $like)
+                    ->orWhere('u.apellido', 'like', $like)
+                    ->orWhere('u.documento', 'like', $like)
+                    ->orWhere('c.nombre', 'like', $like)
+                    ->orWhere('d.nombre', 'like', $like)
+                    ->orWhere('d.apellido', 'like', $like)
+                    ->orWhere('a.asunto', 'like', $like)
+                    ->orWhere('a.observacion', 'like', $like));
+            });
+
+            // Totales de todas las actas que cumplen alcance, filtros y búsqueda (no solo de la
+            // página ni de la fila agrupada): los contadores de la página y del panel.
+            $resumen = $this->conteosPorTipo($conBusqueda($this->filtrar($this->base(), $filtros)))
+                ->selectRaw('COUNT(DISTINCT a.id_estudiante) as estudiantes')
+                ->first();
+
             $query = $this->filtrar($this->base(), $filtros)
                 ->select([
                     'a.id',
@@ -157,19 +176,8 @@ class ActasEstudianteService extends Service
                     ->whereColumn('a2.id_estudiante', 'a.id_estudiante')
                     ->whereColumn('a2.id_periodo_academico', 'a.id_periodo_academico')
                     ->where('a2.tipo', ActaEstudiante::TIPO_DIALOGO_FORMATIVO)
-                    ->selectRaw('count(*)'), 'conteo_dialogo')
-                ->when(filled($busqueda), function ($q) use ($busqueda) {
-                    $like = '%' . $busqueda . '%';
-                    $q->where(fn ($w) => $w
-                        ->where('u.nombre', 'like', $like)
-                        ->orWhere('u.apellido', 'like', $like)
-                        ->orWhere('u.documento', 'like', $like)
-                        ->orWhere('c.nombre', 'like', $like)
-                        ->orWhere('d.nombre', 'like', $like)
-                        ->orWhere('d.apellido', 'like', $like)
-                        ->orWhere('a.asunto', 'like', $like)
-                        ->orWhere('a.observacion', 'like', $like));
-                });
+                    ->selectRaw('count(*)'), 'conteo_dialogo');
+            $query = $conBusqueda($query);
 
             $dir = strtolower((string) $direccion) === 'asc' ? 'asc' : 'desc';
 
@@ -202,7 +210,17 @@ class ActasEstudianteService extends Service
 
             $paginado = $query->paginate(max(1, min($porPagina, 100)), ['*'], 'page', max(1, $pagina));
 
-            return ['error' => false, 'message' => 'Actas obtenidas', 'data' => $paginado];
+            return [
+                'error' => false,
+                'message' => 'Actas obtenidas',
+                'data' => $paginado,
+                'resumen' => [
+                    'total' => (int) $resumen->total,
+                    'dialogo_formativo' => (int) $resumen->dialogo_formativo,
+                    'convivencial' => (int) $resumen->convivencial,
+                    'estudiantes' => (int) $resumen->estudiantes,
+                ],
+            ];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => 'Error al consultar las actas: ' . $e->getMessage(), 'data' => []];
         }

@@ -478,6 +478,10 @@ con permiso (rector, coordinador) la registra: fecha, estudiante, tipo
   `niveles`, su reparto por nivel —,
   `por_anio` — histórico, ignora año/periodo —, `top_estudiantes`), `GET /filtros`
   (años, periodos, niveles, cursos y estudiantes activos con su curso),
+  `GET /` trae además **`resumen`** `{ total, dialogo_formativo, convivencial, estudiantes }`
+  de todas las actas que cumplen alcance (138 / solo solicitadas), filtros y búsqueda —
+  agrupado o no, con `id_estudiante` da los totales de un estudiante. Lo usan la cabecera del
+  listado y el panel del estudiante (que antes contaba las 100 actas cargadas) (2026-10-18).
   `GET /conteo?id_estudiante=&fecha=[&excluir_id=]` (diálogo formativo y convivenciales del
   periodo), `POST /` (**lote**: `{ actas: [...] }`, hasta 50, en una transacción — si una falla
   no se guarda ninguna; devuelve `advertencias` por estudiante calculadas tras insertar todo el
@@ -806,6 +810,11 @@ Sin registro ni 134 → 403.
   - Filtros: `id_periodo`, `fecha_inicio`, `fecha_fin`, `id_curso`, `tipo`, `id_estudiante`.
   - El frontend manda lunes–domingo de la semana actual por defecto.
   - La búsqueda (`s`) mira el estudiante, el curso y el motivo de la última observación.
+  - Junto a `data` (el paginador) trae **`resumen`** `{ total, positivas, negativas,
+    estudiantes }`: suma de los conteos de **todas** las filas que cumplen alcance
+    (`soloDocente()`), filtros y búsqueda, no solo de la página. Son las cifras de la
+    cabecera del listado en el frontend (2026-10-18). Se calcula sobre la misma consulta del
+    listado (`fromSub(clone $query)`), así que nunca puede contar algo que el usuario no ve.
 - `GET /catalogos` — cursos visibles, periodos (con `cerrado`/`actual`) y los flags
   `ver_todas`/`puede_registrar`.
   - `actual` es el periodo que contiene hoy.
@@ -813,7 +822,8 @@ Sin registro ni 134 → 403.
 - `GET /estudiantes?s=` — búsqueda (máx. 20) para abrir el acta de quien aún no tiene
   observaciones.
 - `GET /estudiantes/{id}/acta?id_periodo=` — devuelve:
-  - el estudiante y el periodo (por defecto el actual) con la lista de periodos;
+  - el estudiante (con `nivel` y `foto_carnet`, para la tarjeta del estudiante) y el
+    periodo (por defecto el actual) con la lista de periodos;
   - las observaciones visibles, cada una con `editable`;
   - el `resumen` de positivas/negativas;
   - `mis_asignaturas` y `puede_registrar` (para ESTE estudiante) y `ver_todas`.

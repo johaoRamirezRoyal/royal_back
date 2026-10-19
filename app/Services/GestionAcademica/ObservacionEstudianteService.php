@@ -210,6 +210,12 @@ class ObservacionEstudianteService
                         ->orWhere('o.motivo', 'like', $like));
                 });
 
+            // Totales de todas las filas (no solo de la página): suma de los conteos de cada
+            // estudiante listado, así cuadran con la tabla y respetan alcance, filtros y búsqueda.
+            $resumen = DB::query()->fromSub(clone $query, 'x')->selectRaw(
+                'COUNT(*) as estudiantes, COALESCE(SUM(x.total_rango), 0) as total, COALESCE(SUM(x.positivas_rango), 0) as positivas, COALESCE(SUM(x.negativas_rango), 0) as negativas'
+            )->first();
+
             $columnaOrden = self::ORDENES[$orden ?? ''] ?? null;
             $dir = strtolower((string) $direccion) === 'asc' ? 'asc' : 'desc';
 
@@ -219,7 +225,17 @@ class ObservacionEstudianteService
 
             $paginado = $query->paginate(max(1, min($porPagina, 100)), ['*'], 'page', max(1, $pagina));
 
-            return ['error' => false, 'message' => 'Observaciones obtenidas', 'data' => $paginado];
+            return [
+                'error' => false,
+                'message' => 'Observaciones obtenidas',
+                'data' => $paginado,
+                'resumen' => [
+                    'total' => (int) $resumen->total,
+                    'positivas' => (int) $resumen->positivas,
+                    'negativas' => (int) $resumen->negativas,
+                    'estudiantes' => (int) $resumen->estudiantes,
+                ],
+            ];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => 'Error al consultar las observaciones: ' . $e->getMessage(), 'data' => []];
         }
@@ -257,8 +273,18 @@ class ObservacionEstudianteService
         try {
             $idUsuario = $acceso->idUsuario;
             $estudiante = $this->estudiantes($acceso->idsCursosEstudiantes())
+                ->leftJoin('nivel_academico as n', 'n.id', '=', 'c.id_nivel')
                 ->where('u.id_user', $idEstudiante)
-                ->first(['u.id_user as id_estudiante', 'u.documento', self::nombre('u', 'estudiante'), 'u.id_curso', 'c.nombre as curso']);
+                ->first([
+                    'u.id_user as id_estudiante',
+                    'u.documento',
+                    self::nombre('u', 'estudiante'),
+                    'u.id_curso',
+                    'c.nombre as curso',
+                    'n.nombre as nivel',
+                    // Nombre de archivo; el frontend arma la URL con publicFileUrl.
+                    'u.foto_carnet',
+                ]);
 
             if (! $estudiante) {
                 return self::fallo('Estudiante no encontrado o fuera de tus cursos.', 404);
