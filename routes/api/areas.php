@@ -3,7 +3,7 @@
 use App\Http\Controllers\Areas\AreasController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/', [AreasController::class, 'crearArea']);
+Route::post('/', [AreasController::class, 'crearArea'])->middleware('permiso:12');
 /**
  * Ejemplo de JSON para crear un area:
         {
@@ -11,7 +11,7 @@ Route::post('/', [AreasController::class, 'crearArea']);
             "user_log": 1
         }
  */
-Route::put('/', [AreasController::class, 'actualizarArea']);
+Route::put('/', [AreasController::class, 'actualizarArea'])->middleware('permiso:12');
 /**
  * Ejemplo de JSON para actualizar un area:
         {
@@ -27,7 +27,7 @@ Route::get('/filtro', [AreasController::class, 'filtrarAreas']);
             http://localhost:8000/api/areas/filtro?filtro=filtro_a_buscar
         */
 
-Route::post('/asignar', [AreasController::class, 'asignarArea']);
+Route::post('/asignar', [AreasController::class, 'asignarArea'])->middleware('permiso:12');
 /**
  * Ejemplo de JSON para asignar un area a un usuario:
             {
@@ -38,7 +38,7 @@ Route::post('/asignar', [AreasController::class, 'asignarArea']);
 Route::get('/usuarios-asignables', [AreasController::class, 'usuariosAsignables']);
 Route::get('/usuario-responsable', [AreasController::class, 'usuariosResponsablesAreas']);
 Route::get('/usuario-responsable/{id_area}', [AreasController::class, 'usuarioResponsableArea']);
-Route::post('/estado', [AreasController::class, 'desactivarAreas']);
+Route::post('/estado', [AreasController::class, 'desactivarAreas'])->middleware('permiso:12');
 /**
  * Ejemplo JSON para cambiar el estado del area:
         {

@@ -192,7 +192,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     });
 
     // PRÉSTAMOS
-    Route::prefix('prestamos')->group(function () {
+    // Préstamos de inventario (16 Mis inventarios, 17 Préstamos).
+    Route::prefix('prestamos')->middleware('permiso:16,17')->group(function () {
         require __DIR__.'/api/prestamos.php';
     });
 
@@ -228,7 +229,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // HIKVISION
     // OlvidarEmpleadosHikvision: toda escritura (no-GET) borra la caché de /getList.
-    Route::prefix('/hikvision')->middleware(\App\Http\Middleware\OlvidarEmpleadosHikvision::class)->group(function () {
+    // Enrolar/eliminar en los terminales: 63 Control de acceso, 2 Usuarios (alta/baja), Super Admin (Terminales).
+    Route::prefix('/hikvision')->middleware(['permiso:63,2,perfil:1', \App\Http\Middleware\OlvidarEmpleadosHikvision::class])->group(function () {
         require __DIR__ . '/api/hikvision.php';
     });
 
@@ -323,8 +325,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/modulos.php';
     });
 
-    // LOGS DE ACTIVIDAD (auditoría escrita por LogActividadMiddleware)
-    Route::prefix('/logs-actividad')->group(function () {
+    // LOGS DE ACTIVIDAD (auditoría escrita por LogActividadMiddleware) — solo Super Admin, como la página.
+    Route::prefix('/logs-actividad')->middleware('permiso:perfil:1')->group(function () {
         require __DIR__ . '/api/logsActividad.php';
     });
 

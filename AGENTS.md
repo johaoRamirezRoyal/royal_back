@@ -177,6 +177,25 @@ antes de correr el middleware de la ruta). Ejemplo completo: `ObservacionEstudia
 (`acceso()` memoizado). Los patrones (a)/(b) de abajo siguen en los controllers existentes;
 al tocar uno, conviene migrar su chequeo de entrada al middleware.
 
+Rutas que no tenían **ningún** chequeo y se cerraron con el middleware (2026-10-20; las
+opciones son la unión de las páginas del frontend que consumen cada endpoint, para no dejar
+a nadie fuera):
+- `/hikvision/*` → `permiso:63,2,perfil:1` (Control de acceso, Usuarios — alta/baja en los
+  terminales —, Terminales solo Super Admin). Antes cualquier autenticado podía
+  enrolar/eliminar empleados en los dispositivos. El webhook del dispositivo
+  (`/pushNotification`) está fuera de este grupo y no cambia.
+- `/prestamos` → `permiso:16,17` (Mis inventarios, Préstamos).
+- `/logs-actividad` → `permiso:perfil:1` (igual que la página).
+- Escrituras de `/areas` (crear, editar, asignar, estado) → `permiso:12`; las lecturas
+  siguen abiertas (catálogo que usan Compras, Inventario, Áreas comunes).
+- Escrituras de `/compartido/anio-academico/periodo-academico` → `permiso:99`
+  (Configuración académica); las lecturas siguen abiertas (Inicio, Llegadas tarde).
+
+Siguen abiertos a propósito: catálogos de solo lectura (`/cursos`, `/tipos-documentos`,
+lecturas de `/usuarios`), el autoservicio del propio usuario (`/info-perfil`,
+`/documentos-varios`, `/modulos`) y `/compartido/historia-clinica` (lo usa el flujo de
+admisiones, cuyos usuarios no tienen opciones en `cron_permisos`).
+
 Dos patrones según el caso (ver los controllers de arriba para ejemplos reales):
 
 **(a) Todo el controller detrás de una sola opción, sin rutas públicas mezcladas** — un

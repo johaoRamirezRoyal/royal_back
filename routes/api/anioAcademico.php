@@ -45,7 +45,7 @@ Route::get("/periodo-academico/id", [PeriodoAcademicoController::class, 'obtener
     "activo": true
 }
  */
-Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPeriodoAcademico']);
+Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPeriodoAcademico'])->middleware('permiso:99');
 
 /**
  * PUT /periodo-academico/estado
@@ -56,7 +56,7 @@ Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPe
 }
  * Nota: si ids_periodos_academicos se omite, actualiza todos los registros.
  */
-Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'desactivarPeriodosAcademicos']);
+Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'desactivarPeriodosAcademicos'])->middleware('permiso:99');
 
 /**
  * PUT /periodo-academico
@@ -69,7 +69,7 @@ Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'des
  *       "activo": true
  *   }
  */
-Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeriodoAcademico']);
+Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeriodoAcademico'])->middleware('permiso:99');
 
 /**
  * DELETE /periodo-academico
@@ -78,4 +78,4 @@ Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeri
  *       "ids_periodo_academico": [1, 2]
  *   }
  */
-Route::delete("/periodo-academico", [PeriodoAcademicoController::class, 'eliminarPeriodoAcademico']);
+Route::delete("/periodo-academico", [PeriodoAcademicoController::class, 'eliminarPeriodoAcademico'])->middleware('permiso:99');
