@@ -102,12 +102,14 @@ class InventariosController extends Controller
         $dir = $request->input('dir', 'asc');
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos, $sort, $dir);
 
+        // 500, no 200: con 200 el frontend (apiFetch) no lo trata como error y "Mis
+        // inventarios" mostraba la lista vacía sin ningún aviso.
         if($listado_inventario['error']){
             return response()->json([
                 'error' => true,
                 'message' => $listado_inventario['message'],
                 'data' => $listado_inventario['data']
-            ]);
+            ], 500);
         }
 
         return response()->json([

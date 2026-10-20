@@ -197,6 +197,9 @@ class InventarioServices
                 GROUP BY id_inventario
             ) as idesc");
 
+            // `fecha_compra` se compara como texto (CAST AS CHAR): en el MySQL estricto de
+            // producción comparar la columna DATE contra el literal '0000-00-00' lanza el
+            // error 1525 y tumbaba todo el listado (MariaDB local no lo reproduce).
             $listado = Inventario::select(
                 'inventario.id_user',
                 'inventario.id_area',
@@ -215,7 +218,7 @@ class InventarioServices
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
-                            'fecha_compra', DATE(COALESCE(NULLIF(inventario.fecha_compra, '0000-00-00'), inventario.fechareg)),
+                            'fecha_compra', DATE(COALESCE(NULLIF(CAST(inventario.fecha_compra AS CHAR), '0000-00-00'), inventario.fechareg)),
                             'fecha_descontinuacion', idesc.fecha_descontinuacion,
                             'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
                                 'id', ur.id,
