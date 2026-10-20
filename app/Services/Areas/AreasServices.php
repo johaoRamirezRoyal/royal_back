@@ -37,7 +37,8 @@ class AreasServices extends Service
     public function obtenerTodasLasAreas()
     {
         try {
-            $areas = Areas::get();
+            // Con su bloque: el listado de inventario arma de aquí el filtro "Bloque".
+            $areas = Areas::with('bloque:id,nombre')->get();
             return [
                 'error' => false,
                 'data' => $areas
@@ -83,6 +84,21 @@ class AreasServices extends Service
     public function asignarAreasBloque(int $idBloque, array $ids)
     {
         try {
+            // Un área pertenece a un solo bloque: no se mueve en silencio desde otro.
+            $ocupada = Areas::with('bloque:id,nombre')
+                ->whereIn('id', $ids)
+                ->whereNotNull('id_bloque')
+                ->where('id_bloque', '!=', $idBloque)
+                ->first();
+
+            if ($ocupada) {
+                $bloque = $ocupada->bloque->nombre ?? "#{$ocupada->id_bloque}";
+                return [
+                    'error' => true,
+                    'message' => "El área {$ocupada->nombre} ya está asignada al bloque {$bloque}",
+                ];
+            }
+
             DB::transaction(function () use ($idBloque, $ids) {
                 Areas::where('id_bloque', $idBloque)
                     ->whereNotIn('id', $ids)

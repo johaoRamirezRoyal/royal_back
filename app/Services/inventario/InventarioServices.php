@@ -197,6 +197,9 @@ class InventarioServices
                 GROUP BY id_inventario
             ) as idesc");
 
+            // `fecha_compra` se compara como texto (CAST AS CHAR): en el MySQL estricto de
+            // producción comparar la columna DATE contra el literal '0000-00-00' lanza el
+            // error 1525 y tumbaba todo el listado (MariaDB local no lo reproduce).
             $listado = Inventario::select(
                 'inventario.id_user',
                 'inventario.id_area',
@@ -215,7 +218,7 @@ class InventarioServices
                             'estado_id', inventario.estado,
                             'estado_nombre', e.nombre,
                             'codigo', inventario.codigo,
-                            'fecha_compra', DATE(COALESCE(NULLIF(inventario.fecha_compra, '0000-00-00'), inventario.fechareg)),
+                            'fecha_compra', DATE(COALESCE(NULLIF(CAST(inventario.fecha_compra AS CHAR), '0000-00-00'), inventario.fechareg)),
                             'fecha_descontinuacion', idesc.fecha_descontinuacion,
                             'ultimo_reporte', IF(ur.id IS NULL, NULL, JSON_OBJECT(
                                 'id', ur.id,
@@ -403,6 +406,7 @@ class InventarioServices
                 ->where('c.tipo_categoria', '!=', 3)
                 ->when($filtros['id_usuario'] ?? null, fn ($q, $v) => $q->where('inventario.id_user', $v))
                 ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_area', $v))
+                ->when($filtros['id_bloque_area'] ?? null, fn ($q, $v) => $this->filtrarPorBloqueDeArea($q, $v))
                 ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
                 ->when($filtros['s'] ?? null, fn ($q, $s) => $this->buscarEnListado($q, $s))
                 ->selectRaw('COUNT(*) as total')
@@ -420,6 +424,18 @@ class InventarioServices
         } catch (\Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage(), 'data' => null];
         }
+    }
+
+    /**
+     * Filtro "Bloque" del listado: ítems cuya área pertenece a alguno de los bloques
+     * (o asignados directo al bloque, sin área). A diferencia de 'id_bloque' (solo
+     * inventario.id_bloque, usado por Áreas Comunes), se combina con los demás filtros
+     * con AND. Requiere el join 'areas as a'.
+     */
+    private function filtrarPorBloqueDeArea($query, array $idsBloque)
+    {
+        return $query->where(fn ($q) => $q->whereIn('a.id_bloque', $idsBloque)
+            ->orWhereIn('inventario.id_bloque', $idsBloque));
     }
 
     /**
@@ -451,6 +467,7 @@ class InventarioServices
                 })
                 ->when(($filtros['id_area'] ?? null) && !($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_area', $filtros['id_area']))
                 ->when(!($filtros['id_area'] ?? null) && ($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_bloque', $filtros['id_bloque']))
+                ->when($filtros['id_bloque_area'] ?? null, fn ($q, $v) => $this->filtrarPorBloqueDeArea($q, $v))
                 ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
                 ->when(
                     $filtros['tipo_categoria'] ?? null,

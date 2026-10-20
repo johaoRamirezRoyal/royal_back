@@ -1043,6 +1043,13 @@ corrigieron para ordenar por `inventario.descripcion` cuando no hay un sort expl
   `MAX(inventario.id) DESC` (lo más reciente primero); ahora por
   `inventario.descripcion` ascendente. Es el endpoint que importa si "el listado
   principal de inventario" vuelve a reportarse como desordenado.
+- **Filtro "Bloque" (`id_bloque_area[]`)** en `listado-consolidado` y su `/conteo`: ítems
+  cuya área pertenece a esos bloques (`areas.id_bloque`) o asignados directo al bloque, en
+  AND con los demás filtros (`InventarioServices::filtrarPorBloqueDeArea`). **No es
+  `id_bloque[]`**: ese mira solo `inventario.id_bloque` y se suma (OR) a `id_area`, como
+  lo usa Áreas Comunes; no cambiarlo. El catálogo de bloques del filtro sale de
+  `GET /api/areas`, que trae `bloque {id, nombre}` en cada área (`GET /api/bloques` exige
+  108/109).
 
 ## Áreas Comunes (`/inventario/areas-comunes` — `BloquesController` + `AreasComunesController`)
 
@@ -1103,6 +1110,10 @@ reintroducir esos ids acá.
   `whereHas`/`whereExists` que cae al `id_bloque` del área cuando el directo es nulo.
   Cualquier query nueva que filtre áreas comunes por bloque debe replicar ese mismo
   fallback o perderá silenciosamente los ítems asignados a un área puntual.
+- **Un área pertenece a un solo bloque** (`areas.id_bloque`): `asignarAreasBloque`
+  rechaza (400) un área que ya tiene otro bloque en vez de moverla en silencio; para
+  cambiarla de bloque, primero se quita desde el bloque dueño. El panel "Asignar áreas"
+  del frontend las muestra deshabilitadas con el nombre de su bloque.
 - **`reclasificarAreaComun` vs. `moverItemAreaComun`**: el primero solo cambia
   `id_categoria` (el ítem se queda donde ya estaba); el segundo cambia la ubicación real
   (`id_bloque`/`id_area`). No confundirlos — son las dos acciones "Agregar área común
@@ -1344,6 +1355,7 @@ hay columna many-to-many propia), `texto_libre` (sin opciones, usa
 | `POST` | `/secciones/{idSeccion}/preguntas` | 101 | Crear pregunta + opciones anidadas |
 | `PUT` | `/preguntas/{idPregunta}` | 101 | Actualizar pregunta |
 | `DELETE` | `/preguntas/{idPregunta}` | 101 | Eliminar pregunta (hard delete) |
+| `PUT` | `/{id}/preguntas/orden` | 101 | Reordena en lote: `{ secciones: [{ id, preguntas: [ids] }] }`, solo las secciones que cambiaron (índice = `orden`). Cada lista debe traer exactamente las preguntas actuales de su sección (si no, 422): no cambia preguntas de sección. MyISAM: valida todo antes de escribir |
 
 #### Opciones
 
@@ -1495,6 +1507,8 @@ Encuestas de satisfacción **anónimas** por salón (QR pegado en el salón, flu
   `encuestas_preguntas.texto` `VARCHAR(500)` desde
   `2026_10_16_140000_alter_encuestas_textos_largos` — antes eran VARCHAR(255) y un texto
   largo fallaba con SQLSTATE 1406.
+- `PUT /{id}/preguntas/orden` (129): `{ preguntas: [ids] }` con **todas** las preguntas en
+  el orden nuevo (índice = `orden`); una lista que no coincide con las actuales → 422.
 - `POST /{id}/duplicar` (129): copia preguntas y opciones, «<título> (Copia n)», inactiva;
   no copia salones ni respuestas. Reusa `crear()`, como `EvaluacionesServices::duplicar`.
 - **Flujo público**: `obtenerEncuestaPublica` devuelve también `salon` (nombre) y oculta

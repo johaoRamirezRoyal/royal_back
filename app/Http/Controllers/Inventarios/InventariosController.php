@@ -102,12 +102,14 @@ class InventariosController extends Controller
         $dir = $request->input('dir', 'asc');
         $listado_inventario = $this->inventario_services->obtenerListadoInventario($per_page, $search, $datos, $sort, $dir);
 
+        // 500, no 200: con 200 el frontend (apiFetch) no lo trata como error y "Mis
+        // inventarios" mostraba la lista vacía sin ningún aviso.
         if($listado_inventario['error']){
             return response()->json([
                 'error' => true,
                 'message' => $listado_inventario['message'],
                 'data' => $listado_inventario['data']
-            ]);
+            ], 500);
         }
 
         return response()->json([
@@ -124,7 +126,7 @@ class InventariosController extends Controller
             return $rechazo;
         }
 
-        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
         $per_page = $request->input('per_page', 15);
 
         $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
@@ -153,7 +155,7 @@ class InventariosController extends Controller
         }
 
         return $this->apiResponse(
-            $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_categoria', 's']))
+            $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_bloque_area', 'id_categoria', 's']))
         );
     }
 

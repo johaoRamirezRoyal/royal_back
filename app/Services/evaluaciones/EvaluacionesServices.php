@@ -852,6 +852,36 @@ class EvaluacionesServices
         }
     }
 
+    /**
+     * `$secciones` = [['id' => idSeccion, 'preguntas' => [ids en el orden nuevo]], ...], solo
+     * las que cambiaron. Las preguntas no cambian de sección (eso movería el puntaje
+     * ponderado): cada lista debe traer exactamente las preguntas actuales de su sección.
+     * `evaluaciones_preguntas` es MyISAM, la transacción no deshace nada: todo se valida
+     * antes de la primera escritura.
+     */
+    public function reordenarPreguntas(int $idEvaluacion, array $secciones): array
+    {
+        try {
+            foreach ($secciones as $sec) {
+                $esDeLaEvaluacion = EvaluacionSeccion::where('id', $sec['id'])->where('id_evaluacion', $idEvaluacion)->exists();
+                $actuales = EvaluacionPregunta::where('id_seccion', $sec['id'])->pluck('id')->all();
+                if (!$esDeLaEvaluacion || count($sec['preguntas']) !== count($actuales) || array_diff($actuales, $sec['preguntas'])) {
+                    return ['error' => true, 'message' => 'Las preguntas de la evaluación cambiaron. Recarga para reordenarlas.', 'status' => 422];
+                }
+            }
+
+            foreach ($secciones as $sec) {
+                foreach (array_values($sec['preguntas']) as $orden => $id) {
+                    EvaluacionPregunta::where('id', $id)->update(['orden' => $orden]);
+                }
+            }
+
+            return ['error' => false, 'message' => 'Orden guardado'];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     // ─── Opciones de pregunta ───────────────────────────────────
 
     // Una pregunta ya respondida tiene tipo y opciones inmutables: cambiarlos movería

@@ -260,6 +260,31 @@ class EncuestasServices
         }
     }
 
+    /**
+     * `$ids` = todas las preguntas de la encuesta en el orden nuevo (el índice pasa a ser
+     * `orden`). Debe traer exactamente las preguntas actuales: una lista vieja (otra pestaña
+     * agregó o borró una pregunta) se rechaza en vez de dejar órdenes repetidos.
+     */
+    public function reordenarPreguntas(int $idEncuesta, array $ids): array
+    {
+        try {
+            $actuales = EncuestaPregunta::where('id_encuesta', $idEncuesta)->pluck('id')->all();
+            if (count($ids) !== count($actuales) || array_diff($actuales, $ids)) {
+                return ['error' => true, 'message' => 'Las preguntas de la encuesta cambiaron. Recarga para reordenarlas.', 'status' => 422];
+            }
+
+            DB::transaction(function () use ($ids) {
+                foreach (array_values($ids) as $orden => $id) {
+                    EncuestaPregunta::where('id', $id)->update(['orden' => $orden]);
+                }
+            });
+
+            return ['error' => false, 'message' => 'Orden guardado'];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     // ─── Opciones de pregunta ─────────────────────────────────────
 
     public function crearOpcion(int $idPregunta, array $datos): array
