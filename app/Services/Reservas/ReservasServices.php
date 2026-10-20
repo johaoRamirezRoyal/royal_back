@@ -54,7 +54,12 @@ class ReservasServices extends Service
         ];
     }
 
-    public function crearReserva(array $data): array
+    /**
+     * `$sinLimiteFecha`: el Super Admin (perfil 1) reserva sin la ventana de tiempo de
+     * validarFechaReserva (anticipación, domingo, corte de las 12:00). El resto de
+     * validaciones (choque de salón, portátiles, sonido) sigue aplicando.
+     */
+    public function crearReserva(array $data, bool $sinLimiteFecha = false): array
     {
         $salon = Salones::activo()->find($data['id_salon']);
 
@@ -117,7 +122,7 @@ class ReservasServices extends Service
 
             $fechaReserva = Carbon::parse($combo['fecha'])->startOfDay();
 
-            if ($error = $this->validarFechaReserva($fechaReserva, Carbon::today(), now(), $configReservas)) {
+            if (!$sinLimiteFecha && ($error = $this->validarFechaReserva($fechaReserva, Carbon::today(), now(), $configReservas))) {
                 return ['error' => true, 'message' => $error, 'data' => []];
             }
 
