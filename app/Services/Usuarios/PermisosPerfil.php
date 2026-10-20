@@ -17,7 +17,7 @@ final class PermisosPerfil
     private const ATRIBUTO = 'permisos_perfil';
 
     /** @return array<int, true> id_opcion => true */
-    public static function de(Request $request): array
+    private static function de(Request $request): array
     {
         if (! $request->attributes->has(self::ATRIBUTO)) {
             $perfil = $request->user()?->perfil;
