@@ -144,6 +144,25 @@ perfil, o porque son de uso general:
 - Si un id cambia en BD (ya pasó con Noticias 107→69, Instituciones 104/105→106/111,
   Acudientes 106→112), se cambia solo en `Permiso`.
 
+### 3.7 Un solo helper (auditoría ponytail)
+
+- Las 26 copias del helper de permiso que había en los controllers (`sinAcceso`,
+  `sinAcceso($request)` de firma fija, `sinPermiso`, `tiene`, `tienePermiso(Request, int)`)
+  se reemplazaron por el trait `App\Http\Controllers\Concerns\VerificaPermisos`
+  (`sinAcceso(Request, int ...$opciones)`, sobre `PermisosPerfil::tiene`). Las consultas
+  sueltas a `UsuariosServices::tienePermiso(...)['permiso']` en los controllers pasaron a
+  `PermisosPerfil::tiene($request, ...)`, y los controllers que ya no usan `UsuariosServices`
+  dejaron de inyectarlo.
+- Cambio visible: el 403 de esos métodos dice siempre "No tienes permiso para esta acción."
+  (antes algunos tenían texto propio, p. ej. "…para gestionar proveedores").
+- Se borró `UsuariosServices::tieneAlgunPermiso` (sin callers). `tienePermiso` se queda: lo
+  usa `GET /usuarios/permiso` (frontend).
+- `IndicadoresGestionController` conserva su propio `sinAcceso(Request, int $tipoCategoria)`
+  (elige la opción por tipo de categoría), ahora sobre `PermisosPerfil`.
+- **No** se borraron las constantes `OPCION_*` de los controllers aunque solo apunten a
+  `Permiso`: 48 de 85 llevan al lado el porqué de su módulo (opciones compartidas,
+  autoservicio, historial de ids cambiados) y borrarlas perdía ese contexto.
+
 ## 4. Cómo se verificó
 
 - `php -l` en todos los archivos tocados; `php artisan route:list` carga sin errores.

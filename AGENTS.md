@@ -144,120 +144,38 @@ Tablas legacy manejadas directo por SQL (`DB::table(...)`, no Eloquent/seeders):
 - `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, ...) — la matriz real: qué
   `id_perfil` tiene otorgada cuál `id_opcion`.
 
-El chequeo real vive en `UsuariosServices::tienePermiso($opcion, $perfil): array{permiso: bool, error: bool}`
-(`SELECT ... FROM cron_permisos WHERE id_opcion=? AND id_perfil=? AND activo=1`). Lo
-expone `GET /api/usuarios/permiso?opt=&per=` (`UsuariosController::tienePermiso`) para
-que el frontend decida qué renderizar (`PermissionGate` / fail-closed — ver
-`docs/sistema-permisos.md` en el repo del frontend para el detalle de ese lado).
+`UsuariosServices::tienePermiso($opcion, $perfil)` responde `GET /api/usuarios/permiso?opt=&per=`
+(`UsuariosController::tienePermiso`), lo que consulta el frontend para decidir qué renderizar
+(`PermissionGate`, fail-closed — ver `docs/sistema-permisos.md` del frontend). El backend **no**
+lo usa para proteger endpoints: para eso está lo de abajo.
 
-**Ese chequeo NO se aplica solo — cada controller tiene que llamarlo.** No existe
-middleware global de permisos (revisar `bootstrap/app.php`: `JwtFromCookie`, `auth`,
-`system` son los únicos alias). Una auditoría (2026-08-18) encontró que de 32
-controllers, solo 2 verificaban permisos antes de ejecutar una acción — el resto,
-incluido `PermisosController` (el que administra los permisos mismos), dejaba que
-cualquier usuario autenticado hiciera lo que quisiera con un request directo,
-saltándose por completo lo que el frontend mostraba u ocultaba. Se corrigió ese día en
-`PermisosController`, `UsuariosController`, `LlegadasTardeController`/`ConfigController`,
-`GestionAcademicaController`, `EnfermeriaController`, `InventariosController`,
-`SalonesController`, `BibliotecaController`, `CategoriasController` — usarlos como
-referencia al crear un controller nuevo con acciones sensibles.
+**Cada endpoint con permiso lo declara en la ruta y en el controller** (desde 2026-10-20;
+historial completo, verificación y pendientes en `docs/PERMISOS_MIDDLEWARE_2026_10_20.md`):
 
-**Patrón preferido para código nuevo — middleware `permiso` en la ruta Y en el controller**
-(`App\Http\Middleware\RequirePermiso`, alias en `bootstrap/app.php`): deja pasar si el perfil
-tiene **cualquiera** de las opciones, o si su perfil está en `perfil:N` (autoservicio);
-fail-closed con 403.
-
-- **Ids en un solo lugar: `App\Support\Permiso`** — constantes de cada opción
-  (`Permiso::INVENTARIO = 12`, con el nombre de `cron_opciones` al lado) y de los perfiles
-  (`Permiso::PERFIL_SUPER_ADMIN`…). Las constantes `OPCION_*`/`PERFIL_*` de los controllers y
-  services apuntan ahí, y las rutas también. Nunca escribas un id de opción a mano: si no
-  existe la constante, agrégala. Si un id cambia en BD, se cambia solo ahí.
-- **En la ruta**: `->middleware(Permiso::ruta([Permiso::OBSERVACIONES, ...], [Permiso::PERFIL_DOCENTE, ...]))`
-  (`ruta()` arma el string `permiso:…`).
-- **En el controller**, la misma regla: o el chequeo al inicio de cada método
-  (`sinAcceso(...)`, controllers existentes), o —si el controller no tiene chequeo por
-  método— `implements HasMiddleware` con `public static function middleware()` (corre como
-  middleware, después de la autenticación; admite `only`/`except` para acciones públicas o
-  reglas por método, ver `GestionAcademicaController`, `BibliotecaController`,
-  `HikvisionController`). Así un controller nunca depende de que su ruta tenga el middleware.
-  Laravel no repite un middleware idéntico de ruta y controller.
-Las opciones del perfil se cargan **una vez por petición** (`App\Services\Usuarios\PermisosPerfil`,
-guardadas en el request); el controller que necesite reglas finas (qué datos ve, qué
-acciones) las lee con `PermisosPerfil::tiene($request, ...$opciones)` sin otra consulta, y
-arma su acceso **dentro de la acción**, no en el constructor (Laravel crea el controller
-antes de correr el middleware de la ruta). Ejemplo completo: `ObservacionEstudianteController`
-(`acceso()` memoizado). Los patrones (a)/(b) de abajo siguen en los controllers existentes;
-al tocar uno, conviene migrar su chequeo de entrada al middleware.
-
-Rutas que no tenían **ningún** chequeo y se cerraron con el middleware (2026-10-20; las
-opciones son la unión de las páginas del frontend que consumen cada endpoint, para no dejar
-a nadie fuera):
-- `/hikvision/*` → `permiso:63,2,perfil:1` (Control de acceso, Usuarios — alta/baja en los
-  terminales —, Terminales solo Super Admin). Antes cualquier autenticado podía
-  enrolar/eliminar empleados en los dispositivos. El webhook del dispositivo
-  (`/pushNotification`) está fuera de este grupo y no cambia.
-- `/prestamos` → `permiso:16,17` (Mis inventarios, Préstamos).
-- `/logs-actividad` → `permiso:perfil:1` (igual que la página).
-- Escrituras de `/areas` (crear, editar, asignar, estado) → `permiso:12`; las lecturas
-  siguen abiertas (catálogo que usan Compras, Inventario, Áreas comunes).
-- Escrituras de `/compartido/anio-academico/periodo-academico` → `permiso:99`
-  (Configuración académica); las lecturas siguen abiertas (Inicio, Llegadas tarde).
-
-**Resto de rutas (2026-10-20)**: toda ruta cuyo método ya exigía un permiso como primera
-instrucción (`sinAcceso`, `sinPermiso`, `ensurePermisoGestion`, `soloSuperAdmin`, …) lleva
-ahora el mismo permiso en `->middleware('permiso:…')` — generado desde el propio chequeo del
-método, así que la regla es idéntica (476 de 604 rutas del sistema general). Esos chequeos
-dentro de los métodos **se dejaron** (defensa en profundidad; el middleware corta antes). Los
-controllers que chequeaban en el **constructor** (AdminManagement, MarcaDominio, Biblioteca,
-ConsultaAsistenciaClase, Cumpleaños, GestionAcademica) y los que solo quedaron protegidos por
-la ruta (Hikvision, Préstamos, Logs de actividad, escrituras de Áreas y de Periodos,
-entrada de Observaciones) declaran la misma regla con `HasMiddleware`.
-Quedan sin middleware las rutas cuya regla depende de los datos y no solo del perfil
-(Llegadas tarde con la 101, Asistencia de trabajadores propia/ajena, Indicadores de gestión
-por tipo de categoría, Actas con la regla del docente, editar el propio permiso/licencia),
-el autoservicio y los catálogos — esas siguen validándose dentro del método. **Al crear una
-ruta nueva con permiso, ponlo en la ruta.**
-
-Siguen abiertos a propósito: catálogos de solo lectura (`/cursos`, `/tipos-documentos`,
-lecturas de `/usuarios`), el autoservicio del propio usuario (`/info-perfil`,
-`/documentos-varios`, `/modulos`) y `/compartido/historia-clinica` (lo usa el flujo de
-admisiones, cuyos usuarios no tienen opciones en `cron_permisos`).
-
-Dos patrones según el caso (ver los controllers de arriba para ejemplos reales):
-
-**(a) Todo el controller detrás de una sola opción, sin rutas públicas mezcladas** — un
-chequeo único en el constructor:
-```php
-public function __construct(
-    private MiService $service,
-    UsuariosServices $usuariosService,
-    Request $request,
-) {
-    $tienePermiso = $usuariosService->tienePermiso(self::OPCION, $request->user()->perfil)['permiso'] ?? false;
-    if (!$tienePermiso) {
-        abort($this->error('No tienes permiso para esta acción', 403));
-    }
-}
-```
-Si el controller tiene alguna ruta pública mezclada (ej. `BibliotecaController::verImagenBiblioteca`,
-servida fuera de `auth:api`), el chequeo debe ser condicional a que exista usuario
-autenticado (`if ($usuario = $request->user()) { ... }`) — nunca asumas que
-`$request->user()` no es null.
-
-**(b) Métodos que necesitan opciones distintas** — helper `sinAcceso()` al inicio de
-cada método:
-```php
-private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-{
-    $perfil = $request->user()->perfil;
-    foreach ($opciones as $opcion) {
-        if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-            return null;
-        }
-    }
-    return $this->error('No tienes permiso para esta acción', 403);
-}
-```
+- **Ids en un solo lugar: `App\Support\Permiso`** — una constante por opción
+  (`Permiso::INVENTARIO = 12`, con el nombre de `cron_opciones` al lado) y por perfil
+  (`Permiso::PERFIL_SUPER_ADMIN`, `Permiso::PERFILES_DOCENTE`…). Nunca escribas un id a mano: si
+  no existe la constante, agrégala. Si un id cambia en BD, se cambia solo ahí. Las constantes
+  `OPCION_*` de cada controller apuntan ahí y llevan al lado el porqué de su módulo.
+- **Middleware `permiso`** (`App\Http\Middleware\RequirePermiso`): deja pasar si el perfil tiene
+  **cualquiera** de las opciones o es de uno de los perfiles; si no, 403. Las opciones del
+  perfil se cargan una vez por petición (`App\Services\Usuarios\PermisosPerfil`).
+- **En la ruta**: `->middleware(Permiso::ruta([Permiso::OBSERVACIONES, ...], [Permiso::PERFIL_DOCENTE, ...]))`.
+- **En el controller**, la misma regla, de una de dos formas:
+  - **Por método** — trait `App\Http\Controllers\Concerns\VerificaPermisos` y al inicio del método
+    `if ($rechazo = $this->sinAcceso($request, self::OPCION_X, ...)) { return $rechazo; }`.
+  - **Por controller o grupo de métodos** — `implements HasMiddleware` con
+    `public static function middleware()` (`only`/`except` para acciones públicas o reglas por
+    método): `GestionAcademicaController`, `BibliotecaController`, `HikvisionController`.
+  - **Nunca en el constructor**: Laravel crea el controller antes de correr el middleware de la
+    ruta, y `$request->user()` + `abort()` ahí es frágil.
+- **Lo que depende de los datos** (qué ve cada quien, la 135 que anula registrar, la 101 que
+  limita a "solo hoy", editar solo lo propio) se arma dentro de la acción, leyendo con
+  `PermisosPerfil::tiene($request, ...$opciones)` — ejemplo: `ObservacionEstudianteController::acceso()`.
+  La ruta solo responde "¿puede entrar?".
+- Sin middleware a propósito: autoservicio (`/info-perfil`, `/documentos-varios`, mis
+  trámites…), catálogos de lectura (`/cursos`, lecturas de `/usuarios`, `/areas`…) y
+  `/compartido/historia-clinica` (flujo de admisiones, sin opciones en `cron_permisos`).
 
 Reglas:
 - Antes de gatear un endpoint, revisa (grep en el frontend, `src/pages/`) qué otros
@@ -576,7 +494,7 @@ ver las asistencias de cualquier clase sin ser el docente. Acepta la opción **1
   `DICTADA`. El detalle une los activos del curso con cualquier estudiante que tenga una
   excepción en esa sesión aunque ya no esté en el curso.
 
-### Autoservicio del Docente (tercer patrón de permisos, además de (a)/(b) arriba)
+### Autoservicio del Docente (permiso por perfil además de la opción)
 
 El perfil Docente (`id_perfil` `3`, y Docente ICT `14`) normalmente NO tiene la opción `99`
 otorgada en `cron_permisos` — en vez de eso, las rutas de autoservicio de
@@ -1317,8 +1235,8 @@ solo inserta si no existe ya).
 | 102 | `OPCION_VER` | Lectura de evaluaciones, respuestas, resultados |
 | 103 | `OPCION_RESPONDER` | Ver "mis evaluaciones", evaluables, enviar/editar respuestas, reenviar correo, descargar PDF |
 
-Patrón de permisos: **(b)** — helper `sinAcceso()` al inicio de cada método,
-vía `UsuariosServices::tieneAlgunPermiso()` (OR de varias opciones). Casi todo
+Patrón de permisos: `sinAcceso()` (trait `VerificaPermisos`) al inicio de cada método,
+con el OR de varias opciones, y lo mismo en el middleware de cada ruta. Casi todo
 endpoint de lectura acepta el OR de las tres opciones.
 
 **Ojo con el alcance real más allá del gate de opción** — varios métodos del
