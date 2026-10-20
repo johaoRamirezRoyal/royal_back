@@ -56,7 +56,8 @@ class ReservaController extends Controller
         $imagenEncuesta = !empty($datos['mostrar_encuesta']) ? $datos['imagen_encuesta'] : null;
         unset($datos['mostrar_encuesta'], $datos['imagen_encuesta']);
 
-        $resultado = $this->reservasServices->crearReserva($datos);
+        // Perfil del usuario autenticado, no del `id_user` del body (lo controla el cliente).
+        $resultado = $this->reservasServices->crearReserva($datos, (int) $request->user()->perfil === 1);
 
         if (!$resultado['error']) {
             $this->reservasServices->enviarCorreoAvisoReserva($resultado['data'], $request->user());
