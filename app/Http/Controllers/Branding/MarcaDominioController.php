@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Branding;
 use App\Http\Controllers\Controller;
 use App\Services\branding\MarcaDominioService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Administración de qué logo corresponde a cada dominio de correo (multi-tenant) — se
@@ -12,17 +15,17 @@ use Illuminate\Http\Request;
  * explícito de "solo este rol", no una opción granular más del sistema de permisos habitual
  * (ver docs/sistema-permisos.md para cuándo sí conviene una opción).
  */
-class MarcaDominioController extends Controller
+class MarcaDominioController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private MarcaDominioService $service,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para administrar las marcas por dominio', 403));
-        }
     }
 
     public function listar(Request $request)

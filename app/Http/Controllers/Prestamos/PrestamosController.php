@@ -7,9 +7,18 @@ use App\Http\Requests\Prestamos\StorePrestamoRequest;
 use App\Http\Requests\Prestamos\UpdatePrestamoRequest;
 use App\Services\Prestamos\PrestamosService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class PrestamosController extends Controller
+class PrestamosController extends Controller implements HasMiddleware
 {
+    /** Mis inventarios o Préstamos. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::MIS_INVENTARIOS, Permiso::PRESTAMOS_INVENTARIO]))];
+    }
+
     public function __construct(
         private PrestamosService $prestamosService
     ) {}

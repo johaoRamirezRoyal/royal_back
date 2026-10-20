@@ -6,23 +6,26 @@ use App\Http\Controllers\Controller;
 use App\Models\Usuarios\Usuario;
 use App\Services\AdminManagement\LlaveMaestraService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Generación e historial de llaves de acceso de soporte — ver LlaveMaestraService para la
  * lógica. El canje en sí (AuthController::redeemMasterKey) es público, no vive acá: quien
  * canjea la llave todavía no tiene sesión.
  */
-class LlaveMaestraController extends Controller
+class LlaveMaestraController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private LlaveMaestraService $service,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para gestionar llaves maestras', 403));
-        }
     }
 
     public function index()

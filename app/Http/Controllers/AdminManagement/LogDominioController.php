@@ -5,19 +5,22 @@ namespace App\Http\Controllers\AdminManagement;
 use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\LogDominioService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /** Tráfico por dominio (toda petición, no solo escrituras — ver LogDominioMiddleware). Super Admin únicamente. */
-class LogDominioController extends Controller
+class LogDominioController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private LogDominioService $service,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para ver los logs por dominio', 403));
-        }
     }
 
     public function index(Request $request)

@@ -10,6 +10,9 @@ use App\Services\Usuarios\PermisosPerfil;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Gestión Convivencial — observaciones de estudiantes por día, en actas por periodo
@@ -26,17 +29,23 @@ use Illuminate\Validation\Rule;
  * Controller aparte de GestionAcademicaController por el mismo motivo que
  * ConsultaAsistenciaClaseController: su constructor exige la 99.
  */
-class ObservacionEstudianteController extends Controller
+class ObservacionEstudianteController extends Controller implements HasMiddleware
 {
-    private const OPCION_OBSERVACIONES = 133;
+    /** Entra quien registra o consulta; qué puede hacer adentro lo decide acceso(). Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([self::OPCION_OBSERVACIONES, self::OPCION_VER_TODAS, self::OPCION_SOLO_CONSULTA, self::OPCION_GESTION_ACADEMICA], self::PERFILES_DOCENTE))];
+    }
 
-    private const OPCION_VER_TODAS = 134;
+    private const OPCION_OBSERVACIONES = Permiso::OBSERVACIONES;
 
-    private const OPCION_GESTION_ACADEMICA = 99;
+    private const OPCION_VER_TODAS = Permiso::OBSERVACIONES_VER_TODAS;
 
-    private const OPCION_SOLO_CONSULTA = 135;
+    private const OPCION_GESTION_ACADEMICA = Permiso::GESTION_ACADEMICA;
 
-    private const PERFILES_DOCENTE = [3, 14];
+    private const OPCION_SOLO_CONSULTA = Permiso::OBSERVACIONES_SOLO_CONSULTA;
+
+    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     private ?AccesoObservaciones $acceso = null;
 

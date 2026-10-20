@@ -18,40 +18,23 @@ use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\GestionAcademica\GestionAcademicaService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class GestionAcademicaController extends Controller
+class GestionAcademicaController extends Controller implements HasMiddleware
 {
-    // Opción "Gestión Académica" (99) en el frontend. Se chequea una sola vez acá en el
-    // constructor (en vez de repetirlo en cada uno de los ~20 métodos del controller)
-    // porque ningún endpoint de este controller —ni siquiera los de solo lectura— se
-    // consume fuera de las páginas que ya gatea esta misma opción (asistencias-clases,
-    // configuración académica). Antes de este chequeo, cualquier autenticado podía borrar
-    // horarios de clase, reasignar carga docente o falsificar asistencia de estudiantes
-    // sin tener acceso al módulo.
-    private const OPCION_GESTION_ACADEMICA = 99;
-    // Vicerrector/Directivo Docente: solo lectura del dashboard de métricas, no del
-    // resto del controller (ver migración 2026_08_19_100000_seed_opcion_metricas_asistencia_academica).
-    private const OPCION_METRICAS_ASISTENCIA = 102;
+    // Opción "Gestión Académica" (99): todo el controller. Ningún endpoint —ni los de
+    // lectura— se consume fuera de las páginas que gatea esta opción.
+    private const OPCION_GESTION_ACADEMICA = Permiso::GESTION_ACADEMICA;
 
-    // Perfiles con autoservicio de docente en la tabla perfiles: "Docente" (3) y
-    // "Docente ICT" (14) — este último es un perfil aparte para los profesores del
-    // programa ICT, pero necesita exactamente el mismo autoservicio (asistencia/horario/
-    // métricas de sus propias clases) que un Docente normal.
-    private const PERFILES_DOCENTE = [3, 14];
+    // "Docente" (3) y "Docente ICT" (14): mismo autoservicio.
+    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
-    // Acceso propio del docente (autoservicio, sin pasar por /permisos): tomar asistencia
-    // de SUS clases, gestionar SU horario, y ver métricas (verMetricasAsistencia se
-    // restringe server-side a sus propios cursos — ver
-    // AsistenciaEstudianteService::metricasPorCurso). Explícitamente NO incluye nada de
-    // Configuración académica (asignaturas/áreas/carga académica/franjas/esquemas/años
-    // escolares/calendario) ni Llegadas tarde — esas siguen exigiendo la opción 99/101
-    // otorgada desde /permisos, igual que para cualquier otro perfil.
-    //
-    // verFranjasHorarias es compartido con Configuración académica (el admin también lo
-    // usa para armar la grilla de franjas), pero es de solo lectura de horarios/franjas —
-    // no expone datos sensibles distintos de lo que ya ve en Mi horario — y sin él, el
-    // sheet de "apartar horario" (useMiHorario.hook.ts::abrirSeleccion) no puede listar
-    // las franjas disponibles antes de reservar.
+    // Autoservicio del docente sin la 99: SUS clases, SU horario y métricas (restringidas a
+    // sus cursos en AsistenciaEstudianteService::metricasPorCurso). No incluye Configuración
+    // académica ni Llegadas tarde. verFranjasHorarias es de lectura y lo necesita "apartar
+    // horario". Un método nuevo de autoservicio va aquí Y en su ruta (perfil:3,perfil:14).
     private const METODOS_DOCENTE = [
         'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase', 'guardarAsistenciaClaseLote',
         'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
@@ -59,34 +42,27 @@ class GestionAcademicaController extends Controller
         'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
     ];
 
+    /** Mismas reglas que sus rutas: el controller no depende de que la ruta las tenga. */
+    public static function middleware(): array
+    {
+        $soloDocente = array_values(array_diff(self::METODOS_DOCENTE, ['verMetricasAsistencia']));
+
+        return [
+            new Middleware(Permiso::ruta([self::OPCION_GESTION_ACADEMICA]), except: self::METODOS_DOCENTE),
+            new Middleware(Permiso::ruta([self::OPCION_GESTION_ACADEMICA], self::PERFILES_DOCENTE), only: $soloDocente),
+            // Vicerrector/Directivo Docente: solo lectura del dashboard de métricas (102).
+            new Middleware(
+                Permiso::ruta([self::OPCION_GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], self::PERFILES_DOCENTE),
+                only: ['verMetricasAsistencia'],
+            ),
+        ];
+    }
+
     public function __construct(
         private GestionAcademicaService $service,
         private AnioEscolarServices $anioEscolarService,
         private UsuariosServices $usuariosService,
-        Request $request,
     ) {
-        $tieneAccesoCompleto = $usuariosService->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
-
-        if ($tieneAccesoCompleto) {
-            return;
-        }
-
-        $metodo = $request->route()?->getActionMethod();
-
-        $esDocenteEnMetodoPropio = in_array($request->user()->perfil, self::PERFILES_DOCENTE, true)
-            && in_array($metodo, self::METODOS_DOCENTE, true);
-
-        if ($esDocenteEnMetodoPropio) {
-            return;
-        }
-
-        $esAccionMetricas = $metodo === 'verMetricasAsistencia';
-        $tieneAccesoMetricas = $esAccionMetricas
-            && ($usuariosService->tienePermiso(self::OPCION_METRICAS_ASISTENCIA, $request->user()->perfil)['permiso'] ?? false);
-
-        if (!$tieneAccesoMetricas) {
-            abort($this->error('No tienes permiso para acceder a Gestión Académica', 403));
-        }
     }
 
     public function listarAsignaturas(Request $request)

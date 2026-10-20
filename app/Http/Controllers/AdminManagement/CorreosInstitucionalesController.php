@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\CorreosInstitucionalesService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Administración de `correos_institucionales` (destinatarios fijos de cada módulo, ver
@@ -14,17 +17,17 @@ use Illuminate\Validation\Rule;
  * Admin + `admin.access`, ver rutas en routes/api/adminManagement.php). Edita la tabla de
  * la connection activa (la BD elegida en "Bases de datos").
  */
-class CorreosInstitucionalesController extends Controller
+class CorreosInstitucionalesController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private CorreosInstitucionalesService $service,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para gestionar los correos institucionales', 403));
-        }
     }
 
     public function listar()

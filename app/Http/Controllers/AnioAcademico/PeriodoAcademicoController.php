@@ -7,9 +7,18 @@ use App\Http\Requests\PeriodoAcademico\PeriodoAcademicoRequest;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Services\AnioEscolar\PeriodoAcademicoServices;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class PeriodoAcademicoController extends Controller
+class PeriodoAcademicoController extends Controller implements HasMiddleware
 {
+    /** Escrituras: Gestión Académica (Configuración académica). Las lecturas son de uso general. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]), only: ['agregarPeriodoAcademico', 'editarPeriodoAcademico', 'desactivarPeriodosAcademicos', 'eliminarPeriodoAcademico'])];
+    }
+
     private PeriodoAcademicoServices $periodo_academico;
 
     public function __construct(PeriodoAcademicoServices $periodoAcademico)

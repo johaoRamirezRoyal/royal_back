@@ -7,29 +7,28 @@ use App\Services\FileStorageService;
 use App\Services\Noticias\CumpleanosImagen;
 use App\Services\Noticias\CumpleanosService;
 use App\Services\PerfilUsuario\PerfilUsuarioService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Configuración de cumpleaños (`/api/noticias/cumpleanos/*`). Mismo permiso que la gestión
  * de Noticias (opción 69, Super Admin siempre pasa) — ver NoticiasController.
  */
-class CumpleanosController extends Controller
+class CumpleanosController extends Controller implements HasMiddleware
 {
-    private const OPCION_NOTICIAS = 69;
-    private const SUPER_ADMIN_PERFIL = 1;
+    /** Mismo permiso que la gestión de Noticias. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::NOTICIAS], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private CumpleanosService $service,
-        private UsuariosServices $usuariosService,
-        private Request $request,
     ) {
-        $perfil = $this->request->user()?->perfil;
-        if ($perfil !== self::SUPER_ADMIN_PERFIL && !($this->usuariosService->tienePermiso(self::OPCION_NOTICIAS, $perfil)['permiso'] ?? false)) {
-            abort($this->error('No tienes permiso para gestionar noticias', 403));
-        }
     }
 
     private function reglasPlantilla(): array

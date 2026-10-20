@@ -12,9 +12,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class HikvisionController extends Controller
+class HikvisionController extends Controller implements HasMiddleware
 {
+    /** Control de acceso, Usuarios (alta/baja en terminales) o Super Admin. El webhook del dispositivo es público. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::USUARIOS], [Permiso::PERFIL_SUPER_ADMIN]), except: ['__invoke', 'testNotificationHikvision'])];
+    }
+
     // Perfil de Estudiante en la tabla perfiles
     const PERFIL_ESTUDIANTE = 16;
 

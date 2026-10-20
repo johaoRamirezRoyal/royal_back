@@ -4,8 +4,10 @@ namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
 use App\Services\GestionAcademica\ConsultaAsistenciaClaseService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Consulta de asistencias de clases de todos los docentes, de solo lectura.
@@ -15,26 +17,17 @@ use Illuminate\Http\Request;
  * esta consulta tiene que poder darse a perfiles que NO deben gestionar lo académico
  * (coordinación, rectoría, secretaría...). Acepta la opción propia (132) o la 99 completa.
  */
-class ConsultaAsistenciaClaseController extends Controller
+class ConsultaAsistenciaClaseController extends Controller implements HasMiddleware
 {
-    private const OPCION_CONSULTA_ASISTENCIAS = 132;
-
-    private const OPCION_GESTION_ACADEMICA = 99;
+    /** Opción propia o Gestión Académica completa. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::CONSULTA_ASISTENCIAS_CLASES, Permiso::GESTION_ACADEMICA]))];
+    }
 
     public function __construct(
         private ConsultaAsistenciaClaseService $service,
-        UsuariosServices $usuariosService,
-        Request $request,
     ) {
-        $perfil = $request->user()->perfil;
-
-        foreach ([self::OPCION_CONSULTA_ASISTENCIAS, self::OPCION_GESTION_ACADEMICA] as $opcion) {
-            if ($usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return;
-            }
-        }
-
-        abort($this->error('No tienes permiso para consultar las asistencias de clases', 403));
     }
 
     /**

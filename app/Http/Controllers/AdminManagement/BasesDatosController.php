@@ -5,19 +5,22 @@ namespace App\Http\Controllers\AdminManagement;
 use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\BasesDatosService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /** Panel para el Super Admin: qué bases de datos usa la app, si responden, y renombrarlas. */
-class BasesDatosController extends Controller
+class BasesDatosController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private BasesDatosService $service,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para ver las bases de datos', 403));
-        }
     }
 
     public function listar(Request $request)

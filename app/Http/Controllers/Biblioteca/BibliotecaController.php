@@ -13,23 +13,25 @@ use App\Http\Requests\Biblioteca\SubcategoriaRequest;
 use App\Models\Biblioteca\Libro;
 use App\Services\Biblioteca\BibliotecaServices;
 use App\Services\FileStorageService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class BibliotecaController extends Controller
-
+class BibliotecaController extends Controller implements HasMiddleware
 {
-    // Opción "Biblioteca" (20) en el frontend. Se chequea una sola vez en el
-    // constructor —igual que GestionAcademicaController— salvo que acá SÍ hay una ruta
-    // de este mismo controller sin auth:api: `verImagenBiblioteca` (imágenes públicas
-    // para <img src>, ver routes/api.php). Por eso el chequeo solo corre si hay un
-    // usuario autenticado: cuando no lo hay, necesariamente es esa ruta pública — nunca
-    // una de las protegidas, porque auth:api ya habría cortado la petición con 401 antes
-    // de que Laravel llegue a instanciar este controller.
-    private const OPCION_BIBLIOTECA = 20;
+    /** Opción Biblioteca; las imágenes son públicas (<img src>, fuera de auth). Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::BIBLIOTECA]), except: ['verImagenBiblioteca'])];
+    }
+
+    // Opción "Biblioteca" (20): la exige el middleware `permiso:20` del grupo /biblioteca
+    // (routes/api.php). `verImagenBiblioteca` (imágenes públicas para <img src>) está fuera
+    // de ese grupo a propósito y sigue sin auth.
 
     protected BibliotecaServices $biblioteca_services;
     protected FileStorageService $file_storage_service;
@@ -37,17 +39,9 @@ class BibliotecaController extends Controller
     public function __construct(
         BibliotecaServices $bibliotecaServices,
         FileStorageService $fileStorage,
-        UsuariosServices $usuariosService,
-        Request $request,
     ) {
         $this->biblioteca_services = $bibliotecaServices;
         $this->file_storage_service = $fileStorage;
-
-        $usuario = $request->user();
-
-        if ($usuario && !($usuariosService->tienePermiso(self::OPCION_BIBLIOTECA, $usuario->perfil)['permiso'] ?? false)) {
-            abort($this->error('No tienes permiso para acceder a Biblioteca', 403));
-        }
     }
 
     // CATEGORIAS

@@ -7,23 +7,26 @@ use App\Models\BannerInformativo;
 use App\Services\AdminManagement\BannerInformativoService;
 use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
 /**
  * Edición del banner informativo — mismo patrón de acceso que LlaveMaestraController
  * (perfil Super Admin + `admin.access`, ver rutas en routes/api/adminManagement.php).
  */
-class BannerInformativoController extends Controller
+class BannerInformativoController extends Controller implements HasMiddleware
 {
-    private const PERFILES_PERMITIDOS = [1];
+    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+    }
 
     public function __construct(
         private BannerInformativoService $service,
         private CloudinaryService $cloudinary,
-        Request $request,
     ) {
-        if (!in_array($request->user()->perfil, self::PERFILES_PERMITIDOS, true)) {
-            abort($this->error('No tienes permiso para gestionar el banner informativo', 403));
-        }
     }
 
     public function obtener()

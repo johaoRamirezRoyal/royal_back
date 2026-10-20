@@ -5,9 +5,18 @@ namespace App\Http\Controllers\Areas;
 use App\Http\Controllers\Controller;
 use App\Services\Areas\AreasServices as AreasAreasServices;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class AreasController extends Controller
+class AreasController extends Controller implements HasMiddleware
 {
+    /** Escrituras: opción Inventario. Las lecturas son catálogo (Compras, Inventario, Áreas comunes). Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    public static function middleware(): array
+    {
+        return [new Middleware(Permiso::ruta([Permiso::INVENTARIO]), only: ['crearArea', 'actualizarArea', 'asignarArea', 'desactivarAreas'])];
+    }
+
     protected $service_areas;
 
     public function __construct(AreasAreasServices $areasServices)
