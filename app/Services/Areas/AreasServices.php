@@ -37,7 +37,8 @@ class AreasServices extends Service
     public function obtenerTodasLasAreas()
     {
         try {
-            $areas = Areas::get();
+            // Con su bloque: el listado de inventario arma de aquí el filtro "Bloque".
+            $areas = Areas::with('bloque:id,nombre')->get();
             return [
                 'error' => false,
                 'data' => $areas

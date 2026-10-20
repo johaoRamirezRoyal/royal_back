@@ -14,7 +14,7 @@ class ListadoInventarioRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['id_area', 'id_bloque', 'id_categoria', 'estado'] as $key) {
+        foreach (['id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'estado'] as $key) {
             if ($this->has($key) && !is_array($this->input($key))) {
                 $this->merge([$key => [$this->input($key)]]);
             }
@@ -29,6 +29,9 @@ class ListadoInventarioRequest extends FormRequest
             'id_area.*' => ['integer', Rule::exists('areas', 'id')],
             'id_bloque' => ['nullable', 'array'],
             'id_bloque.*' => ['integer', Rule::exists('bloques', 'id')],
+            // Inventario de las áreas que pertenecen a estos bloques (filtro "Bloque" del listado).
+            'id_bloque_area' => ['nullable', 'array'],
+            'id_bloque_area.*' => ['integer', Rule::exists('bloques', 'id')],
             'id_categoria' => ['nullable', 'array'],
             'id_categoria.*' => ['integer', Rule::exists('categoria', 'id')],
             'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],
@@ -54,6 +57,10 @@ class ListadoInventarioRequest extends FormRequest
             'id_bloque.array' => 'Los bloques deben ser un arreglo',
             'id_bloque.*.integer' => 'Cada bloque debe ser un número entero',
             'id_bloque.*.exists' => 'Uno o más bloques no existen',
+
+            'id_bloque_area.array' => 'Los bloques deben ser un arreglo',
+            'id_bloque_area.*.integer' => 'Cada bloque debe ser un número entero',
+            'id_bloque_area.*.exists' => 'Uno o más bloques no existen',
 
             'id_categoria.array' => 'Las categorías deben ser un arreglo',
             'id_categoria.*.integer' => 'Cada categoría debe ser un número entero',
