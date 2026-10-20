@@ -4,6 +4,7 @@ use App\Http\Controllers\GestionAcademica\GestionAcademicaController;
 use App\Http\Controllers\GestionAcademica\ConsultaAsistenciaClaseController;
 use App\Http\Controllers\GestionAcademica\ActasEstudianteController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 
 /**
@@ -16,9 +17,9 @@ use Illuminate\Support\Facades\Route;
     "id_area": 1 //Filtra las asignaturas de esa área académica
 }
  */
-Route::get('/asignaturas', [GestionAcademicaController::class, 'listarAsignaturas']);
+Route::get('/asignaturas', [GestionAcademicaController::class, 'listarAsignaturas'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
-Route::get('/asignaturas/{id}', [GestionAcademicaController::class, 'obtenerAsignatura']);
+Route::get('/asignaturas/{id}', [GestionAcademicaController::class, 'obtenerAsignatura'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para crear asignaturas
@@ -31,25 +32,25 @@ Route::get('/asignaturas/{id}', [GestionAcademicaController::class, 'obtenerAsig
     "activo": true
 }
  */
-Route::post('/asignaturas', [GestionAcademicaController::class, 'crearAsignatura']);
-Route::put('/asignaturas', [GestionAcademicaController::class, 'actualizarAsignatura']);
-Route::delete('/asignaturas', [GestionAcademicaController::class, 'eliminarAsignatura']);
+Route::post('/asignaturas', [GestionAcademicaController::class, 'crearAsignatura'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::put('/asignaturas', [GestionAcademicaController::class, 'actualizarAsignatura'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::delete('/asignaturas', [GestionAcademicaController::class, 'eliminarAsignatura'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * Áreas académicas (agrupan asignaturas — ver id_area arriba).
  * JSON para filtrar (opcionales): { "nombre": "Ciencias", "estado": 1 }
  */
-Route::get('/areas-academicas', [GestionAcademicaController::class, 'listarAreasAcademicas']);
+Route::get('/areas-academicas', [GestionAcademicaController::class, 'listarAreasAcademicas'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
-Route::get('/areas-academicas/{id}', [GestionAcademicaController::class, 'obtenerAreaAcademica']);
+Route::get('/areas-academicas/{id}', [GestionAcademicaController::class, 'obtenerAreaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para crear/actualizar área académica: { "nombre": "Ciencias Naturales", "activo": true }
  * (actualizar además requiere "id" en el body, igual que /asignaturas)
  */
-Route::post('/areas-academicas', [GestionAcademicaController::class, 'crearAreaAcademica']);
-Route::put('/areas-academicas', [GestionAcademicaController::class, 'actualizarAreaAcademica']);
-Route::delete('/areas-academicas', [GestionAcademicaController::class, 'eliminarAreaAcademica']);
+Route::post('/areas-academicas', [GestionAcademicaController::class, 'crearAreaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::put('/areas-academicas', [GestionAcademicaController::class, 'actualizarAreaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::delete('/areas-academicas', [GestionAcademicaController::class, 'eliminarAreaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para listar las asignaturas de un docente o de todos los docentes, se puede filtrar
@@ -60,7 +61,7 @@ Route::delete('/areas-academicas', [GestionAcademicaController::class, 'eliminar
     "per-page": 10
 }
  */
-Route::get('/docentes-asignaturas', [GestionAcademicaController::class, 'listarDocentesAsignaturas']);
+Route::get('/docentes-asignaturas', [GestionAcademicaController::class, 'listarDocentesAsignaturas'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para asignar asignaturas a un docente
@@ -69,19 +70,19 @@ Route::get('/docentes-asignaturas', [GestionAcademicaController::class, 'listarD
     "asignaturas": [2,3,4]
 }
  */
-Route::post('/docentes-asignaturas', [GestionAcademicaController::class, 'asignarAsignaturasDocente']);
+Route::post('/docentes-asignaturas', [GestionAcademicaController::class, 'asignarAsignaturasDocente'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 /** 
  * JSON para eliminar asignaturas de docente
 {
     "ids": [1,2,3]
 }
 */
-Route::delete('/docentes-asignaturas', [GestionAcademicaController::class, 'eliminarAsignaturasDocente']);
+Route::delete('/docentes-asignaturas', [GestionAcademicaController::class, 'eliminarAsignaturasDocente'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para listar carga académica
  */
-Route::get('/carga-academica', [GestionAcademicaController::class, 'listarCargaAcademica']);
+Route::get('/carga-academica', [GestionAcademicaController::class, 'listarCargaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para crear carga académica
@@ -90,7 +91,7 @@ Route::get('/carga-academica', [GestionAcademicaController::class, 'listarCargaA
     "id_docente_asignatura": 2
 }
  */
-Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaAcademica']);
+Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * JSON para cambiar estado de carga académica
@@ -99,7 +100,7 @@ Route::post('/carga-academica', [GestionAcademicaController::class, 'crearCargaA
     "estado": 0
 }
  */
-Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambiarEstadoCargaAcademica']);
+Route::put('/carga-academica/estado', [GestionAcademicaController::class, 'cambiarEstadoCargaAcademica'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 
 /**
@@ -121,7 +122,7 @@ resuelve el esquema a partir del nivel de ese curso (usado por la pestaña "Hora
 el autoservicio de horario del docente, que solo conocen el curso, no el esquema):
 http://localhost:8000/api/gestion-academica/franjas-horarias?id_curso=1&id_anio_escolar=2&disponible=1&id_docente=7
  */
-Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias']);
+Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias
@@ -133,7 +134,7 @@ http://localhost:8000/api/gestion-academica/franjas-horarias
   "orden": 3
 }
  */
-Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria']);
+Route::post('/franjas-horarias', [GestionAcademicaController::class, 'crearFranjaHoraria'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/lote
@@ -149,7 +150,7 @@ consecutivos de duracion_min minutos (descarta el sobrante final si no completa 
   "asignable": true
 }
  */
-Route::post('/franjas-horarias/lote', [GestionAcademicaController::class, 'crearFranjasHorariasEnLote']);
+Route::post('/franjas-horarias/lote', [GestionAcademicaController::class, 'crearFranjasHorariasEnLote'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/copiar-dia
@@ -162,7 +163,7 @@ día destino que ya tenga franjas se omite (no se borra nada) — hay que elimin
   "ids_dias_destino": [2, 3]
 }
  */
-Route::post('/franjas-horarias/copiar-dia', [GestionAcademicaController::class, 'copiarFranjasDia']);
+Route::post('/franjas-horarias/copiar-dia', [GestionAcademicaController::class, 'copiarFranjasDia'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
@@ -171,7 +172,7 @@ http://localhost:8000/api/gestion-academica/franjas-horarias/tipo
     "id_esquema": 2
 }
  */
-Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria']);
+Route::put('/franjas-horarias/tipo', [GestionAcademicaController::class, 'actualizarTipoFranjaHoraria'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/orden
@@ -189,7 +190,7 @@ http://localhost:8000/api/gestion-academica/franjas-horarias/orden
   ]
 }
  */
-Route::put('/franjas-horarias/orden', [GestionAcademicaController::class, 'actualizarOrdenFranjasHorarias']);
+Route::put('/franjas-horarias/orden', [GestionAcademicaController::class, 'actualizarOrdenFranjasHorarias'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/horario
@@ -200,7 +201,7 @@ http://localhost:8000/api/gestion-academica/franjas-horarias/horario
   "hora_fin": "11:00:00"
 }
 */
-Route::put('/franjas-horarias/horario', [GestionAcademicaController::class, 'actualizarHorarioFranja']);
+Route::put('/franjas-horarias/horario', [GestionAcademicaController::class, 'actualizarHorarioFranja'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/quitar-otros-dias
@@ -211,7 +212,7 @@ del mismo esquema con esa misma hora, dejando la franja $id (la principal) tal c
   "id": 4
 }
 */
-Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::class, 'quitarNoAsignableDeOtrosDias']);
+Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::class, 'quitarNoAsignableDeOtrosDias'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * DELETE /gestion-academica/franjas-horarias
@@ -220,7 +221,7 @@ Route::put('/franjas-horarias/quitar-otros-dias', [GestionAcademicaController::c
     "ids": [1, 2, 3]
 }
 */
-Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria']);
+Route::delete('/franjas-horarias', [GestionAcademicaController::class, 'eliminarFranjaHoraria'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias/dia
@@ -232,7 +233,7 @@ frontend), conservando su hora_inicio/hora_fin. Se agrega al final del día dest
   "id_dia_semana": 3
 }
  */
-Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFranjaADia']);
+Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFranjaADia'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/horario?id_docente=24&id_curso=1&id_asignatura=5&id_dia_semana=2
@@ -242,7 +243,7 @@ Route::put('/franjas-horarias/dia', [GestionAcademicaController::class, 'moverFr
  * globales del esquema. Por defecto false: Attendances consume este mismo endpoint y usa
  * `tipo` para filtrar clases reales, así que no lo pide.
  */
-Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
+Route::get('/horario', [GestionAcademicaController::class, 'verHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/horario
@@ -252,7 +253,7 @@ Route::get('/horario', [GestionAcademicaController::class, 'verHorario']);
     "tipo": "CLASE"
 }
  */
-Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase']);
+Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/horario
@@ -260,7 +261,7 @@ Route::post('/horario', [GestionAcademicaController::class, 'crearHorarioClase']
     "ids": [1, 2, 3]
 }
  */
-Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios']);
+Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/horario/exportar?id_docente=24
@@ -269,7 +270,7 @@ Route::delete('/horario', [GestionAcademicaController::class, 'eliminarHorarios'
  * "Horario" del admin) — arma el archivo en el servidor, el frontend solo dispara el
  * download del binario devuelto (Content-Disposition: attachment).
  */
-Route::get('/horario/exportar', [GestionAcademicaController::class, 'exportarHorarioDocente']);
+Route::get('/horario/exportar', [GestionAcademicaController::class, 'exportarHorarioDocente'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/horario/exportar-todos
@@ -277,7 +278,7 @@ Route::get('/horario/exportar', [GestionAcademicaController::class, 'exportarHor
  * Descarga un único .xlsx con una hoja por docente (solo los que tengan al menos un
  * bloque de horario real) — evita exportar docente por docente desde el frontend.
  */
-Route::get('/horario/exportar-todos', [GestionAcademicaController::class, 'exportarHorariosTodosLosDocentes']);
+Route::get('/horario/exportar-todos', [GestionAcademicaController::class, 'exportarHorariosTodosLosDocentes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase?id_horario_clase=1&fecha=2026-07-02
@@ -287,7 +288,7 @@ Route::get('/horario/exportar-todos', [GestionAcademicaController::class, 'expor
  * fecha_fin requiere fecha_inicio. Ejemplo:
  * ?id_horario_clase[]=1&id_horario_clase[]=2&fecha_inicio=2026-07-01&fecha_fin=2026-07-31
  */
-Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase']);
+Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase
@@ -298,7 +299,7 @@ Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsisten
     "observacion": "Clase normal"
 }
  */
-Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsistenciaClase']);
+Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase
@@ -308,7 +309,7 @@ Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsis
     "observacion": "Feriado"
 }
  */
-Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase']);
+Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase/lote
@@ -328,14 +329,14 @@ Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizar
     ]
 }
  */
-Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote']);
+Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
  * Todos los parámetros son opcionales, pero si ninguno se envía se exige id_horario_clase.
  * ?id_estudiante=1&id_curso=1&fecha=2026-07-02&id_clase=1&id_horario_clase=1
  */
-Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAsistenciasEstudiantes']);
+Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAsistenciasEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
@@ -347,7 +348,7 @@ Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAs
     ]
 }
  */
-Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crearAsistenciaEstudiantes']);
+Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crearAsistenciaEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
@@ -355,7 +356,7 @@ Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crea
     "ids": [1, 2, 3]
 }
  */
-Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'eliminarAsistenciaEstudiante']);
+Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'eliminarAsistenciaEstudiante'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-metricas?fecha_inicio=2026-08-01&fecha_fin=2026-08-31&id_curso=1
@@ -363,7 +364,7 @@ Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'el
  * curso (clases dictadas, ausencias/tardanzas/permisos, % de asistencia) y el top 10
  * de estudiantes con más ausencias en el rango. Todos los parámetros son opcionales.
  */
-Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia']);
+Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * http://localhost:8000/api/gestion-academica/mis-cursos
@@ -371,7 +372,7 @@ Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetr
  * $request->user()->id_user) — usado para poblar el filtro de curso del dashboard de
  * métricas en vez de listar todos los cursos del colegio.
  */
-Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos']);
+Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Esquemas de horario: plantilla de franjas horarias por (nivel × año escolar) —
@@ -380,7 +381,7 @@ Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos'
  *
  * http://localhost:8000/api/gestion-academica/esquemas-horario?id_anio_escolar=2&id_nivel=3
  */
-Route::get('/esquemas-horario', [GestionAcademicaController::class, 'listarEsquemasHorario']);
+Route::get('/esquemas-horario', [GestionAcademicaController::class, 'listarEsquemasHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/esquemas-horario
@@ -390,7 +391,7 @@ http://localhost:8000/api/gestion-academica/esquemas-horario
     "id_anio_escolar": 2
 }
  */
-Route::post('/esquemas-horario', [GestionAcademicaController::class, 'crearEsquemaHorario']);
+Route::post('/esquemas-horario', [GestionAcademicaController::class, 'crearEsquemaHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/esquemas-horario
@@ -400,7 +401,7 @@ http://localhost:8000/api/gestion-academica/esquemas-horario
     "activo": true
 }
  */
-Route::put('/esquemas-horario', [GestionAcademicaController::class, 'actualizarEsquemaHorario']);
+Route::put('/esquemas-horario', [GestionAcademicaController::class, 'actualizarEsquemaHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
 http://localhost:8000/api/gestion-academica/esquemas-horario
@@ -408,7 +409,7 @@ http://localhost:8000/api/gestion-academica/esquemas-horario
     "ids": [1, 2]
 }
  */
-Route::delete('/esquemas-horario', [GestionAcademicaController::class, 'eliminarEsquemaHorario']);
+Route::delete('/esquemas-horario', [GestionAcademicaController::class, 'eliminarEsquemaHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * Autoservicio de horario del docente: el docente autenticado arma su propio horario.
@@ -420,20 +421,20 @@ Route::delete('/esquemas-horario', [GestionAcademicaController::class, 'eliminar
  * tienen horario reservado en el año escolar dado.
  * http://localhost:8000/api/gestion-academica/mi-horario/menu?id_anio_escolar=2
  */
-Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHorario']);
+Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Horario propio ya reservado (mismo formato que GET /horario filtrado por el docente
  * autenticado).
  * http://localhost:8000/api/gestion-academica/mi-horario
  */
-Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario']);
+Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Descarga el .xlsx del horario propio (mismo docente autenticado que GET /mi-horario).
  * http://localhost:8000/api/gestion-academica/mi-horario/exportar
  */
-Route::get('/mi-horario/exportar', [GestionAcademicaController::class, 'exportarMiHorario']);
+Route::get('/mi-horario/exportar', [GestionAcademicaController::class, 'exportarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Aparta una franja para una asignatura propia en un curso. Solo se pueden elegir
@@ -447,7 +448,7 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "id_anio_escolar": 2
 }
  */
-Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario']);
+Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Actualiza la descripción de un bloque propio ya reservado (falla si el id no
@@ -458,7 +459,7 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "descripcion": "Clase de refuerzo"
 }
  */
-Route::put('/mi-horario', [GestionAcademicaController::class, 'actualizarDescripcionMiHorario']);
+Route::put('/mi-horario', [GestionAcademicaController::class, 'actualizarDescripcionMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Elimina bloques del horario propio (falla si alguno de los ids no pertenece al
@@ -468,36 +469,36 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "ids": [10, 11]
 }
  */
-Route::delete('/mi-horario', [GestionAcademicaController::class, 'eliminarMiHorario']);
+Route::delete('/mi-horario', [GestionAcademicaController::class, 'eliminarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
 
 /**
  * Configuración del calendario académico (A o B — ver AnioEscolarServices) y gestión de
  * años escolares (creación manual + habilitar/deshabilitar). El listado en sí sigue
  * viviendo en GET /compartido/anio-academico/todos (compartido con Admisiones, sin gate).
  */
-Route::get('/configuracion-calendario', [GestionAcademicaController::class, 'obtenerConfiguracionCalendario']);
-Route::put('/configuracion-calendario', [GestionAcademicaController::class, 'actualizarConfiguracionCalendario']);
+Route::get('/configuracion-calendario', [GestionAcademicaController::class, 'obtenerConfiguracionCalendario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::put('/configuracion-calendario', [GestionAcademicaController::class, 'actualizarConfiguracionCalendario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * POST /gestion-academica/anios-escolares
  * Body: { "anio_inicio": 2026 }
  */
-Route::post('/anios-escolares', [GestionAcademicaController::class, 'crearAnioEscolarManual']);
+Route::post('/anios-escolares', [GestionAcademicaController::class, 'crearAnioEscolarManual'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * PUT /gestion-academica/anios-escolares/estado
  * Body: { "id": 8, "activo": false }
  */
-Route::put('/anios-escolares/estado', [GestionAcademicaController::class, 'actualizarEstadoAnioEscolar']);
+Route::put('/anios-escolares/estado', [GestionAcademicaController::class, 'actualizarEstadoAnioEscolar'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * Consulta de asistencias de clases (solo lectura, opción 132 o 99) — ver
  * ConsultaAsistenciaClaseController. Controller aparte para no abrir el resto del módulo.
  * http://localhost:8000/api/gestion-academica/consulta-asistencias?fecha_inicio=2026-10-01&fecha_fin=2026-10-13&id_curso=1&page=1&per-page=20
  */
-Route::get('/consulta-asistencias/filtros', [ConsultaAsistenciaClaseController::class, 'filtros']);
-Route::get('/consulta-asistencias', [ConsultaAsistenciaClaseController::class, 'index']);
-Route::get('/consulta-asistencias/{id}', [ConsultaAsistenciaClaseController::class, 'show'])->whereNumber('id');
+Route::get('/consulta-asistencias/filtros', [ConsultaAsistenciaClaseController::class, 'filtros'])->middleware(Permiso::ruta([Permiso::CONSULTA_ASISTENCIAS_CLASES, Permiso::GESTION_ACADEMICA]));
+Route::get('/consulta-asistencias', [ConsultaAsistenciaClaseController::class, 'index'])->middleware(Permiso::ruta([Permiso::CONSULTA_ASISTENCIAS_CLASES, Permiso::GESTION_ACADEMICA]));
+Route::get('/consulta-asistencias/{id}', [ConsultaAsistenciaClaseController::class, 'show'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CONSULTA_ASISTENCIAS_CLASES, Permiso::GESTION_ACADEMICA]));
 
 /**
  * Registro de actas de estudiantes (diálogo formativo / convivencial) — ver
@@ -514,7 +515,7 @@ Route::prefix('actas')->group(function () {
     Route::get('/estadisticas', [ActasEstudianteController::class, 'estadisticas']);
     Route::get('/conteo', [ActasEstudianteController::class, 'conteo']);
     Route::get('/', [ActasEstudianteController::class, 'index']);
-    Route::post('/', [ActasEstudianteController::class, 'store']);
-    Route::put('/{id}', [ActasEstudianteController::class, 'update'])->whereNumber('id');
-    Route::delete('/{id}', [ActasEstudianteController::class, 'destroy'])->whereNumber('id');
+    Route::post('/', [ActasEstudianteController::class, 'store'])->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
+    Route::put('/{id}', [ActasEstudianteController::class, 'update'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
+    Route::delete('/{id}', [ActasEstudianteController::class, 'destroy'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
 });

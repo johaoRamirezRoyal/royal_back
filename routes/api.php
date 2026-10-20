@@ -4,6 +4,7 @@ use App\Http\Controllers\Admissions\AdmissionsController;
 use App\Http\Controllers\Branding\ColegioAdmisionController;
 use App\Http\Controllers\Hikvision\HikvisionController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 Route::get('/', function () {
     return response()->json([
@@ -193,7 +194,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // PRÉSTAMOS
     // Préstamos de inventario (16 Mis inventarios, 17 Préstamos).
-    Route::prefix('prestamos')->middleware('permiso:16,17')->group(function () {
+    Route::prefix('prestamos')->middleware(Permiso::ruta([Permiso::MIS_INVENTARIOS, Permiso::PRESTAMOS_INVENTARIO]))->group(function () {
         require __DIR__.'/api/prestamos.php';
     });
 
@@ -230,12 +231,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // HIKVISION
     // OlvidarEmpleadosHikvision: toda escritura (no-GET) borra la caché de /getList.
     // Enrolar/eliminar en los terminales: 63 Control de acceso, 2 Usuarios (alta/baja), Super Admin (Terminales).
-    Route::prefix('/hikvision')->middleware(['permiso:63,2,perfil:1', \App\Http\Middleware\OlvidarEmpleadosHikvision::class])->group(function () {
+    Route::prefix('/hikvision')->middleware([Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::USUARIOS], [Permiso::PERFIL_SUPER_ADMIN]), \App\Http\Middleware\OlvidarEmpleadosHikvision::class])->group(function () {
         require __DIR__ . '/api/hikvision.php';
     });
 
     // BIBLIOTECA
-    Route::prefix('/biblioteca')->group(function () {
+    Route::prefix('/biblioteca')->middleware(Permiso::ruta([Permiso::BIBLIOTECA]))->group(function () {
         require __DIR__.'/api/Biblioteca.php';
     });
 
@@ -326,7 +327,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     });
 
     // LOGS DE ACTIVIDAD (auditoría escrita por LogActividadMiddleware) — solo Super Admin, como la página.
-    Route::prefix('/logs-actividad')->middleware('permiso:perfil:1')->group(function () {
+    Route::prefix('/logs-actividad')->middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))->group(function () {
         require __DIR__ . '/api/logsActividad.php';
     });
 
@@ -348,14 +349,14 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // BRANDING (logo por dominio de correo — Super Admin únicamente, y solo accesible para
     // los correos de la allowlist de administración, ver RestrictToAdminEmails)
-    Route::prefix('/branding')->middleware('admin.access')->group(function () {
+    Route::prefix('/branding')->middleware(['admin.access', Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN])])->group(function () {
         require __DIR__ . '/api/branding.php';
     });
 
     // ADMINISTRACIÓN TRANSVERSAL (bases de datos vinculadas, logs por dominio — todo en la
     // base admin_management, Super Admin únicamente, y solo accesible para los correos de
     // la allowlist de administración, ver RestrictToAdminEmails)
-    Route::prefix('/admin-management')->middleware('admin.access')->group(function () {
+    Route::prefix('/admin-management')->middleware(['admin.access', Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN])])->group(function () {
         require __DIR__ . '/api/adminManagement.php';
     });
 });

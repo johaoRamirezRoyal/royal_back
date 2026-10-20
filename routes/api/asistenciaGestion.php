@@ -3,6 +3,7 @@
 use App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController;
 use App\Http\Controllers\AsistenciaGestion\AsistenciaHorariosController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 // throttle: 20 peticiones/min por IP de dispositivo (ver AppServiceProvider::boot) —
 // evita que un doble-tap o un retry dispare varias marcaciones seguidas, sin que un
@@ -23,21 +24,21 @@ Route::delete('/', [AsistenciaGestionController::class, 'eliminarAsistencia']);
 // CONFIGURACIÓN — horarios estándar y bandas de puntualidad (solo RH/Administradores, ver
 // AsistenciaHorariosController). Antes de /{id}: si no, "configuracion" matchea el wildcard
 // {id} y actualizarObservacion() se lleva la petición en vez de actualizarConfiguracion().
-Route::get('/configuracion', [AsistenciaHorariosController::class, 'obtenerConfiguracion']);
-Route::put('/configuracion', [AsistenciaHorariosController::class, 'actualizarConfiguracion']);
+Route::get('/configuracion', [AsistenciaHorariosController::class, 'obtenerConfiguracion'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+Route::put('/configuracion', [AsistenciaHorariosController::class, 'actualizarConfiguracion'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
 
 Route::put('/{id}/revocar', [AsistenciaGestionController::class, 'revocarLlegadaTarde']);
 
 Route::put('/{id}', [AsistenciaGestionController::class, 'actualizarObservacion']);
 
 Route::prefix('/horarios')->group(function () {
-    Route::get('/', [AsistenciaHorariosController::class, 'index']);
-    Route::post('/', [AsistenciaHorariosController::class, 'store']);
-    Route::put('/{id}', [AsistenciaHorariosController::class, 'update']);
-    Route::delete('/{id}', [AsistenciaHorariosController::class, 'destroy']);
-    Route::post('/{id}/bandas', [AsistenciaHorariosController::class, 'storeBanda']);
+    Route::get('/', [AsistenciaHorariosController::class, 'index'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+    Route::post('/', [AsistenciaHorariosController::class, 'store'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+    Route::put('/{id}', [AsistenciaHorariosController::class, 'update'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+    Route::delete('/{id}', [AsistenciaHorariosController::class, 'destroy'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+    Route::post('/{id}/bandas', [AsistenciaHorariosController::class, 'storeBanda'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
 });
 // Antes de /bandas/{id}: si no, "orden" matchea el wildcard {id} y nunca llega acá.
-Route::put('/bandas/orden', [AsistenciaHorariosController::class, 'reordenarBandas']);
-Route::put('/bandas/{id}', [AsistenciaHorariosController::class, 'updateBanda']);
-Route::delete('/bandas/{id}', [AsistenciaHorariosController::class, 'destroyBanda']);
+Route::put('/bandas/orden', [AsistenciaHorariosController::class, 'reordenarBandas'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+Route::put('/bandas/{id}', [AsistenciaHorariosController::class, 'updateBanda'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));
+Route::delete('/bandas/{id}', [AsistenciaHorariosController::class, 'destroyBanda'])->middleware(Permiso::ruta([Permiso::CONFIGURACION_ASISTENCIA]));

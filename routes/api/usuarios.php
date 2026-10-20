@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Usuarios\UsuariosController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 Route::get('/firma', [UsuariosController::class, 'verFirma']);
 Route::post('/firma', [UsuariosController::class, 'subirFirma']);
@@ -26,7 +27,7 @@ Route::get('/paginados', [UsuariosController::class, 'mostrarUsuariosPaginados']
 
 Route::get('/{id}', [UsuariosController::class, 'mostrarInfoUsuarioId'])->where('id', '[0-9]+');
 
-Route::put('/estado', [UsuariosController::class, 'actualizarEstadoUsuarios']);
+Route::put('/estado', [UsuariosController::class, 'actualizarEstadoUsuarios'])->middleware(Permiso::ruta([Permiso::USUARIOS]));
 /**
  * Ejemplo de JSON para actualizar estado de varios usuarios:
         {
@@ -38,8 +39,8 @@ Route::put('/estado', [UsuariosController::class, 'actualizarEstadoUsuarios']);
         "estado": "activo"
         }
  */
-Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios']);
-Route::post('/', [UsuariosController::class, 'agregarUsuario']);
+Route::put('/{id}', [UsuariosController::class, 'actualizarUsuarios'])->middleware(Permiso::ruta([Permiso::USUARIOS]));
+Route::post('/', [UsuariosController::class, 'agregarUsuario'])->middleware(Permiso::ruta([Permiso::USUARIOS]));
 /**
  * Ejemplo de JSON para agregar usuario:
  *

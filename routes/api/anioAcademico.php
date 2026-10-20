@@ -4,6 +4,7 @@ use App\Http\Controllers\AnioAcademico\AnioAcademico;
 use App\Http\Controllers\AnioAcademico\PeriodoAcademicoController;
 use App\Http\Controllers\AnioAcademico\PeriodoInstitucionalController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 Route::get('/todos', [AnioAcademico::class, 'obtenerAniosAcademicos']);
 Route::get('/ultimo', [AnioAcademico::class, 'obtenerUltimoAnioAcademico']);
@@ -45,7 +46,7 @@ Route::get("/periodo-academico/id", [PeriodoAcademicoController::class, 'obtener
     "activo": true
 }
  */
-Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPeriodoAcademico'])->middleware('permiso:99');
+Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPeriodoAcademico'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * PUT /periodo-academico/estado
@@ -56,7 +57,7 @@ Route::post("/periodo-academico", [PeriodoAcademicoController::class, 'agregarPe
 }
  * Nota: si ids_periodos_academicos se omite, actualiza todos los registros.
  */
-Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'desactivarPeriodosAcademicos'])->middleware('permiso:99');
+Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'desactivarPeriodosAcademicos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * PUT /periodo-academico
@@ -69,7 +70,7 @@ Route::put("/periodo-academico/estado", [PeriodoAcademicoController::class, 'des
  *       "activo": true
  *   }
  */
-Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeriodoAcademico'])->middleware('permiso:99');
+Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeriodoAcademico'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 /**
  * DELETE /periodo-academico
@@ -78,4 +79,4 @@ Route::put("/periodo-academico", [PeriodoAcademicoController::class, 'editarPeri
  *       "ids_periodo_academico": [1, 2]
  *   }
  */
-Route::delete("/periodo-academico", [PeriodoAcademicoController::class, 'eliminarPeriodoAcademico'])->middleware('permiso:99');
+Route::delete("/periodo-academico", [PeriodoAcademicoController::class, 'eliminarPeriodoAcademico'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));

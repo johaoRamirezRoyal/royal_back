@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\GestionAcademica\ObservacionEstudianteController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 /**
  * GESTIÓN CONVIVENCIAL (prefijo /gestion-convivencial).
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Route;
  * Periodo cerrado (fecha_fin pasada) = solo lectura; solo el autor edita/elimina.
  */
 // Entra quien tenga 133/134/135/99 o sea docente (3/14); qué puede hacer adentro lo decide el controller.
-Route::prefix('/observaciones')->middleware('permiso:133,134,135,99,perfil:3,perfil:14')->group(function () {
+Route::prefix('/observaciones')->middleware(Permiso::ruta([Permiso::OBSERVACIONES, Permiso::OBSERVACIONES_VER_TODAS, Permiso::OBSERVACIONES_SOLO_CONSULTA, Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]))->group(function () {
     Route::get('/catalogos', [ObservacionEstudianteController::class, 'catalogos']);
     Route::get('/estudiantes', [ObservacionEstudianteController::class, 'estudiantes']);
     Route::get('/estudiantes/{idEstudiante}/acta', [ObservacionEstudianteController::class, 'acta'])->whereNumber('idEstudiante');
