@@ -162,6 +162,21 @@ saltándose por completo lo que el frontend mostraba u ocultaba. Se corrigió es
 `SalonesController`, `BibliotecaController`, `CategoriasController` — usarlos como
 referencia al crear un controller nuevo con acciones sensibles.
 
+**Patrón preferido para código nuevo — middleware `permiso` en la ruta**
+(`App\Http\Middleware\RequirePermiso`, alias en `bootstrap/app.php`): deja pasar si el perfil
+tiene **cualquiera** de las opciones, o si su perfil está en `perfil:N` (autoservicio);
+fail-closed con 403. El permiso queda visible junto a la ruta:
+```php
+Route::prefix('/observaciones')->middleware('permiso:133,134,135,99,perfil:3,perfil:14')->group(...);
+```
+Las opciones del perfil se cargan **una vez por petición** (`App\Services\Usuarios\PermisosPerfil`,
+guardadas en el request); el controller que necesite reglas finas (qué datos ve, qué
+acciones) las lee con `PermisosPerfil::tiene($request, ...$opciones)` sin otra consulta, y
+arma su acceso **dentro de la acción**, no en el constructor (Laravel crea el controller
+antes de correr el middleware de la ruta). Ejemplo completo: `ObservacionEstudianteController`
+(`acceso()` memoizado). Los patrones (a)/(b) de abajo siguen en los controllers existentes;
+al tocar uno, conviene migrar su chequeo de entrada al middleware.
+
 Dos patrones según el caso (ver los controllers de arriba para ejemplos reales):
 
 **(a) Todo el controller detrás de una sola opción, sin rutas públicas mezcladas** — un

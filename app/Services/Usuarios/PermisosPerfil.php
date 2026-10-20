@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Services\Usuarios;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Opciones (cron_opciones) otorgadas al perfil del usuario autenticado, cargadas con UNA
+ * consulta por petición y guardadas en el request: el middleware `permiso` y el controller
+ * que lo necesite leen la misma lista, en vez de una consulta por opción
+ * (UsuariosServices::tienePermiso). Mismo criterio que tienePermiso: permiso activo cuya
+ * opción y módulo existen.
+ */
+final class PermisosPerfil
+{
+    private const ATRIBUTO = 'permisos_perfil';
+
+    /** @return array<int, true> id_opcion => true */
+    public static function de(Request $request): array
+    {
+        if (! $request->attributes->has(self::ATRIBUTO)) {
+            $perfil = $request->user()?->perfil;
+
+            $opciones = $perfil === null ? [] : DB::table('cron_permisos as p')
+                ->join('cron_opciones as o', 'o.id', '=', 'p.id_opcion')
+                ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+                ->where('p.id_perfil', $perfil)
+                ->where('p.activo', 1)
+                ->distinct()
+                ->pluck('p.id_opcion')
+                ->all();
+
+            $request->attributes->set(self::ATRIBUTO, array_fill_keys(array_map('intval', $opciones), true));
+        }
+
+        return $request->attributes->get(self::ATRIBUTO);
+    }
+
+    public static function tiene(Request $request, int ...$opciones): bool
+    {
+        $otorgadas = self::de($request);
+
+        foreach ($opciones as $opcion) {
+            if (isset($otorgadas[$opcion])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

@@ -20,7 +20,9 @@ use Throwable;
  * - Una fecha futura se permite (el frontend avisa y pide confirmar antes de enviarla).
  * - Las observaciones son de quien las registra: cada profesor ve solo las suyas, salvo la
  *   opción 134 ("Ver todas las observaciones"), que ve las de todos en todos los cursos.
- * - Solo quien registró una observación la edita o elimina.
+ * - Solo quien registró una observación (id_usuario_registra) la edita o elimina.
+ * - Con la 133/99 se elige el docente de la observación (id_docente); si no, es el propio
+ *   usuario. Cada quien ve las que tiene como docente y las que registró.
  * - Asignatura: la del registrador en el curso del estudiante; si dicta más de una ahí,
  *   tiene que especificarla; si no dicta ninguna (psicología, coordinación…), va sin ella.
  *
@@ -31,6 +33,9 @@ class ObservacionEstudianteService
     public const TIPOS = ['POSITIVA', 'NEGATIVA'];
 
     private const PERFIL_ESTUDIANTE = 16;
+
+    /** Docente y Docente ICT: los que se pueden elegir como docente de una observación. */
+    private const PERFILES_DOCENTE = [3, 14];
 
     private const ORDENES = [
         'fecha' => 'o.fecha',
@@ -72,7 +77,7 @@ class ObservacionEstudianteService
             ->leftJoin('academico_asignatura as asig', 'asig.id', '=', 'o.id_asignatura')
             ->leftJoin('usuarios as doc', 'doc.id_user', '=', 'o.id_docente')
             ->join('periodo_academico as p', 'p.id', '=', 'o.id_periodo_academico')
-            ->when($soloDocente !== null, fn ($q) => $q->where('o.id_docente', $soloDocente))
+            ->when($soloDocente !== null, fn ($q) => $q->where(fn ($w) => $w->where('o.id_docente', $soloDocente)->orWhere('o.id_usuario_registra', $soloDocente)))
             ->select([
                 'o.id',
                 'o.fecha',
@@ -87,6 +92,7 @@ class ObservacionEstudianteService
                 'asig.nombre as asignatura',
                 'o.id_docente',
                 self::nombre('doc', 'docente'),
+                'o.id_usuario_registra',
                 'o.id_periodo_academico',
                 'p.nombre as periodo',
                 // Fecha de la app (America/Bogota), no CURDATE(): si MySQL estuviera en otra
@@ -166,6 +172,61 @@ class ObservacionEstudianteService
             ->orderBy('asig.nombre')
             ->get(['asig.id', 'asig.nombre'])
             ->all();
+    }
+
+    /**
+     * Docentes activos que se pueden elegir (opción 133/99), cada uno con sus asignaturas en
+     * `$idCurso`: primero los que dictan en el curso, luego el resto por apellido.
+     */
+    private function docentesElegibles(?int $idCurso): array
+    {
+        $asignaturas = DB::table('academico_carga_academica as ca')
+            ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+            ->join('academico_asignatura as asig', 'asig.id', '=', 'da.id_asignatura')
+            ->where('ca.id_curso', $idCurso ?? 0)
+            ->where('ca.activo', 1)
+            ->distinct()
+            ->orderBy('asig.nombre')
+            ->get(['da.id_docente', 'asig.id', 'asig.nombre'])
+            ->groupBy('id_docente');
+
+        return DB::table('usuarios as d')
+            ->whereIn('d.perfil', self::PERFILES_DOCENTE)
+            ->where('d.estado', 'activo')
+            ->orderBy('d.apellido')
+            ->orderBy('d.nombre')
+            ->get(['d.id_user as id', self::nombre('d', 'nombre')])
+            ->map(fn ($d) => [
+                'id' => $d->id,
+                'nombre' => $d->nombre,
+                'asignaturas' => ($asignaturas[$d->id] ?? collect())->map(fn ($a) => ['id' => $a->id, 'nombre' => $a->nombre])->values()->all(),
+            ])
+            ->sortBy(fn ($d) => $d['asignaturas'] === [] ? 1 : 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Docente a quien queda la observación: con la 133/99 el que eligió (obligatorio, docente
+     * activo); si no, `$actual` (al editar, el que ya tenía) o el propio usuario.
+     * Devuelve [error|null, idDocente].
+     */
+    private function docenteDe(AccesoObservaciones $acceso, array $datos, ?int $actual = null): array
+    {
+        if (! $acceso->eligeDocente()) {
+            return [null, $actual ?? $acceso->idUsuario];
+        }
+
+        $idDocente = $datos['id_docente'] ?? null;
+        $valido = $idDocente !== null && DB::table('usuarios')
+            ->where('id_user', $idDocente)
+            ->whereIn('perfil', self::PERFILES_DOCENTE)
+            ->where('estado', 'activo')
+            ->exists();
+
+        return $valido
+            ? [null, (int) $idDocente]
+            : [self::fallo('Elige el docente al que corresponde la observación.', 422), null];
     }
 
     /**
@@ -300,7 +361,7 @@ class ObservacionEstudianteService
                     ->orderByDesc('o.fecha')
                     ->orderByDesc('o.id')
                     ->get()
-                    ->map(fn ($o) => ['periodo_cerrado' => (bool) $o->periodo_cerrado, 'editable' => $acceso->puedeRegistrar && ! $o->periodo_cerrado && (int) $o->id_docente === $idUsuario] + (array) $o)
+                    ->map(fn ($o) => ['periodo_cerrado' => (bool) $o->periodo_cerrado, 'editable' => $acceso->puedeRegistrar && ! $o->periodo_cerrado && (int) $o->id_usuario_registra === $idUsuario] + (array) $o)
                 : collect();
 
             return [
@@ -316,6 +377,9 @@ class ObservacionEstudianteService
                         'negativas' => $observaciones->where('tipo', 'NEGATIVA')->count(),
                     ],
                     'mis_asignaturas' => $this->asignaturasDelDocente($idUsuario, $estudiante->id_curso),
+                    // Con la 133/99 se elige el docente (y sus asignaturas en el curso) al registrar.
+                    'elige_docente' => $acceso->eligeDocente(),
+                    'docentes' => $acceso->eligeDocente() ? $this->docentesElegibles($estudiante->id_curso) : [],
                     // Puede registrar a ESTE estudiante (ver todo no implica poder registrar).
                     'puede_registrar' => $acceso->puedeRegistrar
                         && ($acceso->idsCursosRegistro === null || in_array($estudiante->id_curso, $acceso->idsCursosRegistro)),
@@ -332,8 +396,9 @@ class ObservacionEstudianteService
      *
      * @param  array{fecha: string, tipo: string, motivo: string, id_asignatura?: int|null}  $datos
      */
-    private function preparar(object $estudiante, array $datos, int $idUsuario): array
+    private function preparar(object $estudiante, array $datos, int $idDocente, bool $elegido): array
     {
+        [$noDicta, $dictaVarias] = $elegido ? ['El docente elegido no dicta', 'El docente elegido dicta'] : ['No dictas', 'Dictas'];
         $periodo = $this->periodoDeFecha($datos['fecha']);
 
         if (! $periodo) {
@@ -344,18 +409,19 @@ class ObservacionEstudianteService
             return [self::fallo("El periodo \"{$periodo->nombre}\" ya cerró: su acta no se puede modificar.", 403), []];
         }
 
-        $asignaturas = collect($this->asignaturasDelDocente($idUsuario, $estudiante->id_curso));
+        $asignaturas = collect($this->asignaturasDelDocente($idDocente, $estudiante->id_curso));
         $idAsignatura = $datos['id_asignatura'] ?? null;
 
         if ($idAsignatura !== null && ! $asignaturas->contains('id', $idAsignatura)) {
-            return [self::fallo('No dictas esa asignatura en el curso del estudiante.', 422), []];
+            return [self::fallo("{$noDicta} esa asignatura en el curso del estudiante.", 422), []];
         }
 
         if ($idAsignatura === null && $asignaturas->count() > 1) {
-            return [self::fallo('Dictas varias asignaturas en este curso: especifica a cuál corresponde la observación.', 422), []];
+            return [self::fallo("{$dictaVarias} varias asignaturas en este curso: especifica a cuál corresponde la observación.", 422), []];
         }
 
         return [null, [
+            'id_docente' => $idDocente,
             'id_periodo_academico' => $periodo->id,
             'id_asignatura' => $idAsignatura ?? $asignaturas->first()?->id,
             'fecha' => $datos['fecha'],
@@ -378,14 +444,19 @@ class ObservacionEstudianteService
                 return self::fallo('Estudiante no encontrado o fuera de tus cursos.', 404);
             }
 
-            [$error, $columnas] = $this->preparar($estudiante, $datos, $idUsuario);
+            [$error, $idDocente] = $this->docenteDe($acceso, $datos);
+            if ($error) {
+                return $error;
+            }
+
+            [$error, $columnas] = $this->preparar($estudiante, $datos, $idDocente, $acceso->eligeDocente());
             if ($error) {
                 return $error;
             }
 
             $id = DB::table('academico_observacion_estudiante')->insertGetId($columnas + [
                 'id_estudiante' => $idEstudiante,
-                'id_docente' => $idUsuario,
+                'id_usuario_registra' => $idUsuario,
                 'id_curso' => $estudiante->id_curso,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -412,7 +483,7 @@ class ObservacionEstudianteService
             return [self::fallo('Observación no encontrada.', 404), null];
         }
         $idUsuario = $acceso->idUsuario;
-        if ((int) $obs->id_docente !== $idUsuario) {
+        if ((int) $obs->id_usuario_registra !== $idUsuario) {
             return [self::fallo('Solo quien registró la observación puede modificarla.', 403), null];
         }
         if ($obs->periodo_cerrado) {
@@ -430,8 +501,13 @@ class ObservacionEstudianteService
                 return $error;
             }
 
+            [$error, $idDocente] = $this->docenteDe($acceso, $datos, (int) $obs->id_docente);
+            if ($error) {
+                return $error;
+            }
+
             // Asignaturas según el curso que tenía al registrarla, no el actual.
-            [$error, $columnas] = $this->preparar((object) ['id_curso' => $obs->id_curso], $datos, $acceso->idUsuario);
+            [$error, $columnas] = $this->preparar((object) ['id_curso' => $obs->id_curso], $datos, $idDocente, $acceso->eligeDocente());
             if ($error) {
                 return $error;
             }

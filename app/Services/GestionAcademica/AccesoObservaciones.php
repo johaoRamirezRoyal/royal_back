@@ -30,9 +30,18 @@ final class AccesoObservaciones
         return $this->verTodas ? null : ($this->puedeRegistrar ? $this->idsCursosRegistro : []);
     }
 
-    /** null = sin filtro por autor; si no, solo las del propio usuario. */
+    /** null = sin filtro por autor; si no, solo las propias (como docente o como quien la registró). */
     public function soloDocente(): ?int
     {
         return $this->verTodas ? null : $this->idUsuario;
+    }
+
+    /**
+     * Opción 133/99 (registra a cualquier estudiante): al registrar elige el docente a quien
+     * corresponde la observación, en vez de quedar a su nombre.
+     */
+    public function eligeDocente(): bool
+    {
+        return $this->puedeRegistrar && $this->idsCursosRegistro === null;
     }
 }

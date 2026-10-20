@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Route;
  *             "motivo": "texto", "id_asignatura": 3 | null }
  * Periodo cerrado (fecha_fin pasada) = solo lectura; solo el autor edita/elimina.
  */
-Route::prefix('/observaciones')->group(function () {
+// Entra quien tenga 133/134/135/99 o sea docente (3/14); qué puede hacer adentro lo decide el controller.
+Route::prefix('/observaciones')->middleware('permiso:133,134,135,99,perfil:3,perfil:14')->group(function () {
     Route::get('/catalogos', [ObservacionEstudianteController::class, 'catalogos']);
     Route::get('/estudiantes', [ObservacionEstudianteController::class, 'estudiantes']);
     Route::get('/estudiantes/{idEstudiante}/acta', [ObservacionEstudianteController::class, 'acta'])->whereNumber('idEstudiante');

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\GestionAcademica\AccesoObservaciones;
 use App\Services\GestionAcademica\CargaAcademicaService;
 use App\Services\GestionAcademica\ObservacionEstudianteService;
-use App\Services\Usuarios\UsuariosServices;
+use App\Services\Usuarios\PermisosPerfil;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -38,39 +38,47 @@ class ObservacionEstudianteController extends Controller
 
     private const PERFILES_DOCENTE = [3, 14];
 
-    private AccesoObservaciones $acceso;
+    private ?AccesoObservaciones $acceso = null;
 
     public function __construct(
         private ObservacionEstudianteService $service,
-        CargaAcademicaService $cargaAcademica,
-        UsuariosServices $usuariosService,
-        Request $request,
+        private CargaAcademicaService $cargaAcademica,
     ) {
+    }
+
+    /**
+     * Qué puede hacer el usuario, armado en la acción (no en el constructor: Laravel crea el
+     * controller antes de correr el middleware de la ruta). Quién entra lo decide el
+     * middleware `permiso` de la ruta; las opciones se leen de la lista que él ya cargó.
+     */
+    private function acceso(): AccesoObservaciones
+    {
+        if ($this->acceso !== null) {
+            return $this->acceso;
+        }
+
+        $request = request();
         $usuario = $request->user();
-        $tiene = fn (int $opcion) => (bool) ($usuariosService->tienePermiso($opcion, $usuario->perfil)['permiso'] ?? false);
+        $tiene = fn (int $opcion) => PermisosPerfil::tiene($request, $opcion);
 
         $soloConsulta = $tiene(self::OPCION_SOLO_CONSULTA);
         $registraTodos = ! $soloConsulta && ($tiene(self::OPCION_OBSERVACIONES) || $tiene(self::OPCION_GESTION_ACADEMICA));
-        $esDocente = ! $soloConsulta && in_array($usuario->perfil, self::PERFILES_DOCENTE, true);
+        $esDocente = ! $soloConsulta && in_array((int) $usuario->perfil, self::PERFILES_DOCENTE, true);
 
-        $this->acceso = new AccesoObservaciones(
+        return $this->acceso = new AccesoObservaciones(
             idUsuario: $usuario->id_user,
             verTodas: $soloConsulta || $tiene(self::OPCION_VER_TODAS),
             puedeRegistrar: $registraTodos || $esDocente,
             idsCursosRegistro: $registraTodos
                 ? null
-                : collect($esDocente ? ($cargaAcademica->obtenerCursosDocente($usuario->id_user)['data'] ?? []) : [])->pluck('id')->all(),
+                : collect($esDocente ? ($this->cargaAcademica->obtenerCursosDocente($usuario->id_user)['data'] ?? []) : [])->pluck('id')->all(),
         );
-
-        if (! $this->acceso->puedeRegistrar && ! $this->acceso->verTodas) {
-            abort($this->error('No tienes permiso para ver las observaciones de estudiantes', 403));
-        }
     }
 
     public function index(Request $request)
     {
         return $this->apiResponse($this->service->listar(
-            acceso: $this->acceso,
+            acceso: $this->acceso(),
             filtros: $request->only(['id_periodo', 'fecha_inicio', 'fecha_fin', 'id_curso', 'tipo', 'id_estudiante']),
             pagina: (int) $request->input('page', 1),
             porPagina: (int) $request->input('per-page', $request->input('per_page', 20)),
@@ -83,7 +91,7 @@ class ObservacionEstudianteController extends Controller
     /** Catálogos de filtros (cursos visibles y periodos) + qué puede hacer el usuario. */
     public function catalogos()
     {
-        $idsCursos = $this->acceso->idsCursosEstudiantes();
+        $idsCursos = $this->acceso()->idsCursosEstudiantes();
         $cursos = DB::table('curso')
             ->where('activo', 1)
             ->when($idsCursos !== null, fn ($q) => $q->whereIn('id', $idsCursos))
@@ -96,15 +104,16 @@ class ObservacionEstudianteController extends Controller
             'data' => [
                 'cursos' => $cursos,
                 'periodos' => $this->service->periodos(),
-                'ver_todas' => $this->acceso->verTodas,
-                'puede_registrar' => $this->acceso->puedeRegistrar,
+                'ver_todas' => $this->acceso()->verTodas,
+                'puede_registrar' => $this->acceso()->puedeRegistrar,
+                'elige_docente' => $this->acceso()->eligeDocente(),
             ],
         ]);
     }
 
     public function estudiantes(Request $request)
     {
-        return $this->apiResponse($this->service->buscarEstudiantes($this->acceso, $request->input('s')));
+        return $this->apiResponse($this->service->buscarEstudiantes($this->acceso(), $request->input('s')));
     }
 
     /** Acta del estudiante en `?id_periodo=` (por defecto el periodo actual). */
@@ -112,24 +121,24 @@ class ObservacionEstudianteController extends Controller
     {
         $idPeriodo = $request->integer('id_periodo') ?: null;
 
-        return $this->apiResponse($this->service->acta($this->acceso, $idEstudiante, $idPeriodo));
+        return $this->apiResponse($this->service->acta($this->acceso(), $idEstudiante, $idPeriodo));
     }
 
     public function store(Request $request)
     {
         $datos = $this->validar($request, conEstudiante: true);
 
-        return $this->apiResponse($this->service->crear($this->acceso, $datos['id_estudiante'], $datos));
+        return $this->apiResponse($this->service->crear($this->acceso(), $datos['id_estudiante'], $datos));
     }
 
     public function update(Request $request, int $id)
     {
-        return $this->apiResponse($this->service->actualizar($this->acceso, $id, $this->validar($request)));
+        return $this->apiResponse($this->service->actualizar($this->acceso(), $id, $this->validar($request)));
     }
 
     public function destroy(int $id)
     {
-        return $this->apiResponse($this->service->eliminar($this->acceso, $id));
+        return $this->apiResponse($this->service->eliminar($this->acceso(), $id));
     }
 
     private function validar(Request $request, bool $conEstudiante = false): array
@@ -140,6 +149,8 @@ class ObservacionEstudianteController extends Controller
             'tipo' => ['required', Rule::in(ObservacionEstudianteService::TIPOS)],
             'motivo' => ['required', 'string', 'max:5000'],
             'id_asignatura' => ['nullable', 'integer'],
+            // Obligatorio con la 133/99 (lo exige el service); para el docente se ignora.
+            'id_docente' => ['nullable', 'integer'],
         ], [
             'fecha.required' => 'La fecha es obligatoria.',
             'tipo.in' => 'El tipo debe ser positiva o negativa.',
