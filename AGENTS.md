@@ -162,13 +162,25 @@ saltándose por completo lo que el frontend mostraba u ocultaba. Se corrigió es
 `SalonesController`, `BibliotecaController`, `CategoriasController` — usarlos como
 referencia al crear un controller nuevo con acciones sensibles.
 
-**Patrón preferido para código nuevo — middleware `permiso` en la ruta**
+**Patrón preferido para código nuevo — middleware `permiso` en la ruta Y en el controller**
 (`App\Http\Middleware\RequirePermiso`, alias en `bootstrap/app.php`): deja pasar si el perfil
 tiene **cualquiera** de las opciones, o si su perfil está en `perfil:N` (autoservicio);
-fail-closed con 403. El permiso queda visible junto a la ruta:
-```php
-Route::prefix('/observaciones')->middleware('permiso:133,134,135,99,perfil:3,perfil:14')->group(...);
-```
+fail-closed con 403.
+
+- **Ids en un solo lugar: `App\Support\Permiso`** — constantes de cada opción
+  (`Permiso::INVENTARIO = 12`, con el nombre de `cron_opciones` al lado) y de los perfiles
+  (`Permiso::PERFIL_SUPER_ADMIN`…). Las constantes `OPCION_*`/`PERFIL_*` de los controllers y
+  services apuntan ahí, y las rutas también. Nunca escribas un id de opción a mano: si no
+  existe la constante, agrégala. Si un id cambia en BD, se cambia solo ahí.
+- **En la ruta**: `->middleware(Permiso::ruta([Permiso::OBSERVACIONES, ...], [Permiso::PERFIL_DOCENTE, ...]))`
+  (`ruta()` arma el string `permiso:…`).
+- **En el controller**, la misma regla: o el chequeo al inicio de cada método
+  (`sinAcceso(...)`, controllers existentes), o —si el controller no tiene chequeo por
+  método— `implements HasMiddleware` con `public static function middleware()` (corre como
+  middleware, después de la autenticación; admite `only`/`except` para acciones públicas o
+  reglas por método, ver `GestionAcademicaController`, `BibliotecaController`,
+  `HikvisionController`). Así un controller nunca depende de que su ruta tenga el middleware.
+  Laravel no repite un middleware idéntico de ruta y controller.
 Las opciones del perfil se cargan **una vez por petición** (`App\Services\Usuarios\PermisosPerfil`,
 guardadas en el request); el controller que necesite reglas finas (qué datos ve, qué
 acciones) las lee con `PermisosPerfil::tiene($request, ...$opciones)` sin otra consulta, y
@@ -190,6 +202,21 @@ a nadie fuera):
   siguen abiertas (catálogo que usan Compras, Inventario, Áreas comunes).
 - Escrituras de `/compartido/anio-academico/periodo-academico` → `permiso:99`
   (Configuración académica); las lecturas siguen abiertas (Inicio, Llegadas tarde).
+
+**Resto de rutas (2026-10-20)**: toda ruta cuyo método ya exigía un permiso como primera
+instrucción (`sinAcceso`, `sinPermiso`, `ensurePermisoGestion`, `soloSuperAdmin`, …) lleva
+ahora el mismo permiso en `->middleware('permiso:…')` — generado desde el propio chequeo del
+método, así que la regla es idéntica (476 de 604 rutas del sistema general). Esos chequeos
+dentro de los métodos **se dejaron** (defensa en profundidad; el middleware corta antes). Los
+controllers que chequeaban en el **constructor** (AdminManagement, MarcaDominio, Biblioteca,
+ConsultaAsistenciaClase, Cumpleaños, GestionAcademica) y los que solo quedaron protegidos por
+la ruta (Hikvision, Préstamos, Logs de actividad, escrituras de Áreas y de Periodos,
+entrada de Observaciones) declaran la misma regla con `HasMiddleware`.
+Quedan sin middleware las rutas cuya regla depende de los datos y no solo del perfil
+(Llegadas tarde con la 101, Asistencia de trabajadores propia/ajena, Indicadores de gestión
+por tipo de categoría, Actas con la regla del docente, editar el propio permiso/licencia),
+el autoservicio y los catálogos — esas siguen validándose dentro del método. **Al crear una
+ruta nueva con permiso, ponlo en la ruta.**
 
 Siguen abiertos a propósito: catálogos de solo lectura (`/cursos`, `/tipos-documentos`,
 lecturas de `/usuarios`), el autoservicio del propio usuario (`/info-perfil`,
@@ -534,9 +561,9 @@ ver las asistencias de cualquier clase sin ser el docente. Acepta la opción **1
 ("Consulta de asistencias de clases", sembrada para Super Admin por
 `2026_10_13_100000_seed_opcion_consulta_asistencias_clases`) **o** la 99 completa.
 
-- **Por qué un controller aparte**: el constructor de `GestionAcademicaController` aborta
-  todo para quien no tenga la 99 (o sea docente en `METODOS_DOCENTE`); meter la consulta
-  ahí habría obligado a abrir otro hueco en ese chequeo. Con un controller propio, dar la
+- **Por qué un controller aparte**: las rutas de `GestionAcademicaController` exigen la 99
+  (o ser docente en sus rutas de autoservicio); meter la consulta ahí habría obligado a
+  abrir otro hueco en esa regla. Con un controller propio, dar la
   132 a coordinación no le da acceso a nada más del módulo.
 - **Id explícito en la migración**: inserta `cron_opciones.id = 132` en vez de
   `insertGetId`, y falla con un mensaje claro si ese id ya está ocupado por otra opción —
@@ -551,25 +578,19 @@ ver las asistencias de cualquier clase sin ser el docente. Acepta la opción **1
 
 ### Autoservicio del Docente (tercer patrón de permisos, además de (a)/(b) arriba)
 
-El perfil Docente (`id_perfil` `3`) normalmente NO tiene la opción `99` otorgada en
-`cron_permisos` — en vez de eso, el constructor de `GestionAcademicaController` combina
-el chequeo de opción con una whitelist fija de acciones self-scoped:
+El perfil Docente (`id_perfil` `3`, y Docente ICT `14`) normalmente NO tiene la opción `99`
+otorgada en `cron_permisos` — en vez de eso, las rutas de autoservicio de
+`GestionAcademicaController` dejan pasar a los perfiles 3/14 sin la 99: la lista
+`METODOS_DOCENTE` del controller alimenta su `middleware()` (`HasMiddleware`, antes era un
+chequeo en el constructor) y esas mismas rutas llevan `perfil:3,perfil:14` en
+`routes/api/gestionAcademica.php`: asistencia de sus clases, su horario
+(incluida la exportación), `obtenerMisCursos`, `verFranjasHorarias` y
+`verMetricasAsistencia` (esta además acepta la 102).
 
-```php
-private const PERFIL_DOCENTE = 3;
-private const METODOS_DOCENTE = [
-    'verAsistenciasClase', 'crearAsistenciaClase', 'actualizarAsistenciaClase',
-    'verAsistenciasEstudiantes', 'crearAsistenciaEstudiantes', 'eliminarAsistenciaEstudiante',
-    'verMiMenuHorario', 'verMiHorario', 'reservarMiHorario', 'eliminarMiHorario',
-    'verMetricasAsistencia', 'obtenerMisCursos', 'verFranjasHorarias',
-];
-```
-
-Si `$request->user()->perfil === PERFIL_DOCENTE` y la acción está en esa lista, pasa sin
-necesitar la opción 99 — **el resto del controller (asignaturas, áreas, carga académica,
-esquemas/franjas fuera de listar, años escolares, calendario) sigue exigiéndola**. Al
-agregar un método nuevo que el docente deba poder usar desde autoservicio (Asistencia de
-clases / Mi horario), agrégalo a `METODOS_DOCENTE` explícitamente — no asumas que "es de
+**El resto del controller (asignaturas, áreas, carga académica, esquemas/franjas fuera de
+listar, años escolares, calendario) lleva `permiso:99`**. Al agregar una ruta nueva que el
+docente deba poder usar desde autoservicio (Asistencia de clases / Mi horario), agrégalo a
+`METODOS_DOCENTE` **y** ponle `perfil:3,perfil:14` a su ruta explícitamente — no asumas que "es de
 lectura" es suficiente (`verFranjasHorarias` se quedó fuera al construir esto y rompió el
 flujo de "apartar horario" hasta que se agregó). `verMetricasAsistencia` se deja pasar
 siempre, pero el propio `AsistenciaEstudianteService::metricasPorCurso` recibe
