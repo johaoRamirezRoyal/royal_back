@@ -6,13 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Enfermeria\EnfermeriaAtencionRequest;
 use App\Http\Requests\Enfermeria\EnfermeriaCategoriaRequest;
 use App\Services\Enfermeria\EnfermeriaServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class EnfermeriaController extends Controller
 {
+    use VerificaPermisos;
+
     // Opciones del frontend (ver AGENTS.md del frontend, "Enfermería"): 54 = /enfermeria/categorias,
     // 57 = /enfermeria/atencion-medica + /listado + /historial (comparten permiso),
     // 64 = /enfermeria/metricas. Este controller respalda las tres, así que a diferencia
@@ -26,28 +28,8 @@ class EnfermeriaController extends Controller
 
     public function __construct(
         EnfermeriaServices $enfermeriaServices,
-        private UsuariosServices $usuariosService,
     ) {
         $this->enfermeriaServices = $enfermeriaServices;
-    }
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar la ruta en el frontend — cualquier
-     * intento directo a estos endpoints sin ninguna de las opciones dadas se rechaza acá.
-     * Acepta varias opciones (OR) para los endpoints que comparten más de una, ej.
-     * `selectCategorias` (lo usa tanto Categorías como el modal de registrar atención).
-     */
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     /*

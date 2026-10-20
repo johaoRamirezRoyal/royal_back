@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Areas;
 use App\Http\Controllers\Controller;
 use App\Services\Areas\AreasServices;
 use App\Services\inventario\InventarioServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 /**
  * Acciones administrativas masivas de Áreas Comunes que cruzan `areas`/`inventario`
@@ -19,6 +19,8 @@ use App\Support\Permiso;
  */
 class AreasComunesController extends Controller
 {
+    use VerificaPermisos;
+
     private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
     private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
     // "Mis áreas comunes" (autoservicio) — sumada a registrarCheck por consistencia con
@@ -29,24 +31,7 @@ class AreasComunesController extends Controller
     public function __construct(
         private AreasServices $areasService,
         private InventarioServices $inventarioService,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'error' => true,
-            'message' => 'No tienes permiso para esta acción',
-        ], 403);
     }
 
     public function asignarAreasBloque(Request $request)

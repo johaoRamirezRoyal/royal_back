@@ -15,13 +15,15 @@ use App\Http\Requests\ProcesoCompra\VerificarSolicitudRequest;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
 use App\Services\inventario\InventarioServices;
 use App\Services\ProcesoCompra\SolicitudesServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class SolicitudesController extends Controller
 {
+    use VerificaPermisos;
+
     // Opción "Listado de solicitudes" (60) del módulo "Proceso de compra" (9) — legada,
     // sigue gateando los endpoints que no forman parte del rediseño (ver/verificar/
     // aplazar/rechazar sobre la solicitud final, agregar a inventario).
@@ -49,17 +51,7 @@ class SolicitudesController extends Controller
     public function __construct(
         private SolicitudesServices $solicitudesServices,
         private InventarioServices $inventarioServices,
-        private UsuariosServices $usuariosService,
     ) {}
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $tienePermiso = count($opciones) === 1
-            ? ($this->usuariosService->tienePermiso($opciones[0], $request->user()->perfil)['permiso'] ?? false)
-            : ($this->usuariosService->tieneAlgunPermiso($opciones, $request->user()->perfil)['permiso'] ?? false);
-
-        return $tienePermiso ? null : $this->error('No tienes permiso para ver las solicitudes', 403);
-    }
 
     private function esAdminGeneral(Request $request): bool
     {

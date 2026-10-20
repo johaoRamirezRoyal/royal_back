@@ -13,14 +13,16 @@ use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
 use App\Services\inventario\InventarioServices as InventarioServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class InventariosController extends Controller
 {
+    use VerificaPermisos;
+
     // Opciones del frontend: 12 = /inventario/listado (+ reportado/liberado/reportes/
     // mantenimiento/areas), 16 = /inventario/mis-inventarios (autoservicio: solo lo
     // propio), 17 = /inventario/prestamos. `obtenerListadoInventario`/`reportarInventario`
@@ -46,25 +48,8 @@ class InventariosController extends Controller
 
     public function __construct(
         InventarioServices $inventarioServices,
-        private UsuariosServices $usuariosService,
     ) {
         $this->inventario_services = $inventarioServices;
-    }
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar la ruta en el frontend.
-     */
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     public function agregarInventario(RegistrarInventarioRequest $request){

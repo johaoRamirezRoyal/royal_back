@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Areas;
 
 use App\Http\Controllers\Controller;
 use App\Services\Areas\BloquesServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
+use App\Services\Usuarios\PermisosPerfil;
 
 class BloquesController extends Controller
 {
+    use VerificaPermisos;
+
     // cron_opciones bajo id_modulo=6 (Zonas) — ver migración
     // 2026_09_10_150000_seed_opciones_areas_comunes.
     private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
@@ -22,30 +25,13 @@ class BloquesController extends Controller
 
     public function __construct(
         BloquesServices $bloquesServices,
-        private UsuariosServices $usuariosService,
     ) {
         $this->service_bloques = $bloquesServices;
     }
 
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'error' => true,
-            'message' => 'No tienes permiso para esta acción',
-        ], 403);
-    }
-
     private function esAdministrador(Request $request): bool
     {
-        return $this->usuariosService->tienePermiso(self::OPCION_ADMIN_AREAS_COMUNES, $request->user()->perfil)['permiso'] ?? false;
+        return PermisosPerfil::tiene($request, self::OPCION_ADMIN_AREAS_COMUNES);
     }
 
     /** Bloques donde el usuario autenticado es responsable — ver "Mis áreas". */

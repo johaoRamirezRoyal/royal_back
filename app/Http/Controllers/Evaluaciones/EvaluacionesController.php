@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Evaluaciones;
 use App\Http\Controllers\Controller;
 use App\Services\evaluaciones\EvaluacionesServices;
 use App\Services\AnioEscolar\PeriodoServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class EvaluacionesController extends Controller
 {
+    use VerificaPermisos;
+
     // 101/102/103 colisionaban en producción con opciones de Gestión Académica (Llegadas
     // Tarde/Asistencia Docentes/Métricas de Asistencia Académica) — ver migración
     // 2026_09_14_150000_seed_opciones_evaluaciones, que creó los IDs reales de Evaluaciones.
@@ -22,20 +24,8 @@ class EvaluacionesController extends Controller
 
     public function __construct(
         private EvaluacionesServices $evaluacionesServices,
-        private UsuariosServices $usuariosService,
         private PeriodoServices $periodoServices,
     ) {}
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        if ($this->usuariosService->tieneAlgunPermiso($opciones, $perfil)['permiso'] ?? false) {
-            return null;
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
-    }
 
     // ─── Catálogo de servicios ──────────────────────────────────
 

@@ -16,7 +16,7 @@ use App\Http\Requests\GestionAcademica\AsistenciaEstudianteRequest;
 use App\Http\Requests\GestionAcademica\HorarioClaseRequest;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\GestionAcademica\GestionAcademicaService;
-use App\Services\Usuarios\UsuariosServices;
+use App\Services\Usuarios\PermisosPerfil;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -61,7 +61,6 @@ class GestionAcademicaController extends Controller implements HasMiddleware
     public function __construct(
         private GestionAcademicaService $service,
         private AnioEscolarServices $anioEscolarService,
-        private UsuariosServices $usuariosService,
     ) {
     }
 
@@ -486,8 +485,7 @@ class GestionAcademicaController extends Controller implements HasMiddleware
         // cursos (ver AsistenciaEstudianteService::metricasPorCurso) — no basta con
         // ocultar el selector de curso en el frontend, cualquiera podría pedir otro
         // id_curso directo contra la API.
-        $tieneAccesoCompleto = $this->usuariosService
-            ->tienePermiso(self::OPCION_GESTION_ACADEMICA, $request->user()->perfil)['permiso'] ?? false;
+        $tieneAccesoCompleto = PermisosPerfil::tiene($request, self::OPCION_GESTION_ACADEMICA);
         $idDocenteScope = (!$tieneAccesoCompleto && in_array($request->user()->perfil, self::PERFILES_DOCENTE, true))
             ? $request->user()->id_user
             : null;

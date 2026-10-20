@@ -9,14 +9,16 @@ use App\Models\Reservas\ConfiguracionReservas;
 use App\Models\Reservas\Horas;
 use App\Models\Reservas\Salones;
 use App\Services\Reservas\ReservasServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class SalonesController extends Controller
 {
+    use VerificaPermisos;
+
     // Opción "/reservas/salones" (40) en el frontend: gatea administrar el catálogo de
     // salones (crear/editar/eliminar), NO listarlos — `listarSalones`/`listarHoras` los
     // sigue necesitando cualquier autenticado para reservar (CreateReservaModal, en
@@ -26,15 +28,7 @@ class SalonesController extends Controller
 
     public function __construct(
         private ReservasServices $reservasServices,
-        private UsuariosServices $usuariosService,
     ) {}
-
-    private function sinAcceso(Request $request): ?JsonResponse
-    {
-        $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_SALONES, $request->user()->perfil)['permiso'] ?? false;
-
-        return $tienePermiso ? null : $this->error('No tienes permiso para administrar salones', 403);
-    }
 
     /**
      * `token_encuesta`/`encuesta_titulo` vienen null salvo que el salón tenga asignada una
@@ -79,7 +73,7 @@ class SalonesController extends Controller
 
     public function crearSalon(SalonRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -90,7 +84,7 @@ class SalonesController extends Controller
 
     public function actualizarSalon(SalonRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -101,7 +95,7 @@ class SalonesController extends Controller
 
     public function eliminarSalon(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -123,7 +117,7 @@ class SalonesController extends Controller
     // es parte de la misma administración del módulo, no amerita una opción aparte.
     public function crearHora(HoraRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -134,7 +128,7 @@ class SalonesController extends Controller
 
     public function actualizarHora(HoraRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -145,7 +139,7 @@ class SalonesController extends Controller
 
     public function eliminarHora(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 
@@ -173,7 +167,7 @@ class SalonesController extends Controller
 
     public function actualizarConfiguracion(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_SALONES)) {
             return $rechazo;
         }
 

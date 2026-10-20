@@ -5,15 +5,18 @@ namespace App\Http\Controllers\Capacitaciones;
 use App\Http\Controllers\Controller;
 use App\Pdf\Capacitaciones\CertificadoCapacitacionPdfService;
 use App\Services\capacitaciones\CapacitacionesServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
+use App\Services\Usuarios\PermisosPerfil;
 
 class CapacitacionesController extends Controller
 {
+    use VerificaPermisos;
+
     // 85 = ver y realizar capacitaciones, 86 = administrarlas,
     // 93 = listado de capacitaciones realizadas (certificados de otros usuarios).
     private const OPCION_VER = Permiso::CAPACITACIONES;
@@ -22,24 +25,7 @@ class CapacitacionesController extends Controller
 
     public function __construct(
         private CapacitacionesServices $capacitacionesServices,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function tiene(Request $request, int $opcion): bool
-    {
-        return $this->usuariosService->tienePermiso($opcion, $request->user()->perfil)['permiso'] ?? false;
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        foreach ($opciones as $opcion) {
-            if ($this->tiene($request, $opcion)) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     // ─── Realizar capacitaciones (85; 86 puede previsualizar) ───
@@ -62,7 +48,7 @@ class CapacitacionesController extends Controller
         }
 
         return $this->apiResponse($this->capacitacionesServices->detalleCurso(
-            $id, $request->user(), $this->tiene($request, self::OPCION_ADMIN)
+            $id, $request->user(), PermisosPerfil::tiene($request, self::OPCION_ADMIN)
         ));
     }
 
@@ -74,7 +60,7 @@ class CapacitacionesController extends Controller
         }
 
         return $this->apiResponse($this->capacitacionesServices->marcarVisto(
-            $id, $request->user(), $this->tiene($request, self::OPCION_ADMIN)
+            $id, $request->user(), PermisosPerfil::tiene($request, self::OPCION_ADMIN)
         ));
     }
 
@@ -86,7 +72,7 @@ class CapacitacionesController extends Controller
         }
 
         return $this->apiResponse($this->capacitacionesServices->preguntasQuiz(
-            $id, $request->user(), $this->tiene($request, self::OPCION_ADMIN)
+            $id, $request->user(), PermisosPerfil::tiene($request, self::OPCION_ADMIN)
         ));
     }
 
@@ -105,7 +91,7 @@ class CapacitacionesController extends Controller
         ]);
 
         return $this->apiResponse($this->capacitacionesServices->responderQuiz(
-            $id, $data['respuestas'], $request->user(), $this->tiene($request, self::OPCION_ADMIN)
+            $id, $data['respuestas'], $request->user(), PermisosPerfil::tiene($request, self::OPCION_ADMIN)
         ));
     }
 

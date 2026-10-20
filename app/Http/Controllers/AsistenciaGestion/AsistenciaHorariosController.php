@@ -4,37 +4,27 @@ namespace App\Http\Controllers\AsistenciaGestion;
 
 use App\Http\Controllers\Controller;
 use App\Services\AsistenciaTrabajadores\AsistenciaHorariosService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class AsistenciaHorariosController extends Controller
 {
+    use VerificaPermisos;
+
     // Opción de "/permisos" para "Configuración de asistencia" — solo RH y Administradores
     // la tienen asignada por defecto (ver migración 2026_08_06_010002).
     private const OPCION_CONFIGURACION = Permiso::CONFIGURACION_ASISTENCIA;
 
     public function __construct(
         private AsistenciaHorariosService $horariosService,
-        private UsuariosServices $usuariosService,
     ) {}
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar el link en el sidebar — cualquier
-     * intento directo a estos endpoints sin el permiso se rechaza acá.
-     */
-    private function sinPermiso(Request $request): ?JsonResponse
-    {
-        $puedeConfigurar = $this->usuariosService->tienePermiso(self::OPCION_CONFIGURACION, $request->user()->perfil)['permiso'] ?? false;
-
-        return $puedeConfigurar ? null : $this->error('No tienes permiso para acceder a esta configuración', 403);
-    }
 
     public function index(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -43,7 +33,7 @@ class AsistenciaHorariosController extends Controller
 
     public function obtenerConfiguracion(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -52,7 +42,7 @@ class AsistenciaHorariosController extends Controller
 
     public function actualizarConfiguracion(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -73,7 +63,7 @@ class AsistenciaHorariosController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -100,7 +90,7 @@ class AsistenciaHorariosController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -127,7 +117,7 @@ class AsistenciaHorariosController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -136,7 +126,7 @@ class AsistenciaHorariosController extends Controller
 
     public function storeBanda(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -156,7 +146,7 @@ class AsistenciaHorariosController extends Controller
 
     public function updateBanda(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -176,7 +166,7 @@ class AsistenciaHorariosController extends Controller
 
     public function destroyBanda(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 
@@ -185,7 +175,7 @@ class AsistenciaHorariosController extends Controller
 
     public function reordenarBandas(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinPermiso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CONFIGURACION)) {
             return $rechazo;
         }
 

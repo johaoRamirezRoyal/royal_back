@@ -7,6 +7,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 /**
  * Gestión (listar/buscar/activar-desactivar) de los acudientes que se auto-registran vía
@@ -17,6 +18,8 @@ use App\Support\Permiso;
  */
 class AcudientesAdminController extends Controller
 {
+    use VerificaPermisos;
+
     // Id real confirmado contra cron_opciones — la migración de seed usa insertGetId,
     // así que el id no es un literal fijo; el mismo tipo de drift ya documentado para
     // Instituciones (ver InstitucionAdminController::OPCION_GESTION/OPCION_LECTURA).
@@ -26,20 +29,9 @@ class AcudientesAdminController extends Controller
     {
     }
 
-    private function sinAcceso(Request $request): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        if ($this->usuariosService->tienePermiso(self::OPCION_GESTION, $perfil)['permiso'] ?? false) {
-            return null;
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
-    }
-
     public function index(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -61,7 +53,7 @@ class AcudientesAdminController extends Controller
 
     public function actualizarEstado(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 

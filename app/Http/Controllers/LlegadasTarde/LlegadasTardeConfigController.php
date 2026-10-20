@@ -4,10 +4,10 @@ namespace App\Http\Controllers\LlegadasTarde;
 
 use App\Http\Controllers\Controller;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTardeConfigService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class LlegadasTardeConfigController extends Controller
 {
@@ -16,7 +16,6 @@ class LlegadasTardeConfigController extends Controller
 
     public function __construct(
         private LlegadasTardeConfigService $configService,
-        private UsuariosServices $usuariosService,
     ) {}
 
     public function index(): JsonResponse
@@ -26,7 +25,7 @@ class LlegadasTardeConfigController extends Controller
 
     public function update(Request $request): JsonResponse
     {
-        $tieneAccesoCompleto = $this->usuariosService->tienePermiso(self::OPCION_ACCESO_COMPLETO, $request->user()->perfil)['permiso'] ?? false;
+        $tieneAccesoCompleto = PermisosPerfil::tiene($request, self::OPCION_ACCESO_COMPLETO);
 
         if (!$tieneAccesoCompleto) {
             return $this->error('No tienes permiso para modificar esta configuración', 403);

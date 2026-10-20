@@ -6,13 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\PermisosLicencias\ActualizarPermisoRequest;
 use App\Http\Requests\PermisosLicencias\StorePermisoRequest;
 use App\Services\permisosLicencias\PermisosLicenciasServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
+use App\Services\Usuarios\PermisosPerfil;
 
 class PermisosLicenciasController extends Controller
 {
+    use VerificaPermisos;
+
     private const OPCION_ACCESO = Permiso::PERMISOS_LICENCIAS;
     private const OPCION_LISTADO = Permiso::PERMISOS_LICENCIAS_LISTADO;
     private const OPCION_EDITAR_PROPIA = Permiso::PERMISOS_LICENCIAS_EDITAR_PROPIA;
@@ -28,24 +31,7 @@ class PermisosLicenciasController extends Controller
 
     public function __construct(
         private PermisosLicenciasServices $service,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function tienePermiso(Request $request, int $opcion): bool
-    {
-        return $this->usuariosService->tienePermiso($opcion, $request->user()->perfil)['permiso'] ?? false;
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        foreach ($opciones as $opcion) {
-            if ($this->tienePermiso($request, $opcion)) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     // ── Catálogos (sin gate, necesarios en el formulario) ──────────────
@@ -108,7 +94,7 @@ class PermisosLicenciasController extends Controller
         }
 
         $idAsignado = $request->input('id_user_asignado');
-        $idBeneficiario = ($idAsignado && $this->tienePermiso($request, self::OPCION_ASIGNAR))
+        $idBeneficiario = ($idAsignado && PermisosPerfil::tiene($request, self::OPCION_ASIGNAR))
             ? (int) $idAsignado
             : $request->user()->id_user;
 
@@ -125,7 +111,7 @@ class PermisosLicenciasController extends Controller
      */
     public function actualizar(ActualizarPermisoRequest $request, int $id): JsonResponse
     {
-        $puedeEditarTodas = $this->tienePermiso($request, self::OPCION_GESTION);
+        $puedeEditarTodas = PermisosPerfil::tiene($request, self::OPCION_GESTION);
 
         if (!$puedeEditarTodas && $rechazo = $this->sinAcceso($request, self::OPCION_EDITAR_PROPIA)) {
             return $rechazo;

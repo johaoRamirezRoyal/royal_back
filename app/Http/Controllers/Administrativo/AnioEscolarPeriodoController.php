@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Administrativo;
 use App\Http\Controllers\Controller;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\AnioEscolar\PeriodoServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 /**
  * Módulo administrativo "Año Escolar y Periodos" (opción propia, ver migración
@@ -19,6 +19,8 @@ use App\Support\Permiso;
  */
 class AnioEscolarPeriodoController extends Controller
 {
+    use VerificaPermisos;
+
     // Verificado contra AUTO_INCREMENT de `cron_opciones` (107) al momento de escribir esto,
     // antes de correr la migración 2026_09_09_130000_seed_opcion_anio_escolar_periodos —
     // si otra migración inserta una opción antes de esa, este id quedará desalineado (ver
@@ -30,26 +32,14 @@ class AnioEscolarPeriodoController extends Controller
     public function __construct(
         private AnioEscolarServices $anioEscolarServices,
         private PeriodoServices $periodoServices,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function sinAcceso(Request $request): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        if ($this->usuariosService->tienePermiso(self::OPCION, $perfil)['permiso'] ?? false) {
-            return null;
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     // ── Años escolares ──────────────────────────────────────────────────────
 
     public function listarAnios(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -58,7 +48,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function crearAnio(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -80,7 +70,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function actualizarEstadoAnio(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -104,7 +94,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function listarPeriodos(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -115,7 +105,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function crearPeriodo(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -141,7 +131,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function actualizarPeriodo(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -166,7 +156,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function actualizarEstadoPeriodo(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 
@@ -188,7 +178,7 @@ class AnioEscolarPeriodoController extends Controller
 
     public function marcarPeriodoEnCurso(Request $request, int $id): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
             return $rechazo;
         }
 

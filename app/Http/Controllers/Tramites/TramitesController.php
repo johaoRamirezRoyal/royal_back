@@ -5,34 +5,22 @@ namespace App\Http\Controllers\Tramites;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tramites\StoreTramiteRequest;
 use App\Services\tramites\TramitesServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class TramitesController extends Controller
 {
+    use VerificaPermisos;
+
     // 77 = Listado de trámites + aprobar/rechazar/subir documento. Solicitar un trámite
     // y ver "mis trámites" es autoservicio de cualquier usuario, sin gate.
     private const OPCION_GESTION = Permiso::TRAMITES_LISTADO;
 
     public function __construct(
         private TramitesServices $tramitesServices,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     /** GET /api/tramites/tipos — catálogo, sin gate (necesario para el formulario de solicitud). */

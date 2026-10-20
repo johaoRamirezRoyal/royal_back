@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventario\IndicadorGestionFiltroRequest;
 use App\Http\Requests\Inventario\IndicadorGestionRequest;
 use App\Services\inventario\IndicadoresGestionServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class IndicadoresGestionController extends Controller
 {
@@ -20,7 +20,6 @@ class IndicadoresGestionController extends Controller
 
     public function __construct(
         private IndicadoresGestionServices $servicio,
-        private UsuariosServices $usuariosService,
     ) {
     }
 
@@ -28,7 +27,7 @@ class IndicadoresGestionController extends Controller
     {
         $opcion = self::OPCION_POR_TIPO[$tipoCategoria] ?? null;
 
-        if ($opcion && ($this->usuariosService->tienePermiso($opcion, $request->user()->perfil)['permiso'] ?? false)) {
+        if ($opcion && PermisosPerfil::tiene($request, $opcion)) {
             return null;
         }
 

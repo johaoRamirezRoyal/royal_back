@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Reservas\StoreReservaRequest;
 use App\Models\Reservas\Reservas;
 use App\Services\Reservas\ReservasServices;
-use App\Services\Usuarios\UsuariosServices;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class ReservaController extends Controller
 {
@@ -48,7 +48,6 @@ class ReservaController extends Controller
 
     public function __construct(
         private ReservasServices $reservasServices,
-        private UsuariosServices $usuariosService,
     ) {}
 
     public function crearReserva(StoreReservaRequest $request)
@@ -128,7 +127,7 @@ class ReservaController extends Controller
         $esEdicionCompleta = !$cancelarOFinalizar && $request->hasAny(self::CAMPOS_EDICION);
 
         if ($esEdicionCompleta) {
-            $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_EDITAR_RESERVAS, $request->user()->perfil)['permiso'] ?? false;
+            $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_EDITAR_RESERVAS);
 
             if (!$tienePermiso && !$this->puedeAutogestionar($reserva, $request)) {
                 return $this->error('No tienes permiso para editar esta reserva, o ya no tiene la anticipación mínima de ' . self::DIAS_MIN_AUTOSERVICIO . ' días para autogestionarla.', 403);
@@ -147,7 +146,7 @@ class ReservaController extends Controller
                 return $this->error($validator->errors()->first(), 422);
             }
         } elseif ($cancelarOFinalizar) {
-            $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_GESTIONAR_RESERVAS, $request->user()->perfil)['permiso'] ?? false;
+            $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_GESTIONAR_RESERVAS);
 
             if (!$tienePermiso && !$this->puedeAutogestionar($reserva, $request)) {
                 return $this->error('No tienes permiso para cancelar esta reserva, o ya no tiene la anticipación mínima de ' . self::DIAS_MIN_AUTOSERVICIO . ' días para autogestionarla.', 403);

@@ -3,15 +3,17 @@
 namespace App\Http\Controllers\Permisos;
 
 use App\Services\Permisos\PermisosService;
-use App\Services\Usuarios\UsuariosServices;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class PermisosController extends Controller
 
 {
+    use VerificaPermisos;
+
     // Opción "/permisos" (28) en el frontend. Este controller es el que decide qué puede
     // hacer cada perfil en todo el sistema — sin este chequeo, cualquier usuario
     // autenticado (con cualquier perfil) podía otorgarse a sí mismo cualquier opción,
@@ -22,20 +24,8 @@ class PermisosController extends Controller
 
     public function __construct(
         PermisosService $services_permisos,
-        private UsuariosServices $usuariosService,
     ) {
         $this->services_permisos = $services_permisos;
-    }
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar el módulo en el sidebar —
-     * cualquier intento directo a estos endpoints sin el permiso se rechaza acá.
-     */
-    private function sinAcceso(Request $request): ?JsonResponse
-    {
-        $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_PERMISOS, $request->user()->perfil)['permiso'] ?? false;
-
-        return $tienePermiso ? null : $this->error('No tienes permiso para gestionar los permisos del sistema', 403);
     }
 
     /**
@@ -53,7 +43,7 @@ class PermisosController extends Controller
 
     public function verPermisosPorPerfil(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
             return $rechazo;
         }
 
@@ -73,7 +63,7 @@ class PermisosController extends Controller
 
     public function crearPermiso(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
             return $rechazo;
         }
 
@@ -98,7 +88,7 @@ class PermisosController extends Controller
 
     public function eliminarPermiso(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
             return $rechazo;
         }
 
@@ -119,7 +109,7 @@ class PermisosController extends Controller
 
     public function verOpcionesPorPerfil(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
             return $rechazo;
         }
 
@@ -137,7 +127,7 @@ class PermisosController extends Controller
 
     public function verTodosLosPermisosOpciones(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
             return $rechazo;
         }
 

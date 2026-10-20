@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Certificados;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Certificados\StoreSolicitudCertificadoRequest;
 use App\Services\certificados\CertificadosServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class CertificadosController extends Controller
 {
+    use VerificaPermisos;
+
     // 25 = Listado de Certificados Solicitados (Gestión Humana). Solicitar un
     // certificado y ver "mis solicitudes" es autoservicio de cualquier usuario
     // autenticado, sin gate — por eso no hay un chequeo único en el constructor.
@@ -19,21 +21,7 @@ class CertificadosController extends Controller
 
     public function __construct(
         private CertificadosServices $certificadosServices,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     /**

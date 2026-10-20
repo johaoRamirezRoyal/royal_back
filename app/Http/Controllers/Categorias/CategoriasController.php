@@ -3,13 +3,15 @@ namespace App\Http\Controllers\Categorias;
 
 use App\Http\Controllers\Controller;
 use App\Services\Categorias\CategoriasServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class CategoriasController extends Controller{
+    use VerificaPermisos;
+
     // Categorías de inventario. El listado (GET) es de lectura compartida entre los tres
     // módulos que lo consumen — Inventario (12), Mis Inventarios (16) y Préstamos (17),
     // igual que en InventariosController — así que se acepta cualquiera de las tres.
@@ -22,22 +24,8 @@ class CategoriasController extends Controller{
 
     public function __construct(
         CategoriasServices $categoriasServices,
-        private UsuariosServices $usuariosService,
     ) {
         $this->categoria_services = $categoriasServices;
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     public function obtenerTodasLasCategorias(Request $request){

@@ -4,14 +4,16 @@ namespace App\Http\Controllers\Encuestas;
 
 use App\Http\Controllers\Controller;
 use App\Services\encuestas\EncuestasServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class EncuestasController extends Controller
 {
+    use VerificaPermisos;
+
     // La migración 2026_09_22_090600_seed_opciones_encuestas insertó estas opciones con
     // ids 126/127 en la BD local (insertGetId, mismo drift documentado para Instituciones/
     // Noticias/Evaluaciones). En producción las mismas opciones ya existían con ids 129/130
@@ -22,19 +24,7 @@ class EncuestasController extends Controller
 
     public function __construct(
         private EncuestasServices $encuestasServices,
-        private UsuariosServices $usuariosService,
     ) {}
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        if ($this->usuariosService->tieneAlgunPermiso($opciones, $perfil)['permiso'] ?? false) {
-            return null;
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
-    }
 
     // ─── Catálogo de tipos de pregunta (reusa el de Evaluaciones) ────
 

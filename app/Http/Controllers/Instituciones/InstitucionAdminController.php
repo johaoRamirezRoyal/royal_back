@@ -11,14 +11,16 @@ use App\Models\Instituciones\ConfiguracionInstituciones;
 use App\Models\Instituciones\Institucion;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class InstitucionAdminController extends Controller
 {
+    use VerificaPermisos;
+
     // Ids reales confirmados contra cron_opciones (2026-09-22) — las migraciones de seed
     // usan insertGetId, así que no son literales fijos; en esta BD terminaron en 106/111,
     // no 104/105 (esos son "Compras — Gestión de compras"/"Compras — Ventas", módulo
@@ -33,29 +35,9 @@ class InstitucionAdminController extends Controller
     private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
 
     public function __construct(
-        private UsuariosServices $usuariosService,
         private CloudinaryService $cloudinaryService,
         private MailService $mailService,
     ) {
-    }
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar la ruta en el frontend — ver
-     * docs/sistema-permisos.md. Por defecto exige la opción de gestión completa; los
-     * métodos de solo lectura (index/cartas) pasan también OPCION_LECTURA para aceptar
-     * cualquiera de las dos (OR).
-     */
-    private function sinAcceso(Request $request, ?array $opciones = null): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones ?? [self::OPCION_GESTION] as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     private function conEstadoDerivado(Institucion $institucion): array
@@ -82,7 +64,7 @@ class InstitucionAdminController extends Controller
 
     public function index(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, [self::OPCION_GESTION, self::OPCION_LECTURA])) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION, self::OPCION_LECTURA)) {
             return $rechazo;
         }
 
@@ -100,7 +82,7 @@ class InstitucionAdminController extends Controller
 
     public function store(InstitucionAdminRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -134,7 +116,7 @@ class InstitucionAdminController extends Controller
 
     public function update(InstitucionAdminRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -183,7 +165,7 @@ class InstitucionAdminController extends Controller
 
     public function cambiarEstado(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -216,7 +198,7 @@ class InstitucionAdminController extends Controller
      */
     public function cartas(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, [self::OPCION_GESTION, self::OPCION_LECTURA])) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION, self::OPCION_LECTURA)) {
             return $rechazo;
         }
 
@@ -248,7 +230,7 @@ class InstitucionAdminController extends Controller
      */
     public function enviarRecordatorio(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -313,7 +295,7 @@ class InstitucionAdminController extends Controller
      */
     public function configuracion(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 
@@ -322,7 +304,7 @@ class InstitucionAdminController extends Controller
 
     public function actualizarConfiguracion(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
             return $rechazo;
         }
 

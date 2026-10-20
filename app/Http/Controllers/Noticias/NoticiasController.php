@@ -6,12 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\FileStorageService;
 use App\Services\Noticias\NoticiasService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class NoticiasController extends Controller
 {
@@ -33,7 +33,6 @@ class NoticiasController extends Controller
 
     public function __construct(
         private NoticiasService $service,
-        private UsuariosServices $usuariosService,
         private FileStorageService $fileStorage,
         private CloudinaryService $cloudinary,
         private Request $request,
@@ -60,7 +59,7 @@ class NoticiasController extends Controller
             return;
         }
 
-        if (!($this->usuariosService->tienePermiso(self::OPCION_NOTICIAS, $perfil)['permiso'] ?? false)) {
+        if (!PermisosPerfil::tiene($this->request, self::OPCION_NOTICIAS)) {
             abort($this->error('No tienes permiso para gestionar noticias', 403));
         }
     }
@@ -77,7 +76,7 @@ class NoticiasController extends Controller
             return;
         }
 
-        if (!($this->usuariosService->tienePermiso(self::OPCION_CORREOS_DISTRIBUCION, $perfil)['permiso'] ?? false)) {
+        if (!PermisosPerfil::tiene($this->request, self::OPCION_CORREOS_DISTRIBUCION)) {
             abort($this->error('No tienes permiso para gestionar los correos de distribución', 403));
         }
     }

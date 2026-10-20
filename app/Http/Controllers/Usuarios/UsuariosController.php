@@ -12,9 +12,12 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class UsuariosController extends Controller
 {
+    use VerificaPermisos;
+
     // Opción "/users" (2) en el frontend: gatea crear/editar usuarios y cambiar su
     // estado. Sin este chequeo, cualquier autenticado podía crear un usuario con
     // cualquier perfil (incluido Super Admin) o desactivar cuentas ajenas con un POST/PUT
@@ -32,17 +35,6 @@ class UsuariosController extends Controller
         $this->service_usuarios = $usuariosServices;
         $this->service_perfiles = $perfilesServices;
         $this->service_niveles = $nivelesServices;
-    }
-
-    /**
-     * Chequeo server-side del permiso, no solo ocultar el botón en el frontend —
-     * cualquier intento directo a estos endpoints sin el permiso se rechaza acá.
-     */
-    private function sinAcceso(Request $request)
-    {
-        $tienePermiso = $this->service_usuarios->tienePermiso(self::OPCION_USUARIOS, $request->user()->perfil)['permiso'] ?? false;
-
-        return $tienePermiso ? null : $this->error('No tienes permiso para gestionar usuarios', 403);
     }
 
     // GET /usuarios
@@ -198,7 +190,7 @@ class UsuariosController extends Controller
 
     public function agregarUsuario(RegistrarUsuarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_USUARIOS)) {
             return $rechazo;
         }
 
@@ -229,7 +221,7 @@ class UsuariosController extends Controller
 
     public function actualizarUsuarios(ActualizarUsuarioRequest $request, $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_USUARIOS)) {
             return $rechazo;
         }
 
@@ -261,7 +253,7 @@ class UsuariosController extends Controller
 
     public function actualizarEstadoUsuarios(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_USUARIOS)) {
             return $rechazo;
         }
 

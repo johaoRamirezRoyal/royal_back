@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Recursos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Recursos\RenovacionDocumentoRequest;
 use App\Services\recursos\RecursosDocumentosServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class RecursosDocumentosController extends Controller
 {
+    use VerificaPermisos;
+
     // 46 = Listado Maestro — Gestión (crear/editar/eliminar/ver cantidades). Ver el
     // documento y descargarlo/visualizarlo es autoservicio de cualquier usuario
     // autenticado, sin gate.
@@ -19,21 +21,7 @@ class RecursosDocumentosController extends Controller
 
     public function __construct(
         private RecursosDocumentosServices $recursosServices,
-        private UsuariosServices $usuariosService,
     ) {
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
     }
 
     /**

@@ -6,11 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\GestionAcademica\ActaEstudiante;
 use App\Services\GestionAcademica\ActasEstudianteService;
 use App\Services\GestionAcademica\CargaAcademicaService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
+use App\Services\Usuarios\PermisosPerfil;
 
 /**
  * Registro de actas de estudiantes. Lectura (listado, conteo, gráficas): opción 136 o 137
@@ -20,6 +21,8 @@ use App\Support\Permiso;
  */
 class ActasEstudianteController extends Controller
 {
+    use VerificaPermisos;
+
     private const OPCION_VER = Permiso::ACTAS_VER;
 
     private const OPCION_GESTIONAR = Permiso::ACTAS_GESTIONAR;
@@ -28,14 +31,8 @@ class ActasEstudianteController extends Controller
 
     public function __construct(
         private ActasEstudianteService $service,
-        private UsuariosServices $usuariosService,
         private CargaAcademicaService $cargaAcademica,
     ) {}
-
-    private function tiene(Request $request, int $opcion): bool
-    {
-        return (bool) ($this->usuariosService->tienePermiso($opcion, $request->user()->perfil)['permiso'] ?? false);
-    }
 
     /**
      * Lectura: con 136/137 ve todas. Un docente (perfil 3/14) sin ellas ve solo las actas que él
@@ -45,7 +42,7 @@ class ActasEstudianteController extends Controller
      */
     private function sinLectura(Request $request): ?JsonResponse
     {
-        if ($this->tiene($request, self::OPCION_VER) || $this->tiene($request, self::OPCION_GESTIONAR)) {
+        if (PermisosPerfil::tiene($request, self::OPCION_VER) || PermisosPerfil::tiene($request, self::OPCION_GESTIONAR)) {
             $this->service->limitarACursos(null);
 
             return null;
@@ -58,24 +55,11 @@ class ActasEstudianteController extends Controller
             return null;
         }
 
-        if ($this->tiene($request, self::OPCION_MIS_ESTUDIANTES)) {
+        if (PermisosPerfil::tiene($request, self::OPCION_MIS_ESTUDIANTES)) {
             $cursos = $this->cargaAcademica->obtenerCursosDocente($request->user()->id_user)['data'] ?? [];
             $this->service->limitarACursos(collect($cursos)->pluck('id')->all(), $request->user()->id_user);
 
             return null;
-        }
-
-        return $this->error('No tienes permiso para esta acción', 403);
-    }
-
-    private function sinAcceso(Request $request, int ...$opciones): ?JsonResponse
-    {
-        $perfil = $request->user()->perfil;
-
-        foreach ($opciones as $opcion) {
-            if ($this->usuariosService->tienePermiso($opcion, $perfil)['permiso'] ?? false) {
-                return null;
-            }
         }
 
         return $this->error('No tienes permiso para esta acción', 403);

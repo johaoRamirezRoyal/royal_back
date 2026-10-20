@@ -7,10 +7,10 @@ use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\LlegadasTarde as LlegadaTardeModel;
 use App\Models\Usuarios\Usuario;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class LlegadasTardeController extends Controller
 {
@@ -37,12 +37,11 @@ class LlegadasTardeController extends Controller
 
     public function __construct(
         private LlegadasTarde $llegadas_tarde,
-        private UsuariosServices $usuariosService,
     ) {}
 
     private function tieneAccesoCompleto(Request $request): bool
     {
-        return $this->usuariosService->tienePermiso(self::OPCION_ACCESO_COMPLETO, $request->user()->perfil)['permiso'] ?? false;
+        return PermisosPerfil::tiene($request, self::OPCION_ACCESO_COMPLETO);
     }
 
     /** IDs de los estudiantes vinculados (activo=1) al Acudiente autenticado — ver

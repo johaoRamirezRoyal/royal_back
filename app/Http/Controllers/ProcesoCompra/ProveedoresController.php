@@ -8,28 +8,23 @@ use App\Http\Requests\ProcesoCompra\ProveedorContactoRequest;
 use App\Http\Requests\ProcesoCompra\ProveedorDocumentoRequest;
 use App\Http\Requests\ProcesoCompra\ProveedorRequest;
 use App\Services\ProcesoCompra\ProveedoresServices;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
+use App\Http\Controllers\Concerns\VerificaPermisos;
+use App\Services\Usuarios\PermisosPerfil;
 
 class ProveedoresController extends Controller
 {
+    use VerificaPermisos;
+
     // Opción "Proveedores" (61) del módulo "Proceso de compra" (9). Otorgada hoy a:
     // Super Admin, Administrador, Tesorera, Asistente Contable.
     private const OPCION_PROVEEDORES = Permiso::PROVEEDORES;
 
     public function __construct(
         private ProveedoresServices $proveedoresServices,
-        private UsuariosServices $usuariosService,
     ) {}
-
-    private function sinAcceso(Request $request): ?JsonResponse
-    {
-        $tienePermiso = $this->usuariosService->tienePermiso(self::OPCION_PROVEEDORES, $request->user()->perfil)['permiso'] ?? false;
-
-        return $tienePermiso ? null : $this->error('No tienes permiso para gestionar proveedores', 403);
-    }
 
     private function estadoBinarioInvalido(mixed $activo): ?JsonResponse
     {
@@ -45,7 +40,7 @@ class ProveedoresController extends Controller
     // GET /proveedores/{id} — expone documentos/contactos/bancos, requiere opción
     public function ver(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -55,7 +50,7 @@ class ProveedoresController extends Controller
     // POST /proveedores
     public function crear(ProveedorRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -71,7 +66,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/{id}
     public function actualizar(ProveedorRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -88,7 +83,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/{id}/estado  {"estado":"activo"|"inactivo"}
     public function cambiarEstado(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -110,7 +105,7 @@ class ProveedoresController extends Controller
     // GET /proveedores/tipos-documento
     public function listarTiposDocumento(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -121,7 +116,7 @@ class ProveedoresController extends Controller
     // Lectura compartida: opción 61 (Proveedores) u 60 (Listado de solicitudes).
     public function listarCompras(Request $request, int $id)
     {
-        $tienePermiso = $this->usuariosService->tieneAlgunPermiso([self::OPCION_PROVEEDORES, Permiso::COMPRAS_LISTADO_SOLICITUDES], $request->user()->perfil)['permiso'] ?? false;
+        $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_PROVEEDORES, Permiso::COMPRAS_LISTADO_SOLICITUDES);
 
         if (!$tienePermiso) {
             return $this->error('No tienes permiso para ver las compras del proveedor', 403);
@@ -133,7 +128,7 @@ class ProveedoresController extends Controller
     // GET /proveedores/{id}/documentos
     public function listarDocumentos(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -143,7 +138,7 @@ class ProveedoresController extends Controller
     // POST /proveedores/{id}/documentos (multipart: archivo, tipo_documento, activo)
     public function subirDocumento(ProveedorDocumentoRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -159,7 +154,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/documentos/{docId} (multipart opcional)
     public function actualizarDocumento(ProveedorDocumentoRequest $request, int $docId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -175,7 +170,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/documentos/{docId}/estado {"activo":0|1}
     public function cambiarEstadoDocumento(Request $request, int $docId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -189,7 +184,7 @@ class ProveedoresController extends Controller
     // DELETE /proveedores/documentos/{docId}
     public function eliminarDocumento(Request $request, int $docId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -199,7 +194,7 @@ class ProveedoresController extends Controller
     // GET /proveedores/{id}/contactos
     public function listarContactos(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -209,7 +204,7 @@ class ProveedoresController extends Controller
     // POST /proveedores/{id}/contactos
     public function crearContacto(ProveedorContactoRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -223,7 +218,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/contactos/{contactoId}
     public function actualizarContacto(ProveedorContactoRequest $request, int $contactoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -237,7 +232,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/contactos/{contactoId}/estado {"activo":0|1}
     public function cambiarEstadoContacto(Request $request, int $contactoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -251,7 +246,7 @@ class ProveedoresController extends Controller
     // DELETE /proveedores/contactos/{contactoId}
     public function eliminarContacto(Request $request, int $contactoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -261,7 +256,7 @@ class ProveedoresController extends Controller
     // GET /proveedores/{id}/bancos
     public function listarBancos(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -271,7 +266,7 @@ class ProveedoresController extends Controller
     // POST /proveedores/{id}/bancos
     public function crearBanco(ProveedorBancoRequest $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -285,7 +280,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/bancos/{bancoId}
     public function actualizarBanco(ProveedorBancoRequest $request, int $bancoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -299,7 +294,7 @@ class ProveedoresController extends Controller
     // PUT /proveedores/bancos/{bancoId}/estado {"activo":0|1}
     public function cambiarEstadoBanco(Request $request, int $bancoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 
@@ -313,7 +308,7 @@ class ProveedoresController extends Controller
     // DELETE /proveedores/bancos/{bancoId}
     public function eliminarBanco(Request $request, int $bancoId)
     {
-        if ($rechazo = $this->sinAcceso($request)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PROVEEDORES)) {
             return $rechazo;
         }
 

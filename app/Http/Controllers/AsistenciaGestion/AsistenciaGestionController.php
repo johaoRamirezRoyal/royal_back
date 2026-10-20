@@ -7,11 +7,11 @@ use App\Http\Requests\AsistenciaGestion\FiltroAsistenciaGestionRequest;
 use App\Http\Requests\AsistenciaGestion\GraficaAsistenciaRequest;
 use App\Http\Requests\AsistenciaGestion\StoreAsistenciaGestionRequest;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
-use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Support\Permiso;
+use App\Services\Usuarios\PermisosPerfil;
 
 class AsistenciaGestionController extends Controller
 {
@@ -28,7 +28,6 @@ class AsistenciaGestionController extends Controller
 
     public function __construct(
         private AsistenciaGestionService $asistenciaService,
-        private UsuariosServices $usuariosService,
     ) {}
 
     /**
@@ -39,7 +38,7 @@ class AsistenciaGestionController extends Controller
     private function idUsuarioPermitido(Request $request, ?int $idUsuarioSolicitado): ?int
     {
         $usuarioAuth = $request->user();
-        $puedeVerTodas = $this->usuariosService->tienePermiso(self::OPCION_VER_TODAS, $usuarioAuth->perfil)['permiso'] ?? false;
+        $puedeVerTodas = PermisosPerfil::tiene($request, self::OPCION_VER_TODAS);
 
         return $puedeVerTodas ? $idUsuarioSolicitado : $usuarioAuth->id_user;
     }
@@ -65,7 +64,7 @@ class AsistenciaGestionController extends Controller
     public function registrarAsistenciaManual(Request $request): JsonResponse
     {
         $usuarioAuth = $request->user();
-        $puedeGestionar = $this->usuariosService->tienePermiso(self::OPCION_VER_TODAS, $usuarioAuth->perfil)['permiso'] ?? false;
+        $puedeGestionar = PermisosPerfil::tiene($request, self::OPCION_VER_TODAS);
 
         if (!$puedeGestionar) {
             return $this->error('No tienes permiso para registrar asistencias manualmente', 403);
