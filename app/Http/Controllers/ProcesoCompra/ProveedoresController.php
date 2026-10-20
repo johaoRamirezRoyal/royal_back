@@ -11,12 +11,13 @@ use App\Services\ProcesoCompra\ProveedoresServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class ProveedoresController extends Controller
 {
     // Opción "Proveedores" (61) del módulo "Proceso de compra" (9). Otorgada hoy a:
     // Super Admin, Administrador, Tesorera, Asistente Contable.
-    private const OPCION_PROVEEDORES = 61;
+    private const OPCION_PROVEEDORES = Permiso::PROVEEDORES;
 
     public function __construct(
         private ProveedoresServices $proveedoresServices,
@@ -120,7 +121,7 @@ class ProveedoresController extends Controller
     // Lectura compartida: opción 61 (Proveedores) u 60 (Listado de solicitudes).
     public function listarCompras(Request $request, int $id)
     {
-        $tienePermiso = $this->usuariosService->tieneAlgunPermiso([self::OPCION_PROVEEDORES, 60], $request->user()->perfil)['permiso'] ?? false;
+        $tienePermiso = $this->usuariosService->tieneAlgunPermiso([self::OPCION_PROVEEDORES, Permiso::COMPRAS_LISTADO_SOLICITUDES], $request->user()->perfil)['permiso'] ?? false;
 
         if (!$tienePermiso) {
             return $this->error('No tienes permiso para ver las compras del proveedor', 403);

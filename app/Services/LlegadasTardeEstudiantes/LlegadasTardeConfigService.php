@@ -7,6 +7,7 @@ use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
+use App\Support\Permiso;
 
 class LlegadasTardeConfigService extends Service
 {
@@ -14,7 +15,7 @@ class LlegadasTardeConfigService extends Service
     private const ID_CONFIG = 1;
 
     // Perfil "Coordinador" en la tabla perfiles.
-    private const PERFIL_COORDINADOR = 26;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     public function __construct(private MailService $mailService) {}
 

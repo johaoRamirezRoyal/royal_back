@@ -11,19 +11,20 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class AsistenciaGestionController extends Controller
 {
     // Opción de "/permisos" que habilita ver la asistencia de todos los usuarios,
     // no solo la propia (misma opción que ya gatea la ruta en el frontend).
-    private const OPCION_VER_TODAS = 63;
+    private const OPCION_VER_TODAS = Permiso::ASISTENCIA_TRABAJADORES;
 
     // Super Admin y Recursos humanos — únicos perfiles autorizados a revocar una llegada
     // tarde (a diferencia de OPCION_VER_TODAS, no es configurable desde "/permisos": el
     // alcance lo pidió explícitamente así, sin incluir Administrador).
     private const PERFILES_REVOCAR_LLEGADA_TARDE = [1, 8];
 
-    private const PERFIL_COORDINADOR = 26;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     public function __construct(
         private AsistenciaGestionService $asistenciaService,

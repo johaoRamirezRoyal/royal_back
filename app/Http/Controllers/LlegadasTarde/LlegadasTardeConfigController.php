@@ -7,11 +7,12 @@ use App\Services\LlegadasTardeEstudiantes\LlegadasTardeConfigService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class LlegadasTardeConfigController extends Controller
 {
     // Ver LlegadasTardeController::OPCION_ACCESO_COMPLETO.
-    private const OPCION_ACCESO_COMPLETO = 99;
+    private const OPCION_ACCESO_COMPLETO = Permiso::GESTION_ACADEMICA;
 
     public function __construct(
         private LlegadasTardeConfigService $configService,

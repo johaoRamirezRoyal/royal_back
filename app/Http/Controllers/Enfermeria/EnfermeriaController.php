@@ -9,6 +9,7 @@ use App\Services\Enfermeria\EnfermeriaServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class EnfermeriaController extends Controller
 {
@@ -17,9 +18,9 @@ class EnfermeriaController extends Controller
     // 64 = /enfermeria/metricas. Este controller respalda las tres, así que a diferencia
     // de GestionAcademicaController no alcanza un único chequeo en el constructor — cada
     // grupo de endpoints gatea la opción que le corresponde.
-    private const OPCION_CATEGORIAS = 54;
-    private const OPCION_ATENCIONES = 57;
-    private const OPCION_METRICAS = 64;
+    private const OPCION_CATEGORIAS = Permiso::ENFERMERIA_CATEGORIAS;
+    private const OPCION_ATENCIONES = Permiso::ENFERMERIA_ATENCIONES;
+    private const OPCION_METRICAS = Permiso::ENFERMERIA_METRICAS;
 
     protected EnfermeriaServices $enfermeriaServices;
 

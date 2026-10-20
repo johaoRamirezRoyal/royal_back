@@ -8,13 +8,14 @@ use App\Services\certificados\CertificadosServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class CertificadosController extends Controller
 {
     // 25 = Listado de Certificados Solicitados (Gestión Humana). Solicitar un
     // certificado y ver "mis solicitudes" es autoservicio de cualquier usuario
     // autenticado, sin gate — por eso no hay un chequeo único en el constructor.
-    private const OPCION_LISTADO = 25;
+    private const OPCION_LISTADO = Permiso::CERTIFICADOS_LISTADO;
 
     public function __construct(
         private CertificadosServices $certificadosServices,

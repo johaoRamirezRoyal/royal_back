@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\Permiso;
 
 class EvaluacionesServices
 {
@@ -36,15 +37,15 @@ class EvaluacionesServices
     // (usuarios.id_nivel); el resto de perfiles con acceso administrativo al
     // módulo (Super Admin, Gestión Humana, Administrador, etc.) no tiene esa
     // restricción — ver AGENTS.md, sección "Evaluaciones".
-    private const PERFIL_COORDINADOR = 26;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     // Ve todas las evaluaciones sin restricción de nivel/creador — mismo id que
     // App\Http\Middleware\SwitchActiveConnection::PERFIL_SUPER_ADMIN.
-    private const PERFIL_SUPER_ADMIN = 1;
+    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
 
     // Administrador general: mismo trato que Super Admin en el listado de
     // configuración de evaluaciones (ve todos los niveles, sin restricción).
-    private const PERFIL_ADMIN = 2;
+    private const PERFIL_ADMIN = Permiso::PERFIL_ADMINISTRADOR;
 
     // Gestión Humana (perfil "Recursos humanos" en BD, id_perfil 8) — a pedido,
     // resuelve/ve/edita cualquier evaluación igual que Super Admin, sin restricción

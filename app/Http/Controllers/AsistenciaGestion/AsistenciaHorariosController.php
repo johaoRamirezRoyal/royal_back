@@ -8,12 +8,13 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class AsistenciaHorariosController extends Controller
 {
     // Opción de "/permisos" para "Configuración de asistencia" — solo RH y Administradores
     // la tienen asignada por defecto (ver migración 2026_08_06_010002).
-    private const OPCION_CONFIGURACION = 100;
+    private const OPCION_CONFIGURACION = Permiso::CONFIGURACION_ASISTENCIA;
 
     public function __construct(
         private AsistenciaHorariosService $horariosService,

@@ -10,16 +10,17 @@ use App\Services\Usuarios\UsuariosServices;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class ReservaController extends Controller
 {
     // cron_opciones bajo id_modulo=7 (Reservas) — ver migración
     // 2026_09_14_130000_seed_opcion_editar_reservas.
-    private const OPCION_EDITAR_RESERVAS = 120;
+    private const OPCION_EDITAR_RESERVAS = Permiso::RESERVAS_EDITAR;
 
     // Opción "/reservas" (41) — quien la tiene gestiona cancelar/finalizar de
     // cualquier reserva, sin la restricción de autoservicio de abajo.
-    private const OPCION_GESTIONAR_RESERVAS = 41;
+    private const OPCION_GESTIONAR_RESERVAS = Permiso::RESERVAS_GESTIONAR;
 
     // Días mínimos de anticipación que "Mis reservas" exige para que el propio dueño
     // edite/cancele su reserva sin pasar por OPCION_EDITAR_RESERVAS/OPCION_GESTIONAR_RESERVAS.

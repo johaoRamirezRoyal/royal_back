@@ -10,6 +10,7 @@ use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\Permiso;
 
 class LlegadasTardeController extends Controller
 {
@@ -18,10 +19,10 @@ class LlegadasTardeController extends Controller
     // módulo (opción 101, ver migración 2026_08_18_100000) el acceso es restringido:
     // solo hoy, sin eliminar ni dashboard. Para dar ese mismo acceso restringido a un
     // perfil nuevo alcanza con otorgarle la opción 101 desde /permisos, sin tocar código.
-    private const OPCION_ACCESO_COMPLETO = 99;
+    private const OPCION_ACCESO_COMPLETO = Permiso::GESTION_ACADEMICA;
 
     // Autoservicio (sin pasar por /permisos, igual que el Docente en Gestión Académica —
-    // ver GestionAcademicaController::METODOS_DOCENTE): un Acudiente ve sus propios hijos
+    // ver las rutas de autoservicio en routes/api/gestionAcademica.php): un Acudiente ve sus propios hijos
     // ACTIVOS en `estudiantes_padres`, nunca de otro estudiante — ver obtenerLlegadasTarde.
     private const PERFIL_ACUDIENTE = 6;
 
@@ -32,7 +33,7 @@ class LlegadasTardeController extends Controller
     // curso ajeno — mismo criterio de "resolver los cursos propios" que ya usa
     // AsistenciaEstudianteService::metricasPorCurso ($id_docente_scope). Un Docente CON
     // la opción 99 (ej. también Coordinador) cae en la rama general de abajo, sin scope.
-    private const PERFIL_DOCENTE = 3;
+    private const PERFIL_DOCENTE = Permiso::PERFIL_DOCENTE;
 
     public function __construct(
         private LlegadasTarde $llegadas_tarde,

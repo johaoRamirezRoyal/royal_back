@@ -9,15 +9,16 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class EvaluacionesController extends Controller
 {
     // 101/102/103 colisionaban en producción con opciones de Gestión Académica (Llegadas
     // Tarde/Asistencia Docentes/Métricas de Asistencia Académica) — ver migración
     // 2026_09_14_150000_seed_opciones_evaluaciones, que creó los IDs reales de Evaluaciones.
-    private const OPCION_VER = 123;
-    private const OPCION_ADMIN = 122;
-    private const OPCION_RESPONDER = 124;
+    private const OPCION_VER = Permiso::EVALUACIONES_RESULTADOS;
+    private const OPCION_ADMIN = Permiso::EVALUACIONES_ADMIN;
+    private const OPCION_RESPONDER = Permiso::EVALUACIONES_REALIZAR;
 
     public function __construct(
         private EvaluacionesServices $evaluacionesServices,

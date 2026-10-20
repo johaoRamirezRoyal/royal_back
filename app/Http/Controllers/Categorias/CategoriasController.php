@@ -7,15 +7,16 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class CategoriasController extends Controller{
     // Categorías de inventario. El listado (GET) es de lectura compartida entre los tres
     // módulos que lo consumen — Inventario (12), Mis Inventarios (16) y Préstamos (17),
     // igual que en InventariosController — así que se acepta cualquiera de las tres.
     // Crear/editar categorías son acciones administrativas: solo 12.
-    private const OPCION_INVENTARIO = 12;
-    private const OPCION_MIS_INVENTARIOS = 16;
-    private const OPCION_PRESTAMOS = 17;
+    private const OPCION_INVENTARIO = Permiso::INVENTARIO;
+    private const OPCION_MIS_INVENTARIOS = Permiso::MIS_INVENTARIOS;
+    private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
 
     protected $categoria_services;
 

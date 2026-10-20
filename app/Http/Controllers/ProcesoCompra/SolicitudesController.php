@@ -18,32 +18,33 @@ use App\Services\ProcesoCompra\SolicitudesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class SolicitudesController extends Controller
 {
     // Opción "Listado de solicitudes" (60) del módulo "Proceso de compra" (9) — legada,
     // sigue gateando los endpoints que no forman parte del rediseño (ver/verificar/
     // aplazar/rechazar sobre la solicitud final, agregar a inventario).
-    private const OPCION_SOLICITUDES = 60;
+    private const OPCION_SOLICITUDES = Permiso::COMPRAS_LISTADO_SOLICITUDES;
     // "Compras — Gestión de compras" (104): seguimiento, confirmar/asignar proveedor,
     // disponible en stock, anular. "Compras — Ventas" (105): cambiar estado tras la
     // entrega. Ventas tiene ambas (ver migración eliminar_perfil_compras...) — no existe
     // un perfil "Compras" separado, resultó innecesario. IDs confirmados contra
     // `cron_opciones` en BD (creadas 2026-08-31) — no confundir con 109/110, que
     // pertenecen a otro módulo ("Uso areas comunes") y no existen respectivamente.
-    private const OPCION_COMPRAS_GESTION = 104;
-    private const OPCION_COMPRAS_VENTAS = 105;
+    private const OPCION_COMPRAS_GESTION = Permiso::COMPRAS_GESTION;
+    private const OPCION_COMPRAS_VENTAS = Permiso::COMPRAS_VENTAS;
     // "Compras — Generar solicitudes" (114): quién puede crear una solicitud de compra
     // (POST /solicitudes) — antes abierto a cualquier empleado autenticado. Ver migración
     // 2026_09_11_110000_seed_opcion_generar_solicitudes_compra. "Mis solicitudes"
     // (ver/cancelar las propias) NO usa esta opción, sigue sin gate.
-    private const OPCION_GENERAR_SOLICITUDES = 114;
+    private const OPCION_GENERAR_SOLICITUDES = Permiso::COMPRAS_GENERAR_SOLICITUDES;
     // Mismo perfil Coordinador (26) que EvaluacionesServices — aprueba/rechaza las
     // solicitudes de usuarios de su propio id_nivel. Super Admin(1)/Administrador(2)
     // también pueden ver y decidir la bandeja de aprobaciones, sin recorte de nivel.
-    private const PERFIL_COORDINADOR = 26;
-    private const PERFIL_SUPER_ADMIN = 1;
-    private const PERFIL_ADMIN = 2;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
+    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
+    private const PERFIL_ADMIN = Permiso::PERFIL_ADMINISTRADOR;
 
     public function __construct(
         private SolicitudesServices $solicitudesServices,

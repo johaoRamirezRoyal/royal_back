@@ -7,6 +7,7 @@ use App\Services\Usuarios\UsuariosServices;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class PermisosController extends Controller
 
@@ -15,7 +16,7 @@ class PermisosController extends Controller
     // hacer cada perfil en todo el sistema — sin este chequeo, cualquier usuario
     // autenticado (con cualquier perfil) podía otorgarse a sí mismo cualquier opción,
     // incluida esta misma, con un solo POST directo a /api/permisos/activar-permiso.
-    private const OPCION_PERMISOS = 28;
+    private const OPCION_PERMISOS = Permiso::PERMISOS_SISTEMA;
 
     protected $services_permisos;
 

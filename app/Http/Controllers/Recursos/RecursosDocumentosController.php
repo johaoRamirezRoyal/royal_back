@@ -8,13 +8,14 @@ use App\Services\recursos\RecursosDocumentosServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class RecursosDocumentosController extends Controller
 {
     // 46 = Listado Maestro — Gestión (crear/editar/eliminar/ver cantidades). Ver el
     // documento y descargarlo/visualizarlo es autoservicio de cualquier usuario
     // autenticado, sin gate.
-    private const OPCION_GESTION = 46;
+    private const OPCION_GESTION = Permiso::LISTADO_MAESTRO;
 
     public function __construct(
         private RecursosDocumentosServices $recursosServices,

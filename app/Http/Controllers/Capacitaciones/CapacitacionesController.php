@@ -10,14 +10,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
+use App\Support\Permiso;
 
 class CapacitacionesController extends Controller
 {
     // 85 = ver y realizar capacitaciones, 86 = administrarlas,
     // 93 = listado de capacitaciones realizadas (certificados de otros usuarios).
-    private const OPCION_VER = 85;
-    private const OPCION_ADMIN = 86;
-    private const OPCION_REALIZADAS = 93;
+    private const OPCION_VER = Permiso::CAPACITACIONES;
+    private const OPCION_ADMIN = Permiso::CAPACITACIONES_CONFIGURAR;
+    private const OPCION_REALIZADAS = Permiso::CAPACITACIONES_REALIZADAS;
 
     public function __construct(
         private CapacitacionesServices $capacitacionesServices,

@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
+use App\Support\Permiso;
 
 /**
  * Consulta de solo lectura de las asistencias de clase de TODOS los docentes: listado de
@@ -20,7 +21,7 @@ class ConsultaAsistenciaClaseService
 {
     private const PERFIL_ESTUDIANTE = 16;
 
-    private const PERFILES_DOCENTE = [3, 14];
+    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     // Columnas por las que la tabla del frontend puede ordenar (sort=<clave>).
     private const ORDENES = [

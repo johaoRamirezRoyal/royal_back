@@ -13,6 +13,7 @@ use App\Services\Service;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Support\Permiso;
 
 class AsistenciaGestionService extends Service
 {
@@ -30,7 +31,7 @@ class AsistenciaGestionService extends Service
     // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
     // Usuario::correosPorPerfilesYNivel).
     private const PERFIL_RECURSOS_HUMANOS = 8;
-    private const PERFIL_COORDINADOR = 26;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     // Director administrativo: ve la asistencia y recibe el aviso de llegada tarde de estos
     // niveles (fijo, no depende de su propio id_nivel).

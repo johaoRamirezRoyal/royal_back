@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 /**
  * Gestión (listar/buscar/activar-desactivar) de los acudientes que se auto-registran vía
@@ -19,7 +20,7 @@ class AcudientesAdminController extends Controller
     // Id real confirmado contra cron_opciones — la migración de seed usa insertGetId,
     // así que el id no es un literal fijo; el mismo tipo de drift ya documentado para
     // Instituciones (ver InstitucionAdminController::OPCION_GESTION/OPCION_LECTURA).
-    private const OPCION_GESTION = 112;
+    private const OPCION_GESTION = Permiso::ACUDIENTES_GESTION;
 
     public function __construct(private UsuariosServices $usuariosService)
     {

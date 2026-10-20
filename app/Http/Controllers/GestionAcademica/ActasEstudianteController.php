@@ -10,6 +10,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use App\Support\Permiso;
 
 /**
  * Registro de actas de estudiantes. Lectura (listado, conteo, gráficas): opción 136 o 137
@@ -19,11 +20,11 @@ use Illuminate\Validation\Rule;
  */
 class ActasEstudianteController extends Controller
 {
-    private const OPCION_VER = 136;
+    private const OPCION_VER = Permiso::ACTAS_VER;
 
-    private const OPCION_GESTIONAR = 137;
+    private const OPCION_GESTIONAR = Permiso::ACTAS_GESTIONAR;
 
-    private const OPCION_MIS_ESTUDIANTES = 138;
+    private const OPCION_MIS_ESTUDIANTES = Permiso::ACTAS_MIS_ESTUDIANTES;
 
     public function __construct(
         private ActasEstudianteService $service,

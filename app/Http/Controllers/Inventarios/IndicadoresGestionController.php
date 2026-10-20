@@ -10,12 +10,13 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\Permiso;
 
 class IndicadoresGestionController extends Controller
 {
     // cron_opciones: 94 = "Indicadores de gestion Sistemas" (tipo_categoria 1),
     // 95 = "Indicadores de gestion Aires" (Operativos, tipo_categoria 2).
-    private const OPCION_POR_TIPO = [1 => 94, 2 => 95];
+    private const OPCION_POR_TIPO = [1 => Permiso::INDICADORES_SISTEMAS, 2 => Permiso::INDICADORES_AIRES];
 
     public function __construct(
         private IndicadoresGestionServices $servicio,

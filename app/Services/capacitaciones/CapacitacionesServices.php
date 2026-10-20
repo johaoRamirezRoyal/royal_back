@@ -13,6 +13,7 @@ use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Support\Permiso;
 
 /**
  * Capacitación Institucional (Gestión Humana). Migrado de `sami_royal/vistas/modulos/capacitaciones`.
@@ -26,7 +27,7 @@ class CapacitacionesServices
     public const NOTA_MINIMA = 60;
 
     // Super Admin ve todas las capacitaciones sin estar asignado en capacitacion_perfil (igual que el legado).
-    private const PERFIL_SUPER_ADMIN = 1;
+    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
 
     public function __construct(
         private FileStorageService $fileStorage,

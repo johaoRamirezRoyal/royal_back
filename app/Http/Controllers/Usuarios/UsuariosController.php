@@ -11,6 +11,7 @@ use App\Services\Perfiles\PerfilesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use App\Support\Permiso;
 
 class UsuariosController extends Controller
 {
@@ -18,7 +19,7 @@ class UsuariosController extends Controller
     // estado. Sin este chequeo, cualquier autenticado podía crear un usuario con
     // cualquier perfil (incluido Super Admin) o desactivar cuentas ajenas con un POST/PUT
     // directo, sin tener la opción otorgada.
-    private const OPCION_USUARIOS = 2;
+    private const OPCION_USUARIOS = Permiso::USUARIOS;
 
     protected $service_usuarios;
 

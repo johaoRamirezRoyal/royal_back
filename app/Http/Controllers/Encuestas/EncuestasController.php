@@ -8,6 +8,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class EncuestasController extends Controller
 {
@@ -16,8 +17,8 @@ class EncuestasController extends Controller
     // Noticias/Evaluaciones). En producción las mismas opciones ya existían con ids 129/130
     // — 2026_09_22_100000_fix_ids_opciones_encuestas renumera la BD local para que
     // coincida, así que estas constantes reflejan el id real en ambos entornos.
-    private const OPCION_ADMIN = 129;
-    private const OPCION_VER = 130;
+    private const OPCION_ADMIN = Permiso::ENCUESTAS_ADMIN;
+    private const OPCION_VER = Permiso::ENCUESTAS_RESULTADOS;
 
     public function __construct(
         private EncuestasServices $encuestasServices,

@@ -7,15 +7,16 @@ use App\Services\Areas\BloquesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class BloquesController extends Controller
 {
     // cron_opciones bajo id_modulo=6 (Zonas) — ver migración
     // 2026_09_10_150000_seed_opciones_areas_comunes.
-    private const OPCION_ADMIN_AREAS_COMUNES = 108;
-    private const OPCION_USO_AREAS_COMUNES = 109;
+    private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
+    private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
     // "Mis áreas" (autoservicio) — ver migración 2026_09_14_120000_seed_opcion_mis_areas_comunes.
-    private const OPCION_MIS_AREAS_COMUNES = 119;
+    private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
 
     protected $service_bloques;
 

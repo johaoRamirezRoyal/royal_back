@@ -9,18 +9,19 @@ use App\Services\permisosLicencias\PermisosLicenciasServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class PermisosLicenciasController extends Controller
 {
-    private const OPCION_ACCESO = 80;
-    private const OPCION_LISTADO = 81;
-    private const OPCION_EDITAR_PROPIA = 82;
-    private const OPCION_GESTION = 83;
-    private const OPCION_DETALLE = 90;
-    private const OPCION_ASIGNAR = 92;
+    private const OPCION_ACCESO = Permiso::PERMISOS_LICENCIAS;
+    private const OPCION_LISTADO = Permiso::PERMISOS_LICENCIAS_LISTADO;
+    private const OPCION_EDITAR_PROPIA = Permiso::PERMISOS_LICENCIAS_EDITAR_PROPIA;
+    private const OPCION_GESTION = Permiso::PERMISOS_LICENCIAS_APROBAR;
+    private const OPCION_DETALLE = Permiso::PERMISOS_LICENCIAS_DETALLE;
+    private const OPCION_ASIGNAR = Permiso::PERMISOS_LICENCIAS_OPERATIVOS;
     // Configuración de catálogos (motivo/ley/personal/institucional) — ver migración
     // 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.
-    private const OPCION_CONFIGURACION = 121;
+    private const OPCION_CONFIGURACION = Permiso::PERMISOS_LICENCIAS_CONFIGURACION;
 
     /** Coordinador/Directivo: ve (y le notifican) solo las solicitudes de su propio nivel. */
     private const PERFILES_COORDINACION_NIVEL = [26, 7];

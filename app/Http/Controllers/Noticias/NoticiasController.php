@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\Permiso;
 
 class NoticiasController extends Controller
 {
@@ -20,7 +21,7 @@ class NoticiasController extends Controller
     // de drift ya documentado para Instituciones en AGENTS.md, "104 vs 106"): dos
     // features distintas quedaban gateadas por la misma opción por error. Confirmado
     // contra la tabla real 2026-09-16.
-    private const OPCION_NOTICIAS = 69;
+    private const OPCION_NOTICIAS = Permiso::NOTICIAS;
 
     // cron_opciones id 128 ("Noticias — Correos de distribución") — ver migración
     // 2026_09_16_150000_seed_opcion_correos_distribucion_noticias. Separada de
@@ -28,7 +29,7 @@ class NoticiasController extends Controller
     // necesariamente debe poder cambiar a qué direcciones reales se manda el correo
     // masivo. Renumerada de 147 a 128 el 2026-09-16 al sincronizar cron_opciones con
     // producción (147 era un id inflado por duplicados locales, ver AGENTS.md).
-    private const OPCION_CORREOS_DISTRIBUCION = 128;
+    private const OPCION_CORREOS_DISTRIBUCION = Permiso::NOTICIAS_CORREOS_DISTRIBUCION;
 
     public function __construct(
         private NoticiasService $service,
@@ -49,7 +50,7 @@ class NoticiasController extends Controller
     // `cron_permisos` — mismo criterio que el bypass `allowedRoles={[1]}` del lado
     // frontend (router/sidebar): un Super Admin no debe quedar afuera de un módulo por
     // un permiso mal configurado o revocado por error.
-    private const SUPER_ADMIN_PERFIL = 1;
+    private const SUPER_ADMIN_PERFIL = Permiso::PERFIL_SUPER_ADMIN;
 
     private function ensurePermisoGestion(): void
     {

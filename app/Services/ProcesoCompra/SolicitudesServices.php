@@ -15,6 +15,7 @@ use App\Services\MailService;
 use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use App\Support\Permiso;
 
 class SolicitudesServices
 {
@@ -40,7 +41,7 @@ class SolicitudesServices
 
     // Mismo perfil Coordinador (26) que ya usa EvaluacionesServices::PERFIL_COORDINADOR —
     // un coordinador queda a cargo de todas las solicitudes de usuarios de su id_nivel.
-    private const PERFIL_COORDINADOR = 26;
+    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     // Los archivos se guardan en la raíz del disco de uploads para que su URL
     // pública sea directa: /public/upload/<nombre_archivo>.

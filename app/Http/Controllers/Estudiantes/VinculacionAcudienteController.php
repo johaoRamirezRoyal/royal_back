@@ -7,6 +7,7 @@ use App\Services\Estudiantes\VinculacionAcudienteService;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 /**
  * Módulo "Vinculación Estudiante - Padre" (Académico): listar acudientes (perfil 6),
@@ -17,7 +18,7 @@ class VinculacionAcudienteController extends Controller
     // Id real confirmado contra cron_opciones tras correr
     // 2026_09_23_100000_seed_opcion_vinculacion_estudiante_padre (insertGetId — no
     // asumir el literal en otra BD, ver drift documentado en AGENTS.md).
-    private const OPCION_VINCULACION = 131;
+    private const OPCION_VINCULACION = Permiso::VINCULACION_ACUDIENTES;
 
     private const PERFIL_ESTUDIANTE = 16;
 

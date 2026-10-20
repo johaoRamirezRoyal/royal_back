@@ -15,6 +15,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use App\Support\Permiso;
 
 class InstitucionAdminController extends Controller
 {
@@ -22,14 +23,14 @@ class InstitucionAdminController extends Controller
     // usan insertGetId, así que no son literales fijos; en esta BD terminaron en 106/111,
     // no 104/105 (esos son "Compras — Gestión de compras"/"Compras — Ventas", módulo
     // no relacionado, ver ProveedoresController y compras/seguimiento-compra).
-    private const OPCION_GESTION = 106;
+    private const OPCION_GESTION = Permiso::INSTITUCIONES_GESTION;
     // Solo lectura — listado de instituciones y sus documentos, sin crear/editar/
     // activar-desactivar ni tocar la configuración (ver index()/cartas() vs. el resto de
     // métodos de este controller). Otorgada al perfil Admisiones (9), ver
     // 2026_08_31_190000_seed_opcion_ver_instituciones_documentos.
-    private const OPCION_LECTURA = 111;
+    private const OPCION_LECTURA = Permiso::INSTITUCIONES_LECTURA;
 
-    private const PERFIL_SUPER_ADMIN = 1;
+    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
 
     public function __construct(
         private UsuariosServices $usuariosService,

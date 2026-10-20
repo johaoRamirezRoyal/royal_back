@@ -7,6 +7,7 @@ use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use App\Support\Permiso;
 
 class ActaEstudiante extends Model
 {
@@ -19,7 +20,7 @@ class ActaEstudiante extends Model
     public const TIPOS = [self::TIPO_DIALOGO_FORMATIVO, self::TIPO_CONVIVENCIAL];
 
     /** Perfiles que pueden figurar como docente que solicita el acta (Docente, Docente ICT). */
-    public const PERFILES_DOCENTE = [3, 14];
+    public const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     /** Máximo de actas de diálogo formativo por estudiante y periodo (se avisa, no se bloquea). */
     public const MAX_DIALOGO_FORMATIVO = 3;

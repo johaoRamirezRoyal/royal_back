@@ -17,6 +17,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 class InventariosController extends Controller
 {
@@ -26,20 +27,20 @@ class InventariosController extends Controller
     // se comparten con Mis Inventarios (un usuario reporta o consulta SU inventario
     // asignado sin necesitar el permiso administrativo completo); `listadoConsolidado` se
     // comparte con Préstamos (para elegir qué ítem prestar). El resto es exclusivo de 12.
-    private const OPCION_INVENTARIO = 12;
-    private const OPCION_MIS_INVENTARIOS = 16;
-    private const OPCION_PRESTAMOS = 17;
+    private const OPCION_INVENTARIO = Permiso::INVENTARIO;
+    private const OPCION_MIS_INVENTARIOS = Permiso::MIS_INVENTARIOS;
+    private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
     // cron_opciones bajo id_modulo=6 (Zonas) — Áreas Comunes tiene su propio par de
     // permisos, separado de OPCION_INVENTARIO; historialInventario() los acepta también
     // porque "Ver hoja de vida" ya se ofrece como acción de fila en Listado de Áreas
     // Comunes (ver AGENTS.md "Áreas Comunes").
-    private const OPCION_ADMIN_AREAS_COMUNES = 108;
-    private const OPCION_USO_AREAS_COMUNES = 109;
+    private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
+    private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
     // "Mis áreas comunes" (autoservicio, `/inventario/areas-comunes/mis-areas`): sin
     // esta, alguien con SOLO 119 (sin 108/109) cargaría la página pero listadoConsolidado
     // y reportarInventario le devolverían 403 — Reportar es la única acción que esa
     // vista ofrece, así que ambos métodos la necesitan.
-    private const OPCION_MIS_AREAS_COMUNES = 119;
+    private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
 
     protected $inventario_services;
 

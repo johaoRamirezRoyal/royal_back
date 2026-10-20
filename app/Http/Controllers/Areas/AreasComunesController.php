@@ -9,6 +9,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 /**
  * Acciones administrativas masivas de Áreas Comunes que cruzan `areas`/`inventario`
@@ -18,12 +19,12 @@ use Illuminate\Support\Facades\Validator;
  */
 class AreasComunesController extends Controller
 {
-    private const OPCION_ADMIN_AREAS_COMUNES = 108;
-    private const OPCION_USO_AREAS_COMUNES = 109;
+    private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
+    private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
     // "Mis áreas comunes" (autoservicio) — sumada a registrarCheck por consistencia con
     // InventariosController::listadoConsolidado/reportarInventario, aunque hoy la
     // vista de autoservicio (`misAreas`) ya no ofrece el check, solo Reportar.
-    private const OPCION_MIS_AREAS_COMUNES = 119;
+    private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
 
     public function __construct(
         private AreasServices $areasService,

@@ -129,7 +129,7 @@ class AsistenciaEstudianteService extends Service
      * ver agregarAsistenciaEstudiantes), no hay fila por cada presente.
      *
      * $id_docente_scope: cuando un Docente (sin opción 99) consulta esto vía su propio
-     * acceso de autoservicio (ver GestionAcademicaController::METODOS_DOCENTE), se le pasa
+     * acceso de autoservicio (rutas `perfil:3,perfil:14` en routes/api/gestionAcademica.php), se le pasa
      * su propio id_user acá — restringe los resultados a únicamente los cursos donde tiene
      * carga académica activa, ignorando cualquier id_curso ajeno que llegue en la request
      * (no basta con ocultar el selector en el frontend).

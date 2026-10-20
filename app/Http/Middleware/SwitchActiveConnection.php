@@ -6,6 +6,7 @@ use App\Services\AdminManagement\BasesDatosService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use App\Support\Permiso;
 
 /**
  * Infraestructura para el multi-tenant a futuro: un Super Admin de la allowlist de
@@ -27,7 +28,7 @@ use Illuminate\Support\Facades\Config;
  */
 class SwitchActiveConnection
 {
-    private const PERFIL_SUPER_ADMIN = 1;
+    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
 
     public function __construct(private BasesDatosService $basesDatosService)
     {

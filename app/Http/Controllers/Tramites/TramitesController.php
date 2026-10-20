@@ -8,12 +8,13 @@ use App\Services\tramites\TramitesServices;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Support\Permiso;
 
 class TramitesController extends Controller
 {
     // 77 = Listado de trámites + aprobar/rechazar/subir documento. Solicitar un trámite
     // y ver "mis trámites" es autoservicio de cualquier usuario, sin gate.
-    private const OPCION_GESTION = 77;
+    private const OPCION_GESTION = Permiso::TRAMITES_LISTADO;
 
     public function __construct(
         private TramitesServices $tramitesServices,

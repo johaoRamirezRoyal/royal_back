@@ -13,6 +13,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\Permiso;
 
 class SalonesController extends Controller
 {
@@ -21,7 +22,7 @@ class SalonesController extends Controller
     // sigue necesitando cualquier autenticado para reservar (CreateReservaModal, en
     // /reservas, no tiene ni tiene por qué tener este permiso: reservar es de acceso
     // general, administrar el catálogo de salones no).
-    private const OPCION_SALONES = 40;
+    private const OPCION_SALONES = Permiso::SALONES;
 
     public function __construct(
         private ReservasServices $reservasServices,

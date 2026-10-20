@@ -9,6 +9,7 @@ use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Support\Permiso;
 
 /**
  * Módulo administrativo "Año Escolar y Periodos" (opción propia, ver migración
@@ -24,7 +25,7 @@ class AnioEscolarPeriodoController extends Controller
     // el bug ya documentado de Instituciones, 104 vs 106 real, en el AGENTS.md del repo).
     // Confirmar `SELECT id FROM cron_opciones WHERE nombre = 'Año Escolar y Periodos'`
     // después de migrar en cada entorno antes de confiar en este literal.
-    private const OPCION = 107;
+    private const OPCION = Permiso::ANIO_ESCOLAR_PERIODOS;
 
     public function __construct(
         private AnioEscolarServices $anioEscolarServices,

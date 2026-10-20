@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Throwable;
+use App\Support\Permiso;
 
 /**
  * Observaciones de estudiantes por día (POSITIVA/NEGATIVA), organizadas por periodo
@@ -35,7 +36,7 @@ class ObservacionEstudianteService
     private const PERFIL_ESTUDIANTE = 16;
 
     /** Docente y Docente ICT: los que se pueden elegir como docente de una observación. */
-    private const PERFILES_DOCENTE = [3, 14];
+    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     private const ORDENES = [
         'fecha' => 'o.fecha',
