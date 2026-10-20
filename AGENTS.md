@@ -1081,6 +1081,10 @@ reintroducir esos ids acá.
   `whereHas`/`whereExists` que cae al `id_bloque` del área cuando el directo es nulo.
   Cualquier query nueva que filtre áreas comunes por bloque debe replicar ese mismo
   fallback o perderá silenciosamente los ítems asignados a un área puntual.
+- **Un área pertenece a un solo bloque** (`areas.id_bloque`): `asignarAreasBloque`
+  rechaza (400) un área que ya tiene otro bloque en vez de moverla en silencio; para
+  cambiarla de bloque, primero se quita desde el bloque dueño. El panel "Asignar áreas"
+  del frontend las muestra deshabilitadas con el nombre de su bloque.
 - **`reclasificarAreaComun` vs. `moverItemAreaComun`**: el primero solo cambia
   `id_categoria` (el ítem se queda donde ya estaba); el segundo cambia la ubicación real
   (`id_bloque`/`id_area`). No confundirlos — son las dos acciones "Agregar área común
