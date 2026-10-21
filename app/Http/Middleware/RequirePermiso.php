@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -31,8 +32,11 @@ class RequirePermiso
                 : $opciones[] = (int) $regla;
         }
 
+        // Super Admin pasa siempre, también en reglas solo de perfil (`perfil:N` sin el 1).
         $permitido = $perfil !== null
-            && (in_array((int) $perfil, $perfiles, true) || PermisosPerfil::tiene($request, ...$opciones));
+            && ((int) $perfil === Permiso::PERFIL_SUPER_ADMIN
+                || in_array((int) $perfil, $perfiles, true)
+                || PermisosPerfil::tiene($request, ...$opciones));
 
         if (! $permitido) {
             return response()->json([

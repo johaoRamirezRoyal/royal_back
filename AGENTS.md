@@ -195,10 +195,14 @@ Reglas:
   `up()` con `insertGetId` en `cron_opciones` + inserts iniciales en `cron_permisos`, y un
   `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
   de hardcodear el número en el frontend.
-- **Todo es fail-closed, incluido Super Admin**: crear la fila en `cron_opciones` sin el
-  `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso — ni
-  siquiera perfil 1, porque `PermisosPerfil` no tiene ningún caso especial para Super
-  Admin, solo mira la fila de `cron_permisos`. Pasó de verdad con la opción "Metricas
+- **Super Admin tiene acceso a todo** (desde 2026-10-21): `PermisosPerfil` le da todas las
+  opciones existentes menos `Permiso::OPCIONES_RESTRICTIVAS` (las que quitan capacidades, hoy
+  la 135), y `RequirePermiso` lo deja pasar también en reglas solo de perfil. Una opción nueva
+  que restrinja en vez de dar acceso va en `OPCIONES_RESTRICTIVAS`. `crearPermiso`/`eliminarPermiso`
+  rechazan el perfil 1 (422) y `/permisos` no muestra interruptores en su tarjeta.
+- **Todo lo demás es fail-closed**: crear la fila en `cron_opciones` sin el
+  `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso (salvo
+  Super Admin). Pasó de verdad con la opción "Metricas
   Asistencias" (id 127 hoy, ver `2026_09_16_160000_seed_permisos_opcion_metricas_asistencias.php`):
   quedó creada pero invisible para todos hasta que una segunda migración le otorgó el
   acceso. Al agregar una opción, verifica en el mismo `up()` (o justo después, con el

@@ -28,6 +28,16 @@ class PermisosController extends Controller
         $this->services_permisos = $services_permisos;
     }
 
+    // Super Admin tiene acceso global (PermisosPerfil): sus permisos no se otorgan ni revocan.
+    private const REGLAS_PERMISO = [
+        'id_opcion' => 'required|integer|exists:cron_opciones,id',
+        'id_perfil' => 'required|integer|exists:perfiles,id_perfil|not_in:' . Permiso::PERFIL_SUPER_ADMIN,
+    ];
+
+    private const MENSAJES_PERMISO = [
+        'id_perfil.not_in' => 'Super Admin tiene acceso global: sus permisos no se modifican.',
+    ];
+
     /**
      * A diferencia de sinAcceso() (exige la opción 28, otorgable a cualquier perfil),
      * crear/editar/eliminar módulos y opciones queda reservado explícitamente a Super
@@ -67,10 +77,7 @@ class PermisosController extends Controller
             return $rechazo;
         }
 
-        $validated = $request->validate([
-            'id_opcion' => 'required|integer|exists:cron_opciones,id',
-            'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
-        ]);
+        $validated = $request->validate(self::REGLAS_PERMISO, self::MENSAJES_PERMISO);
 
         $datos = [
             'id_opcion' => $validated['id_opcion'],
@@ -92,10 +99,7 @@ class PermisosController extends Controller
             return $rechazo;
         }
 
-        $validated = $request->validate([
-            'id_opcion' => 'required|integer|exists:cron_opciones,id',
-            'id_perfil' => 'required|integer|exists:perfiles,id_perfil',
-        ]);
+        $validated = $request->validate(self::REGLAS_PERMISO, self::MENSAJES_PERMISO);
 
         $datos = [
             'id_opcion' => $validated['id_opcion'],

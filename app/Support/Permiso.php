@@ -75,6 +75,12 @@ final class Permiso
     public const ACTAS_GESTIONAR = 137;                 // "Gestionar actas de estudiantes"
     public const ACTAS_MIS_ESTUDIANTES = 138;           // "Ver actas de mis estudiantes"
 
+    /**
+     * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás
+     * (PermisosPerfil) pero no estas: con la 135, Observaciones lo dejaría en solo lectura.
+     */
+    public const OPCIONES_RESTRICTIVAS = [self::OBSERVACIONES_SOLO_CONSULTA];
+
     // ─── Perfiles ───────────────────────────────────────────────
     public const PERFIL_SUPER_ADMIN = 1;
     public const PERFIL_ADMINISTRADOR = 2;
