@@ -8,9 +8,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Opciones (cron_opciones) otorgadas al perfil del usuario autenticado, cargadas con UNA
  * consulta por petición y guardadas en el request: el middleware `permiso` y el controller
- * que lo necesite leen la misma lista, en vez de una consulta por opción
- * (UsuariosServices::tienePermiso). Mismo criterio que tienePermiso: permiso activo cuya
- * opción y módulo existen.
+ * que lo necesite leen la misma lista, en vez de una consulta por opción. También la expone al
+ * frontend (GET /usuarios/mis-permisos). Criterio: permiso activo cuya opción y módulo existen.
  */
 final class PermisosPerfil
 {
@@ -35,6 +34,12 @@ final class PermisosPerfil
         }
 
         return $request->attributes->get(self::ATRIBUTO);
+    }
+
+    /** @return array<int> ids de las opciones otorgadas (GET /usuarios/mis-permisos). */
+    public static function opciones(Request $request): array
+    {
+        return array_keys(self::de($request));
     }
 
     public static function tiene(Request $request, int ...$opciones): bool

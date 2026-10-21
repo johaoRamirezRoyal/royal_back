@@ -50,7 +50,7 @@ docente** al registrar una observación, en vez de que quede a su nombre.
 | Pieza | Qué hace |
 |---|---|
 | `app/Http/Middleware/RequirePermiso.php` (alias `permiso`) | Deja pasar si el perfil tiene **cualquiera** de las opciones o está en `perfil:N`. Sin usuario o sin nada de eso: 403 JSON (`No tienes permiso para acceder a este recurso.`). |
-| `app/Services/Usuarios/PermisosPerfil.php` | Carga las opciones del perfil **una vez por petición** (mismo criterio que `tienePermiso`: permiso activo con opción y módulo existentes) y las guarda en el request. `PermisosPerfil::tiene($request, ...$ids)`. |
+| `app/Services/Usuarios/PermisosPerfil.php` | Carga las opciones del perfil **una vez por petición** (mismo criterio que el antiguo `tienePermiso`: permiso activo con opción y módulo existentes) y las guarda en el request. `PermisosPerfil::tiene($request, ...$ids)`. |
 | `app/Support/Permiso.php` | **Única fuente de los ids**: una constante por opción en uso (62, con el nombre de `cron_opciones`) y por perfil (Super Admin, Administrador, Docente, Docente ICT, Coordinador). `Permiso::ruta($opciones, $perfiles)` arma el string del middleware. |
 
 ### 3.2 Regla: el permiso va en la ruta y en el controller
@@ -156,7 +156,8 @@ perfil, o porque son de uso general:
 - Cambio visible: el 403 de esos métodos dice siempre "No tienes permiso para esta acción."
   (antes algunos tenían texto propio, p. ej. "…para gestionar proveedores").
 - Se borró `UsuariosServices::tieneAlgunPermiso` (sin callers). `tienePermiso` se queda: lo
-  usa `GET /usuarios/permiso` (frontend).
+  usa `GET /usuarios/permiso` (frontend). Después lo reemplazó `GET /usuarios/mis-permisos`
+  (sección 7).
 - `IndicadoresGestionController` conserva su propio `sinAcceso(Request, int $tipoCategoria)`
   (elige la opción por tipo de categoría), ahora sobre `PermisosPerfil`.
 - **No** se borraron las constantes `OPCION_*` de los controllers aunque solo apunten a
@@ -202,3 +203,16 @@ perfil, o porque son de uso general:
   opciones, el middleware no lo cubre; queda por revisar.
 - `routes/api.php` incluye `llegadasTarde.php` dos veces (rutas duplicadas, sin efecto
   funcional).
+
+## 7. Lista de opciones para el frontend (`GET /usuarios/mis-permisos`)
+
+- El frontend pedía `GET /usuarios/permiso?opt=&per=` **una vez por opción** (el sidebar solo,
+  decenas de peticiones al entrar) y el backend tomaba `per` del cliente: cualquier autenticado
+  podía consultar los permisos de otro perfil.
+- Nuevo `GET /usuarios/mis-permisos` → `PermisosPerfil::opciones($request)`: las opciones del
+  perfil de la sesión en una lista. El frontend la pide una vez y `refresh()` (llamado desde
+  `/permisos`) la vuelve a pedir.
+- Se borró `GET /usuarios/permiso` (con `UsuariosController::tienePermiso` y
+  `UsuariosServices::tienePermiso`). Las pestañas con el frontend anterior abiertas durante el
+  despliegue dejan de ver lo protegido hasta recargar.
+- Orden de despliegue: backend primero (el frontend nuevo depende del endpoint nuevo).
