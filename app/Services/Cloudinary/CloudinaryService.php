@@ -64,10 +64,12 @@ class CloudinaryService
         // Opcional: por defecto el public_id es el nombre original del archivo (con
         // overwrite), así que dos archivos con el mismo nombre se pisan entre sí. Pasar
         // un nombre único cuando eso no es aceptable (ej. revistas de Noticias).
-        ?string $publicIdPersonalizado = null
+        ?string $publicIdPersonalizado = null,
+        // Opcional: reemplaza la lista de extensiones por defecto (ver validateFile).
+        ?array $extensionesPermitidas = null
     ): array {
         try {
-            $validation = $this->validateFile($file);
+            $validation = $this->validateFile($file, $extensionesPermitidas);
 
             if ($validation['error']) {
                 return [
@@ -331,7 +333,7 @@ class CloudinaryService
     /**
      * Validar archivo
      */
-    private function validateFile(UploadedFile $file): array
+    private function validateFile(UploadedFile $file, ?array $allowedExtensions = null): array
     {
         $maxSize = 10 * 1024 * 1024;
 
@@ -342,7 +344,7 @@ class CloudinaryService
             ];
         }
 
-        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'];
+        $allowedExtensions ??= ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'];
         $extension = strtolower($file->getClientOriginalExtension());
 
         if (! in_array($extension, $allowedExtensions)) {

@@ -21,6 +21,10 @@ Route::get('/', function () {
 Route::post('/pushNotification/{tenant?}', [HikvisionController::class, 'testNotificationHikvision'])
     ->middleware('hikvision.device');
 
+// Migración de archivos a Cloudinary (sin JWT: header X-Migracion-Token, ver
+// MigracionCloudinaryController; con MIGRACION_API_TOKEN vacío responde 404).
+Route::post('/migracion/cloudinary', [App\Http\Controllers\Migracion\MigracionCloudinaryController::class, 'subir']);
+
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
     require __DIR__ . '/api/auth.php';

@@ -61,6 +61,7 @@ comentarios ya presentes ahí). No hace falta tocar `down()`.
 |--------|------|-----|
 | `/` | inline | Welcome JSON |
 | `POST /pushNotification` | inline | Hikvision test |
+| `POST /migracion/cloudinary` | inline | Migración de archivos (token propio, ver "Cloudinary") |
 | `/auth` | `api/auth.php` | login, register, check, password restore |
 | `GET /biblioteca/imagen/{carpeta}/{filename}` | inline | Imagen pública |
 | `/admissions` | `api/admissions.php` | Flujo público de admisiones |
@@ -2058,6 +2059,23 @@ dominio (p. ej. `MantenimientoChecklistPdfService`) no se tocaron.
 | `uploadFile(UploadedFile, folder)` | Sube archivo, retorna `['error','message','data']` |
 | `getFileUrl(publicId, format)` | Genera URL |
 | `deleteFile(publicId, resourceType)` | Elimina |
+
+- `uploadFile` acepta un 4.º parámetro opcional `$extensionesPermitidas` que reemplaza la
+  lista por defecto (solo lo usa la migración, abajo).
+
+### Migración de archivos a Cloudinary (`POST /api/migracion/cloudinary`)
+
+`MigracionCloudinaryController::subir` recibe por multipart `directorio` (opcional) y
+`archivos[]` (máx. 20, 10 MB c/u) y los sube a `royal/<directorio>`. El `public_id` es el
+nombre del archivo sin extensión (overwrite): repetir la subida no duplica. Un archivo que
+falla no corta el lote; la respuesta trae un resultado por archivo.
+- **Sin JWT**: header `X-Migracion-Token` contra `config('cloudinary.migracion_token')`
+  (`MIGRACION_API_TOKEN`). Con la variable vacía responde **404**: así queda apagado.
+  Con la config cacheada hay que correr `php artisan config:cache` después de cambiarla.
+- Lo consume el script externo `script_liberacion` (fuera de este repo; corre en el VPS):
+  recorre las tablas que guardan archivos del disco de uploads, los busca en
+  `SAMI_UPLOAD_ROOT` y deja log por archivo, CSV fila → URL y reporte de % de éxito. **No
+  actualiza la BD**: cambiar las referencias a las URLs es una fase aparte, a partir del CSV.
 
 - **PDFs** → `resource_type: 'image'` (no raw, el service actual lo trata como image)
 - **Office docs** → `resource_type: 'raw'`

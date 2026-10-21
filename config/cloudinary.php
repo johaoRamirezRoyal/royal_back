@@ -57,4 +57,10 @@ return [
      * Controller action to get cloud_image_url from Blade Upload Widget
      */
     'upload_action' => env('CLOUDINARY_UPLOAD_ACTION'),
+
+    /**
+     * Token del endpoint de migración de archivos (POST /api/migracion/cloudinary).
+     * Vacío = endpoint apagado (404).
+     */
+    'migracion_token' => env('MIGRACION_API_TOKEN'),
 ];
