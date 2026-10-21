@@ -323,3 +323,21 @@ ALTER TABLE encuestas_preguntas MODIFY texto VARCHAR(500) NOT NULL;
 -- tenía otorgada y entraba a /users (gestión de usuarios).
 -- ---------------------------------------------------------------------------
 DELETE FROM cron_permisos WHERE id_opcion = 2 AND id_perfil = 26;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_21_100000_add_indices_inventario_tables.php
+-- Índices para los listados de inventario: `inventario` solo tenía la PK y todo
+-- listado (listado, consolidado, mis inventarios, reportes, áreas) escaneaba la
+-- tabla completa (sin índice en id_categoria ni activo/estado: poco selectivos,
+-- medido que empeoraban el listado). También `reportes` por id_inventario (subconsultas
+-- correlacionadas), `inventario_log` (historial/hoja de vida), `cron_permisos`
+-- (tienePermiso en cada request) y `areas.id_bloque` (filtro Bloque). La
+-- migración omite los que ya existan (Schema::hasIndex).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `inventario` ADD INDEX `inventario_id_user_idx`(`id_user`);
+ALTER TABLE `inventario` ADD INDEX `inventario_id_area_idx`(`id_area`);
+ALTER TABLE `inventario` ADD INDEX `inventario_id_bloque_idx`(`id_bloque`);
+ALTER TABLE `reportes` ADD INDEX `reportes_id_inventario_reporte_tipo_estado_idx`(`id_inventario`, `id_reporte`, `tipo_reporte`, `estado`);
+ALTER TABLE `inventario_log` ADD INDEX `inventario_log_id_inventario_idx`(`id_inventario`);
+ALTER TABLE `cron_permisos` ADD INDEX `cron_permisos_opcion_perfil_activo_idx`(`id_opcion`, `id_perfil`, `activo`);
+ALTER TABLE `areas` ADD INDEX `areas_id_bloque_idx`(`id_bloque`);
