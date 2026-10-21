@@ -708,6 +708,15 @@ Tabla `academico_observacion_estudiante`. Frontend: `/gestion-convivencial/obser
 El controller vive en el namespace `GestionAcademica` porque se reusa la carga académica,
 pero las rutas cuelgan del prefijo propio.
 
+**Lo que ve de otros docentes quien no tiene la 134** (2026-10-21), siempre de solo lectura:
+- `acta()` trae `resumen_global`: positivas y negativas del estudiante en el periodo, de todos
+  los docentes (`conteoGlobal`). `resumen` sigue siendo solo de las propias.
+- `GET /observaciones/estudiantes/{id}/dia?fecha=Y-m-d` (`delDia`): las observaciones que
+  OTROS docentes le registraron al estudiante ese día, completas y con `editable: false`.
+  Excluye las propias (como docente o como quien la registró), con `<=>` para no perder filas
+  con `id_usuario_registra` nulo. Mismo alcance de estudiantes que el acta: fuera de los cursos
+  del docente responde 404.
+
 ### Modelo
 
 - Una fila = una observación de un día: `fecha`, `tipo` (`POSITIVA`|`NEGATIVA`), `motivo`,

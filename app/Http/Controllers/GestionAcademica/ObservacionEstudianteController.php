@@ -133,6 +133,14 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
         return $this->apiResponse($this->service->acta($this->acceso(), $idEstudiante, $idPeriodo));
     }
 
+    /** Observaciones de otros docentes al estudiante en `?fecha=` (Y-m-d). */
+    public function delDia(Request $request, int $idEstudiante)
+    {
+        $fecha = $request->validate(['fecha' => 'required|date_format:Y-m-d'])['fecha'];
+
+        return $this->apiResponse($this->service->delDia($this->acceso(), $idEstudiante, $fecha));
+    }
+
     public function store(Request $request)
     {
         $datos = $this->validar($request, conEstudiante: true);
