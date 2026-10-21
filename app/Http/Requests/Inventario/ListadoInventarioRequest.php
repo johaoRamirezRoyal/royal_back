@@ -15,7 +15,7 @@ class ListadoInventarioRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         foreach (['id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'estado'] as $key) {
-            if ($this->has($key) && !is_array($this->input($key))) {
+            if ($this->has($key) && ! is_array($this->input($key))) {
                 $this->merge([$key => [$this->input($key)]]);
             }
         }
@@ -41,6 +41,9 @@ class ListadoInventarioRequest extends FormRequest
             'descripcion' => ['nullable', 'string', 'max:200'],
             'individual' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1'],
+            'per-page' => ['nullable', 'integer', 'min:1'],
+            'sort' => ['nullable', Rule::in(['nom_user', 'cantidad'])],
+            'dir' => ['nullable', Rule::in(['asc', 'desc'])],
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Inventarios;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventario\ActualizarInventarioRequest;
 use App\Http\Requests\Inventario\EditarDescripcionListadoInventarioRequest;
@@ -12,12 +13,11 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
-use App\Services\inventario\InventarioServices as InventarioServices;
+use App\Services\inventario\InventarioServices;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class InventariosController extends Controller
 {
@@ -30,14 +30,19 @@ class InventariosController extends Controller
     // asignado sin necesitar el permiso administrativo completo); `listadoConsolidado` se
     // comparte con Préstamos (para elegir qué ítem prestar). El resto es exclusivo de 12.
     private const OPCION_INVENTARIO = Permiso::INVENTARIO;
+
     private const OPCION_MIS_INVENTARIOS = Permiso::MIS_INVENTARIOS;
+
     private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
+
     // cron_opciones bajo id_modulo=6 (Zonas) — Áreas Comunes tiene su propio par de
     // permisos, separado de OPCION_INVENTARIO; historialInventario() los acepta también
     // porque "Ver hoja de vida" ya se ofrece como acción de fila en Listado de Áreas
     // Comunes (ver AGENTS.md "Áreas Comunes").
     private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
+
     private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
+
     // "Mis áreas comunes" (autoservicio, `/inventario/areas-comunes/mis-areas`): sin
     // esta, alguien con SOLO 119 (sin 108/109) cargaría la página pero listadoConsolidado
     // y reportarInventario le devolverían 403 — Reportar es la única acción que esa
@@ -52,7 +57,8 @@ class InventariosController extends Controller
         $this->inventario_services = $inventarioServices;
     }
 
-    public function agregarInventario(RegistrarInventarioRequest $request){
+    public function agregarInventario(RegistrarInventarioRequest $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -61,22 +67,23 @@ class InventariosController extends Controller
 
         $agregar = $this->inventario_services->agregarInventario($inventario_data, $request->cantidad());
 
-        if($agregar['error']){
+        if ($agregar['error']) {
             return response()->json([
                 'error' => true,
                 'message' => $agregar['message'],
-                'data' => $agregar['data']
+                'data' => $agregar['data'],
             ]);
         }
 
         return response()->json([
             'error' => false,
-            'message' => "Se ha agregado el articulo al inventario",
-            "data" => $agregar['data']
+            'message' => 'Se ha agregado el articulo al inventario',
+            'data' => $agregar['data'],
         ]);
     }
 
-    public function obtenerListadoInventario(Request $request){
+    public function obtenerListadoInventario(Request $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS)) {
             return $rechazo;
         }
@@ -90,45 +97,47 @@ class InventariosController extends Controller
 
         // 500, no 200: con 200 el frontend (apiFetch) no lo trata como error y "Mis
         // inventarios" mostraba la lista vacía sin ningún aviso.
-        if($listado_inventario['error']){
+        if ($listado_inventario['error']) {
             return response()->json([
                 'error' => true,
                 'message' => $listado_inventario['message'],
-                'data' => $listado_inventario['data']
+                'data' => $listado_inventario['data'],
             ], 500);
         }
 
         return response()->json([
             'error' => false,
             'message' => $listado_inventario['message'],
-            'data' => $listado_inventario['data']
+            'data' => $listado_inventario['data'],
         ]);
     }
 
-    public function listadoConsolidado(ListadoInventarioRequest $request){
+    public function listadoConsolidado(ListadoInventarioRequest $request)
+    {
         // Áreas Comunes también lo usa (tabla de ítems de Listado/Mis áreas) — ver
         // AGENTS.md "Áreas Comunes".
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
             return $rechazo;
         }
 
-        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual']);
-        $per_page = $request->input('per_page', 15);
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual', 'sort', 'dir']);
+        // `per-page` es el que manda el DataTable remoto de /inventario/listado.
+        $per_page = $request->input('per-page', $request->input('per_page', 15));
 
         $listado = $this->inventario_services->obtenerListadoConsolidado($filtros, $per_page);
 
-        if($listado['error']){
+        if ($listado['error']) {
             return response()->json([
                 'error' => true,
                 'message' => $listado['message'],
-                'data' => $listado['data']
+                'data' => $listado['data'],
             ]);
         }
 
         return response()->json([
             'error' => false,
             'message' => $listado['message'],
-            'data' => $listado['data']
+            'data' => $listado['data'],
         ]);
     }
 
@@ -141,11 +150,12 @@ class InventariosController extends Controller
         }
 
         return $this->apiResponse(
-            $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_bloque_area', 'id_categoria', 's']))
+            $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 's']))
         );
     }
 
-    public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request){
+    public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -160,7 +170,8 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function incrementarCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+    public function incrementarCantidadGrupo(GestionarCantidadListadoInventarioRequest $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -175,7 +186,8 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function disminuirCantidadGrupo(GestionarCantidadListadoInventarioRequest $request){
+    public function disminuirCantidadGrupo(GestionarCantidadListadoInventarioRequest $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -191,7 +203,8 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function actualizarInventario(ActualizarInventarioRequest $request, int $id){
+    public function actualizarInventario(ActualizarInventarioRequest $request, int $id)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -201,7 +214,8 @@ class InventariosController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function historialInventario(Request $request, int $id){
+    public function historialInventario(Request $request, int $id)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
@@ -227,7 +241,7 @@ class InventariosController extends Controller
 
         return response($resultado['data']['contenido'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+            'Content-Disposition' => 'inline; filename="'.$resultado['data']['nombre_archivo'].'"',
         ]);
     }
 
@@ -246,11 +260,12 @@ class InventariosController extends Controller
 
         return response($resultado['data']['contenido'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+            'Content-Disposition' => 'inline; filename="'.$resultado['data']['nombre_archivo'].'"',
         ]);
     }
 
-    public function descontinuarInventario(Request $request){
+    public function descontinuarInventario(Request $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
@@ -258,29 +273,31 @@ class InventariosController extends Controller
         $data = $request->all();
 
         $validator = Validator::make($data, [
-            "ids" => "required|array|min:1",
-            "ids.*" => "integer|distinct|exists:inventario,id",
-            "id_log" => "integer|exists:usuarios,id_user", 
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|distinct|exists:inventario,id',
+            'id_log' => 'integer|exists:usuarios,id_user',
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
-                "error" => true,
-                "message" => $validator->errors()->first(),
+                'error' => true,
+                'message' => $validator->errors()->first(),
             ], 422);
         }
 
         $descontinuar = $this->inventario_services->descontinuarInventario($data['ids'], $data['id_log']);
 
         $status = match (true) {
-            $descontinuar['error'] && str_contains($descontinuar['message'], "SQL") => 500,
+            $descontinuar['error'] && str_contains($descontinuar['message'], 'SQL') => 500,
             $descontinuar['error'] => 400,
             default => 200,
         };
+
         return response()->json($descontinuar, $status);
     }
 
-    public function liberarInventario(Request $request) {
+    public function liberarInventario(Request $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -288,15 +305,15 @@ class InventariosController extends Controller
         $data = $request->only('ids', 'id_log');
 
         $validator = Validator::make($data, [
-            "ids" => "required|array|min:1",
-            "ids.*" => "integer|distinct|exists:inventario,id",
-            "id_log" => "integer|exists:usuarios,id_user"
-            ]);
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|distinct|exists:inventario,id',
+            'id_log' => 'integer|exists:usuarios,id_user',
+        ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
-                "error" => true,
-                "message" => $validator->errors()->first(),
+                'error' => true,
+                'message' => $validator->errors()->first(),
             ], 422);
         }
 
@@ -305,7 +322,8 @@ class InventariosController extends Controller
         return $this->apiResponse($liberar);
     }
 
-    public function asignarInventario(Request $request){
+    public function asignarInventario(Request $request)
+    {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
             return $rechazo;
         }
@@ -315,14 +333,14 @@ class InventariosController extends Controller
         $validator = Validator::make($data, [
             'ids' => 'required|array|min:1',
             'ids.*' => 'integer|distinct|exists:inventario,id',
-            'id_area' => "integer|distinct|exists:areas,id",
-            'id_user' => "integer|distinct|exists:usuarios,id_user"
+            'id_area' => 'integer|distinct|exists:areas,id',
+            'id_user' => 'integer|distinct|exists:usuarios,id_user',
         ]);
 
-        if($validator->fails()){
+        if ($validator->fails()) {
             return response()->json([
-                "error" => true,
-                "message" => $validator->errors()->first(),
+                'error' => true,
+                'message' => $validator->errors()->first(),
             ], 422);
         }
 
@@ -373,10 +391,32 @@ class InventariosController extends Controller
             $request->input('estado_solucion'),
             $request->input('id_area'),
             $request->input('id_bloque'),
-            $request->input('id_responsable')
+            $request->input('id_responsable'),
+            $request->input('sort') === 'fechareg' ? $request->input('dir') : null
         );
 
         return $this->apiResponse($resultado);
+    }
+
+    // GET /inventario/reportes/estadisticas — gráficas del historial (/inventario/reportes),
+    // con los mismos filtros que el listado.
+    public function estadisticasReportes(MostrarReportesInventarioRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->inventario_services->estadisticasReportes([
+            'id_user' => $request->input('id_user'),
+            'id_anio' => $request->input('id_anio'),
+            'id_periodo' => $request->input('id_periodo'),
+            'search' => $request->input('search', $request->input('s')),
+            'tipo_categoria' => $request->input('tipo_categoria'),
+            'tipo_reporte' => $request->input('tipo_reporte'),
+            'id_categoria' => $request->input('id_categoria'),
+            'estado_solucion' => $request->input('estado_solucion'),
+            'id_area' => $request->input('id_area'),
+        ]));
     }
 
     public function solucionarReporteInventario(SolucionarReporteInventarioRequest $request)
@@ -447,23 +487,23 @@ class InventariosController extends Controller
         $data = $request->all();
 
         $validator = Validator::make($data, [
-            "ids" => "required|array|min:1",
-            "ids.*" => "integer|distinct|exists:inventario,id",
-            "fecha_inicio" => "required|date",
-            "fecha_fin" => "required|date|after_or_equal:fecha_inicio",
-            "descripcion" => "required|string",
-            "id_anio" => "required|integer|exists:anio_escolar,id",
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|distinct|exists:inventario,id',
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date|after_or_equal:fecha_inicio',
+            'descripcion' => 'required|string',
+            'id_anio' => 'required|integer|exists:anio_escolar,id',
             // El id real de una fila de `periodos`, igual que en ReportarInventarioRequest.
-            "periodo" => "required|integer|exists:periodos,id",
-            "id_log" => "required|integer|exists:usuarios,id_user",
-            "con_solucion" => "boolean",
-            "id_tecnico" => "nullable|integer|exists:usuarios,id_user",
+            'periodo' => 'required|integer|exists:periodos,id',
+            'id_log' => 'required|integer|exists:usuarios,id_user',
+            'con_solucion' => 'boolean',
+            'id_tecnico' => 'nullable|integer|exists:usuarios,id_user',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
-                "error" => true,
-                "message" => $validator->errors()->first(),
+                'error' => true,
+                'message' => $validator->errors()->first(),
             ], 422);
         }
 
@@ -491,16 +531,16 @@ class InventariosController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            "ids" => "required|array|min:1",
-            "ids.*" => "integer|distinct|exists:inventario,id",
-            "con_solucion" => "boolean",
-            "id_log" => "required|integer|exists:usuarios,id_user",
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer|distinct|exists:inventario,id',
+            'con_solucion' => 'boolean',
+            'id_log' => 'required|integer|exists:usuarios,id_user',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
-                "error" => true,
-                "message" => $validator->errors()->first(),
+                'error' => true,
+                'message' => $validator->errors()->first(),
             ], 422);
         }
 
@@ -518,7 +558,7 @@ class InventariosController extends Controller
 
         return response($resultado['data']['contenido'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $resultado['data']['nombre_archivo'] . '"',
+            'Content-Disposition' => 'attachment; filename="'.$resultado['data']['nombre_archivo'].'"',
         ]);
     }
 
@@ -582,7 +622,7 @@ class InventariosController extends Controller
 
         return response($resultado['data']['contenido'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $resultado['data']['nombre_archivo'] . '"',
+            'Content-Disposition' => 'inline; filename="'.$resultado['data']['nombre_archivo'].'"',
         ]);
     }
 
