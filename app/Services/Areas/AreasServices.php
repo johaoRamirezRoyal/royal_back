@@ -5,31 +5,31 @@ namespace App\Services\Areas;
 use App\Models\Areas\Areas;
 use App\Models\Inventario\Inventario;
 use App\Models\Usuarios\Usuario;
-use Illuminate\Support\Facades\DB;
 use App\Services\Service;
+use Illuminate\Support\Facades\DB;
 
 class AreasServices extends Service
 {
     public function crearArea($datos)
     {
-        $nombre = $datos["nombre"];
-        $user_log = $datos["user_log"];
+        $nombre = $datos['nombre'];
+        $user_log = $datos['user_log'];
 
         try {
             $area_nueva = Areas::create([
-                "nombre" => $nombre,
-                "user_log" => $user_log,
-                "fechareg" => now()
-            ])->latest("id")->first();
+                'nombre' => $nombre,
+                'user_log' => $user_log,
+                'fechareg' => now(),
+            ])->latest('id')->first();
 
             return [
-                "error" => false,
-                "data" => $area_nueva->toArray()
+                'error' => false,
+                'data' => $area_nueva->toArray(),
             ];
         } catch (\Exception $e) {
             return [
-                "error" => true,
-                "message" => $e->getMessage()
+                'error' => true,
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -39,26 +39,28 @@ class AreasServices extends Service
         try {
             // Con su bloque: el listado de inventario arma de aquí el filtro "Bloque".
             $areas = Areas::with('bloque:id,nombre')->get();
+
             return [
                 'error' => false,
-                'data' => $areas
+                'data' => $areas,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
 
-    public function actualizarArea($id, $datos){
+    public function actualizarArea($id, $datos)
+    {
         try {
             $area = Areas::find($id);
 
-            if (!$area) {
+            if (! $area) {
                 return [
                     'error' => true,
-                    'message' => 'Área no encontrada'
+                    'message' => 'Área no encontrada',
                 ];
             }
 
@@ -66,13 +68,13 @@ class AreasServices extends Service
 
             return [
                 'error' => false,
-                'message' => 'Área actualizada correctamente'
+                'message' => 'Área actualizada correctamente',
             ];
 
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -93,6 +95,7 @@ class AreasServices extends Service
 
             if ($ocupada) {
                 $bloque = $ocupada->bloque->nombre ?? "#{$ocupada->id_bloque}";
+
                 return [
                     'error' => true,
                     'message' => "El área {$ocupada->nombre} ya está asignada al bloque {$bloque}",
@@ -104,7 +107,7 @@ class AreasServices extends Service
                     ->whereNotIn('id', $ids)
                     ->update(['id_bloque' => null]);
 
-                if (!empty($ids)) {
+                if (! empty($ids)) {
                     Areas::whereIn('id', $ids)->update(['id_bloque' => $idBloque]);
                 }
             });
@@ -138,12 +141,13 @@ class AreasServices extends Service
         }
     }
 
-    public function filtrarAreas($filtro){
-        try{
-            $areas = Areas::where('nombre', 'like', '%' . $filtro . '%')
-                        ->get();
+    public function filtrarAreas($filtro)
+    {
+        try {
+            $areas = Areas::where('nombre', 'like', '%'.$filtro.'%')
+                ->get();
 
-            if($areas->isEmpty()){
+            if ($areas->isEmpty()) {
                 return [
                     'error' => false,
                     'message' => 'No se encontraron áreas con el filtro proporcionado',
@@ -157,7 +161,7 @@ class AreasServices extends Service
                 'data' => $areas,
             ];
 
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
@@ -170,14 +174,15 @@ class AreasServices extends Service
     {
         try {
             Areas::whereIn('id', $ids)->update(['activo' => $estado]);
+
             return [
                 'error' => false,
-                'message' => 'Áreas actualizadas correctamente'
+                'message' => 'Áreas actualizadas correctamente',
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -186,24 +191,24 @@ class AreasServices extends Service
     {
         try {
             $inventario = Inventario::where('id_area', $id_area)
-                                ->update(['id_user' => $id_user]);
+                ->update(['id_user' => $id_user]);
 
-            if($inventario === 0){
+            if ($inventario === 0) {
                 return [
                     'error' => true,
-                    'message' => 'No se puedo asignar el area'
+                    'message' => 'No se puedo asignar el area',
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => 'Área Asignada correctamente'
+                'message' => 'Área Asignada correctamente',
             ];
 
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -219,35 +224,36 @@ class AreasServices extends Service
 
             return [
                 'error' => false,
-                'data' => $usuarios
+                'data' => $usuarios,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
 
-    public function usuarioResponsableArea(int $id_area): array{
+    public function usuarioResponsableArea(int $id_area): array
+    {
         try {
             $responsables = Inventario::where('id_area', $id_area)
-                            ->whereNotNull('id_user')
-                            ->with('usuario:id_user,nombre,apellido')
-                            ->get()
-                            ->pluck('usuario')
-                            ->filter()
-                            ->unique('id_user')
-                            ->values();
+                ->whereNotNull('id_user')
+                ->with('usuario:id_user,nombre,apellido')
+                ->get()
+                ->pluck('usuario')
+                ->filter()
+                ->unique('id_user')
+                ->values();
 
             return [
                 'error' => false,
-                'data' => $responsables
+                'data' => $responsables,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }
@@ -255,23 +261,29 @@ class AreasServices extends Service
     public function usuariosResponsablesAreas(array $ids): array
     {
         try {
-            $responsables = Inventario::whereIn('id_area', $ids)
-                            ->whereNotNull('id_user')
-                            ->with('usuario:id_user,nombre,apellido')
-                            ->get()
-                            ->groupBy('id_area')
-                            ->map(function ($items) {
-                                return $items->pluck('usuario')->filter()->first();
-                            });
+            // Responsable = el usuario del primer ítem (menor id) de cada área con un usuario
+            // existente. Antes se cargaba como modelos TODO el inventario de las áreas pedidas
+            // (~28k filas para el listado de /inventario/areas) solo para quedarse con uno.
+            $primerItemPorArea = Inventario::query()
+                ->join('usuarios as u', 'u.id_user', '=', 'inventario.id_user')
+                ->whereIn('inventario.id_area', $ids)
+                ->groupBy('inventario.id_area')
+                ->selectRaw('MIN(inventario.id) as id')
+                ->pluck('id');
+
+            $responsables = Inventario::whereIn('id', $primerItemPorArea)
+                ->with('usuario:id_user,nombre,apellido')
+                ->get(['id', 'id_area', 'id_user'])
+                ->mapWithKeys(fn ($item) => [$item->id_area => $item->usuario]);
 
             return [
                 'error' => false,
-                'data' => $responsables
+                'data' => $responsables,
             ];
         } catch (\Exception $e) {
             return [
                 'error' => true,
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ];
         }
     }

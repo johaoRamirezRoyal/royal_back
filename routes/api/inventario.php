@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Inventarios\InventariosController;
-use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::MIS_INVENTARIOS]));
 Route::get('/listado-consolidado', [InventariosController::class, 'listadoConsolidado'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::PRESTAMOS_INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO, Permiso::MIS_AREAS_COMUNES]));
@@ -32,6 +32,7 @@ Route::put('/asignar', [InventariosController::class, 'asignarInventario'])->mid
 Route::post('/reportar', [InventariosController::class, 'reportarInventario'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::MIS_INVENTARIOS, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO, Permiso::MIS_AREAS_COMUNES]));
 Route::get('/reportes', [InventariosController::class, 'mostrarReportesDeInventario'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
 Route::put('/reportes/solucionar', [InventariosController::class, 'solucionarReporteInventario'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
+Route::get('/reportes/estadisticas', [InventariosController::class, 'estadisticasReportes'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
 Route::get('/reportes/visto-bueno', [InventariosController::class, 'reportesPendientesVistoBueno'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::put('/reportes/visto-bueno', [InventariosController::class, 'vistoBuenoGeneral'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::put('/reportes/{id}/visto-bueno', [InventariosController::class, 'vistoBuenoReporte'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::INVENTARIO]));

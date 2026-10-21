@@ -990,6 +990,30 @@ resuelve, una fila "solución" (`estado=3`) con `id_reporte` apuntando a la orig
   el frontend siga mandando `estado` en `externalFilters`. El parámetro `sin_solucion`
   se acepta pero no se usa en la query (queda muerto, la rama pendientes/solucionados ya
   la decide `estado_solucion`).
+  - **Joins y filtros en `consultaReportes()`** (privado), compartido con las estadísticas:
+    cualquier filtro nuevo va ahí, no en cada consumidor.
+  - **Campos de la fila vs. del ítem**: `reporte_id`, `fechareg` (fecha del reporte; en
+    preventivos la del mantenimiento), `fecha_creacion` (`rp.fechareg` real),
+    `reportado_por` (quién reportó, `rp.id_user`), `descripcion_reporte`
+    (`COALESCE(rp.descripcion, rp.observacion)`: casi todos los reportes traen el texto solo
+    en `observacion`) y `solucionado_por` son de la FILA. `id_reporte` (último reporte del
+    ítem), `fecha_reporte` (último daño del ítem) y `nom_usuario` (responsable del ítem) son
+    del ÍTEM y se conservan solo por compatibilidad — el historial los mostraba como si
+    fueran de la fila (corregido 2026-10-21).
+  - **Año (`id_anio`)**: `rp.id_anio` o, si el reporte no lo tiene (65% del histórico, del
+    sistema anterior), que `rp.fechareg` caiga en el rango del año escolar
+    (`AnioEscolarServices::rangoDeAnioEscolar`). `id_periodo` es el id real de `periodos`.
+  - Orden: `sort=fechareg&dir=asc|desc` (por defecto desc). La búsqueda incluye el texto
+    del problema.
+- **`GET /inventario/reportes/estadisticas`** (`estadisticasReportes`) — gráficas del
+  historial con los mismos filtros (por defecto `estado_solucion=todos` y solo
+  correctivos + preventivos: las filas de liberación/baja/préstamo no son fallas). Trae las
+  filas con pocas columnas y agrega en PHP (medianas): `resumen` (total, pendientes,
+  solucionados, mediana/promedio de horas de solución de correctivos descartando tiempos
+  negativos, ítems con ≥3 reportes), `por_mes` (12 meses o los del año filtrado),
+  `por_categoria`/`por_area` (top 10 con pendientes), `tiempo_por_categoria` (mediana en
+  días, ≥5 soluciones), `top_items`, `top_reportadores`, `top_resolutores`, `por_periodo`
+  (con año). ~300 ms sin filtros en local.
 - **`PUT /inventario/reportes/solucionar`** (`solucionarReporteInventario`) — crea la
   fila "solución" (`estado=3`). Guarda el texto de la solución en **`descripcion`**, no
   en `observacion` (`observacion` queda `NULL` en la fila de solución). **Quirk de
