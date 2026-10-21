@@ -105,6 +105,22 @@ comentarios ya presentes ahí). No hace falta tocar `down()`.
 | `/solicitudes` | `api/solicitudes.php` |
 | `/evaluaciones` | `api/evaluaciones.php` |
 
+## Imágenes del disco de uploads — miniaturas (`GET /api/public/{ruta}?w=`)
+
+`DocumentoController::verPublico` sirve cualquier archivo del disco de uploads (detrás de
+`auth:api`, caché `private` de 7 días). Con `?w=64|128|256|512` y una imagen
+(jpg/png/webp/gif) devuelve una **miniatura** de ese ancho en WebP (JPEG si GD no tiene WebP),
+corrigiendo la orientación EXIF. Se genera la primera vez en
+`storage/app/miniaturas/{ancho}/{sha1(ruta)}` y se reusa mientras el original no cambie (fuera
+de git). Otro ancho, un archivo que no es imagen o uno que GD no puede leer → el original.
+Ejemplo real: una foto de perfil de 140 KB queda en 5,6 KB a 128 px. Lo que no cambia: cada
+imagen sigue siendo una petición a Laravel (arranque + JWT), así que el tiempo por imagen lo
+domina eso, no el archivo.
+
+`UsuarioResource` (respuesta de `/auth/check` y del login) incluye `foto_perfil`: el
+`nombre_foto` activo de `foto_perfil`, para que el frontend no pida `/info-perfil` solo para el
+avatar.
+
 ## Autenticación JWT
 
 ### Flujo
