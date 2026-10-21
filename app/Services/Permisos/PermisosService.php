@@ -64,11 +64,11 @@ class PermisosService extends Service
         $id_perfil = $datos['id_perfil'];
 
         try {
-            $permiso = Permiso::where('id_opcion', $id_opcion)
-                ->where('id_perfil', $id_perfil)
-                ->first();
+            // Todas las filas del par, no solo la primera: en producción hubo pares duplicados
+            // (102/20) y borrar una sola dejaba el permiso activo aunque la UI lo mostrara quitado.
+            $borradas = Permiso::where('id_opcion', $id_opcion)->where('id_perfil', $id_perfil)->delete();
 
-            if (!$permiso) {
+            if (!$borradas) {
                 return [
                     'error' => true,
                     'message' => 'El permiso no existe',
@@ -76,12 +76,10 @@ class PermisosService extends Service
                 ];
             }
 
-            $permiso->delete();
-
             return [
                 'error' => false,
                 'message' => 'Permiso eliminado',
-                'data' => $permiso->toArray()
+                'data' => $datos
             ];
         } catch (\Exception $ex) {
             $this->sendError($ex, "error al eliminar el permiso");
