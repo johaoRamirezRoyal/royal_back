@@ -10,6 +10,7 @@ use App\Models\GestionAcademica\HorarioClase;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Exception;
+use Illuminate\Support\Str;
 
 /**
  * Autoservicio de horario: el propio docente arma su horario eligiendo, para cada
@@ -43,6 +44,8 @@ class DocenteHorarioService extends Service
                 ->where('activo', 1)
                 ->get()
                 ->filter(fn ($da) => $da->asignatura?->activo)
+                // Por nombre, no en el orden en que se le asignaron al docente.
+                ->sortBy(fn ($da) => Str::lower(Str::ascii($da->asignatura->nombre)))
                 ->values();
 
             // Cursos del/los nivel(es) académico(s) del docente. usuarios.id_nivel/id_nivel_2
@@ -69,11 +72,12 @@ class DocenteHorarioService extends Service
                 ];
             }
 
-            $cursos = Cursos::with('nivel:id,nombre')
+            // Orden académico (nivel → grado → sección), no alfabético: por nombre salía
+            // "Cuarto, Primero, Quinto, Segundo…".
+            $cursos = Cursos::ordenarPorGrado(Cursos::with('nivel:id,nombre')
                 ->where('activo', 1)
                 ->whereIn('id_nivel', $idsNivelAcademico)
-                ->orderBy('nombre')
-                ->get();
+                ->get());
 
             if ($cursos->isEmpty()) {
                 return [
