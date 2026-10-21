@@ -56,6 +56,9 @@ return [
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost'),
 
+    // true bloquea toda la API con 503 (ver App\Http\Middleware\ModoMantenimiento).
+    'mantenimiento' => (bool) env('MANTENIMIENTO', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

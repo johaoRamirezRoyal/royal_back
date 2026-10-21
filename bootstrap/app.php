@@ -5,6 +5,7 @@ use App\Http\Middleware\EnsureInstitucionSession;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
+use App\Http\Middleware\ModoMantenimiento;
 use App\Http\Middleware\RequirePermiso;
 use App\Http\Middleware\ResolveColegioAdmision;
 use App\Http\Middleware\RestrictToAdminEmails;
@@ -26,6 +27,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prependToGroup('api', JwtFromCookie::class);
+        // Va antes que todo (prepend posterior = primero): en mantenimiento ni lee la sesión.
+        $middleware->prependToGroup('api', ModoMantenimiento::class);
         // Necesita $request->user() (JwtFromCookie ya corrió) y debe correr ANTES que
         // cualquier modelo de negocio toque la DB — por eso va primero entre los appended.
         $middleware->appendToGroup('api', SwitchActiveConnection::class);
