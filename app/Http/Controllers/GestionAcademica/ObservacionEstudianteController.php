@@ -127,7 +127,10 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
 
     public function estudiantes(Request $request)
     {
-        return $this->apiResponse($this->service->buscarEstudiantes($this->acceso(), $request->input('s')));
+        // `?todos=1`: todos los del alcance, sin el tope de 20 del buscador (listado de la hoja de vida).
+        $limite = $request->boolean('todos') ? null : 20;
+
+        return $this->apiResponse($this->service->buscarEstudiantes($this->acceso(), $request->input('s'), $limite));
     }
 
     /** Acta del estudiante en `?id_periodo=` (por defecto el periodo actual). */

@@ -304,7 +304,8 @@ class ObservacionEstudianteService
     }
 
     /** Búsqueda de estudiantes (para abrir el acta de uno que aún no tiene observaciones). */
-    public function buscarEstudiantes(AccesoObservaciones $acceso, ?string $busqueda): array
+    /** Sin `$limite` (null) devuelve todos los del alcance: el listado de la hoja de vida. */
+    public function buscarEstudiantes(AccesoObservaciones $acceso, ?string $busqueda, ?int $limite = 20): array
     {
         try {
             $like = '%' . trim((string) $busqueda) . '%';
@@ -316,8 +317,8 @@ class ObservacionEstudianteService
                     ->orWhere('u.documento', 'like', $like)))
                 ->orderBy('u.apellido')
                 ->orderBy('u.nombre')
-                ->limit(20)
-                ->get(['u.id_user as id_estudiante', 'u.documento', self::nombre('u', 'estudiante'), 'c.nombre as curso']);
+                ->when($limite !== null, fn ($q) => $q->limit($limite))
+                ->get(['u.id_user as id_estudiante', 'u.documento', self::nombre('u', 'estudiante'), 'u.id_curso', 'c.nombre as curso', 'u.foto_carnet']);
 
             return ['error' => false, 'message' => 'Estudiantes obtenidos', 'data' => $estudiantes];
         } catch (Throwable $e) {
