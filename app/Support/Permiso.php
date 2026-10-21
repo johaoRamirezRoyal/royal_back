@@ -45,7 +45,8 @@ final class Permiso
     public const INDICADORES_AIRES = 95;                // "Indicadores de gestion Aires"
     public const GESTION_ACADEMICA = 99;                // "Gestión Académica"
     public const CONFIGURACION_ASISTENCIA = 100;        // "Configuración de asistencia"
-    public const LLEGADAS_TARDE = 101;                  // "Llegadas Tarde Academicas"
+    // 101 "Llegadas Tarde Academicas" no tiene constante: el backend no la consulta (sin la 99
+    // el acceso a Llegadas tarde ya es el restringido); solo la usa el frontend para gatear.
     public const METRICAS_ASISTENCIA_ACADEMICA = 102;   // "Asistencia Docentes"
     public const COMPRAS_GESTION = 104;                 // "Compras — Gestión de compras"
     public const COMPRAS_VENTAS = 105;                  // "Compras — Ventas"
@@ -73,6 +74,12 @@ final class Permiso
     public const ACTAS_VER = 136;                       // "Ver actas de estudiantes"
     public const ACTAS_GESTIONAR = 137;                 // "Gestionar actas de estudiantes"
     public const ACTAS_MIS_ESTUDIANTES = 138;           // "Ver actas de mis estudiantes"
+
+    /**
+     * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás
+     * (PermisosPerfil) pero no estas: con la 135, Observaciones lo dejaría en solo lectura.
+     */
+    public const OPCIONES_RESTRICTIVAS = [self::OBSERVACIONES_SOLO_CONSULTA];
 
     // ─── Perfiles ───────────────────────────────────────────────
     public const PERFIL_SUPER_ADMIN = 1;

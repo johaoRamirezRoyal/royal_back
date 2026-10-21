@@ -8,6 +8,7 @@ use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
 use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
+use App\Services\Usuarios\PermisosPerfil;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -143,22 +144,17 @@ class UsuariosController extends Controller
         ], 200);
     }
 
-    public function tienePermiso(Request $request)
+    /**
+     * Opciones (cron_opciones.id) del perfil del usuario autenticado, en una sola lista: el
+     * frontend la pide una vez por sesión en vez de una petición por opción. Solo las propias,
+     * nunca las de otro perfil.
+     */
+    public function misPermisos(Request $request)
     {
-        $opcion = $request->input('opt');
-        $perfil = $request->input('per');
-
-        $permiso = $this->service_usuarios->tienePermiso($opcion, $perfil);
-        $code = ($permiso['permiso']) ? 200 : 405;
-
-        if ($permiso['error']) {
-            return response()->json([
-                'error' => true,
-                'message' => $permiso['message'],
-            ], $code);
-        }
-
-        return response()->json($permiso, $code);
+        return response()->json([
+            'error' => false,
+            'data' => PermisosPerfil::opciones($request),
+        ], 200);
     }
 
     public function mostrarInfoUsuarioId($id)

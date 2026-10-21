@@ -144,10 +144,12 @@ Tablas legacy manejadas directo por SQL (`DB::table(...)`, no Eloquent/seeders):
 - `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, ...) — la matriz real: qué
   `id_perfil` tiene otorgada cuál `id_opcion`.
 
-`UsuariosServices::tienePermiso($opcion, $perfil)` responde `GET /api/usuarios/permiso?opt=&per=`
-(`UsuariosController::tienePermiso`), lo que consulta el frontend para decidir qué renderizar
-(`PermissionGate`, fail-closed — ver `docs/sistema-permisos.md` del frontend). El backend **no**
-lo usa para proteger endpoints: para eso está lo de abajo.
+`GET /api/usuarios/mis-permisos` (`UsuariosController::misPermisos` → `PermisosPerfil::opciones`)
+devuelve los ids de todas las opciones del perfil del usuario autenticado; el frontend lo pide
+una vez por sesión para decidir qué renderizar (`PermissionGate`, fail-closed — ver
+`docs/sistema-permisos.md` del frontend). Reemplazó al antiguo
+`GET /api/usuarios/permiso?opt=&per=` (una consulta por opción, y tomaba el perfil del cliente),
+ya eliminado. No protege endpoints: para eso está lo de abajo.
 
 **Cada endpoint con permiso lo declara en la ruta y en el controller** (desde 2026-10-20;
 historial completo, verificación y pendientes en `docs/PERMISOS_MIDDLEWARE_2026_10_20.md`):
@@ -193,10 +195,14 @@ Reglas:
   `up()` con `insertGetId` en `cron_opciones` + inserts iniciales en `cron_permisos`, y un
   `down()` simétrico. El `id` lo asigna el autoincrement — corre la migración local antes
   de hardcodear el número en el frontend.
-- **Todo es fail-closed, incluido Super Admin**: crear la fila en `cron_opciones` sin el
-  `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso — ni
-  siquiera perfil 1, porque `tienePermiso()` no tiene ningún caso especial para Super
-  Admin, solo mira la fila de `cron_permisos`. Pasó de verdad con la opción "Metricas
+- **Super Admin tiene acceso a todo** (desde 2026-10-21): `PermisosPerfil` le da todas las
+  opciones existentes menos `Permiso::OPCIONES_RESTRICTIVAS` (las que quitan capacidades, hoy
+  la 135), y `RequirePermiso` lo deja pasar también en reglas solo de perfil. Una opción nueva
+  que restrinja en vez de dar acceso va en `OPCIONES_RESTRICTIVAS`. `crearPermiso`/`eliminarPermiso`
+  rechazan el perfil 1 (422) y `/permisos` no muestra interruptores en su tarjeta.
+- **Todo lo demás es fail-closed**: crear la fila en `cron_opciones` sin el
+  `up()` también insertando en `cron_permisos` deja la opción sin nadie con acceso (salvo
+  Super Admin). Pasó de verdad con la opción "Metricas
   Asistencias" (id 127 hoy, ver `2026_09_16_160000_seed_permisos_opcion_metricas_asistencias.php`):
   quedó creada pero invisible para todos hasta que una segunda migración le otorgó el
   acceso. Al agregar una opción, verifica en el mismo `up()` (o justo después, con el
