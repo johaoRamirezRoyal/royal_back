@@ -27,6 +27,10 @@ class UsuarioResource extends JsonResource
             'id_nivel' => $this->id_nivel,
             'nombre_nivel' => $this->whenLoaded('nivelRelacion', fn () => $this->nivelRelacion->nombre),
             'foto_carnet' => $this->foto_carnet,
+            // Nombre de la foto subida en Perfil (en el disco de uploads, se sirve por
+            // /api/public/{nombre}?w=); null si no tiene. Viaja con la sesión para que el
+            // frontend no pida /info-perfil solo para mostrar el avatar.
+            'foto_perfil' => $this->fotoPerfil()->where('activo', 1)->orderByDesc('id')->value('nombre_foto'),
             'correo' => $this->correo,
             // Logo, nombre y color de la marca del dominio de este correo (multi-tenant) —
             // logo_path ya es una URL de Cloudinary lista para usar en un <img src>, no una
