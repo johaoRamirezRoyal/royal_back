@@ -717,6 +717,12 @@ pero las rutas cuelgan del prefijo propio.
   con `id_usuario_registra` nulo. Mismo alcance de estudiantes que el acta: fuera de los cursos
   del docente responde 404.
 
+**Elegir el docente** (2026-10-21): es la opción `139` (`Permiso::OBSERVACIONES_ELEGIR_DOCENTE`,
+migración `2026_10_21_100000_seed_opcion_observaciones_elegir_docente`, sin otorgar a ningún
+perfil). `AccesoObservaciones::eligeDocente()` = puede registrar **y** tiene la 139; sin ella
+`docenteDe()` ignora el `id_docente` del cliente y la observación queda a nombre de quien la
+registra, aunque tenga la 133/99.
+
 ### Modelo
 
 - Una fila = una observación de un día: `fecha`, `tipo` (`POSITIVA`|`NEGATIVA`), `motivo`,

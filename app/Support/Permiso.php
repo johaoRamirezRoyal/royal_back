@@ -74,6 +74,7 @@ final class Permiso
     public const ACTAS_VER = 136;                       // "Ver actas de estudiantes"
     public const ACTAS_GESTIONAR = 137;                 // "Gestionar actas de estudiantes"
     public const ACTAS_MIS_ESTUDIANTES = 138;           // "Ver actas de mis estudiantes"
+    public const OBSERVACIONES_ELEGIR_DOCENTE = 139;    // "Observaciones — Elegir docente"
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

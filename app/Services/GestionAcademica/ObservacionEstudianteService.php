@@ -208,7 +208,7 @@ class ObservacionEstudianteService
     }
 
     /**
-     * Docente a quien queda la observación: con la 133/99 el que eligió (obligatorio, docente
+     * Docente a quien queda la observación: con la 139 el que eligió (obligatorio, docente
      * activo); si no, `$actual` (al editar, el que ya tenía) o el propio usuario.
      * Devuelve [error|null, idDocente].
      */

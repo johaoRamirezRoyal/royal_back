@@ -36,6 +36,7 @@ docente** al registrar una observación, en vez de que quede a su nombre.
   Solo quien la digitó la edita o elimina. Cada quien ve las que tiene como docente o las que
   registró.
 - `AccesoObservaciones::eligeDocente()` = puede registrar a cualquier estudiante (133/99).
+  **Cambiado el 2026-10-21**: ahora es una opción propia, la 139 (ver `AGENTS.md`).
   `/catalogos` y el acta devuelven `elige_docente`; el acta trae `docentes` (perfiles 3/14
   activos, primero los que dictan en el curso, cada uno con sus asignaturas en ese curso).
 - El service exige `id_docente` (docente activo) cuando `eligeDocente()`, y valida la
