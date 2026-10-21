@@ -708,6 +708,21 @@ Tabla `academico_observacion_estudiante`. Frontend: `/gestion-convivencial/obser
 El controller vive en el namespace `GestionAcademica` porque se reusa la carga académica,
 pero las rutas cuelgan del prefijo propio.
 
+**Lo que ve de otros docentes quien no tiene la 134** (2026-10-21), siempre de solo lectura:
+- `acta()` trae `resumen_global`: positivas y negativas del estudiante en el periodo, de todos
+  los docentes (`conteoGlobal`). `resumen` sigue siendo solo de las propias.
+- `GET /observaciones/estudiantes/{id}/dia?fecha=Y-m-d` (`delDia`): las observaciones que
+  OTROS docentes le registraron al estudiante ese día, completas y con `editable: false`.
+  Excluye las propias (como docente o como quien la registró), con `<=>` para no perder filas
+  con `id_usuario_registra` nulo. Mismo alcance de estudiantes que el acta: fuera de los cursos
+  del docente responde 404.
+
+**Elegir el docente** (2026-10-21): es la opción `139` (`Permiso::OBSERVACIONES_ELEGIR_DOCENTE`,
+migración `2026_10_21_100000_seed_opcion_observaciones_elegir_docente`, sin otorgar a ningún
+perfil). `AccesoObservaciones::eligeDocente()` = puede registrar **y** tiene la 139; sin ella
+`docenteDe()` ignora el `id_docente` del cliente y la observación queda a nombre de quien la
+registra, aunque tenga la 133/99.
+
 ### Modelo
 
 - Una fila = una observación de un día: `fecha`, `tipo` (`POSITIVA`|`NEGATIVA`), `motivo`,
@@ -990,6 +1005,30 @@ resuelve, una fila "solución" (`estado=3`) con `id_reporte` apuntando a la orig
   el frontend siga mandando `estado` en `externalFilters`. El parámetro `sin_solucion`
   se acepta pero no se usa en la query (queda muerto, la rama pendientes/solucionados ya
   la decide `estado_solucion`).
+  - **Joins y filtros en `consultaReportes()`** (privado), compartido con las estadísticas:
+    cualquier filtro nuevo va ahí, no en cada consumidor.
+  - **Campos de la fila vs. del ítem**: `reporte_id`, `fechareg` (fecha del reporte; en
+    preventivos la del mantenimiento), `fecha_creacion` (`rp.fechareg` real),
+    `reportado_por` (quién reportó, `rp.id_user`), `descripcion_reporte`
+    (`COALESCE(rp.descripcion, rp.observacion)`: casi todos los reportes traen el texto solo
+    en `observacion`) y `solucionado_por` son de la FILA. `id_reporte` (último reporte del
+    ítem), `fecha_reporte` (último daño del ítem) y `nom_usuario` (responsable del ítem) son
+    del ÍTEM y se conservan solo por compatibilidad — el historial los mostraba como si
+    fueran de la fila (corregido 2026-10-21).
+  - **Año (`id_anio`)**: `rp.id_anio` o, si el reporte no lo tiene (65% del histórico, del
+    sistema anterior), que `rp.fechareg` caiga en el rango del año escolar
+    (`AnioEscolarServices::rangoDeAnioEscolar`). `id_periodo` es el id real de `periodos`.
+  - Orden: `sort=fechareg&dir=asc|desc` (por defecto desc). La búsqueda incluye el texto
+    del problema.
+- **`GET /inventario/reportes/estadisticas`** (`estadisticasReportes`) — gráficas del
+  historial con los mismos filtros (por defecto `estado_solucion=todos` y solo
+  correctivos + preventivos: las filas de liberación/baja/préstamo no son fallas). Trae las
+  filas con pocas columnas y agrega en PHP (medianas): `resumen` (total, pendientes,
+  solucionados, mediana/promedio de horas de solución de correctivos descartando tiempos
+  negativos, ítems con ≥3 reportes), `por_mes` (12 meses o los del año filtrado),
+  `por_categoria`/`por_area` (top 10 con pendientes), `tiempo_por_categoria` (mediana en
+  días, ≥5 soluciones), `top_items`, `top_reportadores`, `top_resolutores`, `por_periodo`
+  (con año). ~300 ms sin filtros en local.
 - **`PUT /inventario/reportes/solucionar`** (`solucionarReporteInventario`) — crea la
   fila "solución" (`estado=3`). Guarda el texto de la solución en **`descripcion`**, no
   en `observacion` (`observacion` queda `NULL` en la fila de solución). **Quirk de

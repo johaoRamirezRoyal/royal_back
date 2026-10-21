@@ -45,6 +45,10 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
 
     private const OPCION_SOLO_CONSULTA = Permiso::OBSERVACIONES_SOLO_CONSULTA;
 
+    // "Elegir docente": al registrar, elige a qué docente corresponde la observación. Sin
+    // ella queda a nombre de quien la registra, aunque tenga la 133/99.
+    private const OPCION_ELEGIR_DOCENTE = Permiso::OBSERVACIONES_ELEGIR_DOCENTE;
+
     private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     private ?AccesoObservaciones $acceso = null;
@@ -81,6 +85,7 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
             idsCursosRegistro: $registraTodos
                 ? null
                 : collect($esDocente ? ($this->cargaAcademica->obtenerCursosDocente($usuario->id_user)['data'] ?? []) : [])->pluck('id')->all(),
+            tieneElegirDocente: $tiene(self::OPCION_ELEGIR_DOCENTE),
         );
     }
 
@@ -131,6 +136,14 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
         $idPeriodo = $request->integer('id_periodo') ?: null;
 
         return $this->apiResponse($this->service->acta($this->acceso(), $idEstudiante, $idPeriodo));
+    }
+
+    /** Observaciones de otros docentes al estudiante en `?fecha=` (Y-m-d). */
+    public function delDia(Request $request, int $idEstudiante)
+    {
+        $fecha = $request->validate(['fecha' => 'required|date_format:Y-m-d'])['fecha'];
+
+        return $this->apiResponse($this->service->delDia($this->acceso(), $idEstudiante, $fecha));
     }
 
     public function store(Request $request)

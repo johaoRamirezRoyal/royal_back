@@ -15,12 +15,15 @@ final class AccesoObservaciones
      *                                 ("solo consulta"), que además implica $verTodas.
      * @param  array<int>|null  $idsCursosRegistro  Cursos donde puede registrar: null = todos
      *                                               (133/99), array = los suyos (docente).
+     * @param  bool  $tieneElegirDocente  Opción 139 "Elegir docente". Sin ella, la observación
+     *                                     queda a nombre de quien la registra.
      */
     public function __construct(
         public readonly int $idUsuario,
         public readonly bool $verTodas,
         public readonly bool $puedeRegistrar,
         public readonly ?array $idsCursosRegistro,
+        public readonly bool $tieneElegirDocente = false,
     ) {
     }
 
@@ -37,11 +40,11 @@ final class AccesoObservaciones
     }
 
     /**
-     * Opción 133/99 (registra a cualquier estudiante): al registrar elige el docente a quien
-     * corresponde la observación, en vez de quedar a su nombre.
+     * Opción 139 (y poder registrar): al registrar elige el docente a quien corresponde la
+     * observación. Sin ella queda a nombre de quien la registra, aunque tenga la 133/99.
      */
     public function eligeDocente(): bool
     {
-        return $this->puedeRegistrar && $this->idsCursosRegistro === null;
+        return $this->puedeRegistrar && $this->tieneElegirDocente;
     }
 }

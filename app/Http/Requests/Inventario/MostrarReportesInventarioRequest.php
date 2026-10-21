@@ -29,6 +29,9 @@ class MostrarReportesInventarioRequest extends FormRequest
             'tipo_reporte' => ['nullable', 'integer'],
             'sin_solucion' => ['nullable', 'boolean'],
             'per_page' => ['nullable', 'integer', 'min:1'],
+            // Orden del historial: solo por fecha (DataTable remoto manda sort/dir).
+            'sort' => ['nullable', 'string'],
+            'dir' => ['nullable', 'in:asc,desc'],
             // Filtros de Reporte de Áreas Comunes (/inventario/areas-comunes/reportes).
             'id_area' => ['nullable', 'integer', Rule::exists('areas', 'id')],
             'id_bloque' => ['nullable', 'integer', Rule::exists('bloques', 'id')],

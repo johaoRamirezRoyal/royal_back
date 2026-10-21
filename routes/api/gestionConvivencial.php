@@ -20,6 +20,7 @@ Route::prefix('/observaciones')->middleware(Permiso::ruta([Permiso::OBSERVACIONE
     Route::get('/catalogos', [ObservacionEstudianteController::class, 'catalogos']);
     Route::get('/estudiantes', [ObservacionEstudianteController::class, 'estudiantes']);
     Route::get('/estudiantes/{idEstudiante}/acta', [ObservacionEstudianteController::class, 'acta'])->whereNumber('idEstudiante');
+    Route::get('/estudiantes/{idEstudiante}/dia', [ObservacionEstudianteController::class, 'delDia'])->whereNumber('idEstudiante');
     Route::get('/', [ObservacionEstudianteController::class, 'index']);
     Route::post('/', [ObservacionEstudianteController::class, 'store']);
     Route::put('/{id}', [ObservacionEstudianteController::class, 'update'])->whereNumber('id');

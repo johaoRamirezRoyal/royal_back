@@ -208,7 +208,7 @@ class ObservacionEstudianteService
     }
 
     /**
-     * Docente a quien queda la observación: con la 133/99 el que eligió (obligatorio, docente
+     * Docente a quien queda la observación: con la 139 el que eligió (obligatorio, docente
      * activo); si no, `$actual` (al editar, el que ya tenía) o el propio usuario.
      * Devuelve [error|null, idDocente].
      */
@@ -377,6 +377,9 @@ class ObservacionEstudianteService
                         'positivas' => $observaciones->where('tipo', 'POSITIVA')->count(),
                         'negativas' => $observaciones->where('tipo', 'NEGATIVA')->count(),
                     ],
+                    // De todos los docentes en el periodo, aunque el usuario solo vea las suyas:
+                    // el conteo es visible para quien puede abrir el estudiante; el detalle no.
+                    'resumen_global' => $periodo ? $this->conteoGlobal($idEstudiante, $periodo['id']) : ['positivas' => 0, 'negativas' => 0],
                     'mis_asignaturas' => $this->asignaturasDelDocente($idUsuario, $estudiante->id_curso),
                     // Con la 133/99 se elige el docente (y sus asignaturas en el curso) al registrar.
                     'elige_docente' => $acceso->eligeDocente(),
@@ -389,6 +392,47 @@ class ObservacionEstudianteService
             ];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => 'Error al consultar el acta: ' . $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /** Positivas/negativas de un estudiante en un periodo, de todos los docentes. */
+    private function conteoGlobal(int $idEstudiante, int $idPeriodo): array
+    {
+        $c = DB::table('academico_observacion_estudiante')
+            ->where('id_estudiante', $idEstudiante)
+            ->where('id_periodo_academico', $idPeriodo)
+            ->selectRaw("COALESCE(SUM(tipo = 'POSITIVA'), 0) as positivas, COALESCE(SUM(tipo = 'NEGATIVA'), 0) as negativas")
+            ->first();
+
+        return ['positivas' => (int) $c->positivas, 'negativas' => (int) $c->negativas];
+    }
+
+    /**
+     * Observaciones que OTROS docentes le registraron al estudiante en un día: el docente
+     * solo ve las suyas en el acta, pero al registrar necesita saber qué pasó ese mismo día.
+     * Solo lectura (`editable` false). Mismo alcance de estudiantes que el acta.
+     */
+    public function delDia(AccesoObservaciones $acceso, int $idEstudiante, string $fecha): array
+    {
+        try {
+            $visible = $this->estudiantes($acceso->idsCursosEstudiantes())->where('u.id_user', $idEstudiante)->exists();
+            if (! $visible) {
+                return self::fallo('Estudiante no encontrado o fuera de tus cursos.', 404);
+            }
+
+            $idUsuario = $acceso->idUsuario;
+            $observaciones = $this->observaciones()
+                ->where('o.id_estudiante', $idEstudiante)
+                ->where('o.fecha', $fecha)
+                // <=> (igualdad null-safe): una fila sin id_usuario_registra no se pierde.
+                ->whereRaw('NOT (o.id_docente <=> ? OR o.id_usuario_registra <=> ?)', [$idUsuario, $idUsuario])
+                ->orderByDesc('o.id')
+                ->get()
+                ->map(fn ($o) => ['periodo_cerrado' => (bool) $o->periodo_cerrado, 'editable' => false] + (array) $o);
+
+            return ['error' => false, 'message' => 'Observaciones del día obtenidas', 'data' => $observaciones->values()];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => 'Error al consultar las observaciones del día: ' . $e->getMessage(), 'data' => []];
         }
     }
 
