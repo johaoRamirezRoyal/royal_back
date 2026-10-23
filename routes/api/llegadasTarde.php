@@ -3,6 +3,7 @@
 use App\Http\Controllers\LlegadasTarde\LlegadasTardeConfigController;
 use App\Http\Controllers\LlegadasTarde\LlegadasTardeController;
 use Illuminate\Support\Facades\Route;
+use App\Support\Permiso;
 
 /**
  * POST /api/llegadas-tarde
@@ -13,8 +14,16 @@ use Illuminate\Support\Facades\Route;
  *       "fecha": "2026-06-25",
  *       "hora": "08:30"
  *   }
+ * Opción 99 o 101.
  */
-Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde']);
+Route::post('/', [LlegadasTardeController::class, 'agregarLlegadaTarde'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, 101]));
+
+/**
+ * POST /api/llegadas-tarde/escanear   Body: { "documento": "1234567890" }
+ * Estación de portería: el carnet trae el documento en código de barras. Opción 99 o 101.
+ * data.estado: "registrada" | "ya_registrada" | "a_tiempo" (este último no guarda nada).
+ */
+Route::post('/escanear', [LlegadasTardeController::class, 'escanearCarnet'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, 101]));
 
 /**
  * GET /api/llegadas-tarde

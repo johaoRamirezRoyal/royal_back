@@ -341,3 +341,19 @@ ALTER TABLE `reportes` ADD INDEX `reportes_id_inventario_reporte_tipo_estado_idx
 ALTER TABLE `inventario_log` ADD INDEX `inventario_log_id_inventario_idx`(`id_inventario`);
 ALTER TABLE `cron_permisos` ADD INDEX `cron_permisos_opcion_perfil_activo_idx`(`id_opcion`, `id_perfil`, `activo`);
 ALTER TABLE `areas` ADD INDEX `areas_id_bloque_idx`(`id_bloque`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_22_100000_create_asistencia_gestion_marcaciones_table.php
+-- Cada marcación del dispositivo (o del QR de portería) posterior a la entrada del
+-- día. asistencia_gestion solo guarda entrada y salida (la última marcación desde
+-- hora_minima_salida); aquí queda el rastro de todas las intermedias. Sin endpoint.
+-- ---------------------------------------------------------------------------
+CREATE TABLE `asistencia_gestion_marcaciones` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id_asistencia` int(11) NOT NULL,
+  `hora` time NOT NULL,
+  `fechareg` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `asistencia_gestion_marcaciones_id_asistencia_foreign` (`id_asistencia`),
+  CONSTRAINT `asistencia_gestion_marcaciones_id_asistencia_foreign` FOREIGN KEY (`id_asistencia`) REFERENCES `asistencia_gestion` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
