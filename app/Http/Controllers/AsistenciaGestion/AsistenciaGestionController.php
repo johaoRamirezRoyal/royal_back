@@ -5,11 +5,12 @@ namespace App\Http\Controllers\AsistenciaGestion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AsistenciaGestion\FiltroAsistenciaGestionRequest;
 use App\Http\Requests\AsistenciaGestion\GraficaAsistenciaRequest;
-use App\Http\Requests\AsistenciaGestion\StoreAsistenciaGestionRequest;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\IpUtils;
 use App\Support\Permiso;
 use App\Services\Usuarios\PermisosPerfil;
 
@@ -43,15 +44,52 @@ class AsistenciaGestionController extends Controller
         return $puedeVerTodas ? $idUsuarioSolicitado : $usuarioAuth->id_user;
     }
 
-    public function registrarAsistencia(StoreAsistenciaGestionRequest $request): JsonResponse
+    /** QR de la pantalla de portería (ver AsistenciaGestionService::tokenQr). */
+    public function tokenQr(Request $request): JsonResponse
     {
-        $data = $request->validated();
+        if (!PermisosPerfil::tiene($request, self::OPCION_VER_TODAS)) {
+            return $this->error('No tienes permiso para mostrar el código de asistencia', 403);
+        }
 
-        $resultado = $this->asistenciaService->registrarAsistencia(
-            $data['id_user'],
-            $data['fecha_asistencia'],
-            $data['hora_asistencia']
+        return $this->apiResponse(['error' => false, 'message' => 'OK', 'data' => $this->asistenciaService->tokenQr()]);
+    }
+
+    /**
+     * El trabajador escanea el QR de portería con su celular. Quién marca sale de la sesión y
+     * la hora del reloj del servidor; del cliente solo llega el token, que prueba que estuvo
+     * frente a la pantalla en los últimos ~90 s. Con ASISTENCIA_QR_REDES (CIDRs separados por
+     * coma) además tiene que venir desde la red del colegio.
+     */
+    public function marcarConQr(Request $request): JsonResponse
+    {
+        $token = (string) $request->input('token', '');
+        if (!$this->asistenciaService->tokenQrValido($token)) {
+            return $this->error('El código ya venció. Escanea de nuevo el de la pantalla.', 422);
+        }
+
+        $redes = array_filter(array_map('trim', explode(',', (string) config('services.asistencia_qr.redes'))));
+        if ($redes && !IpUtils::checkIp((string) $request->ip(), $redes)) {
+            return $this->error('Para marcar con el código tienes que estar conectado a la red del colegio.', 403);
+        }
+
+        $usuario = $request->user();
+        if (in_array((int) $usuario->perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+            return $this->error('Tu perfil no registra asistencia de trabajadores.', 403);
+        }
+
+        // Mismo criterio que el debounce del webhook: un doble escaneo no puede leerse como la salida.
+        if (!Cache::add('asistencia-qr:' . config('database.default') . ':' . $usuario->id_user, true, 60)) {
+            return $this->error('Ya registramos tu marcación hace un momento.', 429);
+        }
+
+        $hora = now()->format('H:i:s');
+        $resultado = $this->asistenciaService->registrarMarcacion(
+            (int) $usuario->id_user,
+            now()->toDateString(),
+            $hora,
+            AsistenciaGestionService::METODO_QR
         );
+        $resultado['data'] = array_merge($resultado['data'] ?? [], ['hora_marcacion' => $hora]);
 
         return $this->apiResponse($resultado);
     }
@@ -121,13 +159,6 @@ class AsistenciaGestionController extends Controller
         return $this->apiResponse($resultado);
     }
 
-    public function obtenerResumenPorUsuario(FiltroAsistenciaGestionRequest $request): JsonResponse
-    {
-        $resultado = $this->asistenciaService->obtenerResumenPorUsuario($request->validated());
-
-        return $this->apiResponse($resultado);
-    }
-
     public function obtenerDatosGrafica(FiltroAsistenciaGestionRequest $request): JsonResponse
     {
         $resultado = $this->asistenciaService->obtenerDatosGrafica($request->validated());
@@ -145,35 +176,6 @@ class AsistenciaGestionController extends Controller
     public function distribucionHorasLlegada(GraficaAsistenciaRequest $request): JsonResponse
     {
         $resultado = $this->asistenciaService->distribucionHorasLlegada($request->validated());
-
-        return $this->apiResponse($resultado);
-    }
-
-    public function promedioHoraLlegadaPorUsuario(GraficaAsistenciaRequest $request): JsonResponse
-    {
-        $resultado = $this->asistenciaService->promedioHoraLlegadaPorUsuario($request->validated());
-
-        return $this->apiResponse($resultado);
-    }
-
-    public function ultimosRegistrosUsuario(Request $request): JsonResponse
-    {
-        $request->validate([
-            'id_usuario' => ['required', 'integer', 'exists:usuarios,id_user'],
-            'limite' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ], [
-            'id_usuario.required' => 'El ID del usuario es obligatorio.',
-            'id_usuario.integer' => 'El ID del usuario debe ser numérico.',
-            'id_usuario.exists' => 'El usuario seleccionado no existe.',
-            'limite.integer' => 'El límite debe ser numérico.',
-            'limite.min' => 'El límite debe ser al menos 1.',
-            'limite.max' => 'El límite no puede ser mayor a 100.',
-        ]);
-
-        $resultado = $this->asistenciaService->ultimosRegistrosUsuario(
-            $request->input('id_usuario'),
-            $request->input('limite', 30)
-        );
 
         return $this->apiResponse($resultado);
     }

@@ -139,6 +139,11 @@ class AsistenciaGestion extends Model
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
     }
 
+    public function marcaciones()
+    {
+        return $this->hasMany(AsistenciaGestionMarcacion::class, 'id_asistencia');
+    }
+
     public function scopeFechaDesde(Builder $query, string $fecha): Builder
     {
         return $query->where('fecha_asistencia', '>=', $fecha);

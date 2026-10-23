@@ -5,20 +5,17 @@ use App\Http\Controllers\AsistenciaGestion\AsistenciaHorariosController;
 use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
 
-// throttle: 20 peticiones/min por IP de dispositivo (ver AppServiceProvider::boot) —
-// evita que un doble-tap o un retry dispare varias marcaciones seguidas, sin que un
-// kiosco compartido por varios trabajadores agote la cuota entre ellos.
-Route::post('/', [AsistenciaGestionController::class, 'registrarAsistencia'])->middleware('throttle:asistencia');
 // Registro manual de una asistencia (RH corrige un olvido del dispositivo) — ver
 // AsistenciaGestionController::registrarAsistenciaManual, exige la opción de "ver todas".
 Route::post('/manual', [AsistenciaGestionController::class, 'registrarAsistenciaManual']);
+// Marcación con QR (respaldo de las terminales): la pantalla de portería pide el token que
+// cambia cada 30 s; el trabajador lo escanea y marca con su propia sesión.
+Route::get('/qr/token', [AsistenciaGestionController::class, 'tokenQr'])->middleware(Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES]));
+Route::post('/qr/marcar', [AsistenciaGestionController::class, 'marcarConQr'])->middleware('throttle:asistencia');
 Route::get('/', [AsistenciaGestionController::class, 'obtenerAsistencia']);
-Route::get('/resumen', [AsistenciaGestionController::class, 'obtenerResumenPorUsuario']);
 Route::get('/grafica', [AsistenciaGestionController::class, 'obtenerDatosGrafica']);
 Route::get('/grafica/top-tardanzas', [AsistenciaGestionController::class, 'topUsuariosLlegadasTarde']);
 Route::get('/grafica/distribucion-horas', [AsistenciaGestionController::class, 'distribucionHorasLlegada']);
-Route::get('/grafica/promedio-por-usuario', [AsistenciaGestionController::class, 'promedioHoraLlegadaPorUsuario']);
-Route::get('/ultimos-registros', [AsistenciaGestionController::class, 'ultimosRegistrosUsuario']);
 Route::delete('/', [AsistenciaGestionController::class, 'eliminarAsistencia']);
 
 // CONFIGURACIÓN — horarios estándar y bandas de puntualidad (solo RH/Administradores, ver

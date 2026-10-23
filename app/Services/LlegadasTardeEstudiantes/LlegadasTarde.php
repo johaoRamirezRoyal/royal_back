@@ -43,7 +43,7 @@ class LlegadasTarde extends Service
         private CloudinaryService $cloudinaryService
     ) {}
 
-    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null, ?UploadedFile $soporte = null): array
+    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null, ?UploadedFile $soporte = null, bool $avisarDespuesDeResponder = false): array
     {
         try {
             $yaRegistrada = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
@@ -148,8 +148,12 @@ class LlegadasTarde extends Service
             $primeraVezLimiteAlcanzado = $umbralLimite > 0 && $totalEnPeriodo === $umbralLimite;
             $llegadaTarde->update(['limite_alcanzado' => $limiteAlcanzado]);
 
-            $enviado = $this->enviarNotificacionLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado, avisarVicerrectoria: $primeraVezLimiteAlcanzado);
-            $llegadaTarde->update(['enviado' => $enviado]);
+            $avisar = function () use ($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado, $primeraVezLimiteAlcanzado) {
+                $enviado = $this->enviarNotificacionLlegadaTarde($llegadaTarde, $totalEnPeriodo, $limiteAlcanzado, avisarVicerrectoria: $primeraVezLimiteAlcanzado);
+                $llegadaTarde->update(['enviado' => $enviado]);
+            };
+            // La estación de escaneo no puede esperar los correos entre un carnet y el siguiente.
+            $avisarDespuesDeResponder ? app()->terminating($avisar) : $avisar();
 
             return [
                 'error' => false,

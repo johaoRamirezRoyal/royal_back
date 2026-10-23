@@ -253,11 +253,6 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/llegadasTarde.php';
     });
 
-    //LLEGADAS TARDE
-    Route::prefix("/llegadas-tarde")->group(function () {
-        require __DIR__ . '/api/llegadasTarde.php';
-    });
-
     // GESTIÓN ACADÉMICA
     Route::prefix('/gestion-academica')->group(function () {
         require __DIR__ . '/api/gestionAcademica.php';

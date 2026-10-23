@@ -2120,6 +2120,86 @@ Almacenamiento local de archivos subidos (vs Cloudinary). Usado en: `DocumentosV
   rutas tiene que llamar `olvidarEmpleadosRegistrados()`. Cambios hechos directo en el
   terminal se ven al vencer la caché o al recargar.
 
+### Webhook de marcaciones (`POST /pushNotification/{tenant?}`, `HikvisionController::testNotificationHikvision`)
+
+Sin JWT: `RestrictToHikvisionDevices` solo deja pasar IPs de terminales configuradas y cambia
+`database.default` al colegio. Eventos sin `employeeNoString` (puerta, pings) se ignoran; el
+número es el `id_user`. Siempre se usa la hora del **servidor**, no la del dispositivo. Cada
+marcación pasa por dos procesos independientes:
+
+- **Llegada tarde de estudiantes** (`registrarLlegadaTardeSiAplica`, perfil 16 activo): se
+  registra solo si la hora pasa `configuracion_llegadas_tarde.hora_limite` (07:15 por
+  defecto) — la llegada a tiempo **no** se guarda, por diseño. No se verifica si es la
+  primera marcación del día porque los estudiantes marcan **una sola vez** (a la entrada);
+  si eso cambia, una segunda marcación tardía contaría como llegada tarde. Idempotente por
+  alumno+día (`firstOrCreate` + índice único). **Desde 2026-10-22 corre en
+  `app()->terminating()`** (después de responder a la terminal): manda correo y WhatsApp al
+  acudiente y, si el proveedor tardaba, la terminal esperaba y reenviaba el evento. Solo el
+  webhook se difiere; el registro manual (`LlegadasTarde::agregarLlegadaTarde` desde la app)
+  sigue enviando antes de responder porque devuelve `enviado`. El diferido solo ahorra
+  tiempo a la terminal con PHP-FPM.
+- **Asistencia de trabajadores** (`AsistenciaGestionService::registrarMarcacion`, perfiles
+  fuera de `PERFILES_EXCLUIDOS_ASISTENCIA`), tras un debounce de 15 s por usuario
+  (`Cache::add`, contra reenvíos del dispositivo):
+  - Primera marcación del día = entrada (`hora_asistencia`) y aviso de tardanza.
+  - **Toda marcación posterior** se guarda en `asistencia_gestion_marcaciones`
+    (`id_asistencia` con cascada, `hora`, `fechareg`; relación `AsistenciaGestion::marcaciones()`,
+    migración `2026_10_22_100000_create_asistencia_gestion_marcaciones_table`). No hay
+    endpoint ni pantalla que la muestre — se decidió así; se consulta en BD.
+  - **La salida es la ÚLTIMA marcación** desde `hora_minima_salida` (desde 2026-10-22; antes
+    era la primera y las siguientes se descartaban, así que salir a una diligencia y volver
+    dejaba la salida a la hora de la diligencia). El `UPDATE` solo pisa una salida anterior
+    (`hora_salida IS NULL OR hora_salida < hora`), así un evento desordenado no la retrocede.
+  - Si una marcación real reemplaza la salida puesta por `asistencia:cerrar-vencidas`, se
+    borra la observación que empieza con `OBSERVACION_SALIDA_AUTOMATICA`. La de un registro
+    manual se conserva.
+- Rastro en `storage/logs/laravel.log` con el prefijo `[hikvision-notification]`; las
+  marcaciones que no cambian la salida solo quedan en la tabla.
+- **Pendiente sin resolver**: los comandos programados (`asistencia:cerrar-vencidas`,
+  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`) usan solo la conexión por
+  defecto y no recorren los colegios (`mysql`, `sami_hebreo`); verificar cómo se ejecuta
+  `schedule:run` por colegio en el servidor.
+
+### Escaneo de carnets de estudiantes (respaldo de la terminal, desde 2026-10-22)
+
+- `POST /api/llegadas-tarde/escanear` `{documento}` (opción 99 o 101, ruta y controller):
+  el código de barras del carnet es el **documento** en CODE 128 (`Sami_Royal`
+  `vistas/modulos/carnet/frente.php`). Busca un estudiante (perfil 16) con ese documento
+  exacto y aplica la misma regla que el webhook: hora del servidor; hasta `hora_limite` no
+  guarda nada (`estado: "a_tiempo"`); después llama `agregarLlegadaTarde` →
+  `"registrada"` (con `total_llegadas_tarde_periodo`/`limite_alcanzado`) o `"ya_registrada"`.
+  404 si no hay estudiante, 422 si está inactivo.
+- `agregarLlegadaTarde(..., avisarDespuesDeResponder: true)` manda los correos en
+  `app()->terminating()`: la estación no espera el SMTP entre un carnet y otro. El flujo
+  manual (`POST /llegadas-tarde`) sigue síncrono.
+- `POST /llegadas-tarde` (registro manual) exige también la opción 99 o 101, en la ruta y en
+  el controller, desde 2026-10-22. Antes solo pedía sesión porque `LlegadaTardeRequest::authorize`
+  devuelve `true`, y cualquier usuario podía registrar una llegada tarde a cualquier estudiante.
+
+### Marcación con QR de portería (respaldo de las terminales, desde 2026-10-22)
+
+- `GET /api/asistencia-gestion/qr/token` (opción 63, `Permiso::ASISTENCIA_TRABAJADORES`): la
+  pantalla de portería pide un token `"{ventana}.{firma}"` que cambia cada 30 s. La firma es
+  HMAC con `app.key` e incluye `database.default`: el QR de un colegio no sirve en otro. Sin
+  tabla ni estado (`AsistenciaGestionService::tokenQr` / `tokenQrValido`).
+- `POST /api/asistencia-gestion/qr/marcar` `{token}` (cualquier usuario con sesión,
+  `throttle:asistencia`): el token se acepta durante 3 ventanas (~90 s). Quién marca sale de la
+  sesión y la hora de `now()`; nunca del cliente. Excluye `PERFILES_EXCLUIDOS_ASISTENCIA`, tiene
+  debounce de 60 s por usuario (un doble escaneo no es la salida) y pasa por el mismo
+  `registrarMarcacion` que el webhook, con `QR = 1` en la fila creada.
+- `ASISTENCIA_QR_REDES` (`config('services.asistencia_qr.redes')`, CIDRs separados por coma):
+  si está, solo se marca desde esas redes. Usa `$request->ip()`: detrás de un proxy hay que
+  tener bien configurados los proxies de confianza o se verá la IP del proxy.
+- Límite conocido: alguien puede reenviar el QR en vivo dentro de los ~90 s; la restricción
+  por red es lo que lo cierra.
+- Eliminados el 2026-10-22 por no tener consumidor (ni el frontend, ni el legacy, ni las
+  terminales, que solo llaman `pushNotification`; todos exigían sesión de OMNIA):
+  `POST /api/asistencia-gestion` (recibía usuario, fecha y hora del cliente y estaba abierto a
+  cualquier usuario con sesión), `GET /resumen`, `GET /ultimos-registros` y
+  `GET /grafica/promedio-por-usuario`, con sus métodos y `StoreAsistenciaGestionRequest`.
+  También el bloque `/llegadas-tarde` repetido en `routes/api.php`. Registrar a mano es
+  `POST /manual`; si vuelve a hacer falta algo de lo borrado, está en git.
+
 ## Email
 
 ### Mailables (`app/Mail/`)

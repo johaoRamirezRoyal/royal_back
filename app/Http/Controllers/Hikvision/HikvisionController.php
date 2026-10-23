@@ -752,7 +752,10 @@ class HikvisionController extends Controller implements HasMiddleware
         // genéricos) — cada método decide por su cuenta, con un typecheck sobre el estado
         // del día, si esta marcación aplica como entrada (llegada tarde solo tiene sentido
         // ahí) y es idempotente por día, así que llamarlo en cada evento es seguro.
-        $this->registrarLlegadaTardeSiAplica($idUsuario);
+        // Después de responder: la llegada tarde manda correo y WhatsApp al acudiente y, si
+        // el proveedor tarda, la terminal se queda esperando y reenvía el evento. Mismo
+        // mecanismo que el aviso de tardanza de trabajadores (notificarLlegadaTardeDespuesDeResponder).
+        app()->terminating(fn () => $this->registrarLlegadaTardeSiAplica($idUsuario));
 
         $this->registrarAsistenciaGestionSiAplica($idUsuario);
     }

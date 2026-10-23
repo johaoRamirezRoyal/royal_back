@@ -106,4 +106,10 @@ return [
         'cookie_name' => env('SAMI_SESSION_COOKIE_NAME', 'PHPSESSID'),
         'cache_ttl' => env('SAMI_SSO_CACHE_TTL_MINUTES', 120),
     ],
+    // Redes desde las que vale marcar asistencia con el QR de portería (CIDRs separados por
+    // coma, p. ej. "190.0.0.0/24,10.0.0.0/8"). Vacío = desde cualquier red.
+    'asistencia_qr' => [
+        'redes' => env('ASISTENCIA_QR_REDES'),
+    ],
+
 ];

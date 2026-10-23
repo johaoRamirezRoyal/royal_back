@@ -4,6 +4,7 @@ namespace App\Services\AsistenciaTrabajadores;
 
 use App\Enums\Mails;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
+use App\Models\AsistenciaGestion\AsistenciaGestionMarcacion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
@@ -26,6 +27,8 @@ class AsistenciaGestionService extends Service
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
+
+    private const OBSERVACION_SALIDA_AUTOMATICA = 'Salida marcada automáticamente';
 
     // Perfiles fijos del aviso de llegada tarde (ver notificarLlegadaTarde) — Recursos
     // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
@@ -61,43 +64,6 @@ class AsistenciaGestionService extends Service
         $groupId = hikvisionattendanceService::GROUP_ID_POR_PERFIL[$perfil] ?? null;
 
         return self::GRUPO_LABEL_POR_GROUP_ID[$groupId] ?? 'Sin departamento';
-    }
-
-    public function registrarAsistencia(int $idUsuario, string $fecha, string $hora): array
-    {
-        try {
-            // firstOrCreate() intenta el create() y, si choca con el índice único
-            // (asistencia_gestion_user_fecha_unique), reconsulta en vez de fallar:
-            // así dos pushes casi simultáneos del mismo usuario (p. ej. un
-            // reintento del dispositivo) no pueden duplicar la fila.
-            $asistencia = AsistenciaGestion::firstOrCreate(
-                ['id_user' => $idUsuario, 'fecha_asistencia' => $fecha],
-                ['hora_asistencia' => $hora, 'fechareg' => now()]
-            );
-
-            if (!$asistencia->wasRecentlyCreated) {
-                return [
-                    'error' => false,
-                    'message' => 'Ya existe un registro de asistencia para este usuario en esta fecha',
-                    'data' => null,
-                ];
-            }
-
-            $this->notificarLlegadaTardeDespuesDeResponder($asistencia);
-
-            return [
-                'error' => false,
-                'message' => 'Asistencia registrada correctamente',
-                'data' => $asistencia->toArray(),
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al registrar asistencia');
-            return [
-                'error' => true,
-                'message' => 'Error en el servidor al registrar asistencia',
-                'data' => null,
-            ];
-        }
     }
 
     /**
@@ -169,8 +135,9 @@ class AsistenciaGestionService extends Service
      * resuelve con un typecheck sobre el estado del día, no sobre lo que reporte el
      * dispositivo:
      *   - Sin entrada registrada hoy -> esta marcación es la entrada.
-     *   - Con entrada y sin salida -> esta marcación es la salida.
-     *   - Con entrada y salida ya registradas -> se descarta (tercer evento del día).
+     *   - Con entrada -> queda en asistencia_gestion_marcaciones y, si es desde la hora
+     *     mínima de salida y posterior a la salida actual, pasa a ser la salida (la salida
+     *     es la ÚLTIMA marcación del día: salir a una diligencia y volver no la deja fija).
      */
     /**
      * Hora mínima para marcar salida: el campo hora_minima_salida del horario aplicable al
@@ -190,22 +157,58 @@ class AsistenciaGestionService extends Service
             ?? '09:00:00';
     }
 
-    public function registrarMarcacion(int $idUsuario, string $fecha, string $hora): array
+    /** Valores de la columna `QR` (método de marcación). */
+    public const METODO_TERMINAL = 0;
+    public const METODO_QR = 1;
+
+    // QR de la pantalla de portería: cambia cada VENTANA_QR segundos y se acepta durante
+    // VENTANAS_VALIDAS_QR ventanas (la actual y las anteriores), unos 90 s en total.
+    private const VENTANA_QR = 30;
+    private const VENTANAS_VALIDAS_QR = 3;
+
+    /**
+     * Token del QR de la pantalla: "{ventana}.{firma}". La firma incluye la base del colegio,
+     * así un QR de un colegio no sirve en otro. Sin estado: nada que guardar ni limpiar.
+     */
+    public function tokenQr(): array
+    {
+        $ventana = intdiv(time(), self::VENTANA_QR);
+
+        return [
+            'token' => $ventana . '.' . $this->firmaQr($ventana),
+            'segundos_restantes' => self::VENTANA_QR - (time() % self::VENTANA_QR),
+        ];
+    }
+
+    public function tokenQrValido(string $token): bool
+    {
+        [$ventana, $firma] = array_pad(explode('.', $token, 2), 2, '');
+        if (!ctype_digit($ventana) || $firma === '') return false;
+
+        $edad = intdiv(time(), self::VENTANA_QR) - (int) $ventana;
+
+        return $edad >= 0 && $edad < self::VENTANAS_VALIDAS_QR
+            && hash_equals($this->firmaQr((int) $ventana), $firma);
+    }
+
+    private function firmaQr(int $ventana): string
+    {
+        return substr(hash_hmac('sha256', 'asistencia-qr|' . config('database.default') . '|' . $ventana, (string) config('app.key')), 0, 32);
+    }
+
+    public function registrarMarcacion(int $idUsuario, string $fecha, string $hora, int $metodo = self::METODO_TERMINAL): array
     {
         try {
             $asistencia = AsistenciaGestion::where('id_user', $idUsuario)
                 ->where('fecha_asistencia', $fecha)
                 ->first();
 
-            $tieneEntrada = $asistencia !== null;
-            $tieneSalida = $asistencia !== null && $asistencia->hora_salida !== null;
-
-            if (!$tieneEntrada) {
-                // firstOrCreate() por la misma razón que en registrarAsistencia(): dos
-                // pushes casi simultáneos del mismo usuario no deben duplicar la fila.
+            if ($asistencia === null) {
+                // firstOrCreate(): si choca con el índice único usuario+fecha reconsulta en
+                // vez de fallar, así dos pushes casi simultáneos no duplican la fila.
                 $asistencia = AsistenciaGestion::firstOrCreate(
                     ['id_user' => $idUsuario, 'fecha_asistencia' => $fecha],
-                    ['hora_asistencia' => $hora, 'fechareg' => now()]
+                    ['hora_asistencia' => $hora, 'fechareg' => now(), 'QR' => $metodo]
                 );
 
                 if (!$asistencia->wasRecentlyCreated) {
@@ -225,13 +228,7 @@ class AsistenciaGestionService extends Service
                 ];
             }
 
-            if ($tieneSalida) {
-                return [
-                    'error' => false,
-                    'message' => 'Ya existe un registro de salida para este usuario en esta fecha',
-                    'data' => null,
-                ];
-            }
+            AsistenciaGestionMarcacion::create(['id_asistencia' => $asistencia->id, 'hora' => $hora]);
 
             $horaMinimaSalida = $this->horaMinimaSalidaParaUsuario($idUsuario);
 
@@ -243,22 +240,26 @@ class AsistenciaGestionService extends Service
                 ];
             }
 
-            // Guard atómico: si otro proceso (reintento del dispositivo) ya registró
-            // la salida entre el check de arriba y este update, whereNull no afecta
-            // ninguna fila y quedamos en el mismo caso "ya existe salida".
+            // Atómico: solo reemplaza una salida anterior a esta marcación, así un evento
+            // que llegue desordenado no pisa una salida posterior.
             $actualizado = AsistenciaGestion::where('id', $asistencia->id)
-                ->whereNull('hora_salida')
+                ->where(fn ($q) => $q->whereNull('hora_salida')->orWhere('hora_salida', '<', $hora))
                 ->update(['hora_salida' => $hora]);
 
             if ($actualizado === 0) {
                 return [
                     'error' => false,
-                    'message' => 'Ya existe un registro de salida para este usuario en esta fecha',
+                    'message' => 'La salida registrada ya es posterior a esta marcación',
                     'data' => null,
                 ];
             }
 
             $asistencia->refresh();
+
+            // Una marcación real reemplazó la salida que puso el cierre automático: su nota ya no aplica.
+            if (str_starts_with((string) $asistencia->observacion, self::OBSERVACION_SALIDA_AUTOMATICA)) {
+                $asistencia->update(['observacion' => null]);
+            }
 
             return [
                 'error' => false,
@@ -308,6 +309,8 @@ class AsistenciaGestionService extends Service
                 $query->where('hora_asistencia', '<=', $filtros['hora_hasta']);
             }
 
+            $filtrada = clone $query;
+
             $perPage = $filtros['per_page'] ?? 50;
             $resultados = $query->orderBy('fecha_asistencia', 'desc')
                 ->orderBy('hora_asistencia', 'desc')
@@ -330,6 +333,14 @@ class AsistenciaGestionService extends Service
                     $filtros['id_nivel'] ?? null,
                     $filtros['id_usuario'] ?? null
                 );
+
+                // Cifras del día (todas las páginas, mismos filtros). La tardanza sale de las
+                // bandas del horario (atributo calculado, no una columna), así que se cuenta en
+                // PHP: acotado a un solo día, son a lo sumo unos cientos de filas.
+                $data['resumen'] = [
+                    'llegaron' => $resultados->total(),
+                    'tarde' => $filtrada->get()->filter(fn (AsistenciaGestion $a) => $a->esTardanza())->count(),
+                ];
             }
 
             return [
@@ -536,65 +547,6 @@ class AsistenciaGestionService extends Service
             ->all();
     }
 
-    public function obtenerResumenPorUsuario(array $filtros): array
-    {
-        try {
-            $query = DB::table('asistencia_gestion as ag')
-                ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
-                ->select(
-                    'ag.id_user',
-                    'u.nombre',
-                    'u.perfil',
-                    DB::raw('COUNT(*) as total_asistencias'),
-                    DB::raw('MIN(ag.hora_asistencia) as primera_asistencia'),
-                    DB::raw('MAX(ag.hora_asistencia) as ultima_asistencia'),
-                    DB::raw('AVG(TIME_TO_SEC(ag.hora_asistencia)) as promedio_segundos')
-                )
-                ->groupBy('ag.id_user', 'u.nombre', 'u.perfil');
-
-            if (!empty($filtros['id_usuario'])) {
-                $query->where('ag.id_user', $filtros['id_usuario']);
-            }
-
-            if (!empty($filtros['id_perfil'])) {
-                $query->where('u.perfil', $filtros['id_perfil']);
-            }
-
-            if (!empty($filtros['fecha_desde'])) {
-                $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
-            }
-
-            if (!empty($filtros['fecha_hasta'])) {
-                $query->where('ag.fecha_asistencia', '<=', $filtros['fecha_hasta']);
-            }
-
-            $resultados = $query->orderByDesc('total_asistencias')->get();
-
-            $data = $resultados->map(fn ($r) => [
-                'id_user' => $r->id_user,
-                'nombre' => $r->nombre,
-                'perfil' => $r->perfil,
-                'total_asistencias' => (int) $r->total_asistencias,
-                'primera_asistencia' => $r->primera_asistencia,
-                'ultima_asistencia' => $r->ultima_asistencia,
-                'promedio_hora' => $this->segundosATiempo((int) round($r->promedio_segundos)),
-            ]);
-
-            return [
-                'error' => false,
-                'message' => 'Resumen obtenido correctamente',
-                'data' => $data,
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al obtener resumen de asistencia');
-            return [
-                'error' => true,
-                'message' => 'Error en el servidor al obtener resumen',
-                'data' => null,
-            ];
-        }
-    }
-
     public function obtenerDatosGrafica(array $filtros): array
     {
         try {
@@ -765,92 +717,6 @@ class AsistenciaGestionService extends Service
         }
     }
 
-    public function promedioHoraLlegadaPorUsuario(array $filtros): array
-    {
-        try {
-            $query = DB::table('asistencia_gestion as ag')
-                ->join('usuarios as u', 'u.id_user', '=', 'ag.id_user')
-                ->select(
-                    'ag.id_user',
-                    DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nombre_completo"),
-                    'u.perfil',
-                    DB::raw('COUNT(*) as total_marcaciones'),
-                    DB::raw('MIN(ag.hora_asistencia) as primera_llegada'),
-                    DB::raw('MAX(ag.hora_asistencia) as ultima_llegada'),
-                    DB::raw('AVG(TIME_TO_SEC(ag.hora_asistencia)) as promedio_segundos')
-                )
-                ->groupBy('ag.id_user', 'nombre_completo', 'u.perfil');
-
-            if (!empty($filtros['id_usuario'])) {
-                $query->where('ag.id_user', $filtros['id_usuario']);
-            }
-
-            if (!empty($filtros['id_perfil'])) {
-                $query->where('u.perfil', $filtros['id_perfil']);
-            }
-
-            if (!empty($filtros['fecha_desde'])) {
-                $query->where('ag.fecha_asistencia', '>=', $filtros['fecha_desde']);
-            }
-
-            if (!empty($filtros['fecha_hasta'])) {
-                $query->where('ag.fecha_asistencia', '<=', $filtros['fecha_hasta']);
-            }
-
-            $perPage = $filtros['per_page'] ?? 20;
-            $resultados = $query->orderBy('nombre_completo')
-                ->paginate($perPage);
-
-            $data = $resultados->through(fn ($r) => [
-                'id_user' => $r->id_user,
-                'nombre' => $r->nombre_completo,
-                'perfil' => $r->perfil,
-                'total_marcaciones' => (int) $r->total_marcaciones,
-                'primera_llegada' => $r->primera_llegada,
-                'ultima_llegada' => $r->ultima_llegada,
-                'promedio_hora' => $this->segundosATiempo((int) round($r->promedio_segundos)),
-            ]);
-
-            return [
-                'error' => false,
-                'message' => 'Promedio de hora de llegada obtenido',
-                'data' => $data,
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al obtener promedio de hora de llegada');
-            return [
-                'error' => true,
-                'message' => 'Error en el servidor al obtener promedio de hora de llegada',
-                'data' => null,
-            ];
-        }
-    }
-
-    public function ultimosRegistrosUsuario(int $idUsuario, int $limite = 30): array
-    {
-        try {
-            $registros = AsistenciaGestion::with('usuario')
-                ->porUsuario($idUsuario)
-                ->orderBy('fecha_asistencia', 'desc')
-                ->orderBy('hora_asistencia', 'desc')
-                ->limit($limite)
-                ->get();
-
-            return [
-                'error' => false,
-                'message' => 'Últimos registros obtenidos',
-                'data' => $registros,
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al obtener últimos registros');
-            return [
-                'error' => true,
-                'message' => 'Error en el servidor al obtener últimos registros',
-                'data' => null,
-            ];
-        }
-    }
-
     public function eliminarAsistencia(array $ids): array
     {
         try {
@@ -997,7 +863,7 @@ class AsistenciaGestionService extends Service
 
                 $asistencia->update([
                     'hora_salida' => $horario->hora_salida_esperada,
-                    'observacion' => "Salida marcada automáticamente: el usuario no registró su salida antes de la hora esperada ({$horaEsperada}).",
+                    'observacion' => self::OBSERVACION_SALIDA_AUTOMATICA . ": el usuario no registró su salida antes de la hora esperada ({$horaEsperada}).",
                 ]);
 
                 $usuario = $asistencia->usuario;
@@ -1036,13 +902,6 @@ class AsistenciaGestionService extends Service
                 'data' => null,
             ];
         }
-    }
-
-    private function segundosATiempo(int $segundos): string
-    {
-        $horas = intdiv($segundos, 3600);
-        $minutos = intdiv(($segundos % 3600), 60);
-        return sprintf('%02d:%02d:00', $horas, $minutos);
     }
 
     private function obtenerRangoFechas(array $filtros): array

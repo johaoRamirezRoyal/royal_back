@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\LlegadasTarde\LlegadaTardeRequest;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\LlegadasTarde as LlegadaTardeModel;
+use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use Illuminate\Http\Request;
@@ -27,6 +28,9 @@ class LlegadasTardeController extends Controller
     private const PERFIL_ACUDIENTE = 6;
 
     private const PERFIL_ESTUDIANTE = 16;
+
+    // "Llegadas Tarde Academicas": acceso solo a este submódulo (ver OPCION_ACCESO_COMPLETO).
+    private const OPCION_SOLO_LLEGADAS_TARDE = 101;
 
     // Autoservicio de un Docente SIN la opción 99 (Gestión Académica completa): ve las
     // llegadas tarde de los alumnos de SUS cursos (carga académica activa), nunca de un
@@ -110,6 +114,10 @@ class LlegadasTardeController extends Controller
     }
 
     public function agregarLlegadaTarde(LlegadaTardeRequest $request){
+        if (!$this->tieneAccesoCompleto($request) && !PermisosPerfil::tiene($request, self::OPCION_SOLO_LLEGADAS_TARDE)) {
+            return $this->error('No tienes permiso para registrar llegadas tarde', 403);
+        }
+
         $body = $request->validated();
 
         $id_alumno = $body['id_alumno'];
@@ -122,6 +130,71 @@ class LlegadasTardeController extends Controller
         $response = $this->llegadas_tarde->agregarLlegadaTarde($id_alumno, $fecha, $hora, $justificada, $observacion, $soporte);
 
         return $this->apiResponse($response);
+    }
+
+    /**
+     * Estación de portería (respaldo de la terminal): se escanea el carnet, cuyo código de
+     * barras es el documento (CODE 128, ver Sami_Royal carnet/frente.php). Misma regla que el
+     * webhook de Hikvision: solo se registra si ya pasó la hora límite, con la hora del
+     * servidor; a tiempo solo se informa. Los correos salen después de responder.
+     */
+    public function escanearCarnet(Request $request){
+        if (!$this->tieneAccesoCompleto($request) && !PermisosPerfil::tiene($request, self::OPCION_SOLO_LLEGADAS_TARDE)) {
+            return $this->error('No tienes permiso para registrar llegadas tarde', 403);
+        }
+
+        $documento = trim((string) $request->input('documento', ''));
+        if ($documento === '') {
+            return $this->error('Escanea un carnet o escribe el documento.', 422);
+        }
+
+        $alumno = Usuario::with('cursoRelacion:id,nombre')
+            ->select('id_user', 'nombre', 'apellido', 'documento', 'estado', 'id_curso', 'foto_carnet')
+            ->where('documento', $documento)
+            ->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->first();
+
+        if (!$alumno) {
+            return $this->error("No hay un estudiante con el documento {$documento}.", 404);
+        }
+        if ($alumno->estado !== 'activo') {
+            return $this->error("{$alumno->nombre} {$alumno->apellido} está inactivo.", 422);
+        }
+
+        $ahora = now();
+        $horaLimite = ConfiguracionLlegadasTarde::find(1)?->hora_limite ?? '07:15:00';
+        $data = [
+            'estudiante' => [
+                'id_user' => $alumno->id_user,
+                'nombre' => trim("{$alumno->nombre} {$alumno->apellido}"),
+                'documento' => $alumno->documento,
+                'curso' => $alumno->cursoRelacion?->nombre,
+                'foto_carnet' => $alumno->foto_carnet,
+            ],
+            'hora' => $ahora->format('H:i:s'),
+            'hora_limite' => $horaLimite,
+        ];
+
+        if ($data['hora'] <= $horaLimite) {
+            return $this->apiResponse(['error' => false, 'message' => 'Llegó a tiempo: no se registra.', 'data' => $data + ['estado' => 'a_tiempo']]);
+        }
+
+        $resultado = $this->llegadas_tarde->agregarLlegadaTarde($alumno->id_user, $ahora->toDateString(), $data['hora'], avisarDespuesDeResponder: true);
+        if ($resultado['error']) {
+            return $this->apiResponse($resultado);
+        }
+
+        // Sin fila nueva = ya tenía una llegada tarde hoy (el service devuelve data vacía).
+        $nueva = $resultado['data'];
+        return $this->apiResponse([
+            'error' => false,
+            'message' => $resultado['message'],
+            'data' => $data + ($nueva ? [
+                'estado' => 'registrada',
+                'total_llegadas_tarde_periodo' => $nueva['total_llegadas_tarde_periodo'] ?? null,
+                'limite_alcanzado' => (bool) ($nueva['limite_alcanzado'] ?? false),
+            ] : ['estado' => 'ya_registrada']),
+        ]);
     }
 
     public function obtenerLlegadasTarde(Request $request){
