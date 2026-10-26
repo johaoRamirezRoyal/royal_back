@@ -357,3 +357,20 @@ CREATE TABLE `asistencia_gestion_marcaciones` (
   KEY `asistencia_gestion_marcaciones_id_asistencia_foreign` (`id_asistencia`),
   CONSTRAINT `asistencia_gestion_marcaciones_id_asistencia_foreign` FOREIGN KEY (`id_asistencia`) REFERENCES `asistencia_gestion` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- ---------------------------------------------------------------------------
+-- 2026_10_26_100000_add_conexion_to_hikvision_dispositivos_table.php
+-- Las terminales Hikvision pasan del .env a esta tabla: cada fila es una conexión
+-- completa con sus propias credenciales (password cifrada con APP_KEY desde PHP).
+-- El paso de datos NO tiene SQL fijo: la migración lee el .env del colegio
+-- (HIKVISION_HOST/PORT/PROTOCOL/USERNAME/PASSWORD/HOSTS) e
+-- inserta/actualiza una fila por terminal; las filas que solo tenían nombre y no
+-- están en el .env quedan con host/puerto sacados del device_id y activo = 0.
+-- En producción solo en Royal (mysql): la base de Hebreo no funciona allá.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `hikvision_dispositivos` ADD `protocolo` varchar(5) NOT NULL DEFAULT 'http' AFTER `nombre`;
+ALTER TABLE `hikvision_dispositivos` ADD `host` varchar(100) NULL AFTER `protocolo`;
+ALTER TABLE `hikvision_dispositivos` ADD `puerto` int unsigned NULL AFTER `host`;
+ALTER TABLE `hikvision_dispositivos` ADD `usuario` varchar(100) NULL AFTER `puerto`;
+ALTER TABLE `hikvision_dispositivos` ADD `password` text NULL AFTER `usuario`;
+ALTER TABLE `hikvision_dispositivos` ADD `principal` tinyint(1) NOT NULL DEFAULT '0' AFTER `password`;
+ALTER TABLE `hikvision_dispositivos` ADD `activo` tinyint(1) NOT NULL DEFAULT '1' AFTER `principal`;
