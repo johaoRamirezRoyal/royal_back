@@ -159,7 +159,7 @@ class ConsultaAsistenciaClaseService
                     ->orWhereIn('id_user', $excepciones->keys()))
                 ->orderBy('apellido')
                 ->orderBy('nombre')
-                ->get(['id_user', 'documento', 'nombre', 'apellido'])
+                ->get(['id_user', 'documento', 'nombre', 'apellido', 'foto_carnet'])
                 ->map(function ($e) use ($excepciones) {
                     $excepcion = $excepciones->get($e->id_user);
 
@@ -167,6 +167,7 @@ class ConsultaAsistenciaClaseService
                         'id_estudiante' => $e->id_user,
                         'documento' => $e->documento,
                         'nombre' => trim(($e->nombre ?? '') . ' ' . ($e->apellido ?? '')),
+                        'foto_carnet' => $e->foto_carnet,
                         'estado' => $excepcion->estado ?? 'PRESENTE',
                         'observacion' => $excepcion->observacion ?? null,
                     ];
