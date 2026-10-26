@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Hikvision\HikvisionController;
+use App\Http\Controllers\Hikvision\HikvisionDispositivosController;
+use App\Support\Permiso;
 use Illuminate\Support\Facades\Route;
 
 Route::post("/", [HikvisionController::class, 'registrarEmpleado']);
@@ -15,7 +17,12 @@ Route::post("/face/enroll", [HikvisionController::class, 'registrarRostroEmplead
 Route::post("/face/enroll/cancelar", [HikvisionController::class, 'cancelarRegistroRostro']);
 Route::get('/testHikvision', [HikvisionController::class, 'testHikvisionConexion']);
 Route::get('/devices', [HikvisionController::class, 'listarDispositivos']);
-Route::put('/devices', [HikvisionController::class, 'guardarNombreDispositivo']);
+// Alta, edición y baja de terminales: solo Super Admin (también en el controller).
+Route::middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))->group(function () {
+    Route::post('/devices', [HikvisionDispositivosController::class, 'crear']);
+    Route::put('/devices/{id}', [HikvisionDispositivosController::class, 'actualizar'])->whereNumber('id');
+    Route::delete('/devices/{id}', [HikvisionDispositivosController::class, 'eliminar'])->whereNumber('id');
+});
 Route::get('/httpHosts', [HikvisionController::class, 'obtenerHttpHosts']);
 Route::get('/getList', [HikvisionController::class, 'obtenerEmpleadosRegistrados']);
 Route::get('/image', [HikvisionController::class, 'obtenerImagenEmpleado']);
