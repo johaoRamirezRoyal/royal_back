@@ -13,6 +13,7 @@ use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
 use Exception;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 
 class PermisosLicenciasServices
@@ -53,8 +54,7 @@ class PermisosLicenciasServices
     public function __construct(
         private FileStorageService $fileStorage,
         private MailService $mailService,
-    ) {
-    }
+    ) {}
 
     public function tipos(): array
     {
@@ -134,57 +134,10 @@ class PermisosLicenciasServices
     public function listar(array $filtros, ?int $idNivelViewer, int $perPage): array
     {
         try {
-            $query = Permiso::with(['usuario:id_user,nombre,apellido,documento,telefono,correo,id_nivel', 'tipo:id,nombre', 'motivo:id,nombre'])
-                ->orderByDesc('id');
-
-            // Coordinador/Directivo (perfil 26 o 7): acotado a las solicitudes de su propio nivel.
-            if ($idNivelViewer !== null) {
-                $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', $idNivelViewer));
-            }
-
-            if (!empty($filtros['id_user'])) {
-                $query->where('id_user', (int) $filtros['id_user']);
-            }
-
-            if (!empty($filtros['id_nivel'])) {
-                $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', (int) $filtros['id_nivel']));
-            }
-
-            if (!empty($filtros['perfil'])) {
-                $query->whereHas('usuario', fn ($u) => $u->where('perfil', (int) $filtros['perfil']));
-            }
-
-            if (!empty($filtros['tipo_permiso'])) {
-                $query->where('tipo_permiso', (int) $filtros['tipo_permiso']);
-            }
-
-            if (!empty($filtros['motivo_permiso'])) {
-                $query->where('motivo_permiso', (int) $filtros['motivo_permiso']);
-            }
-
-            if (isset($filtros['estado']) && $filtros['estado'] !== null && $filtros['estado'] !== '') {
-                $query->where('estado', (int) $filtros['estado']);
-            }
-
-            if (!empty($filtros['fecha_desde'])) {
-                $query->whereDate('fecha_permiso', '>=', $filtros['fecha_desde']);
-            }
-
-            if (!empty($filtros['fecha_hasta'])) {
-                $query->whereDate('fecha_permiso', '<=', $filtros['fecha_hasta']);
-            }
-
-            if (!empty($filtros['s'])) {
-                $search = $filtros['s'];
-                $query->where(function ($q) use ($search) {
-                    $q->where('id', $search)
-                        ->orWhereHas('usuario', fn ($u) => $u->where('nombre', 'like', "%{$search}%")
-                            ->orWhere('apellido', 'like', "%{$search}%")
-                            ->orWhere('documento', 'like', "%{$search}%"));
-                });
-            }
-
-            $paginator = $query->paginate($perPage);
+            $paginator = $this->consultaFiltrada($filtros, $idNivelViewer)
+                ->with(['usuario:id_user,nombre,apellido,documento,telefono,correo,id_nivel', 'tipo:id,nombre', 'motivo:id,nombre'])
+                ->orderByDesc('id')
+                ->paginate($perPage);
             $paginator->getCollection()->each(fn ($p) => $this->adjuntarUrl($p));
 
             return ['error' => false, 'message' => 'Solicitudes obtenidas correctamente', 'data' => $paginator];
@@ -193,12 +146,143 @@ class PermisosLicenciasServices
         }
     }
 
+    /**
+     * Agregados para las gráficas del listado, con los mismos filtros que `listar()`.
+     * Día completo (tipo 2): los días están en `dias_permiso` (legado) o en `tiempo_permiso`
+     * (formulario nuevo). Parcial (tipo 1): minutos en `tiempo_permiso`. Las fechas
+     * `0000-00-00` del legado cuentan en los totales pero no en las series por fecha.
+     */
+    public function estadisticas(array $filtros, ?int $idNivelViewer): array
+    {
+        try {
+            $base = $this->consultaFiltrada($filtros, $idNivelViewer)->toBase();
+            // ponytail: CAST al número inicial; texto sin número o negativo del legado cuenta 0.
+            $dias = "SUM(CASE WHEN tipo_permiso = 2 THEN GREATEST(CAST(COALESCE(NULLIF(dias_permiso, ''), NULLIF(tiempo_permiso, ''), '0') AS SIGNED), 0) ELSE 0 END)";
+            $horas = "ROUND(SUM(CASE WHEN tipo_permiso = 1 THEN GREATEST(CAST(COALESCE(NULLIF(tiempo_permiso, ''), '0') AS SIGNED), 0) ELSE 0 END) / 60, 1)";
+            $porTipo = 'SUM(tipo_permiso = 1) AS parcial, SUM(tipo_permiso = 2) AS dia_completo';
+            $conFecha = fn () => (clone $base)->where('fecha_permiso', '>', '1000-01-01');
+
+            $resumen = (clone $base)->selectRaw(
+                "COUNT(*) AS total, SUM(estado = 0) AS pendientes, SUM(estado = 1) AS aprobados, SUM(estado = 2) AS rechazados,
+                COUNT(DISTINCT id_user) AS personas, {$dias} AS dias, {$horas} AS horas,
+                SUM(estado = 1 AND remunerado = 'si') AS remunerados, SUM(estado = 1 AND remunerado = 'no') AS no_remunerados"
+            )->first();
+
+            $porMes = $conFecha()
+                ->selectRaw("DATE_FORMAT(fecha_permiso, '%Y-%m') AS mes, {$porTipo}, COUNT(*) AS total, {$dias} AS dias, {$horas} AS horas")
+                ->groupBy('mes')->orderBy('mes')->get();
+
+            $motivos = PermisoMotivo::pluck('nombre', 'id');
+            $porMotivo = (clone $base)
+                ->selectRaw("motivo_permiso AS id, COUNT(*) AS total, {$dias} AS dias, {$horas} AS horas")
+                ->groupBy('motivo_permiso')->orderByDesc('total')->get()
+                ->map(fn ($f) => ['nombre' => $motivos[$f->id] ?? "Motivo #{$f->id}"] + (array) $f);
+
+            $tipos = PermisoTipo::pluck('nombre', 'id');
+            $porTipoPermiso = (clone $base)
+                ->selectRaw("tipo_permiso AS id, COUNT(*) AS total, {$dias} AS dias, {$horas} AS horas")
+                ->groupBy('tipo_permiso')->orderBy('tipo_permiso')->get()
+                ->map(fn ($f) => ['nombre' => $tipos[$f->id] ?? "Tipo #{$f->id}"] + (array) $f);
+
+            $porDetalle = (clone $base)->where('tipo_permiso_detalle', '<>', '')
+                ->selectRaw('tipo_permiso_detalle AS nombre, COUNT(*) AS total')
+                ->groupBy('tipo_permiso_detalle')->orderByDesc('total')->limit(10)->get();
+
+            $porDiaSemana = $conFecha()
+                ->selectRaw("DAYOFWEEK(fecha_permiso) AS dia, {$porTipo}")
+                ->groupBy('dia')->orderBy('dia')->get();
+
+            $porHoraSalida = (clone $base)->where('tipo_permiso', 1)->whereNotNull('hora_salida')
+                ->selectRaw('HOUR(hora_salida) AS hora, COUNT(*) AS total')
+                ->groupBy('hora')->orderBy('hora')->get();
+
+            $top = (clone $base)
+                ->selectRaw("id_user, COUNT(*) AS total, {$dias} AS dias, {$horas} AS horas")
+                ->groupBy('id_user')->orderByDesc('total')->limit(10)->get();
+            $nombres = Usuario::whereIn('id_user', $top->pluck('id_user'))->get(['id_user', 'nombre', 'apellido'])->keyBy('id_user');
+            $topUsuarios = $top->map(fn ($f) => [
+                'nombre' => isset($nombres[$f->id_user]) ? trim("{$nombres[$f->id_user]->nombre} {$nombres[$f->id_user]->apellido}") : "#{$f->id_user}",
+                'total' => (int) $f->total,
+                'dias' => (int) $f->dias,
+                'horas' => (float) $f->horas,
+            ]);
+
+            return ['error' => false, 'message' => 'Estadísticas obtenidas correctamente', 'data' => [
+                'resumen' => $resumen,
+                'por_mes' => $porMes,
+                'por_motivo' => $porMotivo,
+                'por_tipo' => $porTipoPermiso,
+                'por_detalle' => $porDetalle,
+                'por_dia_semana' => $porDiaSemana,
+                'por_hora_salida' => $porHoraSalida,
+                'top_usuarios' => $topUsuarios,
+            ]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Filtros comunes del listado y sus estadísticas (sin orden ni relaciones). */
+    private function consultaFiltrada(array $filtros, ?int $idNivelViewer): Builder
+    {
+        $query = Permiso::query();
+
+        // Coordinador/Directivo (perfil 26 o 7): acotado a las solicitudes de su propio nivel.
+        if ($idNivelViewer !== null) {
+            $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', $idNivelViewer));
+        }
+
+        if (! empty($filtros['id_user'])) {
+            $query->where('id_user', (int) $filtros['id_user']);
+        }
+
+        if (! empty($filtros['id_nivel'])) {
+            $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', (int) $filtros['id_nivel']));
+        }
+
+        if (! empty($filtros['perfil'])) {
+            $query->whereHas('usuario', fn ($u) => $u->where('perfil', (int) $filtros['perfil']));
+        }
+
+        if (! empty($filtros['tipo_permiso'])) {
+            $query->where('tipo_permiso', (int) $filtros['tipo_permiso']);
+        }
+
+        if (! empty($filtros['motivo_permiso'])) {
+            $query->where('motivo_permiso', (int) $filtros['motivo_permiso']);
+        }
+
+        if (isset($filtros['estado']) && $filtros['estado'] !== null && $filtros['estado'] !== '') {
+            $query->where('estado', (int) $filtros['estado']);
+        }
+
+        if (! empty($filtros['fecha_desde'])) {
+            $query->whereDate('fecha_permiso', '>=', $filtros['fecha_desde']);
+        }
+
+        if (! empty($filtros['fecha_hasta'])) {
+            $query->whereDate('fecha_permiso', '<=', $filtros['fecha_hasta']);
+        }
+
+        if (! empty($filtros['s'])) {
+            $search = $filtros['s'];
+            $query->where(function ($q) use ($search) {
+                $q->where('id', $search)
+                    ->orWhereHas('usuario', fn ($u) => $u->where('nombre', 'like', "%{$search}%")
+                        ->orWhere('apellido', 'like', "%{$search}%")
+                        ->orWhere('documento', 'like', "%{$search}%"));
+            });
+        }
+
+        return $query;
+    }
+
     public function detalle(int $id): array
     {
         try {
             $permiso = Permiso::with(['usuario:id_user,nombre,apellido,documento,telefono,correo,id_nivel', 'tipo:id,nombre', 'motivo:id,nombre'])->find($id);
 
-            if (!$permiso) {
+            if (! $permiso) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -249,7 +333,7 @@ class PermisosLicenciasServices
         try {
             $permiso = Permiso::find($id);
 
-            if (!$permiso) {
+            if (! $permiso) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -257,7 +341,7 @@ class PermisosLicenciasServices
                 return ['error' => true, 'message' => 'Solo se pueden editar solicitudes pendientes', 'status' => 422];
             }
 
-            if (!$puedeEditarTodas && $permiso->id_user !== $actorId) {
+            if (! $puedeEditarTodas && $permiso->id_user !== $actorId) {
                 return ['error' => true, 'message' => 'No puedes editar la solicitud de otro usuario', 'status' => 403];
             }
 
@@ -315,7 +399,7 @@ class PermisosLicenciasServices
         try {
             $permiso = Permiso::with('usuario')->find($id);
 
-            if (!$permiso) {
+            if (! $permiso) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -407,11 +491,11 @@ class PermisosLicenciasServices
             ...$this->lineasDetalle($permiso),
             '',
             "Estado: {$estado}",
-            'Fecha de actualización: ' . ($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
+            'Fecha de actualización: '.($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
         ];
 
         if ($permiso->estado === 1 && $permiso->remunerado) {
-            $lineas[] = 'Remunerado: ' . ($permiso->remunerado === 'si' ? 'Sí' : 'No');
+            $lineas[] = 'Remunerado: '.($permiso->remunerado === 'si' ? 'Sí' : 'No');
         }
 
         if ($permiso->estado === 2 && $permiso->motivo_rechazo) {
@@ -422,8 +506,8 @@ class PermisosLicenciasServices
     }
 
     /**
-     * @param array $antes   valores (casteados) de CAMPOS_EDITABLES antes del update
-     * @param array $cambios `getChanges()` acotado a CAMPOS_EDITABLES (solo se usan las claves)
+     * @param  array  $antes  valores (casteados) de CAMPOS_EDITABLES antes del update
+     * @param  array  $cambios  `getChanges()` acotado a CAMPOS_EDITABLES (solo se usan las claves)
      */
     private function notificarEdicion(Permiso $permiso, array $antes, array $cambios, int $actorId): void
     {
@@ -441,7 +525,7 @@ class PermisosLicenciasServices
 
             // Nunca exponer la ruta del archivo en el correo.
             $lineas[] = $campo === 'evidencia_permiso'
-                ? "{$etiqueta}: " . ($antes[$campo] ? 'se reemplazó el archivo' : 'se adjuntó un archivo')
+                ? "{$etiqueta}: ".($antes[$campo] ? 'se reemplazó el archivo' : 'se adjuntó un archivo')
                 : "{$etiqueta}: {$this->valorCorreo($antes[$campo])} → {$this->valorCorreo($permiso->{$campo})}";
         }
 
@@ -450,7 +534,7 @@ class PermisosLicenciasServices
             'Información vigente:',
             ...$this->lineasDetalle($permiso),
             '',
-            'Fecha de actualización: ' . ($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
+            'Fecha de actualización: '.($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
         ]);
 
         $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Permiso/licencia - Editada', implode("\n", $lineas));
@@ -476,7 +560,7 @@ class PermisosLicenciasServices
 
         $lineas = [
             "Usuario: {$nombreCompleto}",
-            'Documento: ' . ($beneficiario->documento ?? 'N/A'),
+            'Documento: '.($beneficiario->documento ?? 'N/A'),
             "Motivo: {$motivo}",
         ];
 
@@ -485,23 +569,23 @@ class PermisosLicenciasServices
         }
 
         $lineas[] = "Tipo de permiso: {$tipo}";
-        $lineas[] = 'Fecha del permiso: ' . ($permiso->fecha_permiso?->format('Y-m-d') ?? 'N/A');
+        $lineas[] = 'Fecha del permiso: '.($permiso->fecha_permiso?->format('Y-m-d') ?? 'N/A');
 
         if ($permiso->hora_salida) {
             $lineas[] = "Hora de salida: {$permiso->hora_salida}";
         }
 
         if ($permiso->fecha_retorno) {
-            $lineas[] = 'Día de ingreso: ' . $permiso->fecha_retorno->format('Y-m-d');
+            $lineas[] = 'Día de ingreso: '.$permiso->fecha_retorno->format('Y-m-d');
         }
 
         $lineas[] = $esParcial
-            ? 'Tiempo aproximado del permiso: ' . ($permiso->tiempo_permiso ? "{$permiso->tiempo_permiso} minutos" : 'N/A')
-            : 'Cantidad de días de permiso: ' . ($permiso->tiempo_permiso ?: ($permiso->dias_permiso ?: 'N/A'));
+            ? 'Tiempo aproximado del permiso: '.($permiso->tiempo_permiso ? "{$permiso->tiempo_permiso} minutos" : 'N/A')
+            : 'Cantidad de días de permiso: '.($permiso->tiempo_permiso ?: ($permiso->dias_permiso ?: 'N/A'));
 
-        $lineas[] = 'Descripción: ' . ($permiso->descripcion ?: 'N/A');
-        $lineas[] = 'Evidencia adjunta: ' . ($permiso->evidencia_permiso ? 'Sí' : 'No');
-        $lineas[] = 'Fecha de la solicitud: ' . ($permiso->fechareg?->format('Y-m-d H:i') ?? 'N/A');
+        $lineas[] = 'Descripción: '.($permiso->descripcion ?: 'N/A');
+        $lineas[] = 'Evidencia adjunta: '.($permiso->evidencia_permiso ? 'Sí' : 'No');
+        $lineas[] = 'Fecha de la solicitud: '.($permiso->fechareg?->format('Y-m-d H:i') ?? 'N/A');
 
         return $lineas;
     }
@@ -560,8 +644,8 @@ class PermisosLicenciasServices
             $config = self::CATALOGOS[$tipo];
             $item = $config['model']::find($id);
 
-            if (!$item) {
-                return ['error' => true, 'message' => 'No se encontró el ítem con id: ' . $id, 'status' => 404];
+            if (! $item) {
+                return ['error' => true, 'message' => 'No se encontró el ítem con id: '.$id, 'status' => 404];
             }
 
             $item->update([
@@ -583,8 +667,8 @@ class PermisosLicenciasServices
             $config = self::CATALOGOS[$tipo];
             $item = $config['model']::find($id);
 
-            if (!$item) {
-                return ['error' => true, 'message' => 'No se encontró el ítem con id: ' . $id, 'status' => 404];
+            if (! $item) {
+                return ['error' => true, 'message' => 'No se encontró el ítem con id: '.$id, 'status' => 404];
             }
 
             $item->update(['activo' => $activo]);
