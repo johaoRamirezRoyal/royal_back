@@ -1,0 +1,44 @@
+# Deploy automático a producción: cada push a `produccion` sube los archivos
+# cambiados por FTP con git-ftp (el mismo flujo que hoy se corre a mano).
+# git-ftp lee en el servidor `.git-ftp.log` (último commit subido) y solo sube el diff,
+# así que continúa exactamente donde quedó el último `git ftp push` local.
+#
+# Secrets requeridos (Settings → Secrets and variables → Actions):
+#   FTP_URL       ej. ftp.royalschool.edu.co (o ftp://host/ruta si no es la raíz de la cuenta)
+#   FTP_USER
+#   FTP_PASSWORD
+#
+# vendor/ y .env no están en git → no se suben; si cambia composer.lock hay que
+# actualizar vendor/ en el servidor a mano, igual que antes.
+
+name: Deploy producción
+
+on:
+  push:
+    branches: [produccion]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-produccion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git-ftp necesita el historial para calcular el diff
+
+      - name: Verificar sintaxis PHP
+        run: find app bootstrap config database routes -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Instalar git-ftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq git-ftp
+
+      - name: Subir cambios por FTP
+        run: git ftp push --user "$FTP_USER" --passwd "$FTP_PASSWORD" "$FTP_URL"
+        env:
+          FTP_URL: ${{ secrets.FTP_URL }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
