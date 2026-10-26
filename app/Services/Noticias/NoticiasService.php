@@ -142,6 +142,11 @@ class NoticiasService
     private function programadasVisiblesDeTipo(string $tipo, ?int $idNivel)
     {
         $hoy = now()->toDateString();
+        // Un cumpleaños sin ventana propia se muestra solo el día del cumpleaños (0 días
+        // después de `fecha`); antes tomaba los 10 de las noticias y seguía en el Home
+        // hasta 10 días después. Las felicitaciones generadas no guardan
+        // dias_visualizacion, así que esto también corrige las que ya existen.
+        $diasDefecto = $tipo === 'cumpleanos' ? 0 : self::DIAS_VISUALIZACION_DEFECTO;
 
         $query = MensajeProgramado::with('nivelRelacion')
             ->where('activo', 1)
@@ -161,7 +166,7 @@ class NoticiasService
             // en blanco.
             ->whereRaw(
                 'DATE_ADD(fecha, INTERVAL COALESCE(dias_visualizacion, ?) DAY) >= ?',
-                [self::DIAS_VISUALIZACION_DEFECTO, $hoy],
+                [$diasDefecto, $hoy],
             )
             ->orderByDesc('fecha')
             ->get();

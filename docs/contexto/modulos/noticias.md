@@ -10,8 +10,11 @@ después de medianoche. Repetirlo es seguro gracias a `enviado_at`/`ultimo_envio
 
 - Las noticias `normal` no se envían por correo: solo se muestran en el Home durante
   `fecha` + `dias_visualizacion`.
-- Un cumpleaños se envía **una vez, en su fecha exacta**. `crearProgramado` siempre crea
-  noticias `normal` y `actualizarProgramado` no cambia el tipo.
+- Un cumpleaños se envía **una vez, en su fecha exacta**, y en el Home se muestra **solo
+  ese día**: sin `dias_visualizacion` propio, su ventana es 0 días
+  (`programadasVisiblesDeTipo`); las noticias usan 10. Antes tomaba los 10 días y seguía
+  en el Home después del cumpleaños. `crearProgramado` siempre crea noticias `normal` y
+  `actualizarProgramado` no cambia el tipo.
 - Interruptor de correos (`configuracion_noticias.enviar_correos_programadas`,
   `GET|PUT /api/noticias/configuracion`): apagado, no envía **ni marca `enviado_at`**. No
   afecta al mensaje general.
