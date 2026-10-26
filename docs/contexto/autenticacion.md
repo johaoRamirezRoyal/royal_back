@@ -55,3 +55,27 @@ contraseña (para soporte).
   `via_llave_maestra: true` y `generado_por`, que `AuthController::check()` devuelve para
   que el frontend muestre su aviso.
 - `revocar()` no borra la fila: pone `expira_en = now()` para conservar la auditoría.
+
+## Página de acceso en el navegador (`PaginaAccesoNavegador`)
+
+Si alguien abre una ruta de la API en el navegador, un 401, 403, 404 o 503 se muestra
+como una página con el diseño de OMNIA (`resources/views/errores/acceso.blade.php`). Los
+textos están en `AVISOS` del middleware.
+
+| Código | Botón |
+|---|---|
+| 401 | login del frontend (`FRONTEND_URL`) |
+| 403 | `/home` del frontend |
+| 404 | login del frontend |
+| 503 (`MANTENIMIENTO`) | "Volver a intentar" (recarga la misma dirección; conserva `Retry-After`) |
+
+- Es el middleware más externo del grupo `api`, así que cubre todas las fuentes de esos
+  códigos sin tocarlas. Un middleware o controller nuevo que responda 401/403/404 queda
+  cubierto solo.
+- **Las rutas que no existen** no pasan por el grupo `api`: su 404 lo convierte el
+  `respond()` de `bootstrap/app.php` con `PaginaAccesoNavegador::pagina()`, solo cuando no
+  hubo ruta, para no convertirlo dos veces.
+- **Solo actúa si `Accept` pide `text/html` de forma explícita.** `apiFetch` (con
+  `application/json`), `fetch()` sin cabeceras y las imágenes (`*/*`) siguen recibiendo
+  JSON. No lo cambies por `acceptsHtml()`, que también acepta `*/*`.
+- Test: `tests/Feature/PaginaAccesoNavegadorTest.php`.
