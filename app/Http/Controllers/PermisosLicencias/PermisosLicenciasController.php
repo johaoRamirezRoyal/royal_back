@@ -2,26 +2,32 @@
 
 namespace App\Http\Controllers\PermisosLicencias;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PermisosLicencias\ActualizarPermisoRequest;
 use App\Http\Requests\PermisosLicencias\StorePermisoRequest;
 use App\Services\permisosLicencias\PermisosLicenciasServices;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
-use App\Services\Usuarios\PermisosPerfil;
 
 class PermisosLicenciasController extends Controller
 {
     use VerificaPermisos;
 
     private const OPCION_ACCESO = Permiso::PERMISOS_LICENCIAS;
+
     private const OPCION_LISTADO = Permiso::PERMISOS_LICENCIAS_LISTADO;
+
     private const OPCION_EDITAR_PROPIA = Permiso::PERMISOS_LICENCIAS_EDITAR_PROPIA;
+
     private const OPCION_GESTION = Permiso::PERMISOS_LICENCIAS_APROBAR;
+
     private const OPCION_DETALLE = Permiso::PERMISOS_LICENCIAS_DETALLE;
+
     private const OPCION_ASIGNAR = Permiso::PERMISOS_LICENCIAS_OPERATIVOS;
+
     // Configuración de catálogos (motivo/ley/personal/institucional) — ver migración
     // 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.
     private const OPCION_CONFIGURACION = Permiso::PERMISOS_LICENCIAS_CONFIGURACION;
@@ -31,8 +37,7 @@ class PermisosLicenciasController extends Controller
 
     public function __construct(
         private PermisosLicenciasServices $service,
-    ) {
-    }
+    ) {}
 
     // ── Catálogos (sin gate, necesarios en el formulario) ──────────────
 
@@ -113,7 +118,7 @@ class PermisosLicenciasController extends Controller
     {
         $puedeEditarTodas = PermisosPerfil::tiene($request, self::OPCION_GESTION);
 
-        if (!$puedeEditarTodas && $rechazo = $this->sinAcceso($request, self::OPCION_EDITAR_PROPIA)) {
+        if (! $puedeEditarTodas && $rechazo = $this->sinAcceso($request, self::OPCION_EDITAR_PROPIA)) {
             return $rechazo;
         }
 
@@ -136,11 +141,29 @@ class PermisosLicenciasController extends Controller
             return $rechazo;
         }
 
-        $idNivelViewer = in_array($request->user()->perfil, self::PERFILES_COORDINACION_NIVEL, true)
+        return $this->paginatedResponse($this->service->listar($this->filtrosListado($request), $this->nivelViewer($request), (int) $request->input('per-page', 15)));
+    }
+
+    /** GET /estadisticas — opción 81. Gráficas del listado, mismos filtros que `listar()`. */
+    public function estadisticas(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_LISTADO)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->service->estadisticas($this->filtrosListado($request), $this->nivelViewer($request)));
+    }
+
+    private function nivelViewer(Request $request): ?int
+    {
+        return in_array($request->user()->perfil, self::PERFILES_COORDINACION_NIVEL, true)
             ? $request->user()->id_nivel
             : null;
+    }
 
-        $filtros = [
+    private function filtrosListado(Request $request): array
+    {
+        return [
             'id_user' => $request->input('id_user'),
             'tipo_permiso' => $request->input('tipo_permiso'),
             'motivo_permiso' => $request->input('motivo_permiso'),
@@ -152,8 +175,6 @@ class PermisosLicenciasController extends Controller
             'id_nivel' => $request->input('id_nivel'),
             'perfil' => $request->input('perfil'),
         ];
-
-        return $this->paginatedResponse($this->service->listar($filtros, $idNivelViewer, (int) $request->input('per-page', 15)));
     }
 
     /** GET /{id} — opción 90. */
@@ -195,7 +216,7 @@ class PermisosLicenciasController extends Controller
 
     private function tipoCatalogoInvalido(string $tipo): ?JsonResponse
     {
-        if (!PermisosLicenciasServices::tipoCatalogoValido($tipo)) {
+        if (! PermisosLicenciasServices::tipoCatalogoValido($tipo)) {
             return $this->error("Catálogo inválido: {$tipo}. Debe ser uno de: motivo, ley, personal, institucional.", 422);
         }
 
