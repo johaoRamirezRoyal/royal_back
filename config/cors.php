@@ -13,6 +13,8 @@ return [
         'https://frontend-new-s-a-m-i.vercel.app',
         'https://frontend-new-s-a-m-8tnnuns5u-royal-s-projects11.vercel.app',
         'https://gestorsami.royalschool.edu.co',
+        'https://omniaeducation.co',
+        'https://www.omniaeducation.co',
     ],
 
     'allowed_origins_patterns' => [],
