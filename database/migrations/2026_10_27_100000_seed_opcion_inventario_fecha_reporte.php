@@ -4,9 +4,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Opción 140 "Fecha Reporte" (módulo 2, Inventario, ver InventariosController): permite fijar
- * `inventario.fechareg` al agregar o editar un ítem. Sin ella, al crear la pone la BD y al
- * editar no se puede cambiar.
+ * Opción 140 "Fecha de Reporte" (módulo 2, Inventario, ver InventariosController): permite
+ * elegir la fecha (`reportes.fechareg`) al reportar un daño. Sin ella, el reporte queda con
+ * la fecha actual.
  *
  * No se otorga a ningún perfil: se asigna desde /permisos (Super Admin la tiene por su acceso
  * global). Id explícito (el de producción): si ya está ocupado por otra cosa, la migración
@@ -16,7 +16,7 @@ return new class extends Migration
 {
     private const ID_OPCION = 140;
 
-    private const NOMBRE = 'Fecha Reporte';
+    private const NOMBRE = 'Fecha de Reporte';
 
     private const ID_MODULO = 2;
 

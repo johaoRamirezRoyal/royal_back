@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * Contra la base real (ver InventarioHistorialFlowTest): editar `fechareg` exige la opción
- * Fecha Reporte además de Inventario. No escribe nada: la petición se rechaza antes de guardar.
+ * Contra la base real (ver InventarioHistorialFlowTest): elegir la fecha de un reporte de daño
+ * exige la opción Fecha de Reporte. No escribe nada: la petición se rechaza antes de guardar.
  */
 class InventarioFechaReporteTest extends TestCase
 {
@@ -28,7 +28,7 @@ class InventarioFechaReporteTest extends TestCase
         DB::purge('mysql');
     }
 
-    public function test_sin_opcion_fecha_reporte_no_puede_cambiar_fechareg(): void
+    public function test_sin_opcion_fecha_de_reporte_no_puede_elegir_la_fecha_del_reporte(): void
     {
         $perfilesConFecha = DB::table('cron_permisos')->where('id_opcion', Permiso::INVENTARIO_FECHA_REPORTE)
             ->where('activo', 1)->pluck('id_perfil');
@@ -39,17 +39,26 @@ class InventarioFechaReporteTest extends TestCase
             ->whereIn('perfil', DB::table('cron_permisos')->where('id_opcion', Permiso::INVENTARIO)->where('activo', 1)->select('id_perfil'))
             ->first();
 
-        $item = DB::table('inventario')->value('id');
+        $item = DB::table('inventario')->whereNotIn('estado', [2, 5])->value('id');
+        $anio = DB::table('anio_escolar')->value('id');
+        $periodo = DB::table('periodos')->value('id');
 
-        if (! $usuario || ! $item) {
-            $this->markTestSkipped('No hay un usuario con Inventario y sin Fecha Reporte, o no hay ítems.');
+        if (! $usuario || ! $item || ! $anio || ! $periodo) {
+            $this->markTestSkipped('Faltan datos reales (usuario con Inventario sin Fecha de Reporte, ítem, año o periodo).');
         }
 
         $token = app(JwtService::class)->generateToken($usuario);
+        $reportesAntes = DB::table('reportes')->where('id_inventario', $item)->count();
 
-        $this->putJson("/api/inventario/{$item}", ['fechareg' => '2020-01-01'], ['Authorization' => "Bearer {$token}"])
-            ->assertForbidden();
+        $this->postJson('/api/inventario/reportar', [
+            'ids' => [$item],
+            'id_log' => $usuario->id_user,
+            'descripcion' => 'Prueba automática: no debe guardarse',
+            'id_anio' => $anio,
+            'id_periodo' => $periodo,
+            'fechareg' => '2020-01-01',
+        ], ['Authorization' => "Bearer {$token}"])->assertForbidden();
 
-        $this->assertNotSame('2020-01-01', substr((string) DB::table('inventario')->where('id', $item)->value('fechareg'), 0, 10));
+        $this->assertSame($reportesAntes, DB::table('reportes')->where('id_inventario', $item)->count());
     }
 }
