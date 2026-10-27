@@ -1832,12 +1832,16 @@ class InventarioServices
         int $id_log,
         string $descripcion,
         int $id_anio,
-        int $id_periodo
+        int $id_periodo,
+        ?string $fechareg = null
     ): array {
+        // Con fecha elegida (opción Fecha de Reporte) se conserva la hora actual, para no
+        // dejar todos los reportes de ese día a las 00:00.
+        $fechaReporte = $fechareg ? Carbon::parse($fechareg)->setTimeFrom(now()) : now();
 
         try {
 
-            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo) {
+            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo, $fechaReporte) {
 
                 // 2 = ya reportado, 5 = descontinuado — un ítem con mantenimiento
                 // preventivo pendiente (6) SÍ se puede reportar (ej. un daño nuevo,
@@ -1874,6 +1878,7 @@ class InventarioServices
                         'observacion' => $descripcion,
                         'id_anio' => $id_anio,
                         'periodo' => $id_periodo,
+                        'fechareg' => $fechaReporte,
                     ]);
                 }
 
@@ -1889,7 +1894,7 @@ class InventarioServices
             if (! $resultado['error']) {
                 $reportadorCorreo = Usuario::find($id_log)?->correo;
                 $reportadorNombre = InventarioEmailHelper::nombreUsuario($id_log);
-                $fecha = now()->format('d/m/Y H:i');
+                $fecha = $fechaReporte->format('d/m/Y H:i');
                 // Nombre del estado al que quedó el ítem (2 = Reportado) — no vía la
                 // relación Inventario::estado(), que colisiona con la columna `estado`
                 // del propio modelo (mismo criterio que el resto del módulo, que

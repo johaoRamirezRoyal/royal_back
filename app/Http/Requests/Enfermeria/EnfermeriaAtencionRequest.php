@@ -41,9 +41,9 @@ class EnfermeriaAtencionRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'id_user.required' => 'El estudiante es obligatorio',
-            'id_user.integer' => 'El ID del estudiante debe ser un número entero',
-            'id_user.exists' => 'El estudiante seleccionado no existe',
+            'id_user.required' => 'El paciente es obligatorio',
+            'id_user.integer' => 'El ID del paciente debe ser un número entero',
+            'id_user.exists' => 'El paciente seleccionado no existe',
 
             'motivo.required' => 'El motivo de la atención es obligatorio',
             'motivo.integer' => 'El motivo debe ser un número entero',

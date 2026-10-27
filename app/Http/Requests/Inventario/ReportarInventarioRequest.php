@@ -24,6 +24,8 @@ class ReportarInventarioRequest extends FormRequest
             // Periodo::reportes() y registrarCheckInventario en InventarioServices, que
             // comparan `reportes.periodo`/`inventario_check.periodo` contra ese mismo id.
             'id_periodo' => ['required', 'integer', Rule::exists('periodos', 'id')],
+            // Fecha del reporte: solo con la opción Fecha de Reporte (la valida el controller).
+            'fechareg' => ['sometimes', 'required', 'date', 'before_or_equal:today'],
         ];
     }
 
@@ -52,6 +54,10 @@ class ReportarInventarioRequest extends FormRequest
             'id_periodo.required' => 'El periodo es obligatorio',
             'id_periodo.integer' => 'El periodo debe ser un número entero',
             'id_periodo.exists' => 'El periodo no existe',
+
+            'fechareg.required' => 'La fecha del reporte es obligatoria',
+            'fechareg.date' => 'La fecha del reporte debe ser una fecha válida',
+            'fechareg.before_or_equal' => 'La fecha del reporte no puede ser futura',
         ];
     }
 
@@ -63,6 +69,7 @@ class ReportarInventarioRequest extends FormRequest
             'descripcion' => $this->descripcion,
             'id_anio' => $this->id_anio,
             'id_periodo' => $this->id_periodo,
+            'fechareg' => $this->input('fechareg'),
         ];
     }
 }

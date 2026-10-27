@@ -374,3 +374,13 @@ ALTER TABLE `hikvision_dispositivos` ADD `usuario` varchar(100) NULL AFTER `puer
 ALTER TABLE `hikvision_dispositivos` ADD `password` text NULL AFTER `usuario`;
 ALTER TABLE `hikvision_dispositivos` ADD `principal` tinyint(1) NOT NULL DEFAULT '0' AFTER `password`;
 ALTER TABLE `hikvision_dispositivos` ADD `activo` tinyint(1) NOT NULL DEFAULT '1' AFTER `principal`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_27_100000_seed_opcion_inventario_fecha_reporte.php
+-- Opción 140 "Fecha de Reporte" (módulo 2, Inventario): permite elegir la
+-- fecha (reportes.fechareg) al reportar un daño. No se otorga a ningún perfil
+-- (se asigna desde /permisos). En producción ya existía con este id y nombre.
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 140, 'Fecha de Reporte', 2, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 140);

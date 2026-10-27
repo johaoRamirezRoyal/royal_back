@@ -45,6 +45,9 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
   al bloque o que están asignados directo al bloque, en AND con los demás filtros. **No
   es `id_bloque[]`**: ese mira solo `inventario.id_bloque` y se suma con OR a `id_area`
   (lo usa Áreas Comunes). No lo cambies.
+- **Fecha de un reporte de daño**: `POST /inventario/reportar` acepta `fechareg` (no futura)
+  solo con la opción 140 "Fecha de Reporte" (`Permiso::INVENTARIO_FECHA_REPORTE`); si no,
+  403. Se guarda en `reportes.fechareg` con la hora actual; sin el campo, la fecha es ahora.
 
 ## Áreas Comunes (`/inventario/areas-comunes`, `routes/api/bloques.php`)
 
