@@ -45,6 +45,9 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
   al bloque o que están asignados directo al bloque, en AND con los demás filtros. **No
   es `id_bloque[]`**: ese mira solo `inventario.id_bloque` y se suma con OR a `id_area`
   (lo usa Áreas Comunes). No lo cambies.
+- **`fechareg` (fecha de reporte)**: `POST /inventario` y `PUT /inventario/{id}` solo
+  aceptan `fechareg` con la opción 140 "Fecha Reporte" (`Permiso::INVENTARIO_FECHA_REPORTE`),
+  además de la 12; si no, 403. Sin el campo, al crear la pone la BD (default).
 
 ## Áreas Comunes (`/inventario/areas-comunes`, `routes/api/bloques.php`)
 
