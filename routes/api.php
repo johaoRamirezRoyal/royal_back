@@ -33,6 +33,7 @@ Route::group(['prefix' => 'auth'], function () {
 // Banner informativo público (sin token — se lee desde el login y desde el sistema
 // general ya autenticado, ver App\Http\Controllers\BannerInformativoController).
 Route::get('/banner-informativo', [App\Http\Controllers\BannerInformativoController::class, 'obtener']);
+Route::get('/banners-modulo', [App\Http\Controllers\BannerInformativoController::class, 'porModulo']);
 
 // Encuesta pública por salón (sin token — se accede vía QR físico pegado en el salón,
 // anónima, cualquiera con el link puede responder). El token identifica el salón, no su

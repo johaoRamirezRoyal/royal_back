@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminManagement\BannerInformativoController;
+use App\Http\Controllers\AdminManagement\BannerModuloController;
 use App\Http\Controllers\AdminManagement\BasesDatosController;
 use App\Http\Controllers\AdminManagement\CorreosInstitucionalesController;
 use App\Http\Controllers\AdminManagement\LlaveMaestraController;
@@ -37,6 +38,13 @@ Route::prefix('banner-informativo')->group(function () {
     // Envía el mensaje YA GUARDADO por correo — acción explícita separada del guardado
     // (ver BannerInformativoService::enviarCorreo), no dispara sola al tocar 'activo'.
     Route::post('/enviar-correo', [BannerInformativoController::class, 'enviarCorreo']);
+});
+
+// Un banner por módulo del sidebar (la imagen se sube con banner-informativo/imagen).
+Route::prefix('banners-modulo')->group(function () {
+    Route::get('/', [BannerModuloController::class, 'listar']);
+    Route::put('/', [BannerModuloController::class, 'guardar']);
+    Route::delete('/{id}', [BannerModuloController::class, 'eliminar'])->whereNumber('id');
 });
 
 // Destinatarios fijos de cada módulo (App\Enums\Mails) en la BD de la connection activa.

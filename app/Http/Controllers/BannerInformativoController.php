@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\AdminManagement\BannerInformativoService;
+use App\Services\AdminManagement\BannerModuloService;
 use App\Services\branding\MarcaDominioService;
 use Illuminate\Http\Request;
 
@@ -17,7 +18,20 @@ class BannerInformativoController extends Controller
     public function __construct(
         private BannerInformativoService $service,
         private MarcaDominioService $marcaDominioService,
+        private BannerModuloService $bannersModulo,
     ) {
+    }
+
+    /**
+     * Banners por módulo activos para el visitante (`correo`, igual que obtener()): el
+     * frontend elige el del módulo en el que está. Sin correo, solo los globales.
+     */
+    public function porModulo(Request $request)
+    {
+        $dominio = $this->marcaDominioService->dominioDeCorreo($request->query('correo'));
+
+        return $this->success('Banners por módulo obtenidos correctamente', $this->bannersModulo->activos($dominio)
+            ->map(fn ($b) => $b->only(['modulo', 'mensaje', 'imagen', 'variante', 'tamano', 'expira_en', 'mostrar_modal'])));
     }
 
     /**
