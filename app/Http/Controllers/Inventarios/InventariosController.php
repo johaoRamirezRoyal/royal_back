@@ -35,6 +35,9 @@ class InventariosController extends Controller
 
     private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
 
+    // Fijar `fechareg` (fecha de reporte) al agregar/editar exige esta opción además de 12.
+    private const OPCION_FECHA_REPORTE = Permiso::INVENTARIO_FECHA_REPORTE;
+
     // cron_opciones bajo id_modulo=6 (Zonas) — Áreas Comunes tiene su propio par de
     // permisos, separado de OPCION_INVENTARIO; historialInventario() los acepta también
     // porque "Ver hoja de vida" ya se ofrece como acción de fila en Listado de Áreas
@@ -60,6 +63,10 @@ class InventariosController extends Controller
     public function agregarInventario(RegistrarInventarioRequest $request)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        if ($request->has('fechareg') && ($rechazo = $this->sinAcceso($request, self::OPCION_FECHA_REPORTE))) {
             return $rechazo;
         }
 
@@ -206,6 +213,10 @@ class InventariosController extends Controller
     public function actualizarInventario(ActualizarInventarioRequest $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        if ($request->has('fechareg') && ($rechazo = $this->sinAcceso($request, self::OPCION_FECHA_REPORTE))) {
             return $rechazo;
         }
 

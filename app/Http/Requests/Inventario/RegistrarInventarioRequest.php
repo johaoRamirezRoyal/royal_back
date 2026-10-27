@@ -53,6 +53,9 @@ class RegistrarInventarioRequest extends FormRequest
                 'nullable'
             ],
 
+            // Solo con la opción Fecha Reporte (lo valida el controller); sin ella la pone la BD.
+            "fechareg" => ['sometimes', 'required', 'date'],
+
             // Normalmente un ítem requiere un área; para inventario de "Área Común"
             // asignado directo a un bloque (sin salón puntual), id_bloque cubre el hueco
             // — se exige al menos uno de los dos (required_without simétrico).
@@ -126,6 +129,9 @@ class RegistrarInventarioRequest extends FormRequest
             // fecha_compra
             'fecha_compra.date' => 'La fecha de compra debe ser una fecha válida',
 
+            'fechareg.required' => 'La fecha de reporte es obligatoria',
+            'fechareg.date' => 'La fecha de reporte debe ser una fecha válida',
+
             // id_area
             'id_area.required_without' => 'Debes indicar un área o un bloque',
             'id_area.integer' => 'El área debe ser un número válido',
@@ -169,7 +175,7 @@ class RegistrarInventarioRequest extends FormRequest
      * @return array{activo: mixed, descripcion: mixed, estado: mixed, fecha_compra: mixed, id_area: mixed, id_categoria: mixed, id_compra: mixed, id_user: mixed, marca: mixed, modelo: mixed, precio: mixed}
      */
     public function toInventarioCreate(): array {
-        return [
+        return $this->only('fechareg') + [
             'descripcion' => $this->descripcion,
             'marca' => $this->marca,
             'modelo' => $this->modelo,
