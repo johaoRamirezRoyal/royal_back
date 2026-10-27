@@ -59,14 +59,15 @@ class NoticiaMail extends Mailable
             return [];
         }
 
-        $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
+        $nombreDisco = config('filesystems.uploads_disk', 'public');
 
-        if (!$disk->exists($this->imagenRuta)) {
+        if (!Storage::disk($nombreDisco)->exists($this->imagenRuta)) {
             return [];
         }
 
+        // Desde el disco (no desde un path): funciona igual en local y en Cloudinary.
         return [
-            Attachment::fromPath($disk->path($this->imagenRuta)),
+            Attachment::fromStorageDisk($nombreDisco, $this->imagenRuta),
         ];
     }
 }

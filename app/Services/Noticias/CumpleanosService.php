@@ -9,6 +9,7 @@ use App\Models\Noticias\PlantillaCumpleanos;
 use App\Models\PerfilUsuario\InfoAdicionalUsuario;
 use App\Models\Usuarios\Usuario;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
+use App\Services\FileStorageService;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +33,7 @@ class CumpleanosService
     // Ejemplo de la vista previa sin usuario elegido (no es un dato real).
     private const NOMBRE_EJEMPLO = ['María Fernanda', 'Rodríguez Gómez'];
 
-    public function __construct(private CumpleanosImagen $imagen)
+    public function __construct(private CumpleanosImagen $imagen, private FileStorageService $archivos)
     {
     }
 
@@ -81,7 +82,7 @@ class CumpleanosService
                 if (!$this->disco()->exists($imagen)) {
                     return ['error' => true, 'message' => 'La imagen subida ya no existe; súbela de nuevo'];
                 }
-                $plantilla->fill($this->imagen->inspeccionar($this->disco()->path($imagen)));
+                $plantilla->fill($this->imagen->inspeccionar($this->archivos->rutaLocal($imagen) ?? ''));
             }
             if (!$imagen) {
                 $plantilla->fill(['ancho' => null, 'alto' => null, 'transparente' => false]);
@@ -200,7 +201,7 @@ class CumpleanosService
 
     public function inspeccionarImagen(string $ruta): array
     {
-        return $this->imagen->inspeccionar($this->disco()->path($ruta));
+        return $this->imagen->inspeccionar($this->archivos->rutaLocal($ruta) ?? '');
     }
 
     /** JPEG de la felicitación con la persona elegida, o con un nombre de ejemplo y sin foto. */
@@ -221,10 +222,10 @@ class CumpleanosService
         return [
             'error' => false,
             'data' => $this->imagen->componer(
-                $this->disco()->path($imagen),
+                $this->archivos->rutaLocal($imagen) ?? '',
                 $e,
                 CumpleanosImagen::formatearNombre($nombre, $apellido, $e['nombre']['formato'], $e['nombre']['mayusculas']),
-                $persona && $persona['foto_existe'] ? $this->disco()->path($persona['foto']) : null,
+                $persona && $persona['foto_existe'] ? $this->archivos->rutaLocal($persona['foto']) : null,
             ),
         ];
     }
@@ -240,9 +241,8 @@ class CumpleanosService
     {
         $hoy = Carbon::today();
         $excluidos = DB::table('cumpleanos_excluidos')->pluck('id_user')->flip();
-        $disco = $this->disco();
 
-        return Usuario::query()
+        $filas = Usuario::query()
             ->from('usuarios as u')
             ->leftJoin('info_adicional_usuarios as ia', 'ia.id_user', '=', 'u.id_user')
             ->leftJoin('perfiles as p', 'p.id_perfil', '=', 'u.perfil')
@@ -256,10 +256,17 @@ class CumpleanosService
             ])
             ->orderBy('u.nombre')
             ->toBase()
-            ->get()
-            ->map(function ($u) use ($hoy, $excluidos, $disco) {
+            ->get();
+
+        // Todas a la vez: con el disco en Cloudinary cada consulta es una petición HTTP.
+        $fotosExistentes = $this->archivos->existentes(
+            $filas->map(fn ($u) => $u->foto_perfil ?: ($u->foto_carnet ?: null))->all()
+        );
+
+        return $filas
+            ->map(function ($u) use ($hoy, $excluidos, $fotosExistentes) {
                 $foto = $u->foto_perfil ?: ($u->foto_carnet ?: null);
-                $fotoExiste = $foto && !str_contains($foto, '..') && $disco->exists($foto);
+                $fotoExiste = $foto && ($fotosExistentes[$foto] ?? false);
                 $genero = $this->normalizarGenero($u->genero);
                 $nacimiento = $u->fecha_nacimiento ? Carbon::parse($u->fecha_nacimiento) : null;
 
@@ -575,10 +582,10 @@ class CumpleanosService
         try {
             $e = CumpleanosImagen::normalizar($plantilla->elementos);
             $jpeg = $this->imagen->componer(
-                $this->disco()->path($plantilla->imagen),
+                $this->archivos->rutaLocal($plantilla->imagen) ?? '',
                 $e,
                 CumpleanosImagen::formatearNombre($p['nombre'], $p['apellido'], $e['nombre']['formato'], $e['nombre']['mayusculas']),
-                $this->disco()->path($p['foto']),
+                $this->archivos->rutaLocal($p['foto']),
             );
             $ruta = 'noticias/cumpleanos/' . Str::uuid() . '.jpg';
             $this->disco()->put($ruta, $jpeg);

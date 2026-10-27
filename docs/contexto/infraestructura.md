@@ -26,8 +26,25 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
 - **`FileStorageService`** guarda archivos locales: `uploadFile` (nombre UUID), `eliminar`
   y `reemplazar`.
   - El disco es `config('filesystems.uploads_disk')`: `UPLOADS_DISK=sami` en el VPS
-    (sirve `public/upload`) o `public` en local.
+    (sirve `public/upload`), `public` en local o `cloudinary`.
   - En la BD se guarda la **`ruta`**; la `url` es solo para exponerla.
+  - `rutaLocal($ruta)` da un path real para lo que lo necesita (GD, adjuntos). En un disco
+    remoto, descarga a `storage/app/archivos-remotos/` y lo reusa. **No uses
+    `$disk->path()`**: en Cloudinary devuelve la ruta relativa, no un archivo.
+  - `existentes($rutas)` comprueba muchas rutas a la vez (HEAD en paralelo). Úsalo en
+    listados en vez de `exists()` por fila.
+- **Disco `cloudinary`** (driver `cloudinary_uploads`,
+  `App\Services\Cloudinary\CloudinaryUploadsAdapter`):
+  - Usa el mismo direccionamiento que la migración: `<CLOUDINARY_UPLOADS_PREFIJO,
+    royal>/<ruta>`. Así los archivos migrados y los nuevos se ven igual, y el frontend
+    arma la URL solo (`src/utils/fileUrl.ts`, que sigue la misma regla, con test en
+    `tests/Unit/Cloudinary`).
+  - Imágenes y PDF son `image` (public_id sin extensión) y el resto `raw` (con
+    extensión). El nombre se sanea como en `CloudinaryService::uploadFile`.
+  - `url()`, `exists()` y la lectura usan la URL de entrega (CDN), no la Admin API, que
+    tiene cuota por hora.
+  - El disco `cloudinary` del paquete (`CloudinaryStorageAdapter`) no sirve aquí: solo
+    pone prefijo a los `raw`, manda los PDF a `raw` y gasta Admin API en cada `url()`.
 - **`CloudinaryService`**: `uploadFile($file, $folder, ..., $extensionesPermitidas?)`,
   `getFileUrl` y `deleteFile`.
   - Los PDF se suben como `image` y los documentos de Office como `raw` (sin extensión en
