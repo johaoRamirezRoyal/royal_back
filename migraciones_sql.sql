@@ -377,10 +377,10 @@ ALTER TABLE `hikvision_dispositivos` ADD `activo` tinyint(1) NOT NULL DEFAULT '1
 
 -- ---------------------------------------------------------------------------
 -- 2026_10_27_100000_seed_opcion_inventario_fecha_reporte.php
--- Opción 140 "Fecha Reporte" (módulo 2, Inventario): permite fijar
--- inventario.fechareg al agregar/editar un ítem. No se otorga a ningún perfil
--- (se asigna desde /permisos).
+-- Opción 140 "Fecha de Reporte" (módulo 2, Inventario): permite elegir la
+-- fecha (reportes.fechareg) al reportar un daño. No se otorga a ningún perfil
+-- (se asigna desde /permisos). En producción ya existía con este id y nombre.
 -- ---------------------------------------------------------------------------
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
-SELECT 140, 'Fecha Reporte', 2, 1, NOW() FROM DUAL
+SELECT 140, 'Fecha de Reporte', 2, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 140);

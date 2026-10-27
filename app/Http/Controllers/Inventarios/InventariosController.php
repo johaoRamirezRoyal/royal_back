@@ -35,7 +35,7 @@ class InventariosController extends Controller
 
     private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
 
-    // Fijar `fechareg` (fecha de reporte) al agregar/editar exige esta opción además de 12.
+    // Fijar la fecha de un reporte de daño (en vez de "ahora") exige esta opción.
     private const OPCION_FECHA_REPORTE = Permiso::INVENTARIO_FECHA_REPORTE;
 
     // cron_opciones bajo id_modulo=6 (Zonas) — Áreas Comunes tiene su propio par de
@@ -63,10 +63,6 @@ class InventariosController extends Controller
     public function agregarInventario(RegistrarInventarioRequest $request)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
-            return $rechazo;
-        }
-
-        if ($request->has('fechareg') && ($rechazo = $this->sinAcceso($request, self::OPCION_FECHA_REPORTE))) {
             return $rechazo;
         }
 
@@ -216,10 +212,6 @@ class InventariosController extends Controller
             return $rechazo;
         }
 
-        if ($request->has('fechareg') && ($rechazo = $this->sinAcceso($request, self::OPCION_FECHA_REPORTE))) {
-            return $rechazo;
-        }
-
         $resultado = $this->inventario_services->actualizarInventario($id, $request->toInventarioUpdate());
 
         return $this->apiResponse($resultado);
@@ -366,6 +358,10 @@ class InventariosController extends Controller
             return $rechazo;
         }
 
+        if ($request->has('fechareg') && ($rechazo = $this->sinAcceso($request, self::OPCION_FECHA_REPORTE))) {
+            return $rechazo;
+        }
+
         $data = $request->toReportarInventario();
 
         $resultado = $this->inventario_services->reportarInventario(
@@ -373,7 +369,8 @@ class InventariosController extends Controller
             $data['id_log'],
             $data['descripcion'],
             $data['id_anio'],
-            $data['id_periodo']
+            $data['id_periodo'],
+            $data['fechareg']
         );
 
         return $this->apiResponse($resultado);
