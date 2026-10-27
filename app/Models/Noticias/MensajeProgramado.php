@@ -21,6 +21,8 @@ class MensajeProgramado extends Model
         'id_log',
         'activo',
         'enviado_at',
+        'envio_fallido',
+        'envio_detalle',
     ];
 
     public $timestamps = false;
@@ -28,6 +30,7 @@ class MensajeProgramado extends Model
     protected $casts = [
         'fecha' => 'date:Y-m-d',
         'enviado_at' => 'datetime',
+        'envio_fallido' => 'boolean',
     ];
 
     protected $attributes = [

@@ -220,4 +220,9 @@ class CumpleanosController extends Controller implements HasMiddleware
     {
         return $this->apiResponse($this->service->regenerar($idUser));
     }
+
+    public function reenviarCorreo(int $idMensaje): JsonResponse
+    {
+        return $this->apiResponse($this->service->reenviarCorreo($idMensaje));
+    }
 }

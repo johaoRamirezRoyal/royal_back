@@ -33,8 +33,15 @@ class CumpleanosService
     // Ejemplo de la vista previa sin usuario elegido (no es un dato real).
     private const NOMBRE_EJEMPLO = ['María Fernanda', 'Rodríguez Gómez'];
 
-    public function __construct(private CumpleanosImagen $imagen, private FileStorageService $archivos)
-    {
+    // Felicitaciones con correo fallido que siguen en "Próximas felicitaciones" después de su
+    // día, para poder reenviarlas (la lista solo mira hacia adelante).
+    private const DIAS_ENVIO_FALLIDO = 30;
+
+    public function __construct(
+        private CumpleanosImagen $imagen,
+        private FileStorageService $archivos,
+        private NoticiasService $noticias,
+    ) {
     }
 
     private function disco(): Filesystem
@@ -421,7 +428,9 @@ class CumpleanosService
         $proximos = $personal->filter(fn ($p) => $p['dias_para'] !== null && $p['dias_para'] <= $dias)->sortBy('dias_para');
         $generados = CumpleanosGenerado::whereIn('id_user', $proximos->pluck('id_user'))->get()
             ->keyBy(fn ($g) => "{$g->id_user}-{$g->anio}");
-        $mensajes = MensajeProgramado::whereIn('id', $generados->pluck('id_mensaje')->filter())->pluck('id')->flip();
+        $mensajes = MensajeProgramado::whereIn('id', $generados->pluck('id_mensaje')->filter())
+            ->get(['id', 'envio_fallido', 'envio_detalle'])
+            ->keyBy('id');
 
         $filas = $proximos->map(function ($p) use ($config, $hoy, $plantillas, $generados, $mensajes) {
             $fecha = Carbon::parse($p['proximo_cumpleanos']);
@@ -441,7 +450,16 @@ class CumpleanosService
             ];
 
             if ($g && $g->estado === 'generada') {
-                $existe = $g->id_mensaje && isset($mensajes[$g->id_mensaje]);
+                $mensaje = $g->id_mensaje ? $mensajes->get($g->id_mensaje) : null;
+                $existe = $mensaje !== null;
+
+                if ($mensaje?->envio_fallido) {
+                    return array_merge($fila, [
+                        'estado' => 'envio_fallido',
+                        'detalle' => $mensaje->envio_detalle,
+                        'id_mensaje' => $mensaje->id,
+                    ]);
+                }
 
                 return $fila + [
                     'estado' => 'generada',
@@ -479,7 +497,7 @@ class CumpleanosService
         return [
             'error' => false,
             'data' => [
-                'proximos' => $filas,
+                'proximos' => $this->enviosFallidosRecientes($hoy)->concat($filas)->values(),
                 'resumen' => [
                     'personal' => $personal->count(),
                     'listos' => $personal->filter(fn ($p) => !$p['faltantes'])->count(),
@@ -490,6 +508,80 @@ class CumpleanosService
                 ],
             ],
         ];
+    }
+
+    /**
+     * Cumpleaños ya pasados (últimos DIAS_ENVIO_FALLIDO días) cuyo correo falló: la lista de
+     * próximos solo mira hacia adelante y, sin esto, desaparecerían al día siguiente sin
+     * poder reenviarlos. Mismo formato que las filas de listarProximos, con dias_para < 0.
+     */
+    private function enviosFallidosRecientes(Carbon $hoy): \Illuminate\Support\Collection
+    {
+        $generados = CumpleanosGenerado::where('estado', 'generada')
+            ->whereNotNull('id_mensaje')
+            ->whereBetween('fecha', [$hoy->copy()->subDays(self::DIAS_ENVIO_FALLIDO)->toDateString(), $hoy->copy()->subDay()->toDateString()])
+            ->get();
+        if ($generados->isEmpty()) {
+            return collect();
+        }
+
+        $mensajes = MensajeProgramado::whereIn('id', $generados->pluck('id_mensaje'))
+            ->where('envio_fallido', true)
+            ->get(['id', 'envio_detalle'])
+            ->keyBy('id');
+        $personas = $this->personal()->keyBy('id_user');
+
+        return $generados
+            ->filter(fn ($g) => $mensajes->has($g->id_mensaje) && $personas->has($g->id_user))
+            ->sortByDesc('fecha')
+            ->map(function ($g) use ($mensajes, $personas, $hoy) {
+                $p = $personas->get($g->id_user);
+                $mensaje = $mensajes->get($g->id_mensaje);
+
+                return [
+                    'id_user' => $p['id_user'],
+                    'nombre_completo' => $p['nombre_completo'],
+                    'perfil' => $p['perfil'],
+                    'foto' => $p['foto'],
+                    'genero' => $p['genero'],
+                    'fecha' => $g->fecha->toDateString(),
+                    'dias_para' => -(int) $g->fecha->diffInDays($hoy),
+                    'plantilla' => null,
+                    'fecha_generacion' => null,
+                    'id_mensaje' => $mensaje->id,
+                    'estado' => 'envio_fallido',
+                    'detalle' => $mensaje->envio_detalle,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * "Reenviar correo" de una felicitación: solo si su último envío falló, y respetando el
+     * interruptor de correos de Noticias programadas. Usa el mismo envío que el de cada hora.
+     */
+    public function reenviarCorreo(int $idMensaje): array
+    {
+        $mensaje = MensajeProgramado::where('tipo', 'cumpleanos')->find($idMensaje);
+        if (!$mensaje) {
+            return ['error' => true, 'message' => 'La felicitación no existe'];
+        }
+        if (!$mensaje->envio_fallido) {
+            return ['error' => true, 'message' => $mensaje->enviado_at ? 'El correo de esta felicitación ya se envió correctamente' : 'El correo de esta felicitación todavía no se ha enviado'];
+        }
+        if (!ConfiguracionNoticias::actual()->enviar_correos_programadas) {
+            return ['error' => true, 'message' => 'El envío de correos está desactivado en Noticias programadas'];
+        }
+
+        try {
+            $r = $this->noticias->enviarProgramado($mensaje);
+        } catch (\App\Exceptions\MailRateLimitException $e) {
+            return ['error' => true, 'message' => 'El proveedor de correo llegó a su límite de envíos por hora. Intenta más tarde.'];
+        }
+
+        return $mensaje->envio_fallido
+            ? ['error' => true, 'message' => 'No se pudo reenviar: ' . $mensaje->envio_detalle]
+            : ['error' => false, 'message' => $r['total'] > 1 ? "Correo reenviado a {$r['enviados']} destinatarios" : 'Correo reenviado'];
     }
 
     /**

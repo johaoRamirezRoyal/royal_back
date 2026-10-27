@@ -51,6 +51,7 @@ Route::prefix('cumpleanos')->controller(CumpleanosController::class)->middleware
     Route::get('/proximos', 'proximos');
     Route::post('/generar', 'generar');
     Route::post('/regenerar/{idUser}', 'regenerar')->whereNumber('idUser');
+    Route::post('/correo/{idMensaje}/reenviar', 'reenviarCorreo')->whereNumber('idMensaje');
 });
 
 Route::get('/', [NoticiasController::class, 'listar'])->middleware(Permiso::ruta([Permiso::NOTICIAS], [Permiso::PERFIL_SUPER_ADMIN]));

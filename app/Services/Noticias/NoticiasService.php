@@ -450,45 +450,70 @@ class NoticiasService
         $enviadas = 0;
 
         foreach ($pendientes as $programado) {
-            $mailable = new NoticiaMail($programado->titulo, $programado->mensaje, $programado->url, $programado->imagen);
-            $nivel = (int) ($programado->nivel ?? 0);
-            $distribucion = $this->resolverDestinatariosDistribucion($nivel);
-            $enviados = 0;
-            $total = 1;
-
-            if (!empty($distribucion)) {
-                $enviados = $this->mailService->send($distribucion, $mailable) ? count($distribucion) : 0;
-            } else {
-                $correos = $this->correosPorNivel($nivel);
-                $total = count($correos);
-
-                if (empty($correos)) {
-                    Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
-                    // Se marca igual como enviada — sin destinatarios hoy, reintentar cada
-                    // hora no cambia nada.
-                    $programado->update(['enviado_at' => now()]);
-                    continue;
-                }
-
-                foreach ($correos as $correo) {
-                    try {
-                        if ($this->mailService->send($correo, $mailable)) {
-                            $enviados++;
-                        }
-                    } catch (MailRateLimitException $e) {
-                        Log::warning("Noticias: programada #{$programado->id} cortada por límite de envío del proveedor tras {$enviados}/{$total} destinatarios. {$e->getMessage()}");
-                        break;
-                    }
-                }
+            // Sin destinatarios (total 0) no cuenta como enviada en el resumen del comando.
+            if ($this->enviarProgramado($programado)['total'] > 0) {
+                $enviadas++;
             }
-
-            $programado->update(['enviado_at' => now()]);
-            $enviadas++;
-
-            Log::info("Noticias: programada #{$programado->id} ('{$programado->titulo}') enviada a {$enviados}/{$total} destinatarios" . (!empty($distribucion) ? ' (lista de distribución: ' . implode(', ', $distribucion) . ').' : '.'));
         }
 
         return $enviadas;
+    }
+
+    /**
+     * Envía una noticia programada a su lista (o a los correos de su nivel) y guarda el
+     * resultado: `enviado_at` siempre, y `envio_fallido`/`envio_detalle` si el correo no
+     * llegó a todos. Lo usan el envío de cada hora y "Reenviar correo" de Cumpleaños.
+     * MailRateLimitException se propaga desde la lista de distribución (como antes: sin
+     * marcar, la siguiente hora lo reintenta); con correos sueltos corta y queda fallido.
+     *
+     * @return array{enviados: int, total: int}
+     */
+    public function enviarProgramado(MensajeProgramado $programado): array
+    {
+        $mailable = new NoticiaMail($programado->titulo, $programado->mensaje, $programado->url, $programado->imagen);
+        $nivel = (int) ($programado->nivel ?? 0);
+        $distribucion = $this->resolverDestinatariosDistribucion($nivel);
+        $enviados = 0;
+        $total = 1;
+
+        if (!empty($distribucion)) {
+            $enviados = $this->mailService->send($distribucion, $mailable) ? 1 : 0;
+        } else {
+            $correos = $this->correosPorNivel($nivel);
+            $total = count($correos);
+
+            if (empty($correos)) {
+                // Sin destinatarios, reintentar cada hora no cambia nada: queda marcada y fallida.
+                Log::warning("Noticias: programada #{$programado->id} sin destinatarios para nivel {$programado->nivel}.");
+            }
+
+            foreach ($correos as $correo) {
+                try {
+                    if ($this->mailService->send($correo, $mailable)) {
+                        $enviados++;
+                    }
+                } catch (MailRateLimitException $e) {
+                    Log::warning("Noticias: programada #{$programado->id} cortada por límite de envío del proveedor tras {$enviados}/{$total} destinatarios. {$e->getMessage()}");
+                    break;
+                }
+            }
+        }
+
+        $fallido = $total === 0 || $enviados < $total;
+        $programado->update([
+            'enviado_at' => now(),
+            'envio_fallido' => $fallido,
+            'envio_detalle' => match (true) {
+                !$fallido => null,
+                $total === 0 => 'No hay destinatarios para su nivel',
+                !empty($distribucion) => 'No se pudo enviar a la lista de distribución',
+                default => "Se envió a {$enviados} de {$total} destinatarios",
+            },
+        ]);
+
+        Log::info("Noticias: programada #{$programado->id} ('{$programado->titulo}') enviada a {$enviados}/{$total}" . (!empty($distribucion) ? ' (lista de distribución: ' . implode(', ', $distribucion) . ').' : ' destinatarios.'));
+
+        return ['enviados' => $enviados, 'total' => $total];
     }
 
     /**
