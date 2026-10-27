@@ -356,11 +356,16 @@ class BibliotecaController extends Controller implements HasMiddleware
         return $this->apiResponse($response);
     }
 
+    /** Paz y salvo por correo, solo por curso (el envío a todos los usuarios activos se retiró). */
     public function enviarPazYSalvoGlobal(Request $request)
     {
+        $request->validate([
+            'cursos' => 'required|array|min:1',
+            'cursos.*' => 'integer',
+        ]);
+
         $response = $this->biblioteca_services->enviarPazYSalvoGlobal(
-            $request->input('ids', []),
-            $request->input('cursos', [])
+            array_map('intval', $request->input('cursos'))
         );
 
         return $this->apiResponse($response);

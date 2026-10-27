@@ -1471,29 +1471,26 @@ class BibliotecaServices extends Service
     }
 
     /**
-     * Envía por correo el PDF de paz y salvo a los usuarios indicados (o a todos
-     * los usuarios activos si no se especifican) que tengan al menos un registro de
-     * préstamo histórico (libro o paquete, devuelto o no) — quien nunca ha usado la
-     * biblioteca no necesita un paz y salvo y se excluye. Entre los que sí califican,
-     * se envía sin importar si tienen o no préstamos pendientes por devolver.
-     * @param array|string|int $ids_usuarios
+     * Envía por correo el PDF de paz y salvo a los usuarios activos de los cursos indicados
+     * que tengan al menos un registro de préstamo histórico (libro o paquete, devuelto o no)
+     * — quien nunca ha usado la biblioteca no necesita un paz y salvo y se excluye. Entre los
+     * que sí califican, se envía sin importar si tienen o no préstamos pendientes.
+     * Solo por curso: el envío global (a todos los usuarios activos) se retiró, y sin cursos
+     * no se envía nada.
+     * @param int[] $cursos
      * @return array{data: array, error: bool, message: string}
      */
-    public function enviarPazYSalvoGlobal(array|string|int $ids_usuarios = [], array|string|int $cursos = []): array
+    public function enviarPazYSalvoGlobal(array $cursos): array
     {
         try {
-            $ids_usuarios = array_filter(Arr::wrap($ids_usuarios));
-            $cursos = array_filter(Arr::wrap($cursos));
-
-            $query = Usuario::query();
-            if (!empty($ids_usuarios)) {
-                $query->whereIn('id_user', $ids_usuarios);
-            } elseif (!empty($cursos)) {
-                $query->where('estado', 'activo')->whereIn('id_curso', $cursos);
-            } else {
-                $query->where('estado', 'activo');
+            $cursos = array_filter($cursos);
+            if (empty($cursos)) {
+                return ['error' => true, 'message' => 'Elige al menos un curso para enviar el paz y salvo.', 'data' => []];
             }
-            $usuarios = $query->get(['id_user', 'nombre', 'correo']);
+
+            $usuarios = Usuario::where('estado', 'activo')
+                ->whereIn('id_curso', $cursos)
+                ->get(['id_user', 'nombre', 'correo']);
 
             $mailService = app(MailService::class);
 
