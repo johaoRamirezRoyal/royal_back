@@ -14,6 +14,8 @@ use GuzzleHttp\Middleware;
 use GuzzleHttp\Pool;
 use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Psr7\Request;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -21,17 +23,13 @@ use Illuminate\Support\Str;
 
 class hikvisionattendanceService
 {
-    /** @var array<int, array{id: string, protocol: string, host: string, port: mixed}> */
-    protected array $devices;
+    /** Terminales activas del colegio, cargadas al primer uso (ver devices()). */
+    protected ?array $devices = null;
 
     /** @var array<string, Client> Clients memoizados por device id ("host:port"). */
     protected array $clients = [];
 
     protected HandlerStack $handlerStack;
-
-    protected string $username;
-
-    protected string $password;
 
     // Tipos de verificación
     /** Máximo de usuarios que devuelve un terminal por página de UserInfo/Search (pedir más igual devuelve 30). */
@@ -148,121 +146,105 @@ class hikvisionattendanceService
 
     public function __construct()
     {
-        $config = self::configParaTenant(config('database.default', 'mysql'));
-
-        $this->username = $config['username'] ?? '';
-        $this->password = $config['password'] ?? '';
-        $this->devices = self::parseDispositivos($config);
-
         $this->handlerStack = HandlerStack::create();
         $this->handlerStack->push($this->retryMiddleware(3, 1000)); // 3 intentos
-
-        Log::info('[hikvision] Servicio inicializado', [
-            'tenant' => config('database.default', 'mysql'),
-            'devices' => array_column($this->devices, 'id'),
-        ]);
     }
 
     /**
-     * Bloque de configuración (`services.hikvision.{tenant}`) para un tenant/connection
-     * dado — cada colegio tiene sus propias terminales físicas (ver config/services.php).
-     * Cae al de 'mysql' (Royal) si el tenant pedido no tiene bloque propio, para no
-     * romper si algún día se agrega una connection nueva sin su config de Hikvision.
+     * Terminales activas del colegio vigente (`database.default`), la principal primero, cada
+     * una con sus credenciales. Se cargan al primer uso y no en el constructor: el controller
+     * se crea antes de que RestrictToHikvisionDevices elija el colegio del webhook.
+     *
+     * Una fila cuya contraseña no se puede descifrar (se cifró con otra APP_KEY, p. ej. un dump
+     * de otro entorno) queda con contraseña vacía: el terminal sale "Desconectado" hasta que se
+     * vuelva a escribir, en vez de tumbar todo el servicio.
+     *
+     * @return array<int, array{id: string, protocol: string, host: string, port: int, name: string, username: string, password: string}>
      */
-    private static function configParaTenant(string $tenant): array
+    protected function devices(): array
     {
-        return config("services.hikvision.{$tenant}") ?? config('services.hikvision.mysql') ?? [];
+        return $this->devices ??= HikvisionDispositivo::where('activo', true)
+            ->whereNotNull('host')
+            ->orderByDesc('principal')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (HikvisionDispositivo $d) => [
+                'id' => $d->device_id,
+                'protocol' => $d->protocolo,
+                'host' => $d->host,
+                'port' => $d->puerto,
+                'name' => $d->nombre,
+                'username' => (string) $d->usuario,
+                'password' => self::passwordLegible($d),
+            ])
+            ->all();
+    }
+
+    private static function passwordLegible(HikvisionDispositivo $d): string
+    {
+        try {
+            return (string) $d->password;
+        } catch (DecryptException) {
+            Log::warning('[hikvision] La contraseña de la terminal no se puede descifrar con esta APP_KEY; vuelve a escribirla.', ['device' => $d->device_id]);
+
+            return '';
+        }
     }
 
     /**
-     * Busca en TODOS los tenants (colegios) configurados cuál tiene una terminal con esta
-     * IP de origen — usado por RestrictToHikvisionDevices cuando el webhook llega SIN el
-     * colegio explícito en la URL (terminales viejas, sin reconfigurar todavía — ver
-     * hostsDeTenant()). Null si ninguna terminal de ningún colegio coincide (origen no
-     * autorizado, se rechaza igual que antes).
+     * Busca en TODOS los colegios cuál tiene una terminal con esta IP de origen — usado por
+     * RestrictToHikvisionDevices cuando el webhook llega SIN el colegio explícito en la URL
+     * (terminales viejas, sin reconfigurar todavía). Null si ninguna coincide (origen no
+     * autorizado, se rechaza).
+     *
+     * También null si la IP es de terminales de VARIAS instituciones (detrás de una misma IP
+     * pública, con puertos distintos): adivinar guardaría la marcación en el colegio
+     * equivocado. Esas terminales deben avisar a /pushNotification/{colegio}.
      */
     public static function resolverTenantPorIp(string $ip): ?string
     {
-        foreach (BasesDatosService::connectionsConUsuarios() as $tenant) {
-            if (in_array($ip, self::hostsDeTenant($tenant), true)) {
-                return $tenant;
-            }
+        $coinciden = array_values(array_filter(
+            BasesDatosService::connectionsConUsuarios(),
+            fn (string $tenant) => in_array($ip, self::hostsDeTenant($tenant), true),
+        ));
+
+        if (count($coinciden) > 1) {
+            Log::warning('[hikvision-notification] La IP es de terminales de varias instituciones; configúralas para avisar a /pushNotification/{colegio}', [
+                'ip' => $ip,
+                'instituciones' => $coinciden,
+            ]);
+
+            return null;
         }
 
-        return null;
+        return $coinciden[0] ?? null;
     }
 
     /**
-     * Hosts (IPs) de las terminales configuradas para UN colegio puntual — usado por
-     * RestrictToHikvisionDevices para verificar, cuando el colegio ya viene explícito en la
-     * URL del webhook (/pushNotification/{tenant}, terminal reconfigurada para avisar a su
-     * propia URL), que la IP de origen sea realmente una terminal conocida DE ESE colegio.
-     * La URL sola no autentica — cualquiera podría adivinarla y decir ser otro colegio.
+     * Hosts (IPs) de las terminales registradas de UN colegio — usado por
+     * RestrictToHikvisionDevices para verificar que la IP de origen del webhook sea una
+     * terminal conocida DE ESE colegio (la URL sola no autentica). Incluye las inactivas: una
+     * terminal desactivada en OMNIA (en reparación, por ejemplo) sigue reportando
+     * marcaciones válidas. Un colegio sin la tabla todavía (sin migrar) no tiene terminales.
      */
     public static function hostsDeTenant(string $tenant): array
     {
-        return array_column(self::parseDispositivos(self::configParaTenant($tenant)), 'host');
-    }
+        try {
+            return HikvisionDispositivo::on($tenant)->whereNotNull('host')->pluck('host')->unique()->values()->all();
+        } catch (QueryException $e) {
+            Log::warning('[hikvision] No se pudieron leer las terminales del colegio', ['tenant' => $tenant, 'error' => $e->getMessage()]);
 
-    /**
-     * Resuelve la lista de terminales de UN tenant a partir de su bloque de config: el
-     * dispositivo "principal" (host/port/protocol) más los adicionales declarados en
-     * `extra_hosts` (formato "Nombre@host[:port],Nombre2@host2[:port2]" — el nombre es
-     * opcional, si se omite cae al propio id "host:port"; el puerto opcional cae al
-     * principal). Sin `host` configurado (colegio sin terminal física todavía, ej. Hebreo
-     * Union por ahora) devuelve una lista vacía — nunca un dispositivo con host inventado.
-     *
-     * El nombre "de fábrica" resuelto aquí es solo el fallback antes de que alguien nombre
-     * el terminal desde el frontend (devicesInfo() prioriza el nombre guardado en
-     * hikvision_dispositivos sobre este).
-     *
-     * @return array<int, array{id: string, protocol: string, host: string, port: mixed, name: string}>
-     */
-    private static function parseDispositivos(array $config): array
-    {
-        $host = $config['host'] ?? null;
-
-        if (empty($host)) {
             return [];
         }
-
-        $protocol = $config['protocol'] ?? 'http';
-        $puertoDefault = $config['port'] ?? 8000;
-
-        $lista = [self::normalizarDispositivo($protocol, $host, $puertoDefault)];
-
-        foreach (explode(',', (string) ($config['extra_hosts'] ?? '')) as $entrada) {
-            $entrada = trim($entrada);
-
-            if ($entrada === '') {
-                continue;
-            }
-
-            [$nombre, $entrada] = str_contains($entrada, '@')
-                ? explode('@', $entrada, 2)
-                : [null, $entrada];
-
-            [$h, $puerto] = array_pad(explode(':', trim($entrada), 2), 2, null);
-            $lista[] = self::normalizarDispositivo($protocol, $h, $puerto ?? $puertoDefault, $nombre ? trim($nombre) : null);
-        }
-
-        return collect($lista)->unique('id')->values()->all();
-    }
-
-    private static function normalizarDispositivo(string $protocol, string $host, $port, ?string $name = null): array
-    {
-        $id = "{$host}:{$port}";
-
-        return ['id' => $id, 'protocol' => $protocol, 'host' => $host, 'port' => $port, 'name' => $name ?: $id];
     }
 
     /**
-     * Construye (y memoiza) el Client de Guzzle para un terminal dado.
+     * Construye (y memoiza) el Client de Guzzle para un terminal dado, con sus credenciales.
      */
     protected function client(string $deviceId): Client
     {
         if (!isset($this->clients[$deviceId])) {
-            $device = collect($this->devices)->firstWhere('id', $deviceId);
+            $device = collect($this->devices())->firstWhere('id', $deviceId);
 
             if (!$device) {
                 throw new \InvalidArgumentException("Dispositivo Hikvision desconocido: {$deviceId}");
@@ -270,7 +252,7 @@ class hikvisionattendanceService
 
             $this->clients[$deviceId] = new Client([
                 'base_uri' => "{$device['protocol']}://{$device['host']}:{$device['port']}",
-                'auth' => [$this->username, $this->password, 'digest'],
+                'auth' => [$device['username'], $device['password'], 'digest'],
                 'verify' => env('HIKVISION_VERIFY_SSL', false),
                 'timeout' => 30,
                 'handler' => $this->handlerStack,
@@ -282,64 +264,47 @@ class hikvisionattendanceService
 
     protected function primaryDeviceId(): string
     {
-        if (empty($this->devices)) {
-            throw new \RuntimeException('No hay terminales Hikvision configuradas para esta institución.');
+        if (empty($this->devices())) {
+            throw new \RuntimeException('No hay terminales Hikvision activas para esta institución. Agrégalas en Terminales de acceso.');
         }
 
-        return $this->devices[0]['id'];
+        return $this->devices()[0]['id'];
     }
 
     /**
-     * Ids de todos los terminales configurados (formato "host:port").
+     * Ids de las terminales activas (formato "host:port").
      */
     public function deviceIds(): array
     {
-        return array_column($this->devices, 'id');
+        return array_column($this->devices(), 'id');
     }
 
     /**
-     * Info legible de cada terminal configurado (id, nombre, host, puerto),
-     * para un selector de terminal que muestre nombre en vez de solo IP:puerto.
-     * El nombre guardado desde el frontend (tabla hikvision_dispositivos) tiene
-     * prioridad sobre el de .env; si ninguno existe, cae al id ("host:puerto").
+     * Terminales del colegio para el frontend, la principal primero. Sin `$incluirInactivas`
+     * (los selectores de enrolamiento) solo las activas; con él, todas (la pantalla de
+     * administración). Nunca incluye la contraseña, solo `tiene_password`.
      *
-     * @return array<int, array{id: string, name: string, host: string, port: mixed, isConnected: bool}>
+     * @return array<int, array<string, mixed>>
      */
-    public function devicesInfo(): array
+    public function devicesInfo(bool $incluirInactivas = false): array
     {
-        $nombresGuardados = HikvisionDispositivo::whereIn('device_id', $this->deviceIds())
-            ->pluck('nombre', 'device_id');
+        $conexion = $this->deviceIds() === [] ? [] : $this->testConnection()['data'];
 
-        $conexion = $this->testConnection()['data'];
-
-        return array_map(
-            fn ($device) => [
-                'id' => $device['id'],
-                'name' => $nombresGuardados[$device['id']] ?? $device['name'],
-                'host' => $device['host'],
-                'port' => $device['port'],
-                'isConnected' => $conexion[$device['id']]['isConnected'] ?? false,
-            ],
-            $this->devices
-        );
-    }
-
-    /**
-     * Guarda/actualiza el nombre legible de un terminal ya configurado, para
-     * que el frontend pueda editarlo desde la UI en vez de depender de .env.
-     */
-    public function guardarNombreDispositivo(string $deviceId, string $nombre): array
-    {
-        if (!in_array($deviceId, $this->deviceIds(), true)) {
-            return ['error' => true, 'message' => "Dispositivo desconocido: {$deviceId}", 'data' => []];
-        }
-
-        $dispositivo = HikvisionDispositivo::updateOrCreate(
-            ['device_id' => $deviceId],
-            ['nombre' => $nombre]
-        );
-
-        return ['error' => false, 'message' => 'Nombre actualizado correctamente', 'data' => $dispositivo->toArray()];
+        return HikvisionDispositivo::query()
+            ->when(!$incluirInactivas, fn ($q) => $q->where('activo', true))
+            ->orderByDesc('principal')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (HikvisionDispositivo $d) => [
+                ...$d->only(['protocolo', 'usuario', 'principal', 'activo', 'tiene_password']),
+                'idRegistro' => $d->id,
+                'id' => $d->device_id,
+                'name' => $d->nombre,
+                'host' => $d->host,
+                'port' => $d->puerto,
+                'isConnected' => $conexion[$d->device_id]['isConnected'] ?? false,
+            ])
+            ->all();
     }
 
     /**
@@ -355,7 +320,7 @@ class hikvisionattendanceService
     {
         $porDispositivo = [];
 
-        foreach ($this->devices as $device) {
+        foreach ($this->devices() as $device) {
             try {
                 $porDispositivo[$device['id']] = $operacion($this->client($device['id']), $device['id']);
             } catch (\Throwable $e) {
@@ -490,7 +455,7 @@ class hikvisionattendanceService
     {
         $porDispositivo = [];
 
-        foreach ($this->devices as $device) {
+        foreach ($this->devices() as $device) {
             try {
                 Log::info("Probando conexión con dispositivo: {$device['id']}");
 
@@ -524,7 +489,7 @@ class hikvisionattendanceService
     {
         $porDispositivo = [];
 
-        foreach ($this->devices as $device) {
+        foreach ($this->devices() as $device) {
             try {
                 $response = $this->client($device['id'])->get('/ISAPI/Event/notification/httpHosts?format=json');
 
@@ -609,7 +574,7 @@ class hikvisionattendanceService
             $asistencia = [];
             $nombreUsuario = null;
 
-            foreach ($this->devices as $device) {
+            foreach ($this->devices() as $device) {
                 $evento = $this->getAccessEvents($device['id'], $inicio, $final, 500);
 
                 if ($evento['error'] || ! isset($evento['data']['AccessLogSet']['AccessLog'])) {
@@ -787,7 +752,7 @@ class hikvisionattendanceService
     {
         $porDispositivo = [];
 
-        foreach ($this->devices as $device) {
+        foreach ($this->devices() as $device) {
             $porDispositivo[$device['id']] = $this->ejecutarPoolMasivo($usuarios, $this->client($device['id']), $concurrencias);
         }
 
@@ -807,7 +772,7 @@ class hikvisionattendanceService
             if ($dispositivosConExito > 0) {
                 $exitosos[] = [
                     'id_user' => $id,
-                    'message' => "Registrado en {$dispositivosConExito}/" . count($this->devices) . ' dispositivos',
+                    'message' => "Registrado en {$dispositivosConExito}/" . count($this->devices()) . ' dispositivos',
                 ];
             } else {
                 $fallidos[] = ['id_user' => $id, 'message' => 'Falló en todos los dispositivos'];
@@ -984,7 +949,7 @@ class hikvisionattendanceService
         $huboFallos = false;
         $porDispositivo = $this->buscarEmpleadosEnTerminales($this->deviceIds());
 
-        foreach ($this->devices as $device) {
+        foreach ($this->devices() as $device) {
             $empleadosDispositivo = $porDispositivo[$device['id']] ?? [];
 
             if ($empleadosDispositivo instanceof \Throwable) {
@@ -1263,7 +1228,7 @@ class hikvisionattendanceService
      */
     private function extraerRutaRelativa(string $path, string $deviceId): string
     {
-        $device = collect($this->devices)->firstWhere('id', $deviceId);
+        $device = collect($this->devices())->firstWhere('id', $deviceId);
         if (!$device) {
             return $path;
         }
@@ -1358,7 +1323,7 @@ class hikvisionattendanceService
             $vistos = [];
             $usuariosEncontrados = [];
 
-            foreach ($this->devices as $device) {
+            foreach ($this->devices() as $device) {
                 try {
                     $response = $this->client($device['id'])->post('/ISAPI/AccessControl/UserInfo/Search?format=json', [
                         'json' => [

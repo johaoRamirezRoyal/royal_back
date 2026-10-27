@@ -91,6 +91,18 @@ class BasesDatosService extends Service
 
     /** Usado también por SwitchActiveConnection para no confiar en un valor arbitrario de
      * `admin_conexion_activa` como `database.default` — fail-closed ante datos corruptos. */
+    /** Nombre de la institución de una connection: el editado en "Bases de datos" o el de fábrica. */
+    public static function nombre(string $connection): string
+    {
+        try {
+            $guardado = BaseDatosNombre::where('connection', $connection)->value('nombre');
+        } catch (Exception) {
+            $guardado = null; // admin_management caída: no tumbar a quien solo quiere el nombre
+        }
+
+        return $guardado ?? self::CONNECTIONS[$connection] ?? $connection;
+    }
+
     public static function esConnectionValida(string $connection): bool
     {
         return array_key_exists($connection, self::CONNECTIONS);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Hikvision;
 
 use App\Http\Controllers\Controller;
+use App\Services\AdminManagement\BasesDatosService;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
@@ -662,47 +663,22 @@ class HikvisionController extends Controller implements HasMiddleware
     }
 
     /**
-     * Lista los terminales configurados (id, nombre, host, puerto), para que
-     * el frontend pueda ofrecer un selector de terminal antes de una captura.
+     * Terminales del colegio, la principal primero. Por defecto solo las activas (selector de
+     * terminal antes de una captura); `?todas=1` incluye las inactivas (Terminales de acceso).
+     * El alta, edición y baja están en HikvisionDispositivosController. Cada institución tiene
+     * sus terminales en su propia base: `institucion` dice de cuál son (la del usuario, o la
+     * que el Super Admin eligió en "Bases de datos").
      */
-    public function listarDispositivos()
+    public function listarDispositivos(Request $request)
     {
+        $connection = config('database.default');
+
         return $this->apiResponse([
             'error' => false,
             'message' => 'OK',
-            'data' => $this->hikvision_service->devicesInfo(),
+            'data' => $this->hikvision_service->devicesInfo($request->boolean('todas')),
+            'institucion' => ['connection' => $connection, 'nombre' => BasesDatosService::nombre($connection)],
         ]);
-    }
-
-    /**
-     * Guarda/edita el nombre legible de un terminal ya configurado (ej. "Garita abajo").
-     */
-    public function guardarNombreDispositivo(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'deviceId' => ['required', 'string'],
-            'nombre' => ['required', 'string', 'max:100'],
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => true,
-                'message' => $validator->errors()->first(),
-                'data' => [],
-            ], 400);
-        }
-
-        Log::info('[hikvision] Solicitud de guardar nombre de dispositivo', [
-            'deviceId' => $request->input('deviceId'),
-            'nombre' => $request->input('nombre'),
-        ]);
-
-        $resultado = $this->hikvision_service->guardarNombreDispositivo(
-            $request->input('deviceId'),
-            $request->input('nombre')
-        );
-
-        return $this->apiResponse($resultado);
     }
 
     public function eliminarHuellaEmpleado(Request $request)

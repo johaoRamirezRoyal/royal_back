@@ -4,14 +4,19 @@ namespace App\Providers;
 
 use App\Events\PasswordRestore;
 use App\Listeners\SendPasswordRestore;
+use App\Services\Cloudinary\CloudinaryUploadsAdapter;
 use App\Services\DocumentosVarios\DocumentosVariosService;
 use App\Services\Enfermeria\EnfermeriaServices;
 use App\Services\HistoriaClinica\HistoriaClinicaService;
 use App\Services\JwtService;
 use App\Services\PerfilUsuario\PerfilUsuarioService;
+use Cloudinary\Cloudinary;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Filesystem\FilesystemAdapter;
+use League\Flysystem\Filesystem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -52,5 +57,19 @@ class AppServiceProvider extends ServiceProvider
         // compartido donde marcan varios trabajadores no debe agotar la cuota de
         // uno por las marcaciones de otro.
         RateLimiter::for('asistencia', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
+
+        // Disco `cloudinary` (config/filesystems.php): credenciales de config/cloudinary.php.
+        Storage::extend('cloudinary_uploads', function ($app, array $config) {
+            $adapter = new CloudinaryUploadsAdapter(new Cloudinary([
+                'cloud' => [
+                    'cloud_name' => config('cloudinary.cloud_name'),
+                    'api_key' => config('cloudinary.api_key'),
+                    'api_secret' => config('cloudinary.api_secret'),
+                ],
+                'url' => ['secure' => true],
+            ]), trim($config['prefijo'] ?? '', '/'));
+
+            return new FilesystemAdapter(new Filesystem($adapter, $config), $adapter, $config);
+        });
     }
 }
