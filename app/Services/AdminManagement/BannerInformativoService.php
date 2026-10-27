@@ -33,7 +33,7 @@ class BannerInformativoService
         // Imagen reemplazada o quitada: se borra la anterior en Cloudinary para no dejar
         // huérfanos (una imagen nueva ya se subió aparte, ver subirImagen del controller).
         if ($banner->imagen_public_id && $banner->imagen_public_id !== $imagenPublicId) {
-            $this->cloudinary->deleteFile($banner->imagen_public_id, 'image');
+            $this->cloudinary->deleteFile($banner->imagen_public_id, BannerInformativo::tipoRecurso($banner->imagen));
         }
 
         $banner->update([

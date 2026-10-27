@@ -12,6 +12,9 @@ class BannerInformativo extends Model
 
     public const TAMANOS = ['sm', 'md', 'lg', 'xl'];
 
+    /** Formatos del archivo del banner: imagen, GIF o video corto (MP4/WebM). */
+    public const MEDIA = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'webm'];
+
     /** Transversal en `admin_management` (ver config/database.php), igual que MarcaDominio/
      * LlaveMaestra/LogDominio — sin esto, sigue la connection activa del Super Admin
      * (SwitchActiveConnection) o del tenant de turno, y falla en cualquiera que no sea la
@@ -43,6 +46,13 @@ class BannerInformativo extends Model
         'enviar_correo' => 'boolean',
         'mostrar_modal' => 'boolean',
     ];
+
+    /** Tipo de recurso de Cloudinary de un archivo de banner (`imagen` guarda imagen, GIF o
+     * video): hace falta para borrarlo, Cloudinary no encuentra un video borrado como imagen. */
+    public static function tipoRecurso(?string $url): string
+    {
+        return $url && str_contains($url, '/video/upload/') ? 'video' : 'image';
+    }
 
     public static function actual(): self
     {

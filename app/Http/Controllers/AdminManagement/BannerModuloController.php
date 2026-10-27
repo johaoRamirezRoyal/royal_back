@@ -36,7 +36,7 @@ class BannerModuloController extends Controller implements HasMiddleware
         $request->validate([
             'modulo' => 'required|string|max:100',
             'mensaje' => 'nullable|string|max:500',
-            'imagen' => ['nullable', 'string', 'max:500', 'regex:/^https:\/\/res\.cloudinary\.com\/' . $cloudName . '\/image\/upload\/.*\/banner\/[A-Za-z0-9._-]+$/'],
+            'imagen' => ['nullable', 'string', 'max:500', 'regex:/^https:\/\/res\.cloudinary\.com\/' . $cloudName . '\/(image|video)\/upload\/.*\/banner\/[A-Za-z0-9._-]+$/'],
             'imagen_public_id' => ['nullable', 'string', 'max:255', 'regex:/^banner\/[A-Za-z0-9._-]+$/'],
             'dominio' => 'nullable|string|max:190',
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),

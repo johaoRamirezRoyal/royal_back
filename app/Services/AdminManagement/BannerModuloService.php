@@ -2,6 +2,7 @@
 
 namespace App\Services\AdminManagement;
 
+use App\Models\BannerInformativo;
 use App\Models\BannerModulo;
 use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Support\Collection;
@@ -38,7 +39,7 @@ class BannerModuloService
 
         // Imagen reemplazada o quitada: se borra la anterior en Cloudinary (igual que el global).
         if ($banner->imagen_public_id && $banner->imagen_public_id !== ($datos['imagen_public_id'] ?? null)) {
-            $this->cloudinary->deleteFile($banner->imagen_public_id, 'image');
+            $this->cloudinary->deleteFile($banner->imagen_public_id, BannerInformativo::tipoRecurso($banner->imagen));
         }
 
         $banner->fill($datos + ['actualizado_por' => $idUser])->save();
@@ -54,7 +55,7 @@ class BannerModuloService
             return false;
         }
         if ($banner->imagen_public_id) {
-            $this->cloudinary->deleteFile($banner->imagen_public_id, 'image');
+            $this->cloudinary->deleteFile($banner->imagen_public_id, BannerInformativo::tipoRecurso($banner->imagen));
         }
         $banner->delete();
         Cache::forget(self::CACHE_KEY);

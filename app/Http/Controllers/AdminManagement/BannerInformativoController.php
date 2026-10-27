@@ -43,7 +43,7 @@ class BannerInformativoController extends Controller implements HasMiddleware
             // Solo URLs de Cloudinary dentro de la carpeta del banner (la que devuelve
             // subirImagen) — evita apuntar a (y luego borrar, ver
             // BannerInformativoService::actualizar) archivos ajenos.
-            'imagen' => ['nullable', 'string', 'max:500', 'regex:/^https:\/\/res\.cloudinary\.com\/' . $cloudName . '\/image\/upload\/.*\/banner\/[A-Za-z0-9._-]+$/'],
+            'imagen' => ['nullable', 'string', 'max:500', 'regex:/^https:\/\/res\.cloudinary\.com\/' . $cloudName . '\/(image|video)\/upload\/.*\/banner\/[A-Za-z0-9._-]+$/'],
             'imagen_public_id' => ['nullable', 'string', 'max:255', 'regex:/^banner\/[A-Za-z0-9._-]+$/'],
             'dominio' => 'nullable|string|max:190',
             'variante' => 'required|string|in:' . implode(',', BannerInformativo::VARIANTES),
@@ -111,10 +111,11 @@ class BannerInformativoController extends Controller implements HasMiddleware
     public function subirImagen(Request $request)
     {
         $request->validate([
-            'imagen' => 'required|file|mimes:jpg,jpeg,png,webp,gif|max:8192',
+            // Imagen, GIF o video corto (MP4/WebM). 10 MB = tope de CloudinaryService::validateFile.
+            'imagen' => 'required|file|mimes:' . implode(',', BannerInformativo::MEDIA) . '|max:10240',
         ]);
 
-        $resultado = $this->cloudinary->uploadFile($request->file('imagen'), 'banner');
+        $resultado = $this->cloudinary->uploadFile($request->file('imagen'), 'banner', null, BannerInformativo::MEDIA);
 
         if ($resultado['error']) {
             return $this->error($resultado['message'], 422);
