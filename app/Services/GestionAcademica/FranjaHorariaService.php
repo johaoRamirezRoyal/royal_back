@@ -88,7 +88,7 @@ class FranjaHorariaService extends Service
                 )->where('id_esquema', $idEsquemaResuelto)
                 ->when($id_dia_semana, function ($query) use ($id_dia_semana) {
                     $query->where('id_dia_semana', $id_dia_semana);
-                })->when($disponible, function ($query) use ($id_carga_academica, $id_curso, $id_docente) {
+                })->when($disponible, function ($query) use ($id_carga_academica, $id_curso, $id_docente, $idEsquemaResuelto) {
 
                     // No asignable (receso, almuerzo, etc. marcados directo en la franja):
                     // nunca aparece como disponible, sin importar la carga académica.
@@ -112,22 +112,40 @@ class FranjaHorariaService extends Service
                     // (directo en una carga "suelta", o vía docenteAsignatura en una normal).
                     $docenteScope = $carga?->id_docente_efectivo ?? $id_docente;
 
-                    $query->whereDoesntHave('horarioClase', function ($q) use ($cursoScope, $docenteScope) {
-                        $q->when($cursoScope !== null || $docenteScope !== null, function ($q) use ($cursoScope, $docenteScope) {
-                            $q->whereHas('cargaAcademica', function ($q2) use ($cursoScope, $docenteScope) {
-                                $q2->where(function ($q3) use ($cursoScope, $docenteScope) {
-                                    if ($cursoScope !== null) {
-                                        $q3->orWhere('id_curso', $cursoScope);
-                                    }
-                                    if ($docenteScope !== null) {
-                                        $q3->orWhere('id_docente', $docenteScope)
-                                            ->orWhereHas('docenteAsignatura', function ($q4) use ($docenteScope) {
-                                                $q4->where('id_docente', $docenteScope);
-                                            });
-                                    }
-                                });
+                    if ($cursoScope === null && $docenteScope === null) {
+                        $query->whereDoesntHave('horarioClase');
+                        return;
+                    }
+
+                    // Por HORA REAL, no por franja exacta: mismo criterio que
+                    // HorarioClaseService::franjaDisponibleParaCarga al guardar (mismo día y
+                    // rangos que se solapan). Un docente puede dictar en esquemas distintos
+                    // (Primaria/Bachillerato) con franjas de otras horas; antes una franja que
+                    // se cruzaba con su clase de otro esquema aparecía libre y el guardado la
+                    // rechazaba.
+                    // Y solo contra clases del mismo año escolar que este esquema (los horarios
+                    // de años anteriores no se borran al cambiar de año).
+                    $idAnio = EsquemaHorario::whereKey($idEsquemaResuelto)->value('id_anio_escolar');
+                    $query->whereNotExists(function ($q) use ($cursoScope, $docenteScope, $idAnio) {
+                        $q->selectRaw('1')
+                            ->from('academico_horario_clase as hc')
+                            ->join('academico_franja_horaria as fo', 'fo.id', '=', 'hc.id_franja_horaria')
+                            ->join('academico_esquema_horario as eo', 'eo.id', '=', 'fo.id_esquema')
+                            ->where('eo.id_anio_escolar', $idAnio)
+                            ->join('academico_carga_academica as ca', 'ca.id', '=', 'hc.id_carga_academica')
+                            ->leftJoin('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
+                            ->whereColumn('fo.id_dia_semana', 'academico_franja_horaria.id_dia_semana')
+                            ->whereColumn('fo.hora_inicio', '<', 'academico_franja_horaria.hora_fin')
+                            ->whereColumn('fo.hora_fin', '>', 'academico_franja_horaria.hora_inicio')
+                            ->where(function ($w) use ($cursoScope, $docenteScope) {
+                                if ($cursoScope !== null) {
+                                    $w->orWhere('ca.id_curso', $cursoScope);
+                                }
+                                if ($docenteScope !== null) {
+                                    $w->orWhere('ca.id_docente', $docenteScope)
+                                        ->orWhere('da.id_docente', $docenteScope);
+                                }
                             });
-                        });
                     });
                 })
                 ->orderBy('dias_semana.orden')

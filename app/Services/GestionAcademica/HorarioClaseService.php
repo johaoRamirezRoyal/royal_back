@@ -218,12 +218,18 @@ class HorarioClaseService extends Service
      */
     private function existeCruceHorarioClase(FranjaHoraria $franja, callable $scope): bool
     {
+        // Solo contra clases del MISMO año escolar: el cambio de año no borra los horarios
+        // (ver AnioEscolarServices::cerrarYAbrirAnioEscolar), y sin esto las clases del año
+        // anterior bloquearían las mismas horas en el año nuevo.
+        $idAnio = $franja->loadMissing('esquema')->esquema?->id_anio_escolar;
+
         return HorarioClase::query()
             ->tap($scope)
-            ->whereHas('franjaHoraria', function ($q) use ($franja) {
+            ->whereHas('franjaHoraria', function ($q) use ($franja, $idAnio) {
                 $q->where('id_dia_semana', $franja->id_dia_semana)
                     ->where('hora_inicio', '<', $franja->hora_fin)
-                    ->where('hora_fin', '>', $franja->hora_inicio);
+                    ->where('hora_fin', '>', $franja->hora_inicio)
+                    ->when($idAnio, fn ($q) => $q->whereHas('esquema', fn ($q2) => $q2->where('id_anio_escolar', $idAnio)));
             })
             ->exists();
     }
