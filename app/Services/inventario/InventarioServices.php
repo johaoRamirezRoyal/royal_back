@@ -2912,7 +2912,7 @@ class InventarioServices
                 return $res->successful() ? $res->body() : null;
             }
 
-            $disco = Storage::disk('sami');
+            $disco = Storage::disk(config('filesystems.uploads_disk', 'public'));
 
             return $firma->nombre && $disco->exists($firma->nombre) ? $disco->get($firma->nombre) : null;
         } catch (\Throwable $e) {

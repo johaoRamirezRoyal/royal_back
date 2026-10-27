@@ -63,6 +63,15 @@ return [
             'report' => false,
         ],
 
+        // Disco de uploads en Cloudinary (UPLOADS_DISK=cloudinary). Mismo direccionamiento que
+        // la migración: <prefijo>/<ruta en BD>. Ver App\Services\Cloudinary\CloudinaryUploadsAdapter.
+        'cloudinary' => [
+            'driver' => 'cloudinary_uploads',
+            'prefijo' => env('CLOUDINARY_UPLOADS_PREFIJO', 'royal'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
@@ -76,17 +85,6 @@ return [
             'report' => false,
         ],
 
-    ],
-
-    //Cloudinary configuration
-    'cloudinary' => [
-        'driver' => 'cloudinary',
-        'key' => env('CLOUDINARY_KEY'),
-        'secret' => env('CLOUDINARY_SECRET'),
-        'cloud' => env('CLOUDINARY_CLOUD_NAME'),
-        'url' => env('CLOUDINARY_URL'),
-        'secure' => (bool) env('CLOUDINARY_SECURE', true),
-        'prefix' => env('CLOUDINARY_PREFIX'),
     ],
 
     /*

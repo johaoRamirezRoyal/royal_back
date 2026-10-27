@@ -5,6 +5,7 @@ namespace App\Services\GestionAcademica;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\DocenteAsignatura;
+use App\Models\GestionAcademica\EsquemaHorario;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\GestionAcademica\HorarioClase;
 use App\Models\Usuarios\Usuario;
@@ -102,11 +103,21 @@ class DocenteHorarioService extends Service
                 ->get()
                 ->keyBy('id_carga_academica');
 
-            $cursosData = $cursos->map(function ($curso) use ($asignaturasDocente, $cargasExistentes, $horariosPorCarga) {
+            // Esquema del curso = el de su nivel en este año (mismo criterio que
+            // FranjaHorariaService); el frontend agrupa el menú por esquema.
+            $esquemasPorNivel = EsquemaHorario::whereIn('id_nivel', $cursos->pluck('id_nivel')->unique())
+                ->where('id_anio_escolar', $id_anio_escolar)
+                ->get(['id', 'nombre', 'id_nivel'])
+                ->keyBy('id_nivel');
+
+            $cursosData = $cursos->map(function ($curso) use ($asignaturasDocente, $cargasExistentes, $horariosPorCarga, $esquemasPorNivel) {
+                $esquema = $esquemasPorNivel->get($curso->id_nivel);
+
                 return [
                     'id' => $curso->id,
                     'nombre' => $curso->nombre,
                     'nivel' => $curso->nivel ? ['id' => $curso->nivel->id, 'nombre' => $curso->nivel->nombre] : null,
+                    'esquema' => $esquema ? ['id' => $esquema->id, 'nombre' => $esquema->nombre] : null,
                     'asignaturas' => $asignaturasDocente->map(function ($da) use ($curso, $cargasExistentes, $horariosPorCarga) {
                         $carga = $cargasExistentes->get("{$curso->id}-{$da->id}");
                         $horario = $carga ? $horariosPorCarga->get($carga->id) : null;

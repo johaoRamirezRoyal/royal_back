@@ -123,4 +123,5 @@ esta tabla.
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 
 Otros documentos en `docs/`: `PERMISOS_MIDDLEWARE_2026_10_20.md`,
+`HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md` y `whatsapp-llegadas-tarde.md`.
