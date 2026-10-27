@@ -19,6 +19,9 @@ class CategoriasController extends Controller{
     private const OPCION_INVENTARIO = Permiso::INVENTARIO;
     private const OPCION_MIS_INVENTARIOS = Permiso::MIS_INVENTARIOS;
     private const OPCION_PRESTAMOS = Permiso::PRESTAMOS_INVENTARIO;
+    // "Mis áreas" (filtro de categoría de Área Común).
+    private const OPCION_MIS_AREAS_NIVEL = Permiso::MIS_AREAS_NIVEL;
+    private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
 
     protected $categoria_services;
 
@@ -29,7 +32,7 @@ class CategoriasController extends Controller{
     }
 
     public function obtenerTodasLasCategorias(Request $request){
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_PRESTAMOS)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_PRESTAMOS, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             return $rechazo;
         }
 

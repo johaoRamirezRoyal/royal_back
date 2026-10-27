@@ -52,6 +52,12 @@ class InventariosController extends Controller
     // vista ofrece, así que ambos métodos la necesitan.
     private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
 
+    // "Mis áreas" bajo Mis inventarios (141 nivel / 142 áreas a cargo): solo reportar y ver
+    // la hoja de vida; el listado sale de AreasComunesController::misAreas.
+    private const OPCION_MIS_AREAS_NIVEL = Permiso::MIS_AREAS_NIVEL;
+
+    private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
+
     protected $inventario_services;
 
     public function __construct(
@@ -219,7 +225,7 @@ class InventariosController extends Controller
 
     public function historialInventario(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             return $rechazo;
         }
 
@@ -354,7 +360,7 @@ class InventariosController extends Controller
 
     public function reportarInventario(ReportarInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             return $rechazo;
         }
 

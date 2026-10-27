@@ -60,11 +60,19 @@ reportar, solucionar y mover.
 | 108 Administrador | 1, 2 | todo el módulo |
 | 109 Uso | 11, 26 | todo el módulo, pero `obtenerTodosLosBloques` lo limita a su `id_nivel` si no tiene la 108 |
 | 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) |
+| 141 Mis áreas — de mi nivel | ninguno (se asigna en `/permisos`) | `/inventario/mis-areas` del frontend: ítems tipo 3 de los bloques activos de su `id_nivel` (directos o en sus áreas) |
+| 142 Mis áreas — de mis áreas a cargo | ninguno | lo mismo, pero de las áreas donde tiene ítems con `inventario.id_user` = él |
 
 - Exigen la **108**: crear, editar y desactivar bloques, asignar responsables, asignar
   áreas, reclasificar y mover.
 - Aceptan la **108 o la 109**: listar, registrar un check e historial/indicador de
   checks.
+- **141/142** solo usan `GET /bloques/inventario/mis-areas` (`AreasComunesController::misAreas`,
+  que arma el alcance en el servidor; con las dos, la unión), `POST /inventario/reportar`,
+  `GET /inventario/{id}/historial` y `GET /categorias`. Solo áreas activas (`areas.activo = 1`):
+  el filtro `solo_areas_activas` del consolidado saca también lo que entra por `id_bloque`
+  estando en un área inactiva. Reportar no valida que el ítem
+  esté dentro del alcance (igual que con 16/109/119).
 - El módulo 6 "Zonas" se reusa solo como agrupador; sus tablas legacy no se tocan.
 
 **Trampas**

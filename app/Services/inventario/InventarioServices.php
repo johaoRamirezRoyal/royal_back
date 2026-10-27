@@ -589,6 +589,9 @@ class InventarioServices
                     fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
                 )
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
+                // "Mis áreas" (AreasComunesController::misAreas): fuera lo que está en un área
+                // inactiva, aunque entre por id_bloque (la rama OR de arriba).
+                ->when($filtros['solo_areas_activas'] ?? null, fn ($q) => $q->where(fn ($q2) => $q2->whereNull('inventario.id_area')->orWhere('a.activo', 1)))
                 ->when($filtros['s'] ?? null, fn ($q, $s) => $this->buscarEnListado($q, $s));
 
             // Modo detalle: ítems sueltos de un grupo (query 2, usado por "Inspeccionar"),

@@ -384,3 +384,17 @@ ALTER TABLE `hikvision_dispositivos` ADD `activo` tinyint(1) NOT NULL DEFAULT '1
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
 SELECT 140, 'Fecha de Reporte', 2, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 140);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_27_110000_seed_opciones_mis_areas_nivel_responsable.php
+-- Opciones 141 y 142 (módulo 6, Zonas) de "Mis áreas" (/inventario/mis-areas):
+-- ver y reportar las áreas comunes de los bloques del nivel del usuario (141) o
+-- de las áreas de las que es responsable (142). No se otorgan a ningún perfil
+-- (se asignan desde /permisos).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 141, 'Mis áreas — Áreas comunes de mi nivel', 6, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 141);
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 142, 'Mis áreas — Áreas comunes de mis áreas a cargo', 6, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 142);
