@@ -60,8 +60,14 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
 ## PDFs
 
 - Todo PDF institucional nuevo usa este logo fijo, no el de la marca por dominio:
-  `public_path('storage/royal-school/logotipoBackground.png')` (ejemplo:
+  `app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png')` (ejemplo:
   `HojaVidaPdfService`).
+- Las imágenes fijas de documentos (logos, escudos, sellos) viven en Cloudinary bajo
+  `royal/royal-school/` (`logotipoMarca.png`, `paz-salvo/{logo,sello}.webp`,
+  `instituciones/logo.png`, `horario/logo.png`), no en el disco del servidor.
+  `rutaLocalRoyalSchool()` las descarga a un temporal porque TCPDF/PhpSpreadsheet necesitan
+  ruta local; si falla devuelve null y el documento sale sin esa imagen (sin respaldo local).
+  Una nueva se sube con `POST /api/migracion/cloudinary` (`directorio=royal-school/...`).
 - El `checkPageBreak` de TCPDF es `protected`; para salto de página con coordenadas
   manuales, usa un wrapper propio (como `ensureSpacio()` en `CartaRecomendacionPdfService`).
 

@@ -5,6 +5,7 @@ namespace App\Services\Cloudinary;
 use Cloudinary\Api\Upload\UploadApi;
 use Cloudinary\Configuration\Configuration;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class CloudinaryService
@@ -127,14 +128,14 @@ class CloudinaryService
                 $options
             );
 
-            log::alert('Cloudinary Upload Response',
+            Log::alert('Cloudinary Upload Response',
                 [
                     'response' => $response,
                     'options' => $options,
                 ]
             );
 
-            if (!$response) {
+            if (! $response) {
                 throw new \Exception('Cloudinary devolvió una respuesta vacía.');
             }
 
@@ -149,11 +150,11 @@ class CloudinaryService
                 'message' => 'Archivo subido correctamente.',
                 'data' => [
                     'public_id' => $cleanPublicId,
-                    'public_id_with_extension' => $cleanPublicId . '.' . $extension,
+                    'public_id_with_extension' => $cleanPublicId.'.'.$extension,
                     'url' => $response['secure_url'],
                     'url_with_extension' => str_replace(
-                        '/' . $returnedPublicId,
-                        '/' . $cleanPublicId . '.' . $extension,
+                        '/'.$returnedPublicId,
+                        '/'.$cleanPublicId.'.'.$extension,
                         $response['secure_url']
                     ),
                     'format' => $extension,
@@ -170,7 +171,7 @@ class CloudinaryService
 
             return [
                 'error' => true,
-                'message' => 'Error al subir archivo: ' . $e->getMessage(),
+                'message' => 'Error al subir archivo: '.$e->getMessage(),
                 'data' => [],
             ];
         }
@@ -190,11 +191,11 @@ class CloudinaryService
                 ];
             }
 
-            $images = ["png", "jpg", "jpeg", "webp"];
-            if(in_array($format, $images)){
-                $resourceType = "image";
-            }else{
-                $resourceType = "raw";
+            $images = ['png', 'jpg', 'jpeg', 'webp'];
+            if (in_array($format, $images)) {
+                $resourceType = 'image';
+            } else {
+                $resourceType = 'raw';
             }
 
             $cloudName = config('cloudinary.cloud_name');
@@ -218,10 +219,40 @@ class CloudinaryService
 
             return [
                 'error' => true,
-                'message' => 'Error al generar la URL: ' . $e->getMessage(),
+                'message' => 'Error al generar la URL: '.$e->getMessage(),
                 'data' => [],
             ];
         }
+    }
+
+    /**
+     * Descarga a un temporal local un archivo fijo de royal/royal-school (ej.
+     * 'logotipoBackground.png', 'paz-salvo/sello.webp'): TCPDF/PhpSpreadsheet necesitan
+     * ruta en disco, no una URL. Null si la descarga falla: el documento sale sin esa imagen.
+     */
+    public function rutaLocalRoyalSchool(string $archivo): ?string
+    {
+        $extension = strtolower(pathinfo($archivo, PATHINFO_EXTENSION));
+        $publicId = 'royal/royal-school/'.substr($archivo, 0, -strlen($extension) - 1);
+        $url = $this->getFileUrl($publicId, $extension)['data']['url'] ?? null;
+
+        try {
+            // ponytail: sin caché, una descarga por documento; cachear en disco si pesa en lotes.
+            $respuesta = $url ? Http::timeout(10)->get($url) : null;
+        } catch (\Throwable $e) {
+            $respuesta = null;
+        }
+
+        if (! $respuesta?->successful()) {
+            Log::warning('No se pudo descargar el archivo de royal-school desde Cloudinary', ['archivo' => $archivo, 'url' => $url]);
+
+            return null;
+        }
+
+        $temporal = tempnam(sys_get_temp_dir(), 'royal').'.'.$extension;
+        file_put_contents($temporal, $respuesta->body());
+
+        return $temporal;
     }
 
     /**
@@ -272,7 +303,7 @@ class CloudinaryService
 
             return [
                 'error' => true,
-                'message' => 'Error al eliminar archivo: ' . ($apiResult ?? 'respuesta desconocida'),
+                'message' => 'Error al eliminar archivo: '.($apiResult ?? 'respuesta desconocida'),
             ];
         } catch (\Throwable $e) {
 
@@ -289,7 +320,7 @@ class CloudinaryService
 
             return [
                 'error' => true,
-                'message' => 'Error al eliminar archivo: ' . $e->getMessage(),
+                'message' => 'Error al eliminar archivo: '.$e->getMessage(),
             ];
         }
     }

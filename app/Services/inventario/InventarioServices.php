@@ -24,6 +24,7 @@ use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Pdf\Inventario\ReporteOperativoPdfService;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -1563,7 +1564,7 @@ class InventarioServices
             // Logo fijo del colegio (no el de MarcaDominioService, que resuelve por
             // dominio de correo para el multi-tenant de otros PDFs de este módulo) —
             // pedido explícito para este PDF puntual.
-            $logoPath = storage_path('app/public/royal-school/logotipoBackground.png');
+            $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
 
             $contenido = app(HistorialChecksPdfService::class)->generate([
                 'logo_path' => $logoPath,
@@ -3190,7 +3191,7 @@ class InventarioServices
 
             $contenido = app(MantenimientoChecklistPdfService::class)->generate([
                 // Logo institucional fijo — ver AGENTS.md "Logo en PDFs".
-                'logo_path' => public_path('storage/royal-school/logotipoBackground.png'),
+                'logo_path' => app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png'),
                 'tipo_categoria_label' => $categoria->tipo_categoria === 2 ? 'Operativos' : 'Sistemas',
                 'categoria_nombre' => $categoria->nombre,
                 'es_computadores' => str_contains(strtolower($categoria->nombre ?? ''), 'computador'),

@@ -3,6 +3,7 @@
 namespace App\Pdf\Instituciones;
 
 use App\Models\Instituciones\CartaRecomendacion;
+use App\Services\Cloudinary\CloudinaryService;
 use TCPDF;
 
 /**
@@ -19,13 +20,19 @@ use TCPDF;
 class CartaRecomendacionPdfService
 {
     private const NAVY = [11, 31, 94];
+
     private const GRAY_LIGHT = [225, 225, 225];
+
     private const RED = [191, 4, 17];
+
     private const GRID_GRAY = [150, 150, 170];
 
     private const MARGIN = 40.0;
+
     private const PAGE_W = 595.28;
+
     private const CONTENT_W = self::PAGE_W - self::MARGIN * 2;
+
     private const RIGHT_X = self::PAGE_W - self::MARGIN;
 
     /** Filas de la tabla "Información del estudiante", en el orden exacto del PDF original.
@@ -52,11 +59,12 @@ class CartaRecomendacionPdfService
         ['key' => 'obligaciones_financieras', 'es' => '¿Cumplen puntualmente sus obligaciones financieras con el Jardín/Colegio?', 'en' => "Do parents meet their school's financial obligations on time?"],
     ];
 
-    private string $logoPath;
+    /** Null = logo por defecto de Cloudinary, resuelto al dibujar el encabezado. */
+    private ?string $logoPath;
 
     public function __construct(?string $logoPath = null)
     {
-        $this->logoPath = $logoPath ?? storage_path('app/public/images/instituciones/logo.png');
+        $this->logoPath = $logoPath;
     }
 
     public function generate(CartaRecomendacion $carta): string
@@ -170,7 +178,8 @@ class CartaRecomendacionPdfService
 
         // Logotipo blanco (escudo + wordmark en una sola imagen, fondo ya recortado a
         // transparente) — pensado para fondos oscuros como este encabezado navy.
-        if (is_file($this->logoPath)) {
+        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('instituciones/logo.png');
+        if ($this->logoPath && is_file($this->logoPath)) {
             $pdf->Image($this->logoPath, self::MARGIN, 18, 164.6, 64, 'PNG');
         }
 
@@ -251,6 +260,7 @@ class CartaRecomendacionPdfService
 
     /** Columnas: pregunta | SI | NO | COMENTARIOS. */
     private const COL_PREGUNTA_W = 300.0;
+
     private const COL_CHECK_W = 30.0;
 
     private function drawTablaRespuestas(TCPDF $pdf, string $titulo, string $siLabel, string $noLabel, string $comentariosLabel, array $filas, array $respuestas, string $idioma): void
@@ -271,7 +281,7 @@ class CartaRecomendacionPdfService
                 continue;
             }
 
-            $label = $numero . '.' . $fila[$idioma];
+            $label = $numero.'.'.$fila[$idioma];
             $numero++;
 
             $respuesta = $respuestas[$fila['key']] ?? null;
@@ -427,6 +437,7 @@ class CartaRecomendacionPdfService
         foreach ($campos as [$label, $valor]) {
             if ($label === $labelFirma) {
                 $this->drawFilaFirma($pdf, $label, $labelW, (string) ($firmante['firma'] ?? ''));
+
                 continue;
             }
 
@@ -493,7 +504,7 @@ class CartaRecomendacionPdfService
             return null;
         }
 
-        $path = tempnam(sys_get_temp_dir(), 'firma') . '.' . $tipo;
+        $path = tempnam(sys_get_temp_dir(), 'firma').'.'.$tipo;
         file_put_contents($path, $binario);
 
         return ['path' => $path, 'type' => strtoupper($tipo)];

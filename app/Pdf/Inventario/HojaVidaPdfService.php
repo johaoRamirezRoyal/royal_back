@@ -2,6 +2,7 @@
 
 namespace App\Pdf\Inventario;
 
+use App\Services\Cloudinary\CloudinaryService;
 use TCPDF;
 
 /**
@@ -20,14 +21,16 @@ class HojaVidaPdfService
      */
     public function generate(array $data): string
     {
-        $pdf = new class('L', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF {
+        $pdf = new class('L', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF
+        {
             public function Header() {}
+
             public function Footer()
             {
                 $this->SetY(-15);
                 $this->SetTextColor(127, 127, 127);
                 $this->SetFont($this->getFontFamily(), 'I', 9);
-                $this->Cell(0, 10, 'Pagina ' . $this->getAliasNumPage() . ' de ' . $this->getAliasNbPages(), 0, 0, 'C');
+                $this->Cell(0, 10, 'Pagina '.$this->getAliasNumPage().' de '.$this->getAliasNbPages(), 0, 0, 'C');
             }
         };
 
@@ -41,13 +44,13 @@ class HojaVidaPdfService
 
         $equipo = $data['equipo'];
         // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
-        $logoPath = public_path('storage/royal-school/logotipoBackground.png');
-        $logoCell = is_file($logoPath) ? '<img src="' . $logoPath . '" width="150">' : '';
+        $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
+        $logoCell = $logoPath && is_file($logoPath) ? '<img src="'.$logoPath.'" width="150">' : '';
 
         $encabezado = '
         <table border="1" cellpadding="6" style="width:100%; text-align:center;">
             <tr>
-                <td style="width:21%;">' . $logoCell . '</td>
+                <td style="width:21%;">'.$logoCell.'</td>
                 <td style="width:58%; font-size:12px; font-weight:bold;"><br><br>PROCESO DE MANTENIMIENTO<br>HOJA DE VIDA</td>
                 <td style="width:21%; font-size:9px; font-weight:bold;"><br>VERSIÓN 01<br>03-06-2025<br>1-1</td>
             </tr>
@@ -66,13 +69,13 @@ class HojaVidaPdfService
         ];
 
         $info = '
-        <p style="text-align:center; font-size:10px;"><i>Fecha de emisión: ' . now()->format('d/m/Y') . '</i></p>
+        <p style="text-align:center; font-size:10px;"><i>Fecha de emisión: '.now()->format('d/m/Y').'</i></p>
         <table border="1" cellpadding="4" style="width:100%; font-size:9px; background-color:#dce6f1;">
-            <tr><td style="text-align:center; font-size:11px; font-weight:bold;">INFORMACIÓN DEL EQUIPO ' . e(mb_strtoupper($equipo['descripcion'])) . '</td></tr>
+            <tr><td style="text-align:center; font-size:11px; font-weight:bold;">INFORMACIÓN DEL EQUIPO '.e(mb_strtoupper($equipo['descripcion'])).'</td></tr>
         </table>
         <table border="1" cellpadding="4" style="width:100%; font-size:9px;">';
         foreach ($filas as $etiqueta => $valor) {
-            $info .= '<tr><td style="width:50%;"><b>' . e($etiqueta) . '</b></td><td style="width:50%;">' . e($valor) . '</td></tr>';
+            $info .= '<tr><td style="width:50%;"><b>'.e($etiqueta).'</b></td><td style="width:50%;">'.e($valor).'</td></tr>';
         }
         $info .= '</table><br><br>';
         $pdf->writeHTML($info, true, false, true, false, '');
@@ -88,13 +91,13 @@ class HojaVidaPdfService
             </thead>';
         foreach ($data['historial'] as $i => $h) {
             $fondo = $i % 2 ? ' style="background-color:#f5f5f5;"' : '';
-            $historial .= '<tr' . $fondo . '>
-                <td style="width:11%; text-align:center;">' . e($h['fecha']) . '</td>
-                <td style="width:18%;">' . e($h['usuario']) . '</td>
-                <td style="width:18%;">' . e($h['area']) . '</td>
-                <td style="width:11%;">' . e($h['estado']) . '</td>
-                <td style="width:30%;">' . e($h['observacion']) . '</td>
-                <td style="width:12%; text-align:center;">' . e($h['tiempo']) . '</td>
+            $historial .= '<tr'.$fondo.'>
+                <td style="width:11%; text-align:center;">'.e($h['fecha']).'</td>
+                <td style="width:18%;">'.e($h['usuario']).'</td>
+                <td style="width:18%;">'.e($h['area']).'</td>
+                <td style="width:11%;">'.e($h['estado']).'</td>
+                <td style="width:30%;">'.e($h['observacion']).'</td>
+                <td style="width:12%; text-align:center;">'.e($h['tiempo']).'</td>
             </tr>';
         }
         $historial .= '</table>';

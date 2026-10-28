@@ -6,6 +6,8 @@ use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\Usuarios\Usuario;
 use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\CloudinaryService;
+use Carbon\Carbon;
 use Exception;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\RichText\RichText;
@@ -54,25 +56,25 @@ class HorarioExcelService
      * Un único docente — usado tanto por "Mi horario" (el propio docente autenticado) como
      * por el admin desde Configuración académica > Horario, sobre el docente seleccionado.
      *
-     * @param ?array<int> $idsEsquema Restringe la grilla a estos esquemas (interseca con los
-     * esquemas reales del docente) — null incluye todos los esquemas donde dicta.
+     * @param  ?array<int>  $idsEsquema  Restringe la grilla a estos esquemas (interseca con los
+     *                                   esquemas reales del docente) — null incluye todos los esquemas donde dicta.
      */
     public function exportarDocente(int $idDocente, ?array $idsEsquema = null): array
     {
         try {
             $docente = Usuario::select('id_user', 'nombre', 'apellido', 'correo')->find($idDocente);
 
-            if (!$docente) {
+            if (! $docente) {
                 return ['error' => true, 'message' => 'El docente no existe.', 'data' => []];
             }
 
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
             $spreadsheet->removeSheetByIndex(0);
 
             $nombre = trim("{$docente->nombre} {$docente->apellido}");
             $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
 
-            if (!$this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath, $idsEsquema)) {
+            if (! $this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath, $idsEsquema)) {
                 return ['error' => true, 'message' => 'Este docente no tiene ningún esquema de horario asignado.', 'data' => []];
             }
 
@@ -93,8 +95,8 @@ class HorarioExcelService
      * Un único .xlsx con una hoja por docente — solo los que tengan al menos una clase real
      * (con carga académica) asignada, en vez de exigir exportar docente por docente.
      *
-     * @param ?array<int> $idsEsquema Ver exportarDocente — los docentes sin ningún bloque en
-     * esos esquemas simplemente no generan hoja.
+     * @param  ?array<int>  $idsEsquema  Ver exportarDocente — los docentes sin ningún bloque en
+     *                                   esos esquemas simplemente no generan hoja.
      */
     public function exportarTodosLosDocentes(?array $idsEsquema = null): array
     {
@@ -119,7 +121,7 @@ class HorarioExcelService
                 ->orderBy('apellido')
                 ->get();
 
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
             $spreadsheet->removeSheetByIndex(0);
 
             $usados = [];
@@ -235,11 +237,11 @@ class HorarioExcelService
             $diaId = $franja->id_dia_semana;
             $key = $franja->hora_inicio;
 
-            if (!isset($porDia[$diaId])) {
+            if (! isset($porDia[$diaId])) {
                 $porDia[$diaId] = ['nombre' => $franja->diaSemana->nombre ?? '', 'abreviatura' => $franja->diaSemana->abreviatura ?? '', 'bloques' => []];
             }
 
-            if (!isset($porDia[$diaId]['bloques'][$key])) {
+            if (! isset($porDia[$diaId]['bloques'][$key])) {
                 $porDia[$diaId]['bloques'][$key] = [
                     'hora_inicio' => $franja->hora_inicio,
                     'hora_fin' => $franja->hora_fin,
@@ -296,7 +298,7 @@ class HorarioExcelService
      * fusionan en un solo "run" (una sola celda con rowspan al exportar). Nunca fusiona una
      * celda con varios ocupantes, ni un receso/almuerzo/franja vacía.
      *
-     * @param list<array{rows:list<array>}> $bloques
+     * @param  list<array{rows:list<array>}>  $bloques
      * @return array<int,array{startIdx:int,endIdx:int}>
      */
     private function agruparRunsDia(array $bloques): array
@@ -399,9 +401,9 @@ class HorarioExcelService
      * venir de esquemas distintos, con jornadas distintas). Si un día tiene menos bloques
      * que otro, las filas sobrantes quedan en blanco para ese día.
      *
-     * @param ?string $logoPath Logo resuelto por dominio de correo del docente (ver
-     * MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
-     * @param ?array<int> $idsEsquemaFiltro null incluye todos los esquemas del docente.
+     * @param  ?string  $logoPath  Logo resuelto por dominio de correo del docente (ver
+     *                             MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
+     * @param  ?array<int>  $idsEsquemaFiltro  null incluye todos los esquemas del docente.
      */
     private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null, ?array $idsEsquemaFiltro = null): bool
     {
@@ -471,7 +473,7 @@ class HorarioExcelService
 
         $sheet->mergeCells("{$this->col($colC)}2:{$this->col($colD)}2");
         $teacherCell = $sheet->getCell("{$this->col($colC)}2");
-        $teacherRich = new RichText();
+        $teacherRich = new RichText;
         $teacherRich->createTextRun('Teacher: ')->getFont()->setName(self::FONT_NAME)->setSize(10)->setBold(true);
         $teacherRich->createTextRun($nombreDocente)->getFont()->setName(self::FONT_NAME)->setSize(10);
         $teacherCell->setValue($teacherRich);
@@ -479,7 +481,7 @@ class HorarioExcelService
 
         $sheet->mergeCells("{$this->col($colC)}3:{$this->col($colD)}3");
         $subjectCell = $sheet->getCell("{$this->col($colC)}3");
-        $subjectRich = new RichText();
+        $subjectRich = new RichText;
         $subjectRich->createTextRun('Subject: ')->getFont()->setName(self::FONT_NAME)->setSize(10)->setBold(true);
         $subjectRich->createTextRun($asignaturasUnicas->implode(', ') ?: '—')->getFont()->setName(self::FONT_NAME)->setSize(10);
         $subjectCell->setValue($subjectRich);
@@ -490,8 +492,8 @@ class HorarioExcelService
         // celda-a-celda como en el frontend (ExcelJS): se calcula el tamaño a partir de las
         // proporciones reales del archivo y se centra a mano con offsets en píxeles, ya que
         // PhpSpreadsheet no tiene un "fit dentro de este rango y centra" nativo.
-        $logoPath ??= storage_path('app/public/images/horario/logo.png');
-        if (is_file($logoPath)) {
+        $logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('horario/logo.png');
+        if ($logoPath && is_file($logoPath)) {
             $logoInfo = getimagesize($logoPath);
             $ratio = $logoInfo ? $logoInfo[0] / $logoInfo[1] : 1;
 
@@ -507,7 +509,7 @@ class HorarioExcelService
                 $logoWidth = $logoHeight * $ratio;
             }
 
-            $drawing = new Drawing();
+            $drawing = new Drawing;
             $drawing->setName('Logo');
             $drawing->setPath($logoPath);
             $drawing->setCoordinates('A1');
@@ -570,6 +572,7 @@ class HorarioExcelService
                 if ($idx >= count($dia['bloques'])) {
                     // Este día tiene menos bloques que el día más largo — celdas en blanco.
                     $sheet->getStyle($contentCoord)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFFFFF');
+
                     continue;
                 }
 
@@ -582,7 +585,7 @@ class HorarioExcelService
                     // Franja vacía: si está marcada como no asignable (receso/almuerzo del
                     // esquema) se resalta con su color/etiqueta aunque nadie la haya
                     // agendado; si es una franja normal simplemente libre, queda en blanco.
-                    if (!$bloque['asignable']) {
+                    if (! $bloque['asignable']) {
                         $sheet->setCellValue($contentCoord, $bloque['etiqueta'] ?? 'No asignable');
                         $contentStyle = $sheet->getStyle($contentCoord);
                         $contentStyle->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($this->toArgb($bloque['color']));
@@ -590,6 +593,7 @@ class HorarioExcelService
                     } else {
                         $sheet->getStyle($contentCoord)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFFFFF');
                     }
+
                     continue;
                 }
 
@@ -598,6 +602,7 @@ class HorarioExcelService
                 // vacía que la fusión va a absorber.
                 if ($run['startIdx'] !== $idx) {
                     $sheet->getStyle($contentCoord)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFFFFF');
+
                     continue;
                 }
 
@@ -615,7 +620,7 @@ class HorarioExcelService
         $footerRow = $headerRow + $maxBloques + 1;
         $sheet->mergeCells("A{$footerRow}:{$lastColLetter}{$footerRow}");
         $footerCell = $sheet->getCell("A{$footerRow}");
-        $footerCell->setValue('Actualizado: '.($ultimaActualizacion ? \Carbon\Carbon::parse($ultimaActualizacion)->locale('es')->isoFormat('D/M/YYYY, h:mm a') : '—'));
+        $footerCell->setValue('Actualizado: '.($ultimaActualizacion ? Carbon::parse($ultimaActualizacion)->locale('es')->isoFormat('D/M/YYYY, h:mm a') : '—'));
         $footerCell->getStyle()->getFont()->setName(self::FONT_NAME)->setSize(8)->setItalic(true)->getColor()->setARGB('FF595959');
         $footerCell->getStyle()->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT)->setVertical(Alignment::VERTICAL_CENTER);
 
