@@ -305,6 +305,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/permisosLicencias.php';
     });
 
+    // CURSOS DE TRABAJO EN ALTURAS (Gestión Humana) — también el permiso de alturas en PDF
+    // de los mantenimientos de Áreas Comunes (reportes.id_operativo).
+    Route::prefix('/cursos-altura')->group(function () {
+        require __DIR__ . '/api/cursosAltura.php';
+    });
+
     // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la
     // autenticación NIT de las propias instituciones)
     Route::prefix('/instituciones-admin')->group(function () {

@@ -29,6 +29,12 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
 - **`PUT /inventario/reportes/solucionar`**: crea la fila de solución con el texto en
   **`descripcion`**. Los datos del legacy lo tienen en `observacion`: **toda vista de "la
   solución" lee `descripcion` y, si no hay, `observacion`.**
+- **`POST /inventario/mantenimiento`** (opciones 12, 108 y 109):
+  - Admite cualquier ítem que no esté descontinuado (5) y que no tenga ya un preventivo
+    **abierto** en `reportes` (mismo criterio que `mantenimiento_pendiente`). No se mira
+    `inventario.estado = 6`.
+  - Un ítem **reportado** (estado 2) sí admite un preventivo y **conserva el estado 2**, para
+    que su daño siga en la bandeja de reportados. El resto pasa a 6.
 - **Visto bueno**:
   - `GET /reportes/visto-bueno` (`estado=3 AND visto_bueno=0`, con `search` y
     `per_page`).
@@ -92,3 +98,28 @@ reportar, solucionar y mover.
   - Ignora en silencio los ítems que no son de Área Común, así que se le puede pasar la
     misma lista de ítems.
   - Un fallo se registra en el log y no interrumpe la operación.
+
+## Trabajo en alturas (`CursosAlturaController`, `routes/api/cursosAltura.php`)
+
+Gestión Humana registra los cursos de altura de los operativos en `cursos_altura`
+(certificado vía `FileStorageService`, `fecha_expedicion` y `fecha_finalizacion`
+opcional). Para el CRUD se usa la opción **143**.
+
+
+- **Operativos**: los usuarios activos con perfil en
+  `PermisosLicenciasServices::PERFILES_ASIGNABLES` (10, 23, 27, 32).
+- **Curso vigente**: `CursoAltura::scopeVigentes`. Exige `activo = 1` y
+  `fecha_expedicion <= hoy`, y además `fecha_finalizacion` NULL o `>= hoy`.
+- **`reportes.id_operativo`** (antes `evidencia`, un longblob legacy que nunca se usó) guarda
+  el operativo de un trabajo en altura. Hay dos formas de llenarlo:
+  - Al reportar un daño (`POST /inventario/reportar`).
+  - Al programar un preventivo (`POST /inventario/mantenimiento`).
+
+  En los dos casos se valida con `CursoAltura::reglaOperativo()`: si el operativo no tiene un
+  curso vigente, responde 422.
+- `GET /cursos-altura/operativos-vigentes` y `GET /cursos-altura/permiso/{idReporte}/pdf`
+  aceptan las opciones de Inventario y de Áreas Comunes (12, 108, 109, 119, 141, 142).
+- **El PDF** lo genera `PermisoAlturasPdfService` y sigue el formato de la Resolución
+  4272/2021: datos del trabajo, trabajador autorizado con su curso, lista de verificación
+  SÍ/NO, observaciones y tres firmas. La lista de verificación, la altura y las firmas se
+  llenan a mano en sitio. Si el reporte no tiene operativo, el endpoint responde 404.

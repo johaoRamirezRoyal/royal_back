@@ -13,6 +13,7 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
+use App\Models\CursosAltura\CursoAltura;
 use App\Services\inventario\InventarioServices;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
@@ -376,7 +377,8 @@ class InventariosController extends Controller
             $data['descripcion'],
             $data['id_anio'],
             $data['id_periodo'],
-            $data['fechareg']
+            $data['fechareg'],
+            $data['id_operativo'] ? (int) $data['id_operativo'] : null
         );
 
         return $this->apiResponse($resultado);
@@ -494,7 +496,7 @@ class InventariosController extends Controller
 
     public function programarMantenimientoPreventivo(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -512,6 +514,7 @@ class InventariosController extends Controller
             'id_log' => 'required|integer|exists:usuarios,id_user',
             'con_solucion' => 'boolean',
             'id_tecnico' => 'nullable|integer|exists:usuarios,id_user',
+            'id_operativo' => CursoAltura::reglaOperativo(),
         ]);
 
         if ($validator->fails()) {
@@ -530,7 +533,8 @@ class InventariosController extends Controller
             $data['id_anio'],
             $data['periodo'],
             $data['con_solucion'] ?? false,
-            $data['id_tecnico'] ?? null
+            $data['id_tecnico'] ?? null,
+            isset($data['id_operativo']) ? (int) $data['id_operativo'] : null
         );
 
         return $this->apiResponse($resultado);

@@ -30,7 +30,7 @@ class Reportes extends Model
         'fecha_respuesta',
         'fechareg',
         'descripcion',
-        'evidencia',
+        'id_operativo',
         'id_anio',
         'periodo'
     ];

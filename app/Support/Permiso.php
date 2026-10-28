@@ -78,6 +78,7 @@ final class Permiso
     public const INVENTARIO_FECHA_REPORTE = 140;        // "Fecha de Reporte" (fecha de un reporte de daño)
     public const MIS_AREAS_NIVEL = 141;                 // "Mis áreas — Áreas comunes de mi nivel"
     public const MIS_AREAS_RESPONSABLE = 142;           // "Mis áreas — Áreas comunes de mis áreas a cargo"
+    public const CURSOS_ALTURA = 143;                   // "Gestión Humana — Cursos de altura"
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

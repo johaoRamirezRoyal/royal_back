@@ -25,8 +25,11 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
     tiempo.
 - **`FileStorageService`** guarda archivos locales: `uploadFile` (nombre UUID), `eliminar`
   y `reemplazar`.
-  - El disco es `config('filesystems.uploads_disk')`: `UPLOADS_DISK=sami` en el VPS
-    (sirve `public/upload`), `public` en local o `cloudinary`.
+  - El disco es `config('filesystems.uploads_disk')`: **`cloudinary` en producción**
+    (`APP_ENV=production`) y **`public` en cualquier otro entorno** (`storage/app/public`,
+    servido en `public/storage`; requiere `php artisan storage:link`). `UPLOADS_DISK` lo
+    sobrescribe (p. ej. `sami`, que sirve `public/upload` del SAMI legado), así que en el
+    `.env` de producción no debe quedar `UPLOADS_DISK=sami`.
   - En la BD se guarda la **`ruta`**; la `url` es solo para exponerla.
   - `rutaLocal($ruta)` da un path real para lo que lo necesita (GD, adjuntos). En un disco
     remoto, descarga a `storage/app/archivos-remotos/` y lo reusa. **No uses

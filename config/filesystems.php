@@ -16,10 +16,12 @@ return [
     'default' => env('FILESYSTEM_DISK', 'local'),
 
     /*
-    | Disco que usa FileStorageService para los archivos subidos.
-    | En producción: UPLOADS_DISK=sami
+    | Disco de TODOS los archivos subidos (FileStorageService y quienes leen uploads):
+    | Cloudinary en producción (APP_ENV=production) y `public` en cualquier otro entorno
+    | (storage/app/public, servido en public/storage vía `php artisan storage:link`).
+    | UPLOADS_DISK lo sobrescribe; déjala sin definir para usar esta regla.
     */
-    'uploads_disk' => env('UPLOADS_DISK', 'public'),
+    'uploads_disk' => env('UPLOADS_DISK', env('APP_ENV') === 'production' ? 'cloudinary' : 'public'),
 
     /*
     |--------------------------------------------------------------------------
