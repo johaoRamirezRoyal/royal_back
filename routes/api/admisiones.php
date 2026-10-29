@@ -206,8 +206,6 @@ Route::put("/referencias", [AdmissionsController::class, "actualizarReferenciasF
 Route::delete("/referencias", [AdmissionsController::class, "eliminarReferenciaFamiliarAspirante"]);
 
 
-Route::post('/testArchivo', [AdmissionsController::class, 'testArchivoGuardar']);
-Route::delete('/testArchivo', [AdmissionsController::class, 'testArchivoEliminar']);
 Route::get('/visualizarDocumento', [AdmissionsController::class, 'visualizarDocumentosInscripcion']);
 
 /*

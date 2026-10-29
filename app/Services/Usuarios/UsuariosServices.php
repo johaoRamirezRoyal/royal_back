@@ -660,8 +660,10 @@ class UsuariosServices
                 return ['error' => true, 'message' => $resultado['message']];
             }
 
+            // Solo la activa: las inactivas son firmas subidas a mano para una historia clínica
+            // (AdmisionesServices::actualizarEstadoCitaPsicologia) y no deben pisarse.
             Firma::updateOrCreate(
-                ['id_user' => $id_user],
+                ['id_user' => $id_user, 'activo' => 1],
                 [
                     'nombre' => $file->getClientOriginalName(),
                     'url' => $resultado['data']['url'],
