@@ -3,7 +3,7 @@
 namespace App\Models\CursosAltura;
 
 use App\Models\Usuarios\Usuario;
-use App\Services\PermisosLicencias\PermisosLicenciasServices;
+use App\Services\permisosLicencias\PermisosLicenciasServices;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
