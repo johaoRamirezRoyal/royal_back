@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Reservas\StoreReservaRequest;
 use App\Models\Reservas\Reservas;
 use App\Services\Reservas\ReservasServices;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Support\Permiso;
-use App\Services\Usuarios\PermisosPerfil;
 
 class ReservaController extends Controller
 {
@@ -53,22 +53,18 @@ class ReservaController extends Controller
     public function crearReserva(StoreReservaRequest $request)
     {
         $datos = $request->validated();
-        $imagenEncuesta = !empty($datos['mostrar_encuesta']) ? $datos['imagen_encuesta'] : null;
+        $imagenEncuesta = ! empty($datos['mostrar_encuesta']) ? $datos['imagen_encuesta'] : null;
         unset($datos['mostrar_encuesta'], $datos['imagen_encuesta']);
 
         // Perfil del usuario autenticado, no del `id_user` del body (lo controla el cliente).
         $resultado = $this->reservasServices->crearReserva($datos, (int) $request->user()->perfil === 1);
 
-        if (!$resultado['error']) {
-            $this->reservasServices->enviarCorreoAvisoReserva($resultado['data'], $request->user());
-        }
-
-        if (!$resultado['error']) {
+        if (! $resultado['error']) {
             $this->reservasServices->enviarCorreoAvisoReserva($resultado['data'], $request->user());
         }
 
         // El correo es un extra: si falla, la reserva ya quedó creada y solo se avisa.
-        if (!$resultado['error'] && $imagenEncuesta) {
+        if (! $resultado['error'] && $imagenEncuesta) {
             $resultado['message'] .= $this->reservasServices->enviarCorreoEncuesta($resultado['data'], $imagenEncuesta, $request->user())
                 ? ' Se envió a tu correo el QR de la encuesta.'
                 : ' No se pudo enviar el correo con el QR de la encuesta.';
@@ -85,7 +81,7 @@ class ReservaController extends Controller
         $fecha = $request->input('fecha');
         $hora = $request->input('hora');
 
-        if (!$fecha || !strtotime($fecha) || !$hora) {
+        if (! $fecha || ! strtotime($fecha) || ! $hora) {
             return $this->error('Debe indicar fecha (Y-m-d) y hora.', 422);
         }
 
@@ -119,7 +115,7 @@ class ReservaController extends Controller
     {
         $reserva = Reservas::find($request->input('id'));
 
-        if (!$reserva) {
+        if (! $reserva) {
             return $this->error('No se encontró la reserva.', 404);
         }
 
@@ -128,13 +124,13 @@ class ReservaController extends Controller
         // cualquier reserva sin restricción; el propio dueño puede autogestionar la
         // suya (ver "Mis reservas") solo si faltan más de DIAS_MIN_AUTOSERVICIO días.
         $cancelarOFinalizar = $request->boolean('cancelar') || $request->boolean('finalizar');
-        $esEdicionCompleta = !$cancelarOFinalizar && $request->hasAny(self::CAMPOS_EDICION);
+        $esEdicionCompleta = ! $cancelarOFinalizar && $request->hasAny(self::CAMPOS_EDICION);
 
         if ($esEdicionCompleta) {
             $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_EDITAR_RESERVAS);
 
-            if (!$tienePermiso && !$this->puedeAutogestionar($reserva, $request)) {
-                return $this->error('No tienes permiso para editar esta reserva, o ya no tiene la anticipación mínima de ' . self::DIAS_MIN_AUTOSERVICIO . ' días para autogestionarla.', 403);
+            if (! $tienePermiso && ! $this->puedeAutogestionar($reserva, $request)) {
+                return $this->error('No tienes permiso para editar esta reserva, o ya no tiene la anticipación mínima de '.self::DIAS_MIN_AUTOSERVICIO.' días para autogestionarla.', 403);
             }
 
             $validator = Validator::make($request->all(), [
@@ -152,8 +148,8 @@ class ReservaController extends Controller
         } elseif ($cancelarOFinalizar) {
             $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_GESTIONAR_RESERVAS);
 
-            if (!$tienePermiso && !$this->puedeAutogestionar($reserva, $request)) {
-                return $this->error('No tienes permiso para cancelar esta reserva, o ya no tiene la anticipación mínima de ' . self::DIAS_MIN_AUTOSERVICIO . ' días para autogestionarla.', 403);
+            if (! $tienePermiso && ! $this->puedeAutogestionar($reserva, $request)) {
+                return $this->error('No tienes permiso para cancelar esta reserva, o ya no tiene la anticipación mínima de '.self::DIAS_MIN_AUTOSERVICIO.' días para autogestionarla.', 403);
             }
         }
 

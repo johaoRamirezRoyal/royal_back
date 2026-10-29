@@ -50,7 +50,7 @@ class ReservasServices extends Service
         return [
             'reservados' => $reservados,
             'total' => $total,
-            'disponibles' => $total - $reservados
+            'disponibles' => $total - $reservados,
         ];
     }
 
@@ -63,31 +63,31 @@ class ReservasServices extends Service
     {
         $salon = Salones::activo()->find($data['id_salon']);
 
-        if (!$salon) {
+        if (! $salon) {
             return [
                 'error' => true,
                 'message' => 'El salón no existe o está inactivo.',
-                'data' => []
+                'data' => [],
             ];
         }
 
         $sonidoSolicitado = $data['sonido'] ?? false;
 
-        if ($sonidoSolicitado && !$salon->sonido) {
+        if ($sonidoSolicitado && ! $salon->sonido) {
             return [
                 'error' => true,
                 'message' => 'El salón no tiene disponibilidad de sonido.',
-                'data' => []
+                'data' => [],
             ];
         }
 
         $usuario = Usuario::find($data['id_user']);
 
-        if (!$usuario) {
+        if (! $usuario) {
             return [
                 'error' => true,
                 'message' => 'El usuario no existe.',
-                'data' => []
+                'data' => [],
             ];
         }
 
@@ -98,56 +98,71 @@ class ReservasServices extends Service
         $combos = collect($fechas)->crossJoin($horas)->map(function ($combo) {
             return ['fecha' => $combo[0], 'hora' => $combo[1]];
         })->unique(function ($combo) {
-            return $combo['fecha'] . '-' . $combo['hora'];
+            return $combo['fecha'].'-'.$combo['hora'];
         })->values();
 
         if ($combos->isEmpty()) {
             return [
                 'error' => true,
                 'message' => 'Debe especificar al menos una fecha y hora.',
-                'data' => []
+                'data' => [],
             ];
         }
 
         $configReservas = ConfiguracionReservas::actual();
 
+        // Una sola consulta para todo el rango: como los combos son fechas × horas,
+        // cualquier reserva activa del salón en esas fechas y horas es un choque. Se
+        // informan todos (con título y dueño) para que el usuario sepa con qué reserva choca.
+        $choques = Reservas::with(['usuario:id_user,nombre,apellido', 'hora:id,horas'])
+            ->where('id_salon', $data['id_salon'])
+            ->whereIn('fecha_reserva', $fechas)
+            ->whereIn('hora_reserva', $horas)
+            ->where('activo', 1)
+            ->whereNull('fecha_cancelado')
+            ->orderBy('fecha_reserva')
+            ->orderBy('hora_reserva')
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'fecha' => (string) $r->fecha_reserva,
+                'hora' => trim(str_replace("\n", ' ', $r->hora?->horas ?? (string) $r->hora_reserva)),
+                'titulo' => $r->titulo,
+                'usuario' => trim(($r->usuario?->nombre ?? '').' '.($r->usuario?->apellido ?? '')),
+            ]);
+
+        if ($choques->isNotEmpty()) {
+            $detalle = $choques->map(fn ($c) => "{$c['fecha']} {$c['hora']} — «".($c['titulo'] ?: 'Sin título')."» ({$c['usuario']})")->implode('; ');
+
+            return [
+                'error' => true,
+                'message' => "El salón ya está reservado en el rango elegido: {$detalle}.",
+                'data' => $choques->all(),
+            ];
+        }
+
         foreach ($combos as $combo) {
-            if (!strtotime($combo['fecha'])) {
+            if (! strtotime($combo['fecha'])) {
                 return [
                     'error' => true,
                     'message' => "La fecha {$combo['fecha']} no tiene un formato válido (Y-m-d).",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             $fechaReserva = Carbon::parse($combo['fecha'])->startOfDay();
 
-            if (!$sinLimiteFecha && ($error = $this->validarFechaReserva($fechaReserva, Carbon::today(), now(), $configReservas))) {
+            if (! $sinLimiteFecha && ($error = $this->validarFechaReserva($fechaReserva, Carbon::today(), now(), $configReservas))) {
                 return ['error' => true, 'message' => $error, 'data' => []];
             }
 
             $hora = Horas::find($combo['hora']);
 
-            if (!$hora) {
+            if (! $hora) {
                 return [
                     'error' => true,
                     'message' => "La hora {$combo['hora']} no existe.",
-                    'data' => []
-                ];
-            }
-
-            $ocupado = Reservas::where('id_salon', $data['id_salon'])
-                ->where('fecha_reserva', $combo['fecha'])
-                ->where('hora_reserva', $combo['hora'])
-                ->where('activo', 1)
-                ->whereNull('fecha_cancelado')
-                ->exists();
-
-            if ($ocupado) {
-                return [
-                    'error' => true,
-                    'message' => "El salón ya está reservado el {$combo['fecha']} en la hora {$combo['hora']}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -158,7 +173,7 @@ class ReservasServices extends Service
                     return [
                         'error' => true,
                         'message' => "No hay suficientes portátiles disponibles para el {$combo['fecha']} hora {$combo['hora']}.",
-                        'data' => $disponibilidad
+                        'data' => $disponibilidad,
                     ];
                 }
             }
@@ -187,12 +202,12 @@ class ReservasServices extends Service
 
                         foreach ($portatiles as $portatil) {
                             $this->prestamosService->registrarPrestamo([
-                                'id_inventario'    => $portatil->id,
+                                'id_inventario' => $portatil->id,
                                 'id_user_prestamo' => $data['id_user'],
-                                'fecha_prestamo'   => $combo['fecha'],
-                                'id_user_entrega'  => $portatil->id_user,
-                                'fecha_compromiso' => $combo['fecha'] . ' 23:59:59',
-                                'observacion'      => 'Préstamo automático por reserva #' . $reserva->id,
+                                'fecha_prestamo' => $combo['fecha'],
+                                'id_user_entrega' => $portatil->id_user,
+                                'fecha_compromiso' => $combo['fecha'].' 23:59:59',
+                                'observacion' => 'Préstamo automático por reserva #'.$reserva->id,
                             ]);
                         }
                     }
@@ -217,15 +232,17 @@ class ReservasServices extends Service
 
             return [
                 'error' => true,
-                'message' => 'Error al asignar portátil(es): ' . $e->getMessage(),
-                'data' => []
+                'message' => 'Error al asignar portátil(es): '.$e->getMessage(),
+                'data' => [],
             ];
         }
     }
 
     // Salones con destinatarios propios (ids heredados de la app legada).
     private const SALON_MAKER_LAB = 9;
+
     private const SALON_BIBLIOTECA = 8;
+
     private const SALON_CAFETERIA = 15;
 
     /**
@@ -239,7 +256,9 @@ class ReservasServices extends Service
     {
         try {
             $primera = $reservas[0] ?? null;
-            if (!$primera) return false;
+            if (! $primera) {
+                return false;
+            }
 
             $idSalon = (int) $primera['id_salon'];
             $correos = array_merge(Mails::RESERVAS_SISTEMAS->recipients(), match ($idSalon) {
@@ -258,10 +277,10 @@ class ReservasServices extends Service
                 "Reserva de salón ($nombreSalon)",
                 'emails.reservaAviso',
                 [
-                    'usuario' => trim($usuario->nombre . ' ' . $usuario->apellido),
+                    'usuario' => trim($usuario->nombre.' '.$usuario->apellido),
                     'salon' => $nombreSalon,
-                    'portatil' => ($primera['portatil'] ?? 0) > 0 ? 'Sí (' . $primera['portatil'] . ')' : 'No',
-                    'sonido' => !empty($primera['sonido']) && $primera['sonido'] !== 'no' ? 'Sí' : 'No',
+                    'portatil' => ($primera['portatil'] ?? 0) > 0 ? 'Sí ('.$primera['portatil'].')' : 'No',
+                    'sonido' => ! empty($primera['sonido']) && $primera['sonido'] !== 'no' ? 'Sí' : 'No',
                     'fechas' => array_map(fn ($f) => Carbon::parse($f)->locale('es')->translatedFormat('l j \d\e F \d\e Y'), $fechas),
                     'horas' => $horas,
                     'detalle' => $primera['detalle_reserva'] ?? null,
@@ -269,9 +288,10 @@ class ReservasServices extends Service
                 ]
             );
 
-            return !$resultado['error'];
+            return ! $resultado['error'];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al enviar el correo de aviso de la reserva');
+
             return false;
         }
     }
@@ -287,19 +307,25 @@ class ReservasServices extends Service
     {
         try {
             $primera = $reservas[0] ?? null;
-            if (!$primera || empty($usuario->correo)) return false;
+            if (! $primera || empty($usuario->correo)) {
+                return false;
+            }
 
             $filaSalon = EncuestaSalon::with('encuesta:id,titulo,activo')->where('id_salon', $primera['id_salon'])->first();
-            if (!$filaSalon?->encuesta?->activo) return false;
+            if (! $filaSalon?->encuesta?->activo) {
+                return false;
+            }
 
             $jpg = base64_decode(preg_replace('#^data:image/jpe?g;base64,#', '', $imagenDataUrl), true);
-            if ($jpg === false || (@getimagesizefromstring($jpg)['mime'] ?? null) !== 'image/jpeg') return false;
+            if ($jpg === false || (@getimagesizefromstring($jpg)['mime'] ?? null) !== 'image/jpeg') {
+                return false;
+            }
 
             $horas = Horas::whereIn('id', array_column($reservas, 'hora_reserva'))->orderBy('id')->pluck('horas')->all();
             $fechas = array_values(array_unique(array_column($reservas, 'fecha_reserva')));
 
             return app(MailService::class)->send($usuario->correo, new ReservaEncuestaMail([
-                'nombre' => trim($usuario->nombre . ' ' . $usuario->apellido),
+                'nombre' => trim($usuario->nombre.' '.$usuario->apellido),
                 'salon' => Salones::find($primera['id_salon'])?->nombre ?? '',
                 'titulo' => $primera['titulo'] ?? null,
                 'detalle' => $primera['detalle_reserva'] ?? null,
@@ -309,6 +335,7 @@ class ReservasServices extends Service
             ], $jpg));
         } catch (Exception $e) {
             $this->sendError($e, 'Error al enviar el correo de la encuesta de la reserva');
+
             return false;
         }
     }
@@ -372,17 +399,18 @@ class ReservasServices extends Service
         try {
             $reserva = Reservas::find($data['id']);
 
-            if (!$reserva) {
+            if (! $reserva) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
                     'message' => "No se encontró la reserva con id: {$data['id']}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             // Finalizar (devuelve portátiles, marca como completada)
-            if (!empty($data['finalizar'])) {
+            if (! empty($data['finalizar'])) {
                 $prestamos = PrestamosInventario::where('observacion', 'like', "%reserva #{$reserva->id}")
                     ->whereNull('fecha_devolucion')
                     ->get();
@@ -396,15 +424,16 @@ class ReservasServices extends Service
                 $reserva->update(['confirmado' => 1]);
 
                 DB::commit();
+
                 return [
                     'error' => false,
                     'message' => 'Reserva finalizada correctamente.',
-                    'data' => $reserva->fresh()->toArray()
+                    'data' => $reserva->fresh()->toArray(),
                 ];
             }
 
             // Cancelación
-            if (!empty($data['cancelar'])) {
+            if (! empty($data['cancelar'])) {
                 $reserva->update([
                     'fecha_cancelado' => now(),
                     'activo' => 0,
@@ -422,10 +451,11 @@ class ReservasServices extends Service
                 }
 
                 DB::commit();
+
                 return [
                     'error' => false,
                     'message' => 'Reserva cancelada correctamente.',
-                    'data' => $reserva->fresh()->toArray()
+                    'data' => $reserva->fresh()->toArray(),
                 ];
             }
 
@@ -437,34 +467,37 @@ class ReservasServices extends Service
             if (array_key_exists('hora_reserva', $data)) {
                 $hora = Horas::find($data['hora_reserva']);
 
-                if (!$hora) {
+                if (! $hora) {
                     DB::rollBack();
+
                     return [
                         'error' => true,
                         'message' => 'La hora seleccionada no existe.',
-                        'data' => []
+                        'data' => [],
                     ];
                 }
             }
 
-            if (array_key_exists('fecha_reserva', $data) && !strtotime($data['fecha_reserva'])) {
+            if (array_key_exists('fecha_reserva', $data) && ! strtotime($data['fecha_reserva'])) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
                     'message' => 'La fecha de la reserva no tiene un formato válido (Y-m-d).',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             if (array_key_exists('id_salon', $data)) {
                 $salon = Salones::activo()->find($data['id_salon']);
 
-                if (!$salon) {
+                if (! $salon) {
                     DB::rollBack();
+
                     return [
                         'error' => true,
                         'message' => 'El salón no existe o está inactivo.',
-                        'data' => []
+                        'data' => [],
                     ];
                 }
             }
@@ -488,22 +521,24 @@ class ReservasServices extends Service
 
                 if ($ocupado) {
                     DB::rollBack();
+
                     return [
                         'error' => true,
                         'message' => 'El salón ya se encuentra reservado para esa fecha y hora.',
-                        'data' => []
+                        'data' => [],
                     ];
                 }
             }
 
             $sonidoSolicitado = array_key_exists('sonido', $data) ? $data['sonido'] : ($reserva->sonido && $reserva->sonido !== 'no' && $reserva->sonido !== '0');
 
-            if ($sonidoSolicitado && (!$salon || $salon->sonido !== 'si')) {
+            if ($sonidoSolicitado && (! $salon || $salon->sonido !== 'si')) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
                     'message' => 'El salón no tiene disponibilidad de sonido.',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -546,10 +581,11 @@ class ReservasServices extends Service
 
                     if ($disponibilidad['disponibles'] < $faltan) {
                         DB::rollBack();
+
                         return [
                             'error' => true,
                             'message' => "No hay suficientes portátiles disponibles ({$disponibilidad['disponibles']}) para los {$faltan} adicionales solicitados.",
-                            'data' => $disponibilidad
+                            'data' => $disponibilidad,
                         ];
                     }
 
@@ -562,12 +598,12 @@ class ReservasServices extends Service
 
                     foreach ($portatiles as $portatil) {
                         $this->prestamosService->registrarPrestamo([
-                            'id_inventario'    => $portatil->id,
+                            'id_inventario' => $portatil->id,
                             'id_user_prestamo' => $reserva->id_user,
-                            'fecha_prestamo'   => $fechaEfectiva,
-                            'id_user_entrega'  => $portatil->id_user,
-                            'fecha_compromiso' => $fechaEfectiva . ' 23:59:59',
-                            'observacion'      => 'Préstamo automático por reserva #' . $reserva->id,
+                            'fecha_prestamo' => $fechaEfectiva,
+                            'id_user_entrega' => $portatil->id_user,
+                            'fecha_compromiso' => $fechaEfectiva.' 23:59:59',
+                            'observacion' => 'Préstamo automático por reserva #'.$reserva->id,
                         ]);
                     }
                 }
@@ -581,7 +617,7 @@ class ReservasServices extends Service
             return [
                 'error' => false,
                 'message' => 'Reserva actualizada correctamente.',
-                'data' => $reserva->fresh()->toArray()
+                'data' => $reserva->fresh()->toArray(),
             ];
         } catch (Exception $e) {
             DB::rollBack();
@@ -591,7 +627,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error al actualizar la reserva.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -610,7 +646,7 @@ class ReservasServices extends Service
             $reservas = Reservas::with([
                 'salon:id,nombre',
                 'hora:id,horas',
-                'usuario:id_user,nombre,apellido'
+                'usuario:id_user,nombre,apellido',
             ])
                 ->when($id_user, function ($query) use ($id_user) {
                     $query->where('id_user', $id_user);
@@ -627,7 +663,7 @@ class ReservasServices extends Service
                 ->when($fechaHasta, function ($query) use ($fechaHasta) {
                     $query->whereDate('fecha_reserva', '<=', $fechaHasta);
                 })
-                ->when(!is_null($cancelado), function ($query) use ($cancelado) {
+                ->when(! is_null($cancelado), function ($query) use ($cancelado) {
                     if ($cancelado) {
                         $query->whereNotNull('fecha_cancelado');
                     } else {
@@ -642,7 +678,7 @@ class ReservasServices extends Service
             return [
                 'error' => false,
                 'message' => 'Se obtuvieron correctamente las reservas.',
-                'data' => $reservas
+                'data' => $reservas,
             ];
         } catch (Exception $e) {
 
@@ -651,7 +687,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener las reservas.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -684,7 +720,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al crear el salón.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -694,11 +730,11 @@ class ReservasServices extends Service
         try {
             $salon = Salones::activo()->find($id);
 
-            if (!$salon) {
+            if (! $salon) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el salón con id: {$id}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -715,7 +751,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el salón.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -729,11 +765,11 @@ class ReservasServices extends Service
         try {
             $salon = Salones::activo()->find($id);
 
-            if (!$salon) {
+            if (! $salon) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el salón con id: {$id}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -742,7 +778,7 @@ class ReservasServices extends Service
             return [
                 'error' => false,
                 'message' => 'Salón eliminado correctamente.',
-                'data' => []
+                'data' => [],
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al eliminar el salón');
@@ -750,7 +786,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar el salón.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -783,7 +819,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al crear la franja horaria.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -793,11 +829,11 @@ class ReservasServices extends Service
         try {
             $hora = Horas::where('activo', 1)->find($id);
 
-            if (!$hora) {
+            if (! $hora) {
                 return [
                     'error' => true,
                     'message' => "No se encontró la franja horaria con id: {$id}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -814,7 +850,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar la franja horaria.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -828,11 +864,11 @@ class ReservasServices extends Service
         try {
             $hora = Horas::where('activo', 1)->find($id);
 
-            if (!$hora) {
+            if (! $hora) {
                 return [
                     'error' => true,
                     'message' => "No se encontró la franja horaria con id: {$id}.",
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
@@ -841,7 +877,7 @@ class ReservasServices extends Service
             return [
                 'error' => false,
                 'message' => 'Franja horaria eliminada correctamente.',
-                'data' => []
+                'data' => [],
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al eliminar la franja horaria');
@@ -849,7 +885,7 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al eliminar la franja horaria.',
-                'data' => []
+                'data' => [],
             ];
         }
     }
