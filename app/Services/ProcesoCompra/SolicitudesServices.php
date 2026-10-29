@@ -252,7 +252,10 @@ class SolicitudesServices
             $query = Solicitud::with([
                 'area:id,nombre',
                 'usuario:id_user,nombre,apellido',
-                'proveedor:id_proveedor,nombre',
+                // aprobador y datos de contacto del proveedor: los usa el PDF de orden de compra;
+                // detalle_producto, el buscador del seguimiento.
+                'aprobador:id_user,nombre,apellido',
+                'proveedor:id_proveedor,nombre,num_identificacion,comercial_nombre,telefono_comercial,ciudad,detalle_producto',
                 'productos',
                 'verificacion:id_solicitud,factura_doc,id_log,fecha_verificacion,cantidad,observacion_cant,calidad,observacion_calidad,precios,observacion_precios,plazos,observacion_plazo',
                 'verificacion.usuario:id_user,nombre,apellido',
