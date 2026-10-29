@@ -2,6 +2,7 @@
 
 namespace App\Models\Instituciones;
 
+use App\Services\MailService;
 use Illuminate\Database\Eloquent\Model;
 
 class Institucion extends Model
@@ -55,5 +56,19 @@ class Institucion extends Model
         $fechaBloqueo = $this->fechaBloqueo();
 
         return $fechaBloqueo !== null && now()->greaterThan($fechaBloqueo);
+    }
+
+    /**
+     * Confirma al correo de la institución que quedó registrado: al verificarlo ella misma
+     * (InstitucionController::verifyEmailOtp) o al crearla el admin con correo
+     * (InstitucionAdminController::store). sendView no lanza: si falla, queda en el log.
+     */
+    public function enviarCorreoRegistrado(MailService $mail): void
+    {
+        $mail->sendView($this->email, 'Correo registrado — Admisiones ' . config('app.name'), 'emails.institucionCorreoRegistrado', [
+            'nombreInstitucion' => $this->nombre,
+            'email' => $this->email,
+            'fecha' => now()->format('d/m/Y'),
+        ]);
     }
 }
