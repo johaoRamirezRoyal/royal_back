@@ -2968,8 +2968,8 @@ class InventarioServices
 
             $item = $reporte->inventario;
 
-            // Reporte ya solucionado (historial /inventario/reportes): llena la sección
-            // "Solucionado Por" con quién, cuándo, qué se hizo y su firma registrada.
+            // Reporte ya solucionado (historial /inventario/reportes): llena firmas, fechas y
+            // la solución como el legacy imprimir/solucion.php.
             $solucion = Reportes::with('responsable:id_user,nombre,apellido')
                 ->where('id_reporte', $reporte->id)
                 ->where('estado', 3)
@@ -2978,13 +2978,9 @@ class InventarioServices
 
             $datosSolucion = null;
             if ($solucion) {
-                $fechaSolucion = $solucion->fecha_respuesta;
                 $datosSolucion = [
                     'responsable' => trim(($solucion->responsable->nombre ?? '').' '.($solucion->responsable->apellido ?? '')),
-                    'fecha' => $fechaSolucion?->format('d-m-Y H:i') ?? '',
-                    'tiempo' => $fechaSolucion && $reporte->fechareg
-                        ? $reporte->fechareg->diff($fechaSolucion)->format('%a días %h horas %i minutos')
-                        : '',
+                    'fecha' => $solucion->fecha_respuesta?->format('Y-m-d') ?? '',
                     // Soluciones migradas del legacy guardan el texto en observacion (ver AGENTS.md).
                     'descripcion' => $solucion->descripcion ?: ($solucion->observacion ?? ''),
                     'firma' => $this->descargarFirma($solucion->id_resp),
@@ -2994,12 +2990,16 @@ class InventarioServices
             $contenido = app(ReporteOperativoPdfService::class)->generate([
                 'usuario' => trim(($reporte->usuario->nombre ?? '').' '.($reporte->usuario->apellido ?? '')),
                 'area' => $item->area->nombre ?? '',
-                'fecha' => $reporte->fechareg?->format('d-m-Y') ?? '',
+                'fecha' => $reporte->fechareg?->format('Y-m-d H:i:s') ?? '',
+                'hora' => $reporte->fechareg?->format('H:i:s') ?? '',
+                'fecha_dia' => $reporte->fechareg?->format('Y-m-d') ?? '',
                 'id' => $item->id,
                 'descripcion' => $item->descripcion ?? '',
                 'marca' => $item->marca ?? '',
                 'estado' => Estado::where('id', $item->estado)->value('nombre') ?? '',
                 'observacion' => $reporte->observacion ?? '',
+                'firma_reporta' => $this->descargarFirma($reporte->id_user),
+                'visto_bueno' => (bool) $solucion?->visto_bueno,
                 'solucion' => $datosSolucion,
             ]);
 
@@ -3036,9 +3036,20 @@ class InventarioServices
                 return $res->successful() ? $res->body() : null;
             }
 
-            $disco = Storage::disk(config('filesystems.uploads_disk', 'public'));
+            if (! $firma->nombre) {
+                return null;
+            }
 
-            return $firma->nombre && $disco->exists($firma->nombre) ? $disco->get($firma->nombre) : null;
+            // Primero el disco de uploads (Cloudinary en producción, con lo migrado del legacy);
+            // si no está, la carpeta public/upload de SAMI.
+            foreach (array_unique([config('filesystems.uploads_disk', 'public'), 'sami']) as $nombreDisco) {
+                $disco = Storage::disk($nombreDisco);
+                if ($disco->exists($firma->nombre)) {
+                    return $disco->get($firma->nombre);
+                }
+            }
+
+            return null;
         } catch (\Throwable $e) {
             Log::warning("No se pudo descargar la firma del usuario {$idUser}: ".$e->getMessage());
 

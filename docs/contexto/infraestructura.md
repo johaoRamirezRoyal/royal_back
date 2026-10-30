@@ -108,6 +108,11 @@ firmada. `listarCitasPsicologia` devuelve `psicologa_tiene_firma` por cita.
   `rutaLocalRoyalSchool()` las descarga a un temporal porque TCPDF/PhpSpreadsheet necesitan
   ruta local; si falla devuelve null y el documento sale sin esa imagen (sin respaldo local).
   Una nueva se sube con `POST /api/migracion/cloudinary` (`directorio=royal-school/...`).
+  **No las subas desde la consola de Cloudinary**: la cuenta usa carpetas dinámicas y la
+  consola les pone un public_id con sufijo aleatorio (`logotipoBackground_fk3t8o`), así que
+  `royal/royal-school/<archivo>` da 404. El public_id tiene que ser exactamente
+  `royal/royal-school/<nombre>`. `firma_administrativa.jpg` es la firma fija del V°B° en
+  el reporte operativo de inventario.
 - El `checkPageBreak` de TCPDF es `protected`; para salto de página con coordenadas
   manuales, usa un wrapper propio (como `ensureSpacio()` en `CartaRecomendacionPdfService`).
 
