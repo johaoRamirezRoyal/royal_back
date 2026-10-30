@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Inventarios\InventariosController;
+use App\Http\Controllers\Inventarios\ProgramacionMantController;
 use App\Support\Permiso;
 use Illuminate\Support\Facades\Route;
 
@@ -45,6 +46,18 @@ Route::get('/mantenimiento/periodos', [InventariosController::class, 'periodosMa
 Route::get('/mantenimiento/sin-mantenimiento', [InventariosController::class, 'sinMantenimiento'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::get('/mantenimiento/indicador', [InventariosController::class, 'indicadorMantenimiento'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::get('/mantenimiento/grafica', [InventariosController::class, 'graficaMantenimiento'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
+
+// Programación de mantenimientos (programacion_mant + avances en programacion_apro).
+Route::prefix('/mantenimiento/programacion')->middleware(Permiso::ruta([Permiso::INVENTARIO]))->group(function () {
+    Route::get('/', [ProgramacionMantController::class, 'listar']);
+    Route::get('/estadisticas', [ProgramacionMantController::class, 'estadisticas']);
+    Route::get('/calendario', [ProgramacionMantController::class, 'calendario']);
+    Route::post('/', [ProgramacionMantController::class, 'crear']);
+    Route::put('/{id}', [ProgramacionMantController::class, 'actualizar'])->whereNumber('id');
+    Route::delete('/{id}', [ProgramacionMantController::class, 'eliminar'])->whereNumber('id');
+    Route::get('/{id}/avances', [ProgramacionMantController::class, 'avances'])->whereNumber('id');
+    Route::post('/{id}/avances', [ProgramacionMantController::class, 'registrarAvance'])->whereNumber('id');
+});
 
 // Rutas con {id} al final para no interceptar las rutas estáticas de arriba
 // (Laravel matchea en orden de registro, no por especificidad).

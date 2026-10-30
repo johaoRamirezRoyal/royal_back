@@ -37,6 +37,7 @@ class InventarioServices
 {
     public function __construct(
         private MailService $mailService,
+        private ProgramacionMantServices $programacionMant,
     ) {}
 
     private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null, ?string $solucionadorCorreo = null): array
@@ -2770,6 +2771,24 @@ class InventarioServices
 
                     $creados[] = ['inventario' => $inventario, 'id_resp' => $idRespReporte, 'fecha' => $fecha];
                 }
+
+                // Cada lote deja su programación (descripción, periodo y usuario del
+                // mantenimiento) en /inventario/mantenimiento/programacion. Su franja en el
+                // calendario va del primer al último mantenimiento realmente asignado (las
+                // fechas son aleatorias dentro del rango, ver fechaMantenimientoAleatoria). El
+                // tipo es el de la categoría del primer ítem (un lote no mezcla Sistemas y
+                // Operativos); las Áreas Comunes (tipo_categoria 3) cuentan como Operativos.
+                $fechas = collect($creados)->pluck('fecha');
+                $tipo = (int) DB::table('categoria')->where('id', $inventarios->first()->id_categoria)->value('tipo_categoria');
+                $this->programacionMant->crearDesdeMantenimiento(
+                    $descripcion,
+                    $fechas->min()->toDateString(),
+                    $fechas->max()->toDateString(),
+                    $periodo,
+                    $id_log,
+                    $tipo === 1 ? 1 : 2,
+                    $conSolucion
+                );
 
                 // Sin esto, el cambio a estado 6 (mantenimiento preventivo) de arriba no
                 // quedaba en inventario_log — el historial de inventario nunca reflejaba que
