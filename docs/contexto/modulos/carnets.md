@@ -32,7 +32,7 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   Llegadas tarde.
 - `POST /vista-previa {ids}`: lo que saldría impreso, **sin emitir**. Mismas validaciones que
   `emitir` (`usuariosParaImprimir`: activos, que lleven carnet y con foto; si no, 422) y mismos
-  datos, con `carnet` = el último de cada persona.
+  datos, con `carnet` en null (el dibujo no lo usa).
 - `GET /mio` (sin opción): carnet digital del usuario en sesión, `data: null` si su perfil
   no lleva carnet. La vigencia sale de `AnioEscolarServices::obtenerUltimoAnioEscolar`.
 
@@ -54,6 +54,8 @@ fondo + `elementos` en fracciones de la imagen. Tabla `carnet_plantillas`, servi
   `barras` (centro, ancho/alto en fracción del ancho, color, `fondo` blanco, `visible`).
   `normalizar` reutiliza `CumpleanosImagen::normalizar` para textos y foto (test en
   `tests/Unit/Carnets`).
+- Valores por defecto (`ELEMENTOS_DEFECTO`, iguales en el frontend): textos en `#0f172a` y el
+  detalle en `#55627a`, neutros, no los de una institución.
 - Imagen: vertical con la proporción del carnet (54 × 85,6 mm, ±3 %), 400–3000 px, hasta 5 MB,
   en `carnets/plantillas/`.
 - `GET /carnets/fuentes` y `/fuentes/{archivo}`: las tipografías de cumpleaños **sin opción**

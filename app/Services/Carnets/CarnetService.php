@@ -216,7 +216,7 @@ class CarnetService extends Service
 
     /**
      * Lo que saldría impreso, sin emitir nada: mismas validaciones y mismos datos que emitir,
-     * con `carnet` = el último carnet de cada persona (el que se reemplazaría).
+     * con `carnet` en null (el dibujo no lo usa).
      */
     public function vistaPrevia(array $ids): array
     {
@@ -225,14 +225,13 @@ class CarnetService extends Service
             return ['error' => true, 'message' => $usuarios];
         }
 
-        $ultimos = Carnet::whereIn('id', Carnet::whereIn('id_user', $ids)->selectRaw('MAX(id)')->groupBy('id_user'))->get()->keyBy('id_user');
         $vigencia = $this->vigencia();
         $plantillas = $this->plantillas->enUso();
 
         return [
             'error' => false,
             'message' => 'Vista previa',
-            'data' => $usuarios->map(fn ($u) => $this->datosCarnet($u, $ultimos[$u->id_user] ?? null, $vigencia, $plantillas))->values(),
+            'data' => $usuarios->map(fn ($u) => $this->datosCarnet($u, null, $vigencia, $plantillas))->values(),
         ];
     }
 
