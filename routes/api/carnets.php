@@ -18,6 +18,7 @@ Route::middleware(Permiso::ruta([Permiso::CARNETS]))->group(function () {
     Route::put('/{id}/estado', [CarnetController::class, 'cambiarEstado'])->where('id', '[0-9]+');
     Route::get('/usuario/{idUser}/historial', [CarnetController::class, 'historial'])->where('idUser', '[0-9]+');
     Route::post('/usuario/{idUser}/foto', [CarnetController::class, 'subirFoto'])->where('idUser', '[0-9]+');
+    Route::delete('/usuario/{idUser}/foto', [CarnetController::class, 'eliminarFoto'])->where('idUser', '[0-9]+');
     Route::post('/fotos', [CarnetController::class, 'subirFotosLote']);
 
     // Plantillas (como las de cumpleaños): una en uso por tipo.

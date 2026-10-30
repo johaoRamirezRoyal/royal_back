@@ -30,6 +30,8 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   (`documentoDeArchivo` quita extensión y separadores); si el documento no existe o lo
   tienen varios usuarios activos, lo reporta en `sin_asignar`. Al reemplazar, solo se borra
   la foto anterior si estaba en `carnets/`: las legadas pueden usarse en otra parte.
+  `DELETE /usuario/{id}/foto` deja `foto_carnet` en NULL con la misma regla para el archivo
+  (422 si no tiene foto).
 - **Código de barras**: CODE 128 del documento, el mismo que lee "Escanear carnets" de
   Llegadas tarde.
 - `POST /vista-previa {ids}`: lo que saldría impreso, **sin emitir**. Mismas validaciones que

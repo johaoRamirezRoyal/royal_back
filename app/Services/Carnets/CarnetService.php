@@ -318,6 +318,32 @@ class CarnetService extends Service
         return ['error' => false, 'message' => 'Historial obtenido', 'data' => $carnets];
     }
 
+    /** Quita la foto de carnet. El archivo solo se borra si lo subió este módulo (las legadas pueden usarse en otra parte). */
+    public function eliminarFoto(int $idUser): array
+    {
+        $usuario = $this->poblacion(null)->find($idUser);
+        if (!$usuario) {
+            return ['error' => true, 'message' => 'El usuario no existe, está inactivo o no lleva carnet.', 'status' => 404];
+        }
+        if (!$usuario->foto_carnet) {
+            return ['error' => true, 'message' => 'Este usuario no tiene foto de carnet.', 'status' => 422];
+        }
+
+        try {
+            $anterior = $usuario->foto_carnet;
+            $usuario->foto_carnet = null;
+            $usuario->save();
+            if (str_starts_with($anterior, self::CARPETA_FOTOS . '/')) {
+                $this->archivos->eliminar($anterior);
+            }
+
+            return ['error' => false, 'message' => 'Foto eliminada', 'data' => null];
+        } catch (\Exception $e) {
+            $this->sendError($e, 'Error al eliminar la foto de carnet');
+            return ['error' => true, 'message' => 'No se pudo eliminar la foto.'];
+        }
+    }
+
     /** Reemplaza la foto de carnet. Solo borra la anterior si la subió este módulo. */
     public function subirFoto(int $idUser, UploadedFile $archivo): array
     {

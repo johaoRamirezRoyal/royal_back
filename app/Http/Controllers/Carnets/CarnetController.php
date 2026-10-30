@@ -117,6 +117,15 @@ class CarnetController extends Controller implements HasMiddleware
             : $this->success($response['message'], $response['data']);
     }
 
+    public function eliminarFoto(int $idUser): JsonResponse
+    {
+        $response = $this->service->eliminarFoto($idUser);
+
+        return $response['error']
+            ? $this->error($response['message'], $response['status'] ?? 500)
+            : $this->success($response['message'], $response['data']);
+    }
+
     /** multipart `fotos[]` (máx. 20 por petición: el `max_file_uploads` por defecto de PHP). */
     public function subirFotosLote(Request $request): JsonResponse
     {
