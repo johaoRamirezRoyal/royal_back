@@ -21,7 +21,7 @@ class JwtFromCookie
             // AuthController::logout, que ya elige la cookie a invalidar según
             // ?system=) — necesita poder resolver auth('api')->user() con
             // cualquiera de las dos cookies, no solo la del sistema general.
-            $token = $request->cookie('admissions_token') ?? $request->cookie('token');
+            $token = $this->tokenCompartido($request);
 
         } elseif ($request->is('api/admisiones/*')) {
 
@@ -81,5 +81,22 @@ class JwtFromCookie
         }
 
         return $next($request);
+    }
+
+    /**
+     * /api/compartido sirve a los dos sistemas: se usa la cookie del sistema de la página que
+     * llama (header X-Sistema que pone apiFetch). Sin header, el orden de siempre. Antes se
+     * prefería siempre la de admisiones, y con una sesión de acudiente abierta en el mismo
+     * navegador las páginas del personal hablaban como ese acudiente. El header solo elige
+     * entre las cookies que ya tiene el navegador: no da acceso a nada nuevo.
+     */
+    public function tokenCompartido(Request $request): ?string
+    {
+        $general = $request->cookie('token');
+        $admisiones = $request->cookie('admissions_token');
+
+        return $request->header('X-Sistema') === 'general'
+            ? ($general ?? $admisiones)
+            : ($admisiones ?? $general);
     }
 }

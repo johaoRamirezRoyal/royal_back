@@ -121,6 +121,7 @@ esta tabla.
 | [`modulos/inventario.md`](docs/contexto/modulos/inventario.md) | reportes, visto bueno, listados, Áreas Comunes |
 | [`modulos/evaluaciones.md`](docs/contexto/modulos/evaluaciones.md) | Evaluaciones (Gestor de Calidad) y Encuestas |
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
+| [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 
 Otros documentos en `docs/`: `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),

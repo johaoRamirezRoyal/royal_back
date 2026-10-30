@@ -79,3 +79,43 @@ textos están en `AVISOS` del middleware.
   `application/json`), `fetch()` sin cabeceras y las imágenes (`*/*`) siguen recibiendo
   JSON. No lo cambies por `acceptsHtml()`, que también acepta `*/*`.
 - Test: `tests/Feature/PaginaAccesoNavegadorTest.php`.
+
+## Admisiones: en nombre de qué acudiente actúa una petición
+
+- `AdmissionsController::acudienteDeLaSesion($request, $campo)`. Para un acudiente es el
+  usuario de la sesión, y lo que traiga el cuerpo se ignora. Para el personal en modo
+  admin (token de `TokenExchangeController`, `source=token_exchange`) es el `acudiente_id`
+  firmado en el token; si no viene, se toma el del cuerpo.
+- Lo usan crear inscripción (`POST /admisiones/inscripcion`) y listar las del acudiente
+  (`POST /admisiones/inscripcion/usuario`). Antes tomaban el id del cuerpo: cualquiera
+  podía crear o ver inscripciones de otro acudiente.
+- Test: `tests/Unit/AdmisionesAcudienteSesionTest.php`.
+- **Un acudiente solo toca sus propias inscripciones**: middleware
+  `inscripcion.acudiente` (`App\Http\Middleware\InscripcionDelAcudiente`) sobre `/admisiones`
+  y `/compartido`. Solo restringe tokens de acudiente (system=admissions sin
+  token_exchange); el personal del sistema general y el modo admin pasan igual.
+  - Cada ruta declara en `REGLAS` qué campos traen ids y de qué tabla (también listas como
+    `familiares.*.id_inscripcion` y el `codigo`/`public_id`); todos deben llevar a
+    inscripciones con `id_usuario_registro` = el acudiente. Historia clínica se resuelve por
+    sección (`HISTORIA_CLINICA`).
+  - Una ruta que no esté en `REGLAS` queda **prohibida** para el acudiente (citas,
+    listados de psicología, correo informativo...). Una ruta nueva que use la página del
+    acudiente debe agregarse ahí, o le responderá 403.
+  - El estado solo puede pasar a PENDIENTE (enviar la admisión).
+  - Las escrituras (POST/PUT/DELETE) dependen del **estado actual** de la inscripción
+    (`estadosDe`): datos generales solo en BORRADOR o PENDIENTE; historia clínica
+    (`compartido/historia-clinica/*`) solo en EN REVISION (PSICOLOGIA). Si no, 409 con
+    "recarga la página". Así, si el personal cambia el estado desde Reportes con la página
+    del acudiente abierta, lo que este guarde después no se aplica. Las lecturas y la
+    creación de inscripciones (`SIN_CONTROL_DE_ESTADO`) no se revisan. Es la misma regla
+    que `isLocked`/`isPsicoLocked` en el frontend (`DetailView`): deben coincidir.
+  - Los documentos que sube el colegio (`DOCUMENTOS_DEL_COLEGIO`: 24 Recomendación de
+    Coordinador, 20 Recomendación Psicólogo) no los puede subir ni borrar el acudiente.
+  - Test: `tests/Unit/InscripcionDelAcudienteTest.php`.
+- **`/api/compartido` y las dos cookies**: `JwtFromCookie::tokenCompartido` usa la cookie del
+  sistema de la página que llama (header `X-Sistema`, que pone `apiFetch` del frontend).
+  Sin header, primero la de admisiones. Antes siempre prefería la de admisiones: con una
+  sesión de acudiente abierta en el mismo navegador, Reportes de admisiones (personal)
+  hablaba como ese acudiente y `inscripcion.acudiente` le negaba cambiar el estado. Test:
+  `tests/Unit/JwtFromCookieCompartidoTest.php`.
+

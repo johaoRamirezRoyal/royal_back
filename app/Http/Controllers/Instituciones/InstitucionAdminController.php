@@ -111,6 +111,11 @@ class InstitucionAdminController extends Controller
 
         $institucion = Institucion::create($data);
 
+        // Con correo, se le confirma el registro (el mismo correo que al verificarlo ella misma).
+        if ($institucion->email) {
+            $institucion->enviarCorreoRegistrado($this->mailService);
+        }
+
         return $this->success('Institución creada', $this->conEstadoDerivado($institucion), 201);
     }
 

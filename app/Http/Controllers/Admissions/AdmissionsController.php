@@ -21,11 +21,13 @@ use App\Services\Cloudinary\CloudinaryService;
 use App\Services\JwtService;
 use App\Services\MailService;
 use App\Services\Usuarios\UsuariosServices;
+use App\Support\Permiso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AdmissionsController extends Controller
 {
@@ -248,6 +250,15 @@ class AdmissionsController extends Controller
             // de login (ver otorgarSesionAcudiente/forgetVerificationCode) — para que un
             // futuro loginConPassword desde el mismo lugar no la trate como IP nueva.
             $usuario->update(['ultima_ip' => $request->ip(), 'ultima_conexion' => now()]);
+
+            // Confirmación al acudiente con la misma plantilla del correo de verificación
+            // (emails.layouts.admisiones). sendView no lanza: si falla, solo queda en el log.
+            $slug = $request->attributes->get('colegio_admision_slug');
+            $this->mail_service->sendView($usuario->correo, 'Registro confirmado — Admisiones ' . config('app.name'), 'emails.registroAcudiente', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'email'  => $usuario->correo,
+                'url'    => $slug ? rtrim(config('app.frontend_url'), '/') . "/{$slug}/admissions" : null,
+            ]);
 
             // El registro por sí solo no otorgaba sesión — el usuario quedaba creado
             // pero sin cookie, así que el redirect posterior a registrationProcess
@@ -507,6 +518,87 @@ class AdmissionsController extends Controller
     /** Connection resuelta por ResolveColegioAdmision para esta petición (ver
      * app_attributes en el middleware) — 'mysql' si por algún motivo no corrió (no
      * debería pasar en ninguna ruta pública de /api/admissions, todas están detrás de él). */
+    /**
+     * Acudiente en cuyo nombre actúa la petición.
+     * - Acudiente normal: el usuario de la sesión (lo que traiga el cuerpo se ignora).
+     * - Personal en modo admin (token de token_exchange): el `acudiente_id` firmado en el
+     *   token; si no lo trae, el del cuerpo (ese personal ya pasó la verificación de permisos
+     *   de TokenExchangeController).
+     */
+    private function acudienteDeLaSesion(Request $request, string $campoCuerpo): ?int
+    {
+        $payload = JWTAuth::parseToken()->getPayload();
+
+        if ($payload->get('source') === 'token_exchange') {
+            $id = $payload->get('acudiente_id') ?? $request->input($campoCuerpo);
+
+            return $id ? (int) $id : null;
+        }
+
+        return $request->user()?->id_user;
+    }
+
+    /**
+     * Carpeta de admisiones en Cloudinary bajo el mismo prefijo que el resto de archivos
+     * (CLOUDINARY_UPLOADS_PREFIJO, por defecto "royal"): royal/Admisiones/<subcarpeta>.
+     */
+    private function carpetaAdmisiones(string $subcarpeta): string
+    {
+        $prefijo = trim((string) config('filesystems.disks.cloudinary.prefijo', 'royal'), '/');
+
+        return ($prefijo !== '' ? "{$prefijo}/" : '') . "Admisiones/{$subcarpeta}";
+    }
+
+    /** public_id legible y único: nombre original + sufijo aleatorio. */
+    private function publicIdUnico(\Illuminate\Http\UploadedFile $file): string
+    {
+        return pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . '_' . Str::lower(Str::random(8));
+    }
+
+    /**
+     * Borra en Cloudinary el archivo de un documento de admisión. El resource_type tiene que
+     * ser el mismo con el que se subió (CloudinaryService::getResourceType): imágenes y PDF
+     * van como "image". Antes los PDF se pedían como "raw", Cloudinary respondía "not found"
+     * (que se toma como éxito) y el PDF se quedaba. Devuelve el error, o null si se borró.
+     */
+    private function borrarArchivoCloudinary(array $documento): ?string
+    {
+        if (empty($documento['public_id'])) {
+            return null;
+        }
+
+        $resourceType = in_array(strtolower($documento['formato'] ?? ''), ['png', 'jpg', 'jpeg', 'webp', 'pdf'], true)
+            ? 'image'
+            : 'raw';
+
+        $resultado = $this->cloudinary_service->deleteFile($documento['public_id'], $resourceType);
+
+        return $resultado['error']
+            ? ($resultado['message'] ?? 'Error eliminando archivo en Cloudinary')
+            : null;
+    }
+
+    /**
+     * Tras borrar las filas de una inscripción ("Limpiar campos" o eliminar el aspirante),
+     * borra sus archivos en Cloudinary para no dejarlos huérfanos. Va después del borrado en
+     * BD: si Cloudinary falla, el acudiente igual termina su acción y el archivo suelto queda
+     * en el log para limpiarlo a mano.
+     */
+    private function borrarArchivosHuerfanos(array $documentos, int $idInscripcion): void
+    {
+        foreach ($documentos as $documento) {
+            $error = $this->borrarArchivoCloudinary($documento);
+
+            if ($error) {
+                Log::warning('No se pudo borrar en Cloudinary un documento de admisión', [
+                    'id_inscripcion' => $idInscripcion,
+                    'public_id' => $documento['public_id'] ?? null,
+                    'error' => $error,
+                ]);
+            }
+        }
+    }
+
     private function colegioAdmisionConnection(): string
     {
         return request()->attributes->get('colegio_admision_connection', 'mysql');
@@ -516,6 +608,13 @@ class AdmissionsController extends Controller
     {
         $data = $request->validated();
 
+        // El acudiente sale de la sesión, nunca del cuerpo: si no, cualquiera podía crear
+        // inscripciones a nombre de otro (y saltarse el límite de aspirantes contando el ajeno).
+        $acudiente = $this->acudienteDeLaSesion($request, 'id_usuario_registro');
+        if (! $acudiente) {
+            return $this->apiResponse(['error' => true, 'status' => 403, 'message' => 'No se pudo identificar al acudiente de la sesión.']);
+        }
+        $data['id_usuario_registro'] = $acudiente;
 
         $data['anio_academico'] = $data['anio_academico']
             ?? $this->anio_escolar_services->obtenerUltimoAnioEscolar()['data']->id;
@@ -541,7 +640,12 @@ class AdmissionsController extends Controller
 
     public function mostrarTodasIncripcionesAcudiente(Request $request)
     {
-        $id_acudiente = $request->input('id_acudiente');
+        // Solo las del acudiente de la sesión: con el id del cuerpo, un acudiente podía ver
+        // los aspirantes de otro.
+        $id_acudiente = $this->acudienteDeLaSesion($request, 'id_acudiente');
+        if (! $id_acudiente) {
+            return $this->apiResponse(['error' => true, 'status' => 403, 'message' => 'No se pudo identificar al acudiente de la sesión.']);
+        }
 
         $response = $this->admisiones_services->mostrarTodasIncripcionesAcudiente($id_acudiente);
 
@@ -589,7 +693,12 @@ class AdmissionsController extends Controller
             ]);
         }
 
+        $documentos = $this->admisiones_services->documentosDeInscripcion((int) $id_inscripcion);
         $resultado = $this->admisiones_services->eliminarInscripcion($id_inscripcion);
+
+        if (! $resultado['error']) {
+            $this->borrarArchivosHuerfanos($documentos, (int) $id_inscripcion);
+        }
 
         return $this->apiResponse($resultado);
     }
@@ -598,7 +707,12 @@ class AdmissionsController extends Controller
     {
         $id_inscripcion = $request->input('id');
 
+        $documentos = $this->admisiones_services->documentosDeInscripcion((int) $id_inscripcion);
         $response = $this->admisiones_services->eliminarDatoInscripcion($id_inscripcion);
+
+        if (! $response['error']) {
+            $this->borrarArchivosHuerfanos($documentos, (int) $id_inscripcion);
+        }
 
         return $this->apiResponse($response);
     }
@@ -633,39 +747,6 @@ class AdmissionsController extends Controller
         }
 
         $resultado = $this->admisiones_services->eliminarRegistroAspirante($id);
-
-        return $this->apiResponse($resultado);
-    }
-
-    public function testArchivoGuardar(Request $request)
-    {
-        $file = $request->file('archivo');
-
-        if (! $file) {
-            return response()->json([
-                'error' => true,
-                'message' => 'No se ha proporcionado ningún archivo.',
-                'data' => [],
-            ]);
-        }
-        $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/Test');
-
-        return $this->apiResponse($resultado);
-    }
-
-    public function testArchivoEliminar(Request $request)
-    {
-        $publicId = $request->input('public_id');
-
-        if (! $publicId) {
-            return response()->json([
-                'error' => true,
-                'message' => 'No se ha proporcionado ningún public_id.',
-                'data' => [],
-            ]);
-        }
-
-        $resultado = $this->cloudinary_service->deleteFile($publicId);
 
         return $this->apiResponse($resultado);
     }
@@ -784,29 +865,13 @@ class AdmissionsController extends Controller
             return $this->apiResponse($documentos);
         }
 
-        $imageFormats = ['png', 'jpg', 'jpeg', 'webp'];
-
+        // Aquí sí se detiene si Cloudinary falla: el acudiente borró ese archivo a propósito
+        // y debe saber que no se pudo (la fila queda para reintentar).
         foreach ($documentos['data'] as $docs) {
+            $error = $this->borrarArchivoCloudinary($docs);
 
-            if (! empty($docs['public_id'])) {
-
-                $resourceType = in_array(strtolower($docs['formato'] ?? ''), $imageFormats, true)
-                    ? 'image'
-                    : 'raw';
-
-                $eliminar_cloud = $this->cloudinary_service
-                    ->deleteFile($docs['public_id'], $resourceType);
-
-                if ($eliminar_cloud['error']) {
-                    return $this->apiResponse([
-                        'error' => true,
-                        'message' => $eliminar_cloud['message'] ?? 'Error eliminando archivo en Cloudinary',
-                        'data' => [
-                            'documento' => $docs,
-                            'resource_type_usado' => $resourceType,
-                        ],
-                    ]);
-                }
+            if ($error) {
+                return $this->apiResponse(['error' => true, 'message' => $error, 'data' => ['documento' => $docs]]);
             }
         }
 
@@ -848,8 +913,14 @@ class AdmissionsController extends Controller
                 continue;
             }
 
-            // 1. Subir archivo a Cloudinary
-            $resultado = $this->cloudinary_service->uploadFile($file, 'Admisiones/documentos');
+            // 1. Subir archivo a Cloudinary. Carpeta por inscripción y public_id único: con el
+            // nombre original (overwrite) dos acudientes que suben "cedula.pdf" se pisaban el
+            // archivo, y al borrar uno se borraba el del otro.
+            $resultado = $this->cloudinary_service->uploadFile(
+                $file,
+                $this->carpetaAdmisiones("documentos/{$id_inscripcion}"),
+                $this->publicIdUnico($file)
+            );
 
             if ($resultado['error']) {
                 $respuestas_archivos[] = [
@@ -1061,9 +1132,37 @@ class AdmissionsController extends Controller
         $data = $request->validate([
             'id' => 'required|integer|exists:admisiones_citas_psicologia,id',
             'estado_cita' => 'required|in:AGENDADA,ATENDIDA',
+            // Firma subida a mano al atender (p. ej. un administrador que marca la cita por
+            // la psicóloga). Sin ella se usa la firma de "Mi firma" de la psicóloga de la cita.
+            'firma' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:2048',
         ]);
 
-        $response = $this->admisiones_services->actualizarEstadoCitaPsicologia($data['id'], $data['estado_cita']);
+        // Solo el Super Admin sube la firma a mano; los demás firman con "Mi firma" de la psicóloga.
+        if ($request->hasFile('firma') && (int) $request->user()?->perfil !== Permiso::PERFIL_SUPER_ADMIN) {
+            return response()->json(['error' => true, 'message' => 'Solo el Super Admin puede subir una firma manual.'], 403);
+        }
+
+        $firmaManual = null;
+        if ($data['estado_cita'] === 'ATENDIDA' && $request->hasFile('firma')) {
+            $resultado = $this->cloudinary_service->uploadFile(
+                $request->file('firma'),
+                $this->carpetaAdmisiones("CitasPsicologia/{$data['id']}/firma"),
+                $this->publicIdUnico($request->file('firma'))
+            );
+
+            if ($resultado['error']) {
+                return response()->json($resultado, 400);
+            }
+
+            $firmaManual = ['url' => $resultado['data']['url'], 'nombre' => $request->file('firma')->getClientOriginalName()];
+        }
+
+        $response = $this->admisiones_services->actualizarEstadoCitaPsicologia(
+            $data['id'],
+            $data['estado_cita'],
+            $firmaManual,
+            $request->user()?->id_user
+        );
 
         return $this->apiResponse($response);
     }
@@ -1075,7 +1174,13 @@ class AdmissionsController extends Controller
             'documento' => 'required|file|mimes:pdf',
         ]);
 
-        $resultado = $this->cloudinary_service->uploadFile($request->file('documento'), 'Admisiones/CitasPsicologia');
+        // Misma razón que en subirDocumentoInscripcion: sin public_id único, dos observaciones
+        // con el mismo nombre de archivo se pisaban.
+        $resultado = $this->cloudinary_service->uploadFile(
+            $request->file('documento'),
+            $this->carpetaAdmisiones("CitasPsicologia/{$data['id']}"),
+            $this->publicIdUnico($request->file('documento'))
+        );
 
         if ($resultado['error']) {
             return response()->json($resultado, 400);

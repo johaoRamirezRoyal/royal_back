@@ -79,6 +79,7 @@ final class Permiso
     public const MIS_AREAS_NIVEL = 141;                 // "Mis áreas — Áreas comunes de mi nivel"
     public const MIS_AREAS_RESPONSABLE = 142;           // "Mis áreas — Áreas comunes de mis áreas a cargo"
     public const CURSOS_ALTURA = 143;                   // "Gestión Humana — Cursos de altura"
+    public const CARNETS = 144;                         // "Carnets institucionales" (imprimir, fotos y entregas)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

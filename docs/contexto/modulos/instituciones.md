@@ -84,3 +84,15 @@ diligencian cartas de recomendación de sus egresados aspirantes. Tiene dos cont
 - **Envía un correo por llamada, a propósito**: el lote lo recorre el frontend y se
   detiene en el primer 429. No lo conviertas en un loop en el servidor sin conservar ese
   corte.
+
+## Registro del correo de la institución
+
+- `verifyEmailOtp`, tras guardar el correo, envía la confirmación
+  `emails.institucionCorreoRegistrado` (layout `emails.layouts.admisiones`, con
+  `@section('dept', 'Instituciones asociadas — Admisiones')`; el layout usa
+  "Departamento de Admisiones" si un correo no define `dept`). Va con `sendView`, que no
+  lanza: si falla, queda en el log y el registro sigue hecho. No lleva enlace al portal:
+  las rutas con sesión de institución no resuelven el slug del colegio.
+- El panel de administración (`InstitucionAdminController::store`) envía ese mismo correo al
+  crear una institución con correo (queda verificado sin OTP). `update` no lo envía al
+  cambiar el correo.

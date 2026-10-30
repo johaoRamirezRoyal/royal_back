@@ -53,12 +53,37 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
   - Los PDF se suben como `image` y los documentos de Office como `raw` (sin extensión en
     el `public_id`).
   - Límite de 10 MB; extensiones jpg, jpeg, png, webp y pdf.
+  - Para borrar, `deleteFile` necesita el **mismo** `resource_type` de la subida (un PDF es
+    `image`). Si no coincide, Cloudinary responde "not found", el servicio lo toma como
+    éxito y el archivo se queda.
+- **Archivos de admisiones** (`AdmissionsController`):
+  - Se suben a `<CLOUDINARY_UPLOADS_PREFIJO>/Admisiones/documentos/{id_inscripcion}` (y
+    `.../CitasPsicologia/{id_cita}`) con un `public_id` único (nombre + sufijo aleatorio).
+    Antes iban todos a `Admisiones/documentos` con el nombre original y `overwrite`: dos
+    familias con `cedula.pdf` se pisaban el archivo.
+  - "Limpiar campos" (`eliminarDatoInscripcion`) y eliminar el aspirante
+    (`eliminarInscripcion`) borran también sus archivos en Cloudinary, después de borrar
+    las filas. Si Cloudinary falla, se registra en el log y la acción sigue.
+  - Los archivos que ya estaban sueltos en Cloudinary antes de este cambio no se limpian
+    solos. Test: `tests/Unit/Cloudinary/AdmisionesArchivosTest.php`.
 - **`POST /api/migracion/cloudinary`** (`MigracionCloudinaryController`) no usa JWT, sino
   el header `X-Migracion-Token` contra `MIGRACION_API_TOKEN`.
   - Si la variable está vacía, responde 404 (queda apagado). Después de cambiarla, corre
     `config:cache`.
   - Sube hasta 20 archivos de 10 MB a `royal/<directorio>` y sobrescribe por nombre.
   - Lo usa el script externo `script_liberacion`, que **no** actualiza la BD.
+
+## Firmas manuales en citas de psicología
+
+`PUT /compartido/citaPsicologia/estado` acepta `firma` (imagen, multipart con `_method=PUT`)
+al pasar a ATENDIDA, **solo del Super Admin** (`Permiso::PERFIL_SUPER_ADMIN`; si no, 403 antes
+de subir nada). Se sube a `Admisiones/CitasPsicologia/<id>/firma` y se crea un `Firma`
+con `activo = 0` a nombre de la psicóloga de la cita, enlazado a la historia
+(`hce_observaciones_firmas.id_firma_psicologa`). Sin firma manual se usa la activa de la
+psicóloga; sin ninguna, 422 antes de cambiar el estado. Por eso
+`UsuariosServices::subirFirmaUsuario` hace `updateOrCreate` sobre `['id_user', 'activo' => 1]`:
+si fuera solo por `id_user` podría pisar una firma manual y cambiar la de una historia ya
+firmada. `listarCitasPsicologia` devuelve `psicologa_tiene_firma` por cita.
 
 ## PDFs
 
@@ -79,6 +104,12 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
 - `MailService`: `sendView`, `sendGeneric` (con BCC a `COPIA_GESTOR`) y `send($to,
   Mailable, copiaGestor?)`. Filtra correos inválidos antes de enviar. Si detecta el límite
   por hora del hosting (`452` + "too many recipients"), lanza `MailRateLimitException`.
+- **Correos de Admisiones** (acudientes): todos extienden
+  `resources/views/emails/layouts/admisiones.blade.php` (encabezado, línea dorada, pie) y
+  solo definen `title` y `content`. Hoy: `sendRequestEmail` (código de verificación) y
+  `registroAcudiente` (registro confirmado, que envía `AdmissionsController::familyRegister`
+  al crear al acudiente, con enlace a `FRONTEND_URL/{slug}/admissions`). Un correo nuevo de
+  admisiones usa ese layout en vez de copiar el HTML.
 - **Destinatarios fijos**: `App\Enums\Mails` → `correos_institucionales` por `grupo`.
   Ninguna dirección va en el código ni en las migraciones: cada BD carga las suyas, y un
   grupo vacío significa que ese aviso no se envía. Se administran en
@@ -98,6 +129,15 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
 
 - Eventos (enlazados en `AppServiceProvider`): `PasswordRestore` → cola `default` (3
   reintentos) y `RequestEmailAdmission` → cola `emails` (3 reintentos).
+- `EstadoInscripcionCambiado` → `NotificarEstadoInscripcionCambiado`, cola `emails` (3
+  reintentos; lo enlaza el descubrimiento de eventos de Laravel, no `AppServiceProvider`).
+  Se despacha en `AdmisionesServices::actualizarEstadoDeInscripcionAspirante`, el único
+  punto que cambia el estado de una inscripción (Reportes, modo admin, "Enviar admisión" y
+  la cita de psicología atendida). El listener envía el correo a `ADMISIONES_ESTADO` + el
+  acudiente y, en revisión de psicología, a las psicólogas del nivel. Lleva datos simples
+  (no modelos). Lo nuevo que deba pasar con cada cambio de estado va en otro listener del
+  mismo evento. Si en producción se cachean los eventos (`event:cache` / `optimize`), hay que
+  regenerar la caché al desplegar.
 - Para "usuarios del perfil X en el nivel Y", usa el método estático
   `Usuario::correosPorPerfilesYNivel($perfiles, $idNivel, $soloActivos = false)`. Su
   valor por defecto es `false` a propósito: así se conserva el comportamiento de los

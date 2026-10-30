@@ -60,7 +60,9 @@ Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
 });
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
-Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
+// inscripcion.acudiente: con token de acudiente solo sus propias inscripciones y solo las
+// rutas que usa la página del acudiente; el personal pasa igual que antes.
+Route::middleware(['auth:api', 'inscripcion.acudiente'])->prefix('/compartido')->group(function () {
 
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     
@@ -133,8 +135,8 @@ Route::group(['prefix' => 'institucion'], function () {
 
 // Ruta protegida de la pagina de admisiones
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
-    // ADMISIONES
-    Route::prefix('/admisiones')->group(function () {
+    // ADMISIONES (un acudiente solo toca sus propias inscripciones)
+    Route::prefix('/admisiones')->middleware('inscripcion.acudiente')->group(function () {
         require __DIR__ . '/api/admisiones.php';
     });
 
@@ -325,6 +327,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // VINCULACIÓN ESTUDIANTE - PADRE (estudiantes_padres, opción 131)
     Route::prefix('/vinculacion-acudientes')->group(function () {
         require __DIR__ . '/api/vinculacion-acudientes.php';
+    });
+
+    // CARNETS INSTITUCIONALES (opción 144; /carnets/mio es autoservicio)
+    Route::prefix('/carnets')->group(function () {
+        require __DIR__ . '/api/carnets.php';
     });
 
     // MODULOS (métricas de módulos más visitados — Home)
