@@ -11,13 +11,16 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   controller (`HasMiddleware`, `except: mio`). La migración `seed_opcion_carnets` no la otorga
   a nadie: se asigna desde `/permisos`. Usa id explícito y falla si el 144 está ocupado.
 - **Tabla `carnets`**: una fila por carnet impreso (`version` 1, 2, ...), con `estado`
-  `IMPRESO` → `ENTREGADO` → `PERDIDO`/`ANULADO` (los dos últimos son finales; reglas en
+  `IMPRESO` (o `REIMPRESO`) → `ENTREGADO` → `PERDIDO`/`ANULADO` (los dos últimos son finales; reglas en
   `CarnetService::TRANSICIONES`, test en `tests/Unit/Carnets`). Sin FK a `usuarios`.
-  - `POST /emitir {ids}`: crea la versión siguiente de cada uno y anula la vigente
-    (IMPRESO/ENTREGADO). Todos deben tener foto (si no, 422 con los nombres). Devuelve lo
+  - `REIMPRESO`: la versión 2 en adelante (quien ya tenía carnet). Se comporta igual que
+    `IMPRESO`; `CarnetService::POR_ENTREGAR` agrupa los dos. Migración
+    `add_reimpreso_to_carnets_estado` (amplía el enum).
+  - `POST /emitir {ids}`: crea la versión siguiente de cada uno (IMPRESO si es la primera,
+    REIMPRESO si no) y anula la vigente (por entregar o ENTREGADO). Todos deben tener foto (si no, 422 con los nombres). Devuelve lo
     que se dibuja en cada carnet; el frontend imprime con eso.
   - `PUT /{id}/estado` solo sobre el último carnet del usuario. `PUT /entregar {ids}`
-    entrega en lote el último carnet IMPRESO de cada `id_user` (los demás se omiten).
+    entrega en lote el último carnet por entregar (IMPRESO o REIMPRESO) de cada `id_user` (los demás se omiten).
 - **Foto**: es `usuarios.foto_carnet` (la legada). `POST /usuario/{id}/foto` y
   `POST /fotos` (lote, `fotos[]`, máx. 20 por petición por `max_file_uploads`) suben a
   `carnets/` en el disco de uploads. El lote asigna por nombre de archivo = documento

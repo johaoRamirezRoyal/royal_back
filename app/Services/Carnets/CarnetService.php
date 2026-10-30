@@ -27,9 +27,13 @@ class CarnetService extends Service
     /** Carpeta de las fotos subidas desde este módulo: solo estas se borran al reemplazarlas. */
     private const CARPETA_FOTOS = 'carnets';
 
+    /** Estados de un carnet impreso que todavía no se entrega (REIMPRESO = versión 2 en adelante). */
+    public const POR_ENTREGAR = ['IMPRESO', 'REIMPRESO'];
+
     /** Desde cada estado, a cuáles se puede pasar a mano. PERDIDO y ANULADO son finales. */
     private const TRANSICIONES = [
         'IMPRESO' => ['ENTREGADO', 'PERDIDO', 'ANULADO'],
+        'REIMPRESO' => ['ENTREGADO', 'PERDIDO', 'ANULADO'],
         'ENTREGADO' => ['PERDIDO', 'ANULADO'],
     ];
 
@@ -164,8 +168,9 @@ class CarnetService extends Service
     }
 
     /**
-     * Emite (imprime) un carnet nuevo por usuario: versión siguiente, estado IMPRESO. El
-     * carnet vigente anterior (IMPRESO o ENTREGADO) queda ANULADO. Todos deben tener foto.
+     * Emite (imprime) un carnet nuevo por usuario: versión siguiente, en IMPRESO si es el primero
+     * o REIMPRESO si ya tenía uno. El vigente anterior (por entregar o ENTREGADO) queda ANULADO.
+     * Todos deben tener foto.
      */
     public function emitir(array $ids, int $idUsuarioEmite): array
     {
@@ -179,7 +184,7 @@ class CarnetService extends Service
             $carnets = DB::transaction(fn () => $usuarios->mapWithKeys(function ($u) use ($ahora, $idUsuarioEmite) {
                 $anterior = Carnet::where('id_user', $u->id_user)->latest('id')->lockForUpdate()->first();
 
-                if ($anterior && in_array($anterior->estado, ['IMPRESO', 'ENTREGADO'], true)) {
+                if ($anterior && in_array($anterior->estado, [...self::POR_ENTREGAR, 'ENTREGADO'], true)) {
                     $anterior->update([
                         'estado' => 'ANULADO',
                         'fecha_estado' => $ahora,
@@ -191,7 +196,7 @@ class CarnetService extends Service
                 return [$u->id_user => Carnet::create([
                     'id_user' => $u->id_user,
                     'version' => ($anterior?->version ?? 0) + 1,
-                    'estado' => 'IMPRESO',
+                    'estado' => $anterior ? 'REIMPRESO' : 'IMPRESO',
                     'fecha_emision' => $ahora,
                     'id_usuario_emite' => $idUsuarioEmite,
                 ])];
@@ -282,14 +287,14 @@ class CarnetService extends Service
         return ['error' => false, 'message' => 'Estado del carnet actualizado', 'data' => $carnet->fresh()];
     }
 
-    /** Entrega en lote: el último carnet de cada usuario, si está IMPRESO. Los demás se omiten. */
+    /** Entrega en lote: el último carnet de cada usuario, si está por entregar (IMPRESO o REIMPRESO). Los demás se omiten. */
     public function entregar(array $idsUsuario, int $idUsuario): array
     {
         // pluck: MySQL no deja un UPDATE con subconsulta sobre la misma tabla (error 1093).
         $ultimos = DB::table('carnets')->selectRaw('MAX(id) AS id')->whereIn('id_user', $idsUsuario)->groupBy('id_user')->pluck('id');
         $ahora = now();
 
-        $entregados = Carnet::whereIn('id', $ultimos)->where('estado', 'IMPRESO')->update([
+        $entregados = Carnet::whereIn('id', $ultimos)->whereIn('estado', self::POR_ENTREGAR)->update([
             'estado' => 'ENTREGADO',
             'fecha_entrega' => $ahora,
             'fecha_estado' => $ahora,

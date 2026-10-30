@@ -454,3 +454,10 @@ WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 144);
 -- cada tipo es la que se imprime; una por tipo (CarnetPlantillaService).
 -- ---------------------------------------------------------------------------
 create table `carnet_plantillas` (`id` bigint unsigned not null auto_increment primary key, `nombre` varchar(120) not null, `descripcion` text null, `tipo` varchar(12) not null, `activo` tinyint(1) not null default '0', `imagen` varchar(250) null, `ancho` int unsigned null, `alto` int unsigned null, `transparente` tinyint(1) not null default '0', `elementos` json null, `id_log` int null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_30_100000_add_reimpreso_to_carnets_estado.php
+-- Estado REIMPRESO: el carnet de quien ya tenía uno (versión 2 en adelante). Se
+-- comporta como IMPRESO (se entrega, se pierde o se anula).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `carnets` MODIFY `estado` ENUM('IMPRESO', 'REIMPRESO', 'ENTREGADO', 'PERDIDO', 'ANULADO') NOT NULL DEFAULT 'IMPRESO';

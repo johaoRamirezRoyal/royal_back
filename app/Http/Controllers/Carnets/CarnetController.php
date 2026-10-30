@@ -22,14 +22,14 @@ class CarnetController extends Controller implements HasMiddleware
     {
     }
 
-    /** ?tipo=estudiantes|trabajadores&cursos[]=&estado_carnet=SIN_CARNET|IMPRESO|...&sin_foto=1&s=&page=&per-page=&sort=&dir= */
+    /** ?tipo=estudiantes|trabajadores&cursos[]=&estado_carnet=SIN_CARNET|IMPRESO|REIMPRESO|...&sin_foto=1&s=&page=&per-page=&sort=&dir= */
     public function index(Request $request): JsonResponse
     {
         $filtros = $request->validate([
             'tipo' => 'nullable|in:estudiantes,trabajadores',
             'cursos' => 'nullable|array',
             'cursos.*' => 'integer',
-            'estado_carnet' => 'nullable|in:SIN_CARNET,IMPRESO,ENTREGADO,PERDIDO,ANULADO',
+            'estado_carnet' => 'nullable|in:SIN_CARNET,IMPRESO,REIMPRESO,ENTREGADO,PERDIDO,ANULADO',
             'sin_foto' => 'nullable|boolean',
             's' => 'nullable|string|max:100',
             'sort' => 'nullable|string',

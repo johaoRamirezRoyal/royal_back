@@ -10,6 +10,9 @@ class CarnetServiceTest extends TestCase
     public function test_transiciones_de_estado(): void
     {
         $this->assertTrue(CarnetService::transicionPermitida('IMPRESO', 'ENTREGADO'));
+        $this->assertTrue(CarnetService::transicionPermitida('REIMPRESO', 'ENTREGADO'));
+        $this->assertTrue(CarnetService::transicionPermitida('REIMPRESO', 'PERDIDO'));
+        $this->assertFalse(CarnetService::transicionPermitida('ENTREGADO', 'REIMPRESO'));
         $this->assertTrue(CarnetService::transicionPermitida('ENTREGADO', 'PERDIDO'));
         $this->assertFalse(CarnetService::transicionPermitida('ENTREGADO', 'ENTREGADO'));
         $this->assertFalse(CarnetService::transicionPermitida('PERDIDO', 'ENTREGADO'));
