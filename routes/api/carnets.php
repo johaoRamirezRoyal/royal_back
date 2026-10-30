@@ -13,6 +13,7 @@ Route::get('/fuentes/{archivo}', [CarnetPlantillaController::class, 'archivoFuen
 Route::middleware(Permiso::ruta([Permiso::CARNETS]))->group(function () {
     Route::get('/', [CarnetController::class, 'index']);
     Route::post('/emitir', [CarnetController::class, 'emitir']);
+    Route::post('/vista-previa', [CarnetController::class, 'vistaPrevia']);
     Route::put('/entregar', [CarnetController::class, 'entregar']);
     Route::put('/{id}/estado', [CarnetController::class, 'cambiarEstado'])->where('id', '[0-9]+');
     Route::get('/usuario/{idUser}/historial', [CarnetController::class, 'historial'])->where('idUser', '[0-9]+');

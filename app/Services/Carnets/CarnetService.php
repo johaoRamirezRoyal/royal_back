@@ -73,11 +73,11 @@ class CarnetService extends Service
                 ->leftJoin('carnets as c', 'c.id', '=', 'cu.id_ultimo')
                 ->select([
                     'usuarios.id_user', 'usuarios.documento', 'usuarios.nombre', 'usuarios.apellido',
-                    'usuarios.perfil', 'usuarios.id_curso', 'usuarios.foto_carnet',
+                    'usuarios.perfil', 'usuarios.id_nivel', 'usuarios.id_curso', 'usuarios.foto_carnet',
                     'c.id as carnet_id', 'c.version as carnet_version', 'c.estado as carnet_estado',
                     'c.fecha_emision as carnet_fecha_emision', 'c.fecha_entrega as carnet_fecha_entrega',
                 ])
-                ->with(['perfilRelacion:id_perfil,nombre', 'cursoRelacion:id,nombre'])
+                ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
                 ->when($filtros['cursos'] ?? null, fn ($q, $cursos) => $q->whereIn('usuarios.id_curso', (array) $cursos))
                 ->when($filtros['estado_carnet'] ?? null, fn ($q, $estado) => $estado === 'SIN_CARNET'
                     ? $q->whereNull('c.id')
@@ -116,12 +116,12 @@ class CarnetService extends Service
         }
     }
 
-    /** Curso del estudiante o perfil del trabajador: la línea bajo el nombre en el carnet. */
+    /** Curso del estudiante o nivel del trabajador: la línea bajo el nombre en el carnet. */
     private function detalle(Usuario $u): ?string
     {
         return $u->perfil === self::PERFIL_ESTUDIANTE
             ? $u->cursoRelacion?->nombre
-            : $u->perfilRelacion?->nombre;
+            : $u->nivelRelacion?->nombre;
     }
 
     /**
@@ -169,22 +169,9 @@ class CarnetService extends Service
      */
     public function emitir(array $ids, int $idUsuarioEmite): array
     {
-        $usuarios = $this->poblacion(null)
-            ->whereIn('id_user', $ids)
-            ->with(['perfilRelacion:id_perfil,nombre', 'cursoRelacion:id,nombre'])
-            ->orderBy('apellido')->orderBy('nombre')
-            ->get();
-
-        if ($usuarios->count() !== count(array_unique($ids))) {
-            return ['error' => true, 'message' => 'Alguno de los usuarios no existe, está inactivo o no lleva carnet.'];
-        }
-
-        $sinFoto = $usuarios->filter(fn ($u) => !$u->foto_carnet);
-        if ($sinFoto->isNotEmpty()) {
-            return [
-                'error' => true,
-                'message' => 'Sin foto de carnet: ' . $sinFoto->map(fn ($u) => trim("$u->nombre $u->apellido"))->join(', ') . '.',
-            ];
+        $usuarios = $this->usuariosParaImprimir($ids);
+        if (is_string($usuarios)) {
+            return ['error' => true, 'message' => $usuarios];
         }
 
         try {
@@ -222,6 +209,49 @@ class CarnetService extends Service
             $this->sendError($e, 'Error al emitir carnets');
             return ['error' => true, 'message' => 'Error al emitir los carnets.'];
         }
+    }
+
+    /**
+     * Lo que saldría impreso, sin emitir nada: mismas validaciones y mismos datos que emitir,
+     * con `carnet` = el último carnet de cada persona (el que se reemplazaría).
+     */
+    public function vistaPrevia(array $ids): array
+    {
+        $usuarios = $this->usuariosParaImprimir($ids);
+        if (is_string($usuarios)) {
+            return ['error' => true, 'message' => $usuarios];
+        }
+
+        $ultimos = Carnet::whereIn('id', Carnet::whereIn('id_user', $ids)->selectRaw('MAX(id)')->groupBy('id_user'))->get()->keyBy('id_user');
+        $vigencia = $this->vigencia();
+        $plantillas = $this->plantillas->enUso();
+
+        return [
+            'error' => false,
+            'message' => 'Vista previa',
+            'data' => $usuarios->map(fn ($u) => $this->datosCarnet($u, $ultimos[$u->id_user] ?? null, $vigencia, $plantillas))->values(),
+        ];
+    }
+
+    /** Usuarios a imprimir en el orden de impresión, o el mensaje de por qué no se puede. Todos deben tener foto. */
+    private function usuariosParaImprimir(array $ids): \Illuminate\Support\Collection|string
+    {
+        $usuarios = $this->poblacion(null)
+            ->whereIn('id_user', $ids)
+            ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
+            ->orderBy('apellido')->orderBy('nombre')
+            ->get();
+
+        if ($usuarios->count() !== count(array_unique($ids))) {
+            return 'Alguno de los usuarios no existe, está inactivo o no lleva carnet.';
+        }
+
+        $sinFoto = $usuarios->filter(fn ($u) => !$u->foto_carnet);
+        if ($sinFoto->isNotEmpty()) {
+            return 'Sin foto de carnet: ' . $sinFoto->map(fn ($u) => trim("$u->nombre $u->apellido"))->join(', ') . '.';
+        }
+
+        return $usuarios->toBase();
     }
 
     /** Entregado, perdido o anulado. Solo sobre el último carnet del usuario. */
@@ -360,7 +390,7 @@ class CarnetService extends Service
     public function miCarnet(int $idUser): array
     {
         $usuario = $this->poblacion(null)
-            ->with(['perfilRelacion:id_perfil,nombre', 'cursoRelacion:id,nombre'])
+            ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
             ->find($idUser);
 
         if (!$usuario) {

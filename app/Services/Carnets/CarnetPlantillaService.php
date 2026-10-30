@@ -26,17 +26,17 @@ class CarnetPlantillaService extends Service
 
     private const TEXTO_BASE = [
         'x' => 0.5, 'tamano' => 0.05, 'fuente' => 'poppins', 'peso' => 400, 'estilo' => 'normal',
-        'color' => '#13235b', 'alineacion' => 'center', 'ancho_max' => 0.9, 'mayusculas' => false,
+        'color' => '#0f172a', 'alineacion' => 'center', 'ancho_max' => 0.9, 'mayusculas' => false,
         'formato' => 'completo', 'visible' => true, 'prefijo' => '', 'ajustar' => false,
     ];
 
     public const ELEMENTOS_DEFECTO = [
         'foto' => [
             'x' => 0.5, 'y' => 0.38, 'ancho' => 0.46, 'alto' => 0.58, 'forma' => 'rectangulo', 'radio' => 0.06,
-            'borde' => 0.01, 'color_borde' => '#13235b', 'ajuste' => 'cover', 'capa' => 'encima',
+            'borde' => 0.01, 'color_borde' => '#0f172a', 'ajuste' => 'cover', 'capa' => 'encima',
         ],
         'nombre' => ['y' => 0.68, 'tamano' => 0.07, 'peso' => 700],
-        'detalle' => ['y' => 0.745, 'color' => '#4b5675'],
+        'detalle' => ['y' => 0.745, 'color' => '#55627a'],
         'documento' => ['y' => 0.915, 'tamano' => 0.042],
         'vigencia' => ['y' => 0.965, 'tamano' => 0.04, 'prefijo' => 'Vigencia '],
         'barras' => ['x' => 0.5, 'y' => 0.84, 'ancho' => 0.8, 'alto' => 0.13, 'color' => '#000000', 'fondo' => true, 'visible' => true],

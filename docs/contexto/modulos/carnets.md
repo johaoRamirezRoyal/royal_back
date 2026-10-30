@@ -4,6 +4,9 @@ Carnets de estudiantes (perfil 16) y trabajadores (todo perfil activo salvo acud
 proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
 `Carnets\CarnetController`, service `Carnets\CarnetService`, rutas `routes/api/carnets.php`.
 
+- **`detalle`** (la línea bajo el nombre): el curso del estudiante o el **nivel** del
+  trabajador (`usuarios.id_nivel` → `nivel.nombre`: Administrativo, Primaria…), no su perfil.
+
 - **Permiso**: opción 144 "Carnets institucionales" (módulo 10, Carnet), en la ruta y en el
   controller (`HasMiddleware`, `except: mio`). La migración `seed_opcion_carnets` no la otorga
   a nadie: se asigna desde `/permisos`. Usa id explícito y falla si el 144 está ocupado.
@@ -23,6 +26,9 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   la foto anterior si estaba en `carnets/`: las legadas pueden usarse en otra parte.
 - **Código de barras**: CODE 128 del documento, el mismo que lee "Escanear carnets" de
   Llegadas tarde.
+- `POST /vista-previa {ids}`: lo que saldría impreso, **sin emitir**. Mismas validaciones que
+  `emitir` (`usuariosParaImprimir`: activos, que lleven carnet y con foto; si no, 422) y mismos
+  datos, con `carnet` = el último de cada persona.
 - `GET /mio` (sin opción): carnet digital del usuario en sesión, `data: null` si su perfil
   no lleva carnet. La vigencia sale de `AnioEscolarServices::obtenerUltimoAnioEscolar`.
 

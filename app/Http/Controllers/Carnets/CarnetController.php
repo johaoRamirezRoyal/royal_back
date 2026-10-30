@@ -55,6 +55,21 @@ class CarnetController extends Controller implements HasMiddleware
             : $this->success($response['message'], $response['data']);
     }
 
+    /** { "ids": [1, 2] } → lo que saldría impreso, sin emitir (no cambia nada). */
+    public function vistaPrevia(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'integer',
+        ]);
+
+        $response = $this->service->vistaPrevia($data['ids']);
+
+        return $response['error']
+            ? $this->error($response['message'], 422)
+            : $this->success($response['message'], $response['data']);
+    }
+
     public function cambiarEstado(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
