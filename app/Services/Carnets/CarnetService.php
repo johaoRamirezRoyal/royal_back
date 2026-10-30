@@ -81,7 +81,7 @@ class CarnetService extends Service
                     'c.id as carnet_id', 'c.version as carnet_version', 'c.estado as carnet_estado',
                     'c.fecha_emision as carnet_fecha_emision', 'c.fecha_entrega as carnet_fecha_entrega',
                 ])
-                ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
+                ->with('nivelRelacion:id,nombre')
                 ->when($filtros['cursos'] ?? null, fn ($q, $cursos) => $q->whereIn('usuarios.id_curso', (array) $cursos))
                 ->when($filtros['estado_carnet'] ?? null, fn ($q, $estado) => $estado === 'SIN_CARNET'
                     ? $q->whereNull('c.id')
@@ -120,12 +120,10 @@ class CarnetService extends Service
         }
     }
 
-    /** Curso del estudiante o nivel del trabajador: la línea bajo el nombre en el carnet. */
+    /** Nivel del usuario (Preescolar, Primaria, Administrativo…), estudiante o trabajador: la línea bajo el nombre en el carnet. */
     private function detalle(Usuario $u): ?string
     {
-        return $u->perfil === self::PERFIL_ESTUDIANTE
-            ? $u->cursoRelacion?->nombre
-            : $u->nivelRelacion?->nombre;
+        return $u->nivelRelacion?->nombre;
     }
 
     /**
@@ -243,7 +241,7 @@ class CarnetService extends Service
     {
         $usuarios = $this->poblacion(null)
             ->whereIn('id_user', $ids)
-            ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
+            ->with('nivelRelacion:id,nombre')
             ->orderBy('apellido')->orderBy('nombre')
             ->get();
 
@@ -395,7 +393,7 @@ class CarnetService extends Service
     public function miCarnet(int $idUser): array
     {
         $usuario = $this->poblacion(null)
-            ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
+            ->with('nivelRelacion:id,nombre')
             ->find($idUser);
 
         if (!$usuario) {

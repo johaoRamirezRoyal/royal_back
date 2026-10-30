@@ -4,8 +4,9 @@ Carnets de estudiantes (perfil 16) y trabajadores (todo perfil activo salvo acud
 proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
 `Carnets\CarnetController`, service `Carnets\CarnetService`, rutas `routes/api/carnets.php`.
 
-- **`detalle`** (la línea bajo el nombre): el curso del estudiante o el **nivel** del
-  trabajador (`usuarios.id_nivel` → `nivel.nombre`: Administrativo, Primaria…), no su perfil.
+- **`detalle`** (la línea bajo el nombre): el **nivel** del usuario, estudiante o trabajador
+  (`usuarios.id_nivel` → `nivel.nombre`: Preescolar, Primaria, Secundaria, Administrativo…).
+  No es el curso ni el perfil. El filtro por curso sigue usando `usuarios.id_curso`.
 
 - **Permiso**: opción 144 "Carnets institucionales" (módulo 10, Carnet), en la ruta y en el
   controller (`HasMiddleware`, `except: mio`). La migración `seed_opcion_carnets` no la otorga
