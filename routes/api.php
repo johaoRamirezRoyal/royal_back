@@ -60,7 +60,9 @@ Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
 });
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
-Route::middleware(['auth:api'])->prefix('/compartido')->group(function () {
+// inscripcion.acudiente: con token de acudiente solo sus propias inscripciones y solo las
+// rutas que usa la página del acudiente; el personal pasa igual que antes.
+Route::middleware(['auth:api', 'inscripcion.acudiente'])->prefix('/compartido')->group(function () {
 
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
     
@@ -133,8 +135,8 @@ Route::group(['prefix' => 'institucion'], function () {
 
 // Ruta protegida de la pagina de admisiones
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
-    // ADMISIONES
-    Route::prefix('/admisiones')->group(function () {
+    // ADMISIONES (un acudiente solo toca sus propias inscripciones)
+    Route::prefix('/admisiones')->middleware('inscripcion.acudiente')->group(function () {
         require __DIR__ . '/api/admisiones.php';
     });
 
@@ -303,6 +305,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // /permisos, el módulo de administración de cron_opciones/cron_permisos.
     Route::prefix('/permisos-licencias')->group(function () {
         require __DIR__ . '/api/permisosLicencias.php';
+    });
+
+    // CURSOS DE TRABAJO EN ALTURAS (Gestión Humana) — también el permiso de alturas en PDF
+    // de los mantenimientos de Áreas Comunes (reportes.id_operativo).
+    Route::prefix('/cursos-altura')->group(function () {
+        require __DIR__ . '/api/cursosAltura.php';
     });
 
     // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la

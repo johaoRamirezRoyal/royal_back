@@ -20,8 +20,13 @@ class StoreReservaRequest extends FormRequest
                 'integer',
                 Rule::exists('salones', 'id')->where('activo', 1),
             ],
-            'fecha_reserva' => ['required'],
-            'hora_reserva' => ['required'],
+            // Arreglos: el frontend envía todas las fechas del rango elegido y crearReserva
+            // crea fechas × horas. Tope de 31 días para que un rango sin ventana (Super
+            // Admin) no genere cientos de filas por error.
+            'fecha_reserva' => ['required', 'array', 'min:1', 'max:31'],
+            'fecha_reserva.*' => ['date_format:Y-m-d'],
+            'hora_reserva' => ['required', 'array', 'min:1'],
+            'hora_reserva.*' => ['integer'],
             'id_user' => [
                 'required',
                 'integer',
@@ -48,8 +53,15 @@ class StoreReservaRequest extends FormRequest
             'id_salon.exists' => 'El salón no existe o no está activo.',
 
             'fecha_reserva.required' => 'La fecha de la reserva es obligatoria.',
+            'fecha_reserva.array' => 'Las fechas de la reserva deben enviarse como lista.',
+            'fecha_reserva.min' => 'Debe elegir al menos una fecha.',
+            'fecha_reserva.max' => 'No se pueden reservar más de 31 días a la vez.',
+            'fecha_reserva.*.date_format' => 'Cada fecha debe tener el formato AAAA-MM-DD.',
 
             'hora_reserva.required' => 'La hora de la reserva es obligatoria.',
+            'hora_reserva.array' => 'Las horas de la reserva deben enviarse como lista.',
+            'hora_reserva.min' => 'Debe elegir al menos una hora.',
+            'hora_reserva.*.integer' => 'Cada hora debe ser un número entero.',
 
             'id_user.required' => 'El usuario es obligatorio.',
             'id_user.integer' => 'El usuario debe ser un número entero.',

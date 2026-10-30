@@ -2,12 +2,14 @@
 
 use App\Http\Controllers\Areas\AreasComunesController;
 use App\Http\Controllers\Areas\BloquesController;
-use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', [BloquesController::class, 'obtenerTodosLosBloques'])->middleware(Permiso::ruta([Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
 // "Mis áreas" — autoservicio, permiso propio (ver migración 2026_09_14_120000_seed_opcion_mis_areas_comunes).
 Route::get('/mis-bloques', [BloquesController::class, 'misBloques'])->middleware(Permiso::ruta([Permiso::MIS_AREAS_COMUNES]));
+// "Mis áreas" bajo Mis inventarios — por nivel (141) o por áreas a cargo (142), ver AreasComunesController::misAreas.
+Route::get('/inventario/mis-areas', [AreasComunesController::class, 'misAreas'])->middleware(Permiso::ruta([Permiso::MIS_AREAS_NIVEL, Permiso::MIS_AREAS_RESPONSABLE]));
 Route::post('/', [BloquesController::class, 'crearBloque'])->middleware(Permiso::ruta([Permiso::AREAS_COMUNES_ADMIN]));
 Route::put('/', [BloquesController::class, 'actualizarBloque'])->middleware(Permiso::ruta([Permiso::AREAS_COMUNES_ADMIN]));
 Route::post('/estado', [BloquesController::class, 'desactivarBloques'])->middleware(Permiso::ruta([Permiso::AREAS_COMUNES_ADMIN]));

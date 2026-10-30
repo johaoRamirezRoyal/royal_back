@@ -29,6 +29,12 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
 - **`PUT /inventario/reportes/solucionar`**: crea la fila de solución con el texto en
   **`descripcion`**. Los datos del legacy lo tienen en `observacion`: **toda vista de "la
   solución" lee `descripcion` y, si no hay, `observacion`.**
+- **`POST /inventario/mantenimiento`** (opciones 12, 108 y 109):
+  - Admite cualquier ítem que no esté descontinuado (5) y que no tenga ya un preventivo
+    **abierto** en `reportes` (mismo criterio que `mantenimiento_pendiente`). No se mira
+    `inventario.estado = 6`.
+  - Un ítem **reportado** (estado 2) sí admite un preventivo y **conserva el estado 2**, para
+    que su daño siga en la bandeja de reportados. El resto pasa a 6.
 - **Visto bueno**:
   - `GET /reportes/visto-bueno` (`estado=3 AND visto_bueno=0`, con `search` y
     `per_page`).
@@ -60,11 +66,19 @@ reportar, solucionar y mover.
 | 108 Administrador | 1, 2 | todo el módulo |
 | 109 Uso | 11, 26 | todo el módulo, pero `obtenerTodosLosBloques` lo limita a su `id_nivel` si no tiene la 108 |
 | 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) |
+| 141 Mis áreas — de mi nivel | ninguno (se asigna en `/permisos`) | `/inventario/mis-areas` del frontend: ítems tipo 3 de los bloques activos de su `id_nivel` (directos o en sus áreas) |
+| 142 Mis áreas — de mis áreas a cargo | ninguno | lo mismo, pero de las áreas donde tiene ítems con `inventario.id_user` = él |
 
 - Exigen la **108**: crear, editar y desactivar bloques, asignar responsables, asignar
   áreas, reclasificar y mover.
 - Aceptan la **108 o la 109**: listar, registrar un check e historial/indicador de
   checks.
+- **141/142** solo usan `GET /bloques/inventario/mis-areas` (`AreasComunesController::misAreas`,
+  que arma el alcance en el servidor; con las dos, la unión), `POST /inventario/reportar`,
+  `GET /inventario/{id}/historial` y `GET /categorias`. Solo áreas activas (`areas.activo = 1`):
+  el filtro `solo_areas_activas` del consolidado saca también lo que entra por `id_bloque`
+  estando en un área inactiva. Reportar no valida que el ítem
+  esté dentro del alcance (igual que con 16/109/119).
 - El módulo 6 "Zonas" se reusa solo como agrupador; sus tablas legacy no se tocan.
 
 **Trampas**
@@ -84,3 +98,28 @@ reportar, solucionar y mover.
   - Ignora en silencio los ítems que no son de Área Común, así que se le puede pasar la
     misma lista de ítems.
   - Un fallo se registra en el log y no interrumpe la operación.
+
+## Trabajo en alturas (`CursosAlturaController`, `routes/api/cursosAltura.php`)
+
+Gestión Humana registra los cursos de altura de los operativos en `cursos_altura`
+(certificado vía `FileStorageService`, `fecha_expedicion` y `fecha_finalizacion`
+opcional). Para el CRUD se usa la opción **143**.
+
+
+- **Operativos**: los usuarios activos con perfil en
+  `PermisosLicenciasServices::PERFILES_ASIGNABLES` (10, 23, 27, 32).
+- **Curso vigente**: `CursoAltura::scopeVigentes`. Exige `activo = 1` y
+  `fecha_expedicion <= hoy`, y además `fecha_finalizacion` NULL o `>= hoy`.
+- **`reportes.id_operativo`** (antes `evidencia`, un longblob legacy que nunca se usó) guarda
+  el operativo de un trabajo en altura. Hay dos formas de llenarlo:
+  - Al reportar un daño (`POST /inventario/reportar`).
+  - Al programar un preventivo (`POST /inventario/mantenimiento`).
+
+  En los dos casos se valida con `CursoAltura::reglaOperativo()`: si el operativo no tiene un
+  curso vigente, responde 422.
+- `GET /cursos-altura/operativos-vigentes` y `GET /cursos-altura/permiso/{idReporte}/pdf`
+  aceptan las opciones de Inventario y de Áreas Comunes (12, 108, 109, 119, 141, 142).
+- **El PDF** lo genera `PermisoAlturasPdfService` y sigue el formato de la Resolución
+  4272/2021: datos del trabajo, trabajador autorizado con su curso, lista de verificación
+  SÍ/NO, observaciones y tres firmas. La lista de verificación, la altura y las firmas se
+  llenan a mano en sitio. Si el reporte no tiene operativo, el endpoint responde 404.

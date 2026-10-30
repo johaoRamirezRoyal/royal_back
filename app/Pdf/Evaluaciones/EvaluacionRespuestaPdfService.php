@@ -3,7 +3,9 @@
 namespace App\Pdf\Evaluaciones;
 
 use App\Models\Evaluaciones\EvaluacionRespuestaEvaluacion;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\evaluaciones\EvaluacionesServices;
+use Illuminate\Support\Collection;
 use TCPDF;
 
 /**
@@ -22,14 +24,15 @@ class EvaluacionRespuestaPdfService
     // VITE_INSTITUTION en el .env del frontend.
     private const INSTITUCION_NOMBRE = 'Colegio Real Royal School';
 
-    private string $logoPath;
+    /** Null = escudo por defecto de Cloudinary, resuelto al dibujar el header. */
+    private ?string $logoPath;
 
     public function __construct(private EvaluacionesServices $evaluacionesServices, ?string $logoPath = null)
     {
         // Escudo circular (fondo blanco) — el que sí se distingue sobre la banda navy del
         // header; `logotipoBackground-white.png`, en la misma carpeta, tiene fondo negro
         // sólido y se vería como un bloque negro ahí.
-        $this->logoPath = $logoPath ?? storage_path('app/public/royal-school/logotipoMarca.png');
+        $this->logoPath = $logoPath;
     }
 
     public function setLogoPath(?string $logoPath): void
@@ -42,9 +45,16 @@ class EvaluacionRespuestaPdfService
     /** Paleta por nivel de desempeño — mismos umbrales/colores que `nivelDesempeno` en Ver.tsx. */
     private function nivel(float $promedio): array
     {
-        if ($promedio < 60) return ['label' => 'Bajo', 'bg' => '#fee2e2', 'text' => '#b91c1c', 'solid' => '#ef4444'];
-        if ($promedio < 80) return ['label' => 'Medio', 'bg' => '#fef3c7', 'text' => '#b45309', 'solid' => '#f59e0b'];
-        if ($promedio < 90) return ['label' => 'Eficiente', 'bg' => '#dbeafe', 'text' => '#1d4ed8', 'solid' => '#3b82f6'];
+        if ($promedio < 60) {
+            return ['label' => 'Bajo', 'bg' => '#fee2e2', 'text' => '#b91c1c', 'solid' => '#ef4444'];
+        }
+        if ($promedio < 80) {
+            return ['label' => 'Medio', 'bg' => '#fef3c7', 'text' => '#b45309', 'solid' => '#f59e0b'];
+        }
+        if ($promedio < 90) {
+            return ['label' => 'Eficiente', 'bg' => '#dbeafe', 'text' => '#1d4ed8', 'solid' => '#3b82f6'];
+        }
+
         return ['label' => 'Alto', 'bg' => '#dcfce7', 'text' => '#15803d', 'solid' => '#22c55e'];
     }
 
@@ -62,14 +72,16 @@ class EvaluacionRespuestaPdfService
             'respuestasPreguntas.opcion',
         ]);
 
-        $pdf = new class ('P', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF {
+        $pdf = new class('P', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF
+        {
             public function Header() {}
+
             public function Footer()
             {
                 $this->SetY(-15);
                 $this->SetTextColor(150, 150, 150);
                 $this->SetFont($this->getFontFamily(), 'I', 8);
-                $this->Cell(0, 10, 'Página ' . $this->getAliasNumPage() . ' de ' . $this->getAliasNbPages(), 0, 0, 'C');
+                $this->Cell(0, 10, 'Página '.$this->getAliasNumPage().' de '.$this->getAliasNbPages(), 0, 0, 'C');
             }
         };
 
@@ -95,14 +107,14 @@ class EvaluacionRespuestaPdfService
 
         [$textosLibres, $observaciones] = $this->extraerTextosLibresYObservaciones($respuesta);
 
-        if (!empty($textosLibres)) {
+        if (! empty($textosLibres)) {
             $pdf->writeHTML('<span style="font-size:11pt; font-weight:bold;">Observaciones Generales por Sección</span>', true, false, true, false, '');
             $pdf->Ln(2);
             $pdf->writeHTML($this->tarjetasTexto($textosLibres, '#f8fafc', '#334155'), true, false, true, false, '');
             $pdf->Ln(4);
         }
 
-        if (!empty($observaciones)) {
+        if (! empty($observaciones)) {
             $pdf->writeHTML('<span style="font-size:11pt; font-weight:bold;">Observaciones</span>', true, false, true, false, '');
             $pdf->Ln(2);
             $pdf->writeHTML($this->tarjetasTexto($observaciones, '#fffbeb', '#78350f'), true, false, true, false, '');
@@ -113,15 +125,16 @@ class EvaluacionRespuestaPdfService
 
     private function drawHeader(TCPDF $pdf, string $tituloEvaluacion): void
     {
-        $logoCell = is_file($this->logoPath) ? '<img src="' . $this->logoPath . '" width="32">' : '';
+        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoMarca.png');
+        $logoCell = $this->logoPath && is_file($this->logoPath) ? '<img src="'.$this->logoPath.'" width="32">' : '';
 
         $html = '
         <table cellpadding="4" style="width:100%; border-bottom:2px solid #b91c1c;">
             <tr>
-                <td style="width:20%; text-align:center;">' . $logoCell . '</td>
+                <td style="width:20%; text-align:center;">'.$logoCell.'</td>
                 <td style="width:80%; color:#1e293b;">
-                    <span style="font-size:15pt; font-weight:bold; color:#1e3a8a;">' . e(self::INSTITUCION_NOMBRE) . '</span><br>
-                    <span style="font-size:10pt; color:#475569;">Evaluación de Desempeño &mdash; ' . e($tituloEvaluacion) . '</span>
+                    <span style="font-size:15pt; font-weight:bold; color:#1e3a8a;">'.e(self::INSTITUCION_NOMBRE).'</span><br>
+                    <span style="font-size:10pt; color:#475569;">Evaluación de Desempeño &mdash; '.e($tituloEvaluacion).'</span>
                 </td>
             </tr>
         </table>';
@@ -133,27 +146,27 @@ class EvaluacionRespuestaPdfService
     private function drawFicha(TCPDF $pdf, EvaluacionRespuestaEvaluacion $respuesta, $evaluado, $periodo, $anio, $evaluacion): void
     {
         $periodoLabel = $periodo
-            ? 'Periodo ' . $periodo->numero . ($anio ? " ({$anio->anio_inicio}/{$anio->anio_fin})" : '')
+            ? 'Periodo '.$periodo->numero.($anio ? " ({$anio->anio_inicio}/{$anio->anio_fin})" : '')
             : 'N/A';
-        $evaluadoNombre = trim(($evaluado?->nombre ?? '') . ' ' . ($evaluado?->apellido ?? '')) ?: 'N/A';
+        $evaluadoNombre = trim(($evaluado?->nombre ?? '').' '.($evaluado?->apellido ?? '')) ?: 'N/A';
         $evaluadorNombre = $respuesta->anonima
             ? 'Anónimo'
-            : (trim(($respuesta->usuario?->nombre ?? '') . ' ' . ($respuesta->usuario?->apellido ?? '')) ?: 'N/A');
+            : (trim(($respuesta->usuario?->nombre ?? '').' '.($respuesta->usuario?->apellido ?? '')) ?: 'N/A');
         $fecha = optional($respuesta->completada_en)->format('d/m/Y h:i A') ?? 'N/A';
 
         $html = '
         <table cellpadding="4" style="width:100%; font-size:9pt; background-color:#f8fafc;" border="1" bordercolor="#e2e8f0">
             <tr>
-                <td style="width:50%;"><strong>Evaluado:</strong> ' . e($evaluadoNombre) . '</td>
-                <td style="width:50%;"><strong>Evaluador:</strong> ' . e($evaluadorNombre) . '</td>
+                <td style="width:50%;"><strong>Evaluado:</strong> '.e($evaluadoNombre).'</td>
+                <td style="width:50%;"><strong>Evaluador:</strong> '.e($evaluadorNombre).'</td>
             </tr>
             <tr>
-                <td><strong>Periodo:</strong> ' . e($periodoLabel) . '</td>
-                <td><strong>Fecha:</strong> ' . e($fecha) . '</td>
+                <td><strong>Periodo:</strong> '.e($periodoLabel).'</td>
+                <td><strong>Fecha:</strong> '.e($fecha).'</td>
             </tr>
             <tr>
-                <td><strong>Servicio:</strong> ' . e($evaluacion?->servicio?->nombre ?? 'N/A') . '</td>
-                <td><strong>Nivel:</strong> ' . e($respuesta->nivel?->nombre ?? 'N/A') . '</td>
+                <td><strong>Servicio:</strong> '.e($evaluacion?->servicio?->nombre ?? 'N/A').'</td>
+                <td><strong>Nivel:</strong> '.e($respuesta->nivel?->nombre ?? 'N/A').'</td>
             </tr>
         </table>';
 
@@ -166,14 +179,14 @@ class EvaluacionRespuestaPdfService
         $nivel = $this->nivel($promedioGeneral);
 
         $html = '
-        <table cellpadding="8" style="width:100%; background-color:' . $nivel['bg'] . '; border:2px solid ' . $nivel['solid'] . ';">
+        <table cellpadding="8" style="width:100%; background-color:'.$nivel['bg'].'; border:2px solid '.$nivel['solid'].';">
             <tr>
                 <td style="width:60%; text-align:left;">
                     <span style="font-size:9pt; font-weight:bold; color:#475569;">RESULTADO GENERAL</span><br>
-                    <span style="font-size:20pt; font-weight:bold; color:' . $nivel['text'] . ';">' . $promedioGeneral . '%</span>
+                    <span style="font-size:20pt; font-weight:bold; color:'.$nivel['text'].';">'.$promedioGeneral.'%</span>
                 </td>
                 <td style="width:40%; text-align:right; vertical-align:middle;">
-                    <span style="font-size:13pt; font-weight:bold; color:' . $nivel['text'] . ';">Nivel ' . $nivel['label'] . '</span>
+                    <span style="font-size:13pt; font-weight:bold; color:'.$nivel['text'].';">Nivel '.$nivel['label'].'</span>
                 </td>
             </tr>
         </table>';
@@ -182,7 +195,7 @@ class EvaluacionRespuestaPdfService
         $pdf->Ln(4);
     }
 
-    /** @param \Illuminate\Support\Collection<int, array<string, mixed>> $porSeccion */
+    /** @param Collection<int, array<string, mixed>> $porSeccion */
     private function drawTarjetasSeccion(TCPDF $pdf, $porSeccion): void
     {
         if ($porSeccion->isEmpty()) {
@@ -202,19 +215,19 @@ class EvaluacionRespuestaPdfService
             $html .= '<tr>';
             foreach ($fila as $seccion) {
                 // Sección «No aplica»: no tiene nota ni pondera (su % se reparte entre las demás).
-                $noAplica = !empty($seccion['no_aplica']);
+                $noAplica = ! empty($seccion['no_aplica']);
                 $nivel = $noAplica
                     ? ['solid' => '#cbd5e1', 'text' => '#64748b']
                     : $this->nivel((float) $seccion['promedio']);
-                $valor = $noAplica ? 'No aplica' : $seccion['promedio'] . '%';
-                $pie = $noAplica ? 'No pondera' : 'Pondera ' . $seccion['porcentaje_ponderacion'] . '% &middot; ' . $nivel['label'];
+                $valor = $noAplica ? 'No aplica' : $seccion['promedio'].'%';
+                $pie = $noAplica ? 'No pondera' : 'Pondera '.$seccion['porcentaje_ponderacion'].'% &middot; '.$nivel['label'];
                 $html .= '
                 <td style="width:33%; vertical-align:top;">
-                    <table cellpadding="5" style="width:100%; border:1px solid #e2e8f0; border-left:4px solid ' . $nivel['solid'] . ';">
+                    <table cellpadding="5" style="width:100%; border:1px solid #e2e8f0; border-left:4px solid '.$nivel['solid'].';">
                         <tr><td>
-                            <span style="font-size:8.5pt; font-weight:bold;">' . e($seccion['titulo']) . '</span><br>
-                            <span style="font-size:16pt; font-weight:bold; color:' . $nivel['text'] . ';">' . $valor . '</span><br>
-                            <span style="font-size:7.5pt; color:#64748b;">' . $pie . '</span>
+                            <span style="font-size:8.5pt; font-weight:bold;">'.e($seccion['titulo']).'</span><br>
+                            <span style="font-size:16pt; font-weight:bold; color:'.$nivel['text'].';">'.$valor.'</span><br>
+                            <span style="font-size:7.5pt; color:#64748b;">'.$pie.'</span>
                         </td></tr>
                     </table>
                 </td>';
@@ -250,7 +263,7 @@ class EvaluacionRespuestaPdfService
         foreach ($porPregunta as $respuestasPregunta) {
             $rp = $respuestasPregunta->first();
             $pregunta = $rp?->pregunta;
-            if (!$pregunta) {
+            if (! $pregunta) {
                 continue;
             }
 
@@ -258,13 +271,14 @@ class EvaluacionRespuestaPdfService
             $slug = $pregunta->tipo?->slug;
 
             if ($slug === 'texto_libre') {
-                if (!empty($rp->valor_texto)) {
+                if (! empty($rp->valor_texto)) {
                     $textosLibres[] = ['seccion' => $seccionTitulo, 'pregunta' => $pregunta->texto, 'texto' => $rp->valor_texto];
                 }
+
                 continue;
             }
 
-            if (!empty($rp->comentario)) {
+            if (! empty($rp->comentario)) {
                 $observaciones[] = ['seccion' => $seccionTitulo, 'pregunta' => $pregunta->texto, 'texto' => $rp->comentario];
             }
         }
@@ -285,11 +299,11 @@ class EvaluacionRespuestaPdfService
             foreach ($fila as $item) {
                 $html .= '
                 <td style="width:50%; vertical-align:top;">
-                    <table cellpadding="5" style="width:100%; background-color:' . $bg . '; border:1px solid #e2e8f0;">
+                    <table cellpadding="5" style="width:100%; background-color:'.$bg.'; border:1px solid #e2e8f0;">
                         <tr><td>
-                            <span style="font-size:7pt; font-weight:bold; color:#94a3b8;">' . mb_strtoupper(e($item['seccion'])) . '</span><br>
-                            <span style="font-size:8pt; color:#475569;">' . e($item['pregunta']) . '</span><br>
-                            <span style="font-size:9pt; font-style:italic; color:' . $textColor . ';">&ldquo;' . e($item['texto']) . '&rdquo;</span>
+                            <span style="font-size:7pt; font-weight:bold; color:#94a3b8;">'.mb_strtoupper(e($item['seccion'])).'</span><br>
+                            <span style="font-size:8pt; color:#475569;">'.e($item['pregunta']).'</span><br>
+                            <span style="font-size:9pt; font-style:italic; color:'.$textColor.';">&ldquo;'.e($item['texto']).'&rdquo;</span>
                         </td></tr>
                     </table>
                 </td>';

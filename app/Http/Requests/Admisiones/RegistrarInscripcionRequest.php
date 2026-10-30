@@ -14,8 +14,6 @@ class RegistrarInscripcionRequest extends FormRequest
 
     public function rules(): array
     {
-        $isUpdate = $this->isMethod('put') || $this->isMethod('patch');
-
         return [
 
             'estado' => [
@@ -23,8 +21,10 @@ class RegistrarInscripcionRequest extends FormRequest
                 'exists:admisiones_estados,id'
             ],
 
+            // Ya no es obligatorio: el controlador lo toma de la sesión (ver
+            // AdmissionsController::acudienteDeLaSesion). Solo se usa en modo admin.
             'id_usuario_registro' => [
-                $isUpdate ? 'sometimes' : 'required',
+                'sometimes',
                 'integer',
                 'exists:usuarios,id_user'
             ],

@@ -13,6 +13,7 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
+use App\Models\CursosAltura\CursoAltura;
 use App\Services\inventario\InventarioServices;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
@@ -51,6 +52,12 @@ class InventariosController extends Controller
     // y reportarInventario le devolverían 403 — Reportar es la única acción que esa
     // vista ofrece, así que ambos métodos la necesitan.
     private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
+
+    // "Mis áreas" bajo Mis inventarios (141 nivel / 142 áreas a cargo): solo reportar y ver
+    // la hoja de vida; el listado sale de AreasComunesController::misAreas.
+    private const OPCION_MIS_AREAS_NIVEL = Permiso::MIS_AREAS_NIVEL;
+
+    private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
 
     protected $inventario_services;
 
@@ -219,7 +226,7 @@ class InventariosController extends Controller
 
     public function historialInventario(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             return $rechazo;
         }
 
@@ -354,7 +361,7 @@ class InventariosController extends Controller
 
     public function reportarInventario(ReportarInventarioRequest $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_MIS_INVENTARIOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_MIS_AREAS_COMUNES, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             return $rechazo;
         }
 
@@ -370,7 +377,8 @@ class InventariosController extends Controller
             $data['descripcion'],
             $data['id_anio'],
             $data['id_periodo'],
-            $data['fechareg']
+            $data['fechareg'],
+            $data['id_operativo'] ? (int) $data['id_operativo'] : null
         );
 
         return $this->apiResponse($resultado);
@@ -488,7 +496,7 @@ class InventariosController extends Controller
 
     public function programarMantenimientoPreventivo(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
@@ -506,6 +514,7 @@ class InventariosController extends Controller
             'id_log' => 'required|integer|exists:usuarios,id_user',
             'con_solucion' => 'boolean',
             'id_tecnico' => 'nullable|integer|exists:usuarios,id_user',
+            'id_operativo' => CursoAltura::reglaOperativo(),
         ]);
 
         if ($validator->fails()) {
@@ -524,7 +533,8 @@ class InventariosController extends Controller
             $data['id_anio'],
             $data['periodo'],
             $data['con_solucion'] ?? false,
-            $data['id_tecnico'] ?? null
+            $data['id_tecnico'] ?? null,
+            isset($data['id_operativo']) ? (int) $data['id_operativo'] : null
         );
 
         return $this->apiResponse($resultado);

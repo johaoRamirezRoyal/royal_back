@@ -2,7 +2,7 @@
 
 namespace App\Services\Admisiones;
 
-use App\Enums\Mails;
+use App\Events\EstadoInscripcionCambiado;
 use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Models\Admisiones\Aspirante;
 use App\Models\Admisiones\CitaPsicologia;
@@ -41,7 +41,7 @@ class AdmisionesServices extends Service
         25 => ['Sexto de bachillerato', 'Séptimo de bachillerato', 'Octavo de bachillerato', 'Noveno de bachillerato', 'Décimo de bachillerato', 'Undécimo de bachillerato'],
     ];
 
-    private function perfilPsicologaParaGrado(?string $grado): ?int
+    public static function perfilPsicologaParaGrado(?string $grado): ?int
     {
         foreach (self::NIVELES_PSICOLOGAS as $perfil => $cursos) {
             if (in_array($grado, $cursos, true)) {
@@ -52,7 +52,7 @@ class AdmisionesServices extends Service
         return null;
     }
 
-    private function esEstadoRevisionPsicologia(?string $nombreEstado): bool
+    public static function esEstadoRevisionPsicologia(?string $nombreEstado): bool
     {
         $normalizado = mb_strtolower($nombreEstado ?? '');
 
@@ -83,9 +83,24 @@ class AdmisionesServices extends Service
     }
 
     /* =================================================================== INSCRIPCION SERVICES =================================================================== */
+    /** Máximo de aspirantes (inscripciones) por acudiente. El frontend lo muestra
+     * (MAX_ASPIRANTES en RegistrationForm), pero el límite lo hace cumplir el servidor. */
+    public const MAX_ASPIRANTES_POR_ACUDIENTE = 10;
+
     public function registrarInscripcion(array $data): array
     {
         try {
+            $registradas = Inscripcion::where('id_usuario_registro', $data['id_usuario_registro'])->count();
+
+            if ($registradas >= self::MAX_ASPIRANTES_POR_ACUDIENTE) {
+                return [
+                    'error' => true,
+                    'status' => 422,
+                    'message' => 'Llegaste al límite de ' . self::MAX_ASPIRANTES_POR_ACUDIENTE . ' aspirantes por acudiente.',
+                    'data' => [],
+                ];
+            }
+
             $unique_code = 'ROYAL-'.strtoupper(uniqid());
             $data['codigo'] = $unique_code;
 
@@ -105,6 +120,9 @@ class AdmisionesServices extends Service
                 'error' => false,
                 'message' => 'Inscripción registrada exitosamente.',
                 'data' => [
+                    // Sin el id, el frontend no podía eliminar ni identificar una inscripción
+                    // recién creada (dos nuevas quedaban ambas con id indefinido).
+                    'id' => $inscripcion->id,
                     'codigo' => $inscripcion->codigo,
                     'estado' => $inscripcion->estado,
                     'id_usuario_registro' => $inscripcion->id_usuario_registro,
@@ -445,52 +463,17 @@ class AdmisionesServices extends Service
 
             $estado_nuevo = $inscripcion->estadoInscripcion?->nombre;
 
-            $mailTo = collect(Mails::ADMISIONES_ESTADO->recipients())
-                ->push($correo_acudiente)
-                ->filter()
-                ->values()
-                ->toArray();
-
-            $titulo = "Actualización de estado de inscripción | {$inscripcion->codigo}";
-
-            $contenido = "
-            Hola,
-
-            Se ha actualizado el estado de la inscripción con código {$inscripcion->codigo}.
-
-            Estado anterior: {$estadoAnterior}
-            Nuevo estado: {$estado_nuevo}
-
-            Aspirante: ".optional($inscripcion->aspirante)->nombre_completo.'
-
-            Fecha de actualización: '.now()->format('Y-m-d H:i:s');
-
-            if (! empty($mailTo)) {
-                $this->mailService->sendGeneric($mailTo, $titulo, $contenido);
-            }
-
-            if ($this->esEstadoRevisionPsicologia($estado_nuevo)) {
-                $perfilPsicologa = $this->perfilPsicologaParaGrado($inscripcion->aspirante?->grado_aplica);
-
-                $correosPsicologas = $perfilPsicologa
-                    ? Usuario::where('perfil', $perfilPsicologa)->pluck('correo')->filter()->toArray()
-                    : [];
-
-                if (! empty($correosPsicologas)) {
-                    $this->mailService->sendGeneric(
-                        $correosPsicologas,
-                        "Nueva inscripción en revisión de psicología | {$inscripcion->codigo}",
-                        "Se ha asignado la inscripción con código {$inscripcion->codigo} para revisión de psicología.\n\n".
-                        'Aspirante: '.optional($inscripcion->aspirante)->nombre_completo."\n".
-                        'Grado al que aplica: '.optional($inscripcion->aspirante)->grado_aplica
-                    );
-                } else {
-                    Log::warning('No se encontró psicóloga para notificar el cambio de estado', [
-                        'id_inscripcion' => $id_inscripcion,
-                        'grado_aplica' => $inscripcion->aspirante?->grado_aplica,
-                    ]);
-                }
-            }
+            // Correos (y lo que se agregue) en NotificarEstadoInscripcionCambiado, en cola.
+            EstadoInscripcionCambiado::dispatch(
+                $inscripcion->id,
+                $inscripcion->codigo,
+                $estadoAnterior,
+                $estado_nuevo,
+                $inscripcion->aspirante?->nombre_completo,
+                $inscripcion->aspirante?->grado_aplica,
+                $correo_acudiente,
+                now()->format('Y-m-d H:i:s'),
+            );
 
             return [
                 'error' => false,
@@ -994,6 +977,14 @@ class AdmisionesServices extends Service
                 'data' => $data,
             ];
         }
+    }
+
+    /** public_id y formato de los documentos de una inscripción (para borrar sus archivos). */
+    public function documentosDeInscripcion(int $idInscripcion): array
+    {
+        return Documento::where('id_inscripcion', $idInscripcion)
+            ->get(['public_id', 'formato'])
+            ->toArray();
     }
 
     public function verInfoDocumentos(array $ids)
@@ -1742,9 +1733,14 @@ class AdmisionesServices extends Service
     /**
      * Actualizar el estado (AGENDADA | ATENDIDA) de una cita de psicología.
      *
+     * Al pasar a ATENDIDA, la historia clínica queda firmada con `$firmaManual` (url y nombre
+     * de una firma subida a mano) o, si no viene, con la firma activa de la psicóloga de la
+     * cita. Sin ninguna de las dos se rechaza antes de tocar nada.
+     *
+     * @param  array{url: string, nombre: string}|null  $firmaManual
      * @return array{data: array, error: bool, message: string}
      */
-    public function actualizarEstadoCitaPsicologia(int $id_cita, string $estado_cita): array
+    public function actualizarEstadoCitaPsicologia(int $id_cita, string $estado_cita, ?array $firmaManual = null, ?int $userLog = null): array
     {
         try {
             $cita = CitaPsicologia::with(['inscripcion.usuarioRegistro', 'psicologa'])->find($id_cita);
@@ -1757,19 +1753,38 @@ class AdmisionesServices extends Service
                 ];
             }
 
+            $firmaPsicologa = $estado_cita === 'ATENDIDA' && ! $firmaManual
+                ? Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first()
+                : null;
+
+            if ($estado_cita === 'ATENDIDA' && ! $firmaManual && ! $firmaPsicologa) {
+                return [
+                    'error' => true,
+                    'status' => 422,
+                    'message' => 'La psicóloga de la cita no tiene firma registrada. Sube una firma para marcarla como atendida.',
+                    'data' => [],
+                ];
+            }
+
             $cita->update(['estado_cita' => $estado_cita]);
 
             $acudiente = $cita->inscripcion?->usuarioRegistro;
 
             if ($estado_cita === 'ATENDIDA') {
-                $firmaPsicologa = Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first();
+                // La firma manual queda inactiva: es solo de esta historia clínica y no
+                // reemplaza la de "Mi firma" de la psicóloga.
+                $firmaPsicologa ??= Firma::create([
+                    'id_user' => $cita->id_psicologa,
+                    'nombre' => $firmaManual['nombre'],
+                    'url' => $firmaManual['url'],
+                    'activo' => 0,
+                    'user_log' => $userLog,
+                ]);
 
-                if ($firmaPsicologa) {
-                    HceObservacionesFirmas::updateOrCreate(
-                        ['id_inscripcion' => $cita->id_inscripcion],
-                        ['id_firma_psicologa' => $firmaPsicologa->id]
-                    );
-                }
+                HceObservacionesFirmas::updateOrCreate(
+                    ['id_inscripcion' => $cita->id_inscripcion],
+                    ['id_firma_psicologa' => $firmaPsicologa->id]
+                );
 
                 $idEstadoRevisionFinalizada = Estado::where('nombre', 'REVISION FINALIZADA. A LA ESPERA DE RESULTADOS')->value('id');
 
@@ -1878,6 +1893,13 @@ class AdmisionesServices extends Service
                 ->when($fecha_hasta, fn ($query) => $query->where('fecha_cita', '<=', $fecha_hasta))
                 ->orderBy('fecha_cita')
                 ->get();
+
+            // Para saber, al marcar una cita como atendida, si hace falta subir una firma a mano.
+            $conFirma = Firma::whereIn('id_user', $citas->pluck('id_psicologa')->unique())
+                ->where('activo', 1)
+                ->pluck('id_user')
+                ->all();
+            $citas->each(fn ($cita) => $cita->setAttribute('psicologa_tiene_firma', in_array($cita->id_psicologa, $conFirma)));
 
             return [
                 'error' => false,

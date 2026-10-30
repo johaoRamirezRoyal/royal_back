@@ -386,6 +386,49 @@ SELECT 140, 'Fecha de Reporte', 2, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 140);
 
 -- ---------------------------------------------------------------------------
+-- 2026_10_27_110000_seed_opciones_mis_areas_nivel_responsable.php
+-- Opciones 141 y 142 (módulo 6, Zonas) de "Mis áreas" (/inventario/mis-areas):
+-- ver y reportar las áreas comunes de los bloques del nivel del usuario (141) o
+-- de las áreas de las que es responsable (142). No se otorgan a ningún perfil
+-- (se asignan desde /permisos).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 141, 'Mis áreas — Áreas comunes de mi nivel', 6, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 141);
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 142, 'Mis áreas — Áreas comunes de mis áreas a cargo', 6, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 142);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_28_120000_create_cursos_altura_table.php
+-- Cursos de trabajo en alturas de los operativos (Gestión Humana): certificado,
+-- fecha de expedición y fecha de finalización opcional. Solo los operativos con
+-- un curso vigente se pueden asignar a mantenimientos en altura.
+-- ---------------------------------------------------------------------------
+create table `cursos_altura` (`id` int not null auto_increment, `id_user` int not null, `ruta_certificado` varchar(255) not null, `fecha_expedicion` date not null, `fecha_finalizacion` date null, `user_log` int null, `activo` tinyint not null default '1', `fechareg` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `cursos_altura` add index `cursos_altura_id_user_fecha_finalizacion_index`(`id_user`, `fecha_finalizacion`);
+alter table `cursos_altura` add constraint `cursos_altura_id_user_foreign` foreign key (`id_user`) references `usuarios` (`id_user`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_28_120100_rename_evidencia_to_id_operativo_in_reportes_table.php
+-- reportes.evidencia (longblob legacy, vacía y sin uso) pasa a ser id_operativo:
+-- el operativo con curso de alturas asignado a un mantenimiento o reporte de
+-- daño de Áreas Comunes en altura.
+-- ---------------------------------------------------------------------------
+SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode, 'NO_ZERO_DATE', ''));
+ALTER TABLE reportes CHANGE evidencia id_operativo INT NULL;
+alter table `reportes` add constraint `reportes_id_operativo_foreign` foreign key (`id_operativo`) references `usuarios` (`id_user`) on delete set null;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_28_120200_seed_opcion_cursos_altura.php
+-- Opción 143 (módulo 3, Gestión Humana): CRUD de cursos de altura. No se otorga
+-- a ningún perfil (se asigna desde /permisos).
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 143, 'Gestión Humana — Cursos de altura', 3, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 143);
+
+-- ---------------------------------------------------------------------------
 -- 2026_10_29_100000_create_carnets_table.php
 -- Carnets institucionales: una fila por carnet impreso (cada reimpresión es una
 -- versión nueva del usuario) con su estado de entrega. La foto sigue en

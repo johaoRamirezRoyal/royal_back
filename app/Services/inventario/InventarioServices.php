@@ -24,6 +24,7 @@ use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Pdf\Inventario\ReporteOperativoPdfService;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -589,6 +590,9 @@ class InventarioServices
                     fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
                 )
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
+                // "Mis áreas" (AreasComunesController::misAreas): fuera lo que está en un área
+                // inactiva, aunque entre por id_bloque (la rama OR de arriba).
+                ->when($filtros['solo_areas_activas'] ?? null, fn ($q) => $q->where(fn ($q2) => $q2->whereNull('inventario.id_area')->orWhere('a.activo', 1)))
                 ->when($filtros['s'] ?? null, fn ($q, $s) => $this->buscarEnListado($q, $s));
 
             // Modo detalle: ítems sueltos de un grupo (query 2, usado por "Inspeccionar"),
@@ -1560,7 +1564,7 @@ class InventarioServices
             // Logo fijo del colegio (no el de MarcaDominioService, que resuelve por
             // dominio de correo para el multi-tenant de otros PDFs de este módulo) —
             // pedido explícito para este PDF puntual.
-            $logoPath = storage_path('app/public/royal-school/logotipoBackground.png');
+            $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
 
             $contenido = app(HistorialChecksPdfService::class)->generate([
                 'logo_path' => $logoPath,
@@ -1833,7 +1837,8 @@ class InventarioServices
         string $descripcion,
         int $id_anio,
         int $id_periodo,
-        ?string $fechareg = null
+        ?string $fechareg = null,
+        ?int $id_operativo = null
     ): array {
         // Con fecha elegida (opción Fecha de Reporte) se conserva la hora actual, para no
         // dejar todos los reportes de ese día a las 00:00.
@@ -1841,7 +1846,7 @@ class InventarioServices
 
         try {
 
-            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo, $fechaReporte) {
+            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo, $fechaReporte, $id_operativo) {
 
                 // 2 = ya reportado, 5 = descontinuado — un ítem con mantenimiento
                 // preventivo pendiente (6) SÍ se puede reportar (ej. un daño nuevo,
@@ -1879,6 +1884,7 @@ class InventarioServices
                         'id_anio' => $id_anio,
                         'periodo' => $id_periodo,
                         'fechareg' => $fechaReporte,
+                        'id_operativo' => $id_operativo,
                     ]);
                 }
 
@@ -2018,7 +2024,10 @@ class InventarioServices
                     // 1 = correctivo (reporte de daño), 2 = preventivo (mantenimiento) — se
                     // filtraba por esta columna más abajo pero no se devolvía, así que el
                     // frontend no podía distinguir el tipo fila por fila.
-                    'rp.tipo_reporte'
+                    'rp.tipo_reporte',
+                    // Operativo con curso de alturas asignado (permiso de alturas en PDF).
+                    'rp.id_operativo',
+                    DB::raw("(SELECT CONCAT(uo.nombre, ' ', uo.apellido) FROM usuarios uo WHERE uo.id_user = rp.id_operativo) AS nom_operativo")
                 )
                 // Sin distinct(): cada fila ya es única por rp.id (PK de `reportes`), y todos
                 // los leftJoin de consultaReportes son sobre columnas únicas, así que no pueden
@@ -2556,6 +2565,8 @@ class InventarioServices
      *                                no se indica, se mantiene el fallback histórico: el dueño
      *                                del equipo para el reporte, y quien programa para la
      *                                solución (si $conSolucion).
+     * @param  int|null  $id_operativo  Operativo con curso de alturas vigente, si el trabajo es
+     *                                  en altura (reportes.id_operativo, ver CursosAlturaServices).
      */
     public function programarMantenimientoPreventivo(
         array $ids,
@@ -2566,17 +2577,33 @@ class InventarioServices
         ?int $id_anio,
         ?int $periodo,
         bool $conSolucion = false,
-        ?int $id_tecnico = null
+        ?int $id_tecnico = null,
+        ?int $id_operativo = null
     ): array {
         try {
+            // Solo se excluyen los descontinuados (5) y los que ya tienen un preventivo ABIERTO
+            // en `reportes` (mismo criterio que `mantenimiento_pendiente` del listado
+            // consolidado) — no se mira inventario.estado = 6, que no es confiable para
+            // preventivos (ver consultaReportes). Un ítem reportado (2) SÍ admite un
+            // preventivo: su reporte de daño sigue pendiente aparte.
             $inventarios = Inventario::whereIn('id', $ids)
-                ->whereNotIn('estado', [2, 5, 6])
+                ->where('estado', '!=', 5)
+                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
+                    ->from('reportes as r')
+                    ->whereColumn('r.id_inventario', 'inventario.id')
+                    ->where('r.tipo_reporte', 2)
+                    ->where('r.estado', 6)
+                    ->whereNull('r.id_reporte')
+                    ->whereNotExists(fn ($s) => $s->select(DB::raw(1))
+                        ->from('reportes as sol')
+                        ->whereColumn('sol.id_reporte', 'r.id')
+                        ->where('sol.estado', 3)))
                 ->get();
 
             if ($inventarios->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => 'No se encontraron inventarios disponibles para programar mantenimiento preventivo.',
+                    'message' => 'No se puede programar: el ítem está descontinuado o ya tiene un mantenimiento programado sin solucionar.',
                     'data' => [],
                 ];
             }
@@ -2599,9 +2626,8 @@ class InventarioServices
 
             // Un mismo equipo SÍ puede tener más de un mantenimiento preventivo en el
             // mismo año+periodo (ej. uno de seguimiento tras otro ya solucionado) — ya no
-            // se deduplica por año/periodo. La única restricción real sigue siendo la del
-            // `whereNotIn('estado', [2, 5, 6])` de arriba: no se puede programar uno nuevo
-            // mientras el equipo ya tiene uno actualmente ABIERTO (estado 6 sin resolver).
+            // se deduplica por año/periodo. La única restricción real es la de arriba: no se
+            // puede programar uno nuevo mientras el equipo ya tiene uno ABIERTO.
 
             $creados = [];
             $inventariosActualizados = [];
@@ -2616,6 +2642,7 @@ class InventarioServices
                 $periodo,
                 $conSolucion,
                 $id_tecnico,
+                $id_operativo,
                 &$creados,
                 &$inventariosActualizados
             ) {
@@ -2642,13 +2669,19 @@ class InventarioServices
                         // La fecha del mantenimiento (programado o solucionado) se lee siempre de
                         // `fecha_respuesta` — ver fechaMantenimientoSql().
                         'fecha_respuesta' => $fecha,
+                        'id_operativo' => $id_operativo,
                     ]);
 
-                    $inventario->update([
-                        'estado' => 6,
-                        'observacion' => $descripcion,
-                    ]);
-                    $inventariosActualizados[] = $inventario;
+                    // Un ítem reportado (2) conserva ese estado: si pasara a 6, su reporte de
+                    // daño saldría de la bandeja de reportados (consultaReportes exige
+                    // iv.estado = 2). solucionarReporteInventario sigue el mismo criterio.
+                    if ((int) $inventario->estado !== 2) {
+                        $inventario->update([
+                            'estado' => 6,
+                            'observacion' => $descripcion,
+                        ]);
+                        $inventariosActualizados[] = $inventario;
+                    }
 
                     if ($conSolucion) {
                         Reportes::create([
@@ -3187,7 +3220,7 @@ class InventarioServices
 
             $contenido = app(MantenimientoChecklistPdfService::class)->generate([
                 // Logo institucional fijo — ver AGENTS.md "Logo en PDFs".
-                'logo_path' => public_path('storage/royal-school/logotipoBackground.png'),
+                'logo_path' => app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png'),
                 'tipo_categoria_label' => $categoria->tipo_categoria === 2 ? 'Operativos' : 'Sistemas',
                 'categoria_nombre' => $categoria->nombre,
                 'es_computadores' => str_contains(strtolower($categoria->nombre ?? ''), 'computador'),

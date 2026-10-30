@@ -13,6 +13,7 @@ use App\Http\Middleware\RestrictToAdminEmails;
 use App\Http\Middleware\RestrictToHikvisionDevices;
 use App\Http\Middleware\SwitchActiveConnection;
 use App\Http\Middleware\ValidateSystem;
+use App\Http\Middleware\InscripcionDelAcudiente;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -43,6 +44,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth' => Authenticate::class,
             'system' => ValidateSystem::class,
+            // Un acudiente solo toca sus propias inscripciones (ver el middleware).
+            'inscripcion.acudiente' => InscripcionDelAcudiente::class,
             'institucion.session' => EnsureInstitucionSession::class,
             'hikvision.device' => RestrictToHikvisionDevices::class,
             'admin.access' => RestrictToAdminEmails::class,

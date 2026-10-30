@@ -2,6 +2,7 @@
 
 namespace App\Pdf\Biblioteca;
 
+use App\Services\Cloudinary\CloudinaryService;
 use TCPDF;
 
 /**
@@ -17,9 +18,11 @@ use TCPDF;
 class PazYSalvoPdfService
 {
     private const PAGE_W = 595.28;
+
     private const PAGE_H = 841.89;
 
     private const TABLE_LEFT = 31.2;
+
     private const TABLE_RIGHT = 556.2;
 
     /** Límites X de las 8 columnas de la tabla (9 valores = 8 columnas) — paz_y_salvo / listado (libros) */
@@ -67,13 +70,15 @@ class PazYSalvoPdfService
         );
     }
 
-    private string $logoPath;
-    private string $selloPath;
+    /** Null = logo/sello por defecto de Cloudinary, resueltos al dibujarlos. */
+    private ?string $logoPath;
+
+    private ?string $selloPath;
 
     public function __construct(?string $logoPath = null, ?string $selloPath = null)
     {
-        $this->logoPath = $logoPath ?? storage_path('app/public/images/paz&salvo/logo.webp');
-        $this->selloPath = $selloPath ?? storage_path('app/public/images/paz&salvo/sello.webp');
+        $this->logoPath = $logoPath;
+        $this->selloPath = $selloPath;
     }
 
     /**
@@ -94,9 +99,9 @@ class PazYSalvoPdfService
      * TCPDF no soporta WEBP nativamente: si la imagen viene en ese formato la
      * convierte a un PNG temporal (vía GD) y devuelve esa ruta.
      */
-    private function resolveImage(string $path): ?string
+    private function resolveImage(?string $path): ?string
     {
-        if (!is_file($path)) {
+        if (! $path || ! is_file($path)) {
             return null;
         }
 
@@ -105,11 +110,11 @@ class PazYSalvoPdfService
         }
 
         $imagen = @imagecreatefromwebp($path);
-        if (!$imagen) {
+        if (! $imagen) {
             return null;
         }
 
-        $temporal = tempnam(sys_get_temp_dir(), 'pyspdf') . '.png';
+        $temporal = tempnam(sys_get_temp_dir(), 'pyspdf').'.png';
         imagepng($imagen, $temporal);
         imagedestroy($imagen);
 
@@ -164,7 +169,7 @@ class PazYSalvoPdfService
         // supera, el contenido se corre debajo de ella en vez de solaparse.
         $y = max($tableBottom + 12, $esListado ? 413.5 : 328.5);
 
-        if (!$esListado) {
+        if (! $esListado) {
             $y = $this->asegurarEspacio($pdf, $y, 14, $numeroPagina);
             $this->drawNota($pdf, $data['nota'] ?? null, $y);
             $y += 85; // gap nota -> firma medido en el PDF original (413.5 - 328.5)
@@ -174,7 +179,7 @@ class PazYSalvoPdfService
         $this->drawFirma($pdf, $y);
         $firmaY = $y;
 
-        if (!$esListado && ($data['sin_pendientes'] ?? false)) {
+        if (! $esListado && ($data['sin_pendientes'] ?? false)) {
             $selloY = $this->asegurarEspacio($pdf, $firmaY + 10.1, 113.4, $numeroPagina);
             $this->drawSello($pdf, $selloY);
         }
@@ -211,6 +216,7 @@ class PazYSalvoPdfService
         $x = (self::PAGE_W - $width) / 2;
         $y = 28.4;
 
+        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('paz-salvo/logo.webp');
         $logo = $this->resolveImage($this->logoPath);
         if ($logo) {
             $pdf->Image($logo, $x, $y, $width, $height, 'PNG');
@@ -273,7 +279,7 @@ class PazYSalvoPdfService
      * Dibuja un párrafo con segmentos normales/negrita, con wrap automático,
      * igual que la versión de pdf-lib (evita depender de writeHTMLCell).
      *
-     * @param array<int, array{0: string, 1: bool}> $segments
+     * @param  array<int, array{0: string, 1: bool}>  $segments
      */
     private function drawMixedParagraph(TCPDF $pdf, array $segments, float $x, float $y, float $maxWidth, float $size, float $lineHeight): void
     {
@@ -508,6 +514,7 @@ class PazYSalvoPdfService
         $height = 113.4;
         $x = 368.5;
 
+        $this->selloPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('paz-salvo/sello.webp');
         $sello = $this->resolveImage($this->selloPath);
         if ($sello) {
             $pdf->Image($sello, $x, $y, $width, $height, 'PNG');

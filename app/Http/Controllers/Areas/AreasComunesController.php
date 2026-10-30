@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\Areas;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
+use App\Models\Areas\Areas;
+use App\Models\Areas\Bloque;
+use App\Models\Inventario\Inventario;
 use App\Services\Areas\AreasServices;
 use App\Services\inventario\InventarioServices;
-use Illuminate\Http\JsonResponse;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 /**
  * Acciones administrativas masivas de Áreas Comunes que cruzan `areas`/`inventario`
@@ -22,17 +25,23 @@ class AreasComunesController extends Controller
     use VerificaPermisos;
 
     private const OPCION_ADMIN_AREAS_COMUNES = Permiso::AREAS_COMUNES_ADMIN;
+
     private const OPCION_USO_AREAS_COMUNES = Permiso::AREAS_COMUNES_USO;
+
     // "Mis áreas comunes" (autoservicio) — sumada a registrarCheck por consistencia con
     // InventariosController::listadoConsolidado/reportarInventario, aunque hoy la
     // vista de autoservicio (`misAreas`) ya no ofrece el check, solo Reportar.
     private const OPCION_MIS_AREAS_COMUNES = Permiso::MIS_AREAS_COMUNES;
 
+    // "Mis áreas" bajo Mis inventarios (/inventario/mis-areas) — ver misAreas().
+    private const OPCION_MIS_AREAS_NIVEL = Permiso::MIS_AREAS_NIVEL;
+
+    private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
+
     public function __construct(
         private AreasServices $areasService,
         private InventarioServices $inventarioService,
-    ) {
-    }
+    ) {}
 
     public function asignarAreasBloque(Request $request)
     {
@@ -153,6 +162,56 @@ class AreasComunesController extends Controller
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
     }
 
+    /**
+     * GET /bloques/inventario/mis-areas — ítems de Área Común que el usuario puede ver y
+     * reportar desde "Mis áreas". El alcance se arma acá, no desde filtros del cliente:
+     *   - 141: bloques activos de su nivel (lo directo en el bloque y lo de sus áreas).
+     *   - 142: áreas de las que es responsable (tiene ítems con inventario.id_user = él,
+     *     como lo deja "Asignar área" en /inventario/areas).
+     * Con las dos, la unión.
+     */
+    public function misAreas(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_MIS_AREAS_NIVEL, self::OPCION_MIS_AREAS_RESPONSABLE)) {
+            return $rechazo;
+        }
+
+        $usuario = $request->user();
+        $idsBloque = [];
+        $idsArea = [];
+
+        if (PermisosPerfil::tiene($request, self::OPCION_MIS_AREAS_NIVEL) && $usuario->id_nivel) {
+            $idsBloque = Bloque::where('id_nivel', $usuario->id_nivel)->where('activo', 1)->pluck('id')->all();
+            $idsArea = Areas::whereIn('id_bloque', $idsBloque)->where('activo', 1)->pluck('id')->all();
+        }
+
+        if (PermisosPerfil::tiene($request, self::OPCION_MIS_AREAS_RESPONSABLE)) {
+            $idsArea = array_merge($idsArea, Inventario::where('id_user', $usuario->id_user)
+                ->whereIn('id_area', Areas::where('activo', 1)->select('id'))
+                ->distinct()
+                ->pluck('id_area')
+                ->all());
+        }
+
+        if (empty($idsBloque) && empty($idsArea)) {
+            return response()->json(['error' => false, 'message' => '', 'data' => ['data' => []]]);
+        }
+
+        $filtros = array_filter([
+            'tipo_categoria' => 3,
+            'individual' => 1,
+            'solo_areas_activas' => 1,
+            'id_bloque' => $idsBloque,
+            'id_area' => array_values(array_unique($idsArea)),
+            'id_categoria' => $request->input('id_categoria'),
+            's' => $request->input('s'),
+        ]);
+
+        $resultado = $this->inventarioService->obtenerListadoConsolidado($filtros, 10000);
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
+
     /** Historial completo de checks semestrales — ver InventarioServices::historialChecks. */
     public function historialChecks(Request $request)
     {
@@ -225,7 +284,7 @@ class AreasComunesController extends Controller
 
         return response($resultado['data']['contenido'], 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $resultado['data']['nombre_archivo'] . '"',
+            'Content-Disposition' => 'attachment; filename="'.$resultado['data']['nombre_archivo'].'"',
         ]);
     }
 }

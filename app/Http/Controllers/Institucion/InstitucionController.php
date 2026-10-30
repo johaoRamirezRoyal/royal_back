@@ -383,6 +383,8 @@ class InstitucionController extends Controller
 
         $institucion->update($update);
 
+        $institucion->enviarCorreoRegistrado($this->mail_service);
+
         return $this->success('Correo registrado correctamente');
     }
 
