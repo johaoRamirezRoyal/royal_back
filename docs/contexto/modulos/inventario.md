@@ -99,6 +99,27 @@ reportar, solucionar y mover.
     misma lista de ítems.
   - Un fallo se registra en el log y no interrumpe la operación.
 
+## Programación de mantenimientos (`ProgramacionMantController`, `ProgramacionMantServices`)
+
+- Rutas `inventario/mantenimiento/programacion` (opción `Permiso::INVENTARIO`). Recrea
+  `/mantenimientos/programacion` del legacy sobre sus mismas tablas:
+  - `programacion_mant`: `estado` 0 Pendiente, 1 Terminado, 2 Completado parcial, 3 Aplazado,
+    4 Cancelado; `tipo` 1 Sistemas, 2 Operativos; `periodo` = `periodos.id` (antes ordinal
+    1/2, migrado en `2026_10_30_120000`; los años sin periodos registrados quedaron NULL);
+    `fecha_fin` = último día de la franja (NULL = un solo día; `2026_10_30_130000`). Los
+    filtros `desde`/`hasta` traen las programaciones que se cruzan con ese rango.
+  - `programacion_apro`: avances (estado, observación, `archivo`). `archivo` guarda la ruta
+    de FileStorage; los del legacy son solo el nombre y resuelven con el mismo `url()`.
+- `anio` ('2025/2026') y `mes` ('Enero') siguen siendo texto por compatibilidad con el
+  legacy: se derivan siempre del periodo y de `fecha_registro`, nunca del body. El filtro
+  `id_anio` se traduce a ese texto.
+- Cumplimiento = (Terminado + Completado parcial) / total, igual que el legacy.
+- `GET .../calendario` (cronograma) devuelve solo programaciones, sin paginar.
+- `programarMantenimientoPreventivo` crea una programación por lote (misma descripción,
+  periodo y usuario; `fecha_registro`/`fecha_fin` = primer y último día realmente asignado
+  a los equipos, no el rango elegido, porque cada equipo cae en un día aleatorio; `tipo` según la categoría del primer ítem, Áreas
+  Comunes cuenta como Operativos; estado 1 si se generó con solución, si no 0).
+
 ## Trabajo en alturas (`CursosAlturaController`, `routes/api/cursosAltura.php`)
 
 Gestión Humana registra los cursos de altura de los operativos en `cursos_altura`

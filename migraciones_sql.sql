@@ -461,3 +461,26 @@ create table `carnet_plantillas` (`id` bigint unsigned not null auto_increment p
 -- comporta como IMPRESO (se entrega, se pierde o se anula).
 -- ---------------------------------------------------------------------------
 ALTER TABLE `carnets` MODIFY `estado` ENUM('IMPRESO', 'REIMPRESO', 'ENTREGADO', 'PERDIDO', 'ANULADO') NOT NULL DEFAULT 'IMPRESO';
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_30_120000_add_tipo_to_programacion_mant_table.php
+-- programacion_mant.tipo (1 Sistemas, 2 Operativos) y periodo pasa del ordinal
+-- 1/2 del legacy al periodos.id real según fecha_registro, o año+ordinal
+-- (años sin periodos registrados → NULL).
+-- ---------------------------------------------------------------------------
+SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode, 'NO_ZERO_DATE', ''));
+ALTER TABLE programacion_mant ADD tipo TINYINT NOT NULL DEFAULT 1 AFTER descripcion;
+UPDATE programacion_mant pm
+    LEFT JOIN periodos pf ON pm.fecha_registro BETWEEN pf.fecha_inicio AND pf.fecha_fin
+    LEFT JOIN anio_escolar a ON CONCAT(a.anio_inicio, '/', a.anio_fin) = pm.anio
+    LEFT JOIN periodos po ON po.id_anio = a.id
+        AND pm.periodo IN (FIELD(po.numero, 'I', 'II', 'III', 'IV'), FIELD(po.numero, '1', '2', '3', '4'))
+    SET pm.periodo = COALESCE(pf.id, po.id);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_30_130000_add_fecha_fin_to_programacion_mant_table.php
+-- programacion_mant.fecha_fin: último día de la programación (franja en el
+-- calendario). NULL = un solo día.
+-- ---------------------------------------------------------------------------
+SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode, 'NO_ZERO_DATE', ''));
+ALTER TABLE programacion_mant ADD fecha_fin DATE NULL AFTER fecha_registro;
