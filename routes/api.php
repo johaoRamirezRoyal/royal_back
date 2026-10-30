@@ -321,6 +321,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/vinculacion-acudientes.php';
     });
 
+    // CARNETS INSTITUCIONALES (opción 144; /carnets/mio es autoservicio)
+    Route::prefix('/carnets')->group(function () {
+        require __DIR__ . '/api/carnets.php';
+    });
+
     // MODULOS (métricas de módulos más visitados — Home)
     Route::prefix('/modulos')->group(function () {
         require __DIR__ . '/api/modulos.php';

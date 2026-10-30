@@ -384,3 +384,30 @@ ALTER TABLE `hikvision_dispositivos` ADD `activo` tinyint(1) NOT NULL DEFAULT '1
 INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
 SELECT 140, 'Fecha de Reporte', 2, 1, NOW() FROM DUAL
 WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 140);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_29_100000_create_carnets_table.php
+-- Carnets institucionales: una fila por carnet impreso (cada reimpresión es una
+-- versión nueva del usuario) con su estado de entrega. La foto sigue en
+-- usuarios.foto_carnet. Sin FK a usuarios (tabla legacy).
+-- ---------------------------------------------------------------------------
+CREATE TABLE `carnets` (`id` bigint unsigned not null auto_increment primary key, `id_user` int unsigned not null, `version` smallint unsigned not null, `estado` enum('IMPRESO', 'ENTREGADO', 'PERDIDO', 'ANULADO') not null default 'IMPRESO', `fecha_emision` datetime not null, `fecha_entrega` datetime null, `fecha_estado` datetime null, `observacion` varchar(255) null, `id_usuario_emite` int unsigned not null, `id_usuario_estado` int unsigned null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+ALTER TABLE `carnets` ADD INDEX `carnets_id_user_index`(`id_user`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_29_100100_seed_opcion_carnets.php
+-- Opción 144 "Carnets institucionales" (módulo 10, Carnet): imprimir carnets,
+-- administrar sus fotos y el control de entregas. No se otorga a ningún perfil
+-- (se asigna desde /permisos). Falla si el 144 ya está ocupado por otra opción.
+-- ---------------------------------------------------------------------------
+INSERT INTO `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`)
+SELECT 144, 'Carnets institucionales', 10, 1, NOW() FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM `cron_opciones` WHERE `id` = 144);
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_29_110000_create_carnet_plantillas_table.php
+-- Plantillas de carnet (como las de cumpleaños): imagen de fondo por tipo
+-- (estudiante | trabajador) y posición de cada dato en `elementos`. La activa de
+-- cada tipo es la que se imprime; una por tipo (CarnetPlantillaService).
+-- ---------------------------------------------------------------------------
+create table `carnet_plantillas` (`id` bigint unsigned not null auto_increment primary key, `nombre` varchar(120) not null, `descripcion` text null, `tipo` varchar(12) not null, `activo` tinyint(1) not null default '0', `imagen` varchar(250) null, `ancho` int unsigned null, `alto` int unsigned null, `transparente` tinyint(1) not null default '0', `elementos` json null, `id_log` int null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
