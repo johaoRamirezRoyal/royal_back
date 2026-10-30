@@ -24,7 +24,9 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
     entrega en lote el último carnet por entregar (IMPRESO o REIMPRESO) de cada `id_user` (los demás se omiten).
 - **Foto**: es `usuarios.foto_carnet` (la legada). `POST /usuario/{id}/foto` y
   `POST /fotos` (lote, `fotos[]`, máx. 20 por petición por `max_file_uploads`) suben a
-  `carnets/` en el disco de uploads. El lote asigna por nombre de archivo = documento
+  `carnets/` en el disco de uploads (en Cloudinary, `<carpeta del colegio>/carnets/`; ver
+  `infraestructura.md`, "Carpeta raíz por colegio"). `foto_carnet` guarda la ruta relativa a esa
+  carpeta. El lote asigna por nombre de archivo = documento
   (`documentoDeArchivo` quita extensión y separadores); si el documento no existe o lo
   tienen varios usuarios activos, lo reporta en `sin_asignar`. Al reemplazar, solo se borra
   la foto anterior si estaba en `carnets/`: las legadas pueden usarse en otra parte.

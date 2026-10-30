@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
+use App\Services\AdminManagement\BasesDatosService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -67,7 +68,7 @@ class AppServiceProvider extends ServiceProvider
                     'api_secret' => config('cloudinary.api_secret'),
                 ],
                 'url' => ['secure' => true],
-            ]), trim($config['prefijo'] ?? '', '/'));
+            ]), fn () => BasesDatosService::carpeta(config('database.default')));
 
             return new FilesystemAdapter(new Filesystem($adapter, $config), $adapter, $config);
         });

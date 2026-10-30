@@ -18,5 +18,6 @@ class BaseDatosNombre extends Model
     protected $fillable = [
         'connection',
         'nombre',
+        'carpeta_cloudinary',
     ];
 }

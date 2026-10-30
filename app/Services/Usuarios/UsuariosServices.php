@@ -654,7 +654,7 @@ class UsuariosServices
     public function subirFirmaUsuario(int $id_user, UploadedFile $file): array
     {
         try {
-            $resultado = $this->cloudinaryService->uploadFile($file, 'usuarios/firmas');
+            $resultado = $this->cloudinaryService->uploadFile($file, CloudinaryService::carpetaColegio('usuarios/firmas'));
 
             if ($resultado['error']) {
                 return ['error' => true, 'message' => $resultado['message']];

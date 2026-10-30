@@ -47,6 +47,16 @@ class BasesDatosController extends Controller implements HasMiddleware
         return $this->apiResponse($this->service->restablecerNombre($request->input('connection')));
     }
 
+    public function cambiarCarpeta(Request $request)
+    {
+        $request->validate([
+            'connection' => ['required', 'string'],
+            'carpeta' => ['nullable', 'string', 'max:120', 'regex:' . BasesDatosService::PATRON_CARPETA],
+        ], ['carpeta.regex' => 'La carpeta solo puede tener letras sin tildes, números, guiones y "/" entre carpetas.']);
+
+        return $this->apiResponse($this->service->cambiarCarpeta($request->input('connection'), $request->input('carpeta')));
+    }
+
     public function conexionActiva(Request $request)
     {
         return $this->apiResponse([

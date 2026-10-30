@@ -5,6 +5,7 @@ namespace App\Http\Resources\Usuarios;
 use App\Services\branding\MarcaDominioService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Services\AdminManagement\BasesDatosService;
 
 class UsuarioResource extends JsonResource
 {
@@ -40,6 +41,9 @@ class UsuarioResource extends JsonResource
             'logo_path' => $marca['url'],
             'nombre_marca' => $marca['nombre'],
             'color_marca' => $marca['color'],
+            // Carpeta raíz del colegio en Cloudinary ("Bases de datos"): el frontend arma con
+            // ella las URLs de los archivos (src/utils/fileUrl.ts).
+            'carpeta_archivos' => BasesDatosService::carpeta(config('database.default')),
         ];
     }
 }

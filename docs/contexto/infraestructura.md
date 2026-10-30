@@ -36,10 +36,22 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
     `$disk->path()`**: en Cloudinary devuelve la ruta relativa, no un archivo.
   - `existentes($rutas)` comprueba muchas rutas a la vez (HEAD en paralelo). Úsalo en
     listados en vez de `exists()` por fila.
+- **Carpeta raíz por colegio en Cloudinary** (`BasesDatosService::carpeta($connection)`):
+  cada colegio (connection) guarda sus archivos en `<carpeta>/...`. Se edita en el panel
+  "Bases de datos" (`PUT /api/admin-management/bases-datos/carpeta`, columna
+  `bases_datos_nombres.carpeta_cloudinary`). Sin valor, la de fábrica: `mysql` usa `royal`
+  y las demás el nombre de la connection. Ya no hay variable de entorno para esto
+  (`CLOUDINARY_UPLOADS_PREFIJO` se quitó).
+  - La usan el disco `cloudinary` (resuelve la carpeta por archivo, según
+    `database.default`), la carpeta de Admisiones y las subidas de módulos de un colegio con
+    `CloudinaryService::carpetaColegio()` (cartas de Instituciones, revistas, capacitaciones,
+    firmas). Lo transversal (banners de administración, logos de marcas, la migración) no.
+  - Viaja al frontend como `carpeta_archivos` en `UsuarioResource`.
+  - Cambiarla no mueve los archivos ya subidos: hay que moverlos en Cloudinary.
 - **Disco `cloudinary`** (driver `cloudinary_uploads`,
   `App\Services\Cloudinary\CloudinaryUploadsAdapter`):
-  - Usa el mismo direccionamiento que la migración: `<CLOUDINARY_UPLOADS_PREFIJO,
-    royal>/<ruta>`. Así los archivos migrados y los nuevos se ven igual, y el frontend
+  - Usa el mismo direccionamiento que la migración: `<carpeta del colegio, royal en
+    Royal>/<ruta>`. Así los archivos migrados y los nuevos se ven igual, y el frontend
     arma la URL solo (`src/utils/fileUrl.ts`, que sigue la misma regla, con test en
     `tests/Unit/Cloudinary`).
   - Imágenes y PDF son `image` (public_id sin extensión) y el resto `raw` (con
@@ -57,7 +69,7 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
     `image`). Si no coincide, Cloudinary responde "not found", el servicio lo toma como
     éxito y el archivo se queda.
 - **Archivos de admisiones** (`AdmissionsController`):
-  - Se suben a `<CLOUDINARY_UPLOADS_PREFIJO>/Admisiones/documentos/{id_inscripcion}` (y
+  - Se suben a `<carpeta del colegio>/Admisiones/documentos/{id_inscripcion}` (y
     `.../CitasPsicologia/{id_cita}`) con un `public_id` único (nombre + sufijo aleatorio).
     Antes iban todos a `Admisiones/documentos` con el nombre original y `overwrite`: dos
     familias con `cedula.pdf` se pisaban el archivo.

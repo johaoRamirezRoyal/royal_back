@@ -33,7 +33,13 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
 {
     private const IMAGENES = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'jfif', 'avif', 'pdf'];
 
-    public function __construct(private Cloudinary $cloudinary, private string $prefijo) {}
+    /** `$prefijo`: la carpeta raíz, o una función que la da (la del colegio de la sesión, ver AppServiceProvider). */
+    public function __construct(private Cloudinary $cloudinary, private string|\Closure $prefijo) {}
+
+    private function prefijo(): string
+    {
+        return is_string($this->prefijo) ? $this->prefijo : trim((string) ($this->prefijo)(), '/');
+    }
 
     /** @return array{0: string, 1: string, 2: string} [public_id, resource_type, url] */
     public function recurso(string $ruta): array
@@ -44,7 +50,7 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
         $base = preg_replace('/[^A-Za-z0-9\-_]/', '_', pathinfo($ruta, PATHINFO_FILENAME));
         $tipo = in_array($ext, self::IMAGENES, true) ? 'image' : 'raw';
 
-        $id = implode('/', array_filter([$this->prefijo, $carpeta, $base], fn ($p) => $p !== ''));
+        $id = implode('/', array_filter([$this->prefijo(), $carpeta, $base], fn ($p) => $p !== ''));
         if ($tipo === 'raw' && $ext !== '') {
             $id .= ".{$ext}";
         }

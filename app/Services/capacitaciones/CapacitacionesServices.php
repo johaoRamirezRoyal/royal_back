@@ -336,7 +336,7 @@ class CapacitacionesServices
                 // public_id fijo por curso (`capacitaciones/curso_{id}`, con overwrite): cambiar la
                 // imagen reemplaza el mismo recurso en Cloudinary en vez de dejar huérfanos.
                 // ponytail: URL completa (~90 chars) en `imagen` varchar(100) — ampliar la columna si el cloud_name crece.
-                $subida = $this->cloudinary->uploadFile($imagen, 'capacitaciones', 'curso_' . $curso->id);
+                $subida = $this->cloudinary->uploadFile($imagen, CloudinaryService::carpetaColegio('capacitaciones'), 'curso_' . $curso->id);
 
                 if ($subida['error']) {
                     throw new Exception($subida['message']);

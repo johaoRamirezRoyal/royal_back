@@ -538,15 +538,10 @@ class AdmissionsController extends Controller
         return $request->user()?->id_user;
     }
 
-    /**
-     * Carpeta de admisiones en Cloudinary bajo el mismo prefijo que el resto de archivos
-     * (CLOUDINARY_UPLOADS_PREFIJO, por defecto "royal"): royal/Admisiones/<subcarpeta>.
-     */
+    /** Carpeta de admisiones en Cloudinary, dentro de la carpeta raíz del colegio: <carpeta>/Admisiones/<subcarpeta>. */
     private function carpetaAdmisiones(string $subcarpeta): string
     {
-        $prefijo = trim((string) config('filesystems.disks.cloudinary.prefijo', 'royal'), '/');
-
-        return ($prefijo !== '' ? "{$prefijo}/" : '') . "Admisiones/{$subcarpeta}";
+        return CloudinaryService::carpetaColegio("Admisiones/{$subcarpeta}");
     }
 
     /** public_id legible y único: nombre original + sufijo aleatorio. */

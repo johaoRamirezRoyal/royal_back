@@ -296,7 +296,7 @@ class NoticiasController extends Controller
         ]);
 
         // public_id único: si no, dos PDFs con el mismo nombre se pisan en Cloudinary.
-        $subida = $this->cloudinary->uploadFile($request->file('archivo'), 'Noticias/Revistas', 'revista_' . Str::uuid());
+        $subida = $this->cloudinary->uploadFile($request->file('archivo'), CloudinaryService::carpetaColegio('Noticias/Revistas'), 'revista_' . Str::uuid());
 
         if ($subida['error']) {
             return $this->apiResponse($subida);

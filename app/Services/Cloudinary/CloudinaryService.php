@@ -7,6 +7,7 @@ use Cloudinary\Configuration\Configuration;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\AdminManagement\BasesDatosService;
 
 class CloudinaryService
 {
@@ -59,6 +60,15 @@ class CloudinaryService
      *     data: array
      * }
      */
+    /**
+     * `<carpeta raíz del colegio de la sesión>/<subcarpeta>`, para las subidas de datos de un
+     * colegio. Lo transversal (banners de administración, logos de marcas) no la usa.
+     */
+    public static function carpetaColegio(string $subcarpeta): string
+    {
+        return BasesDatosService::carpeta(config('database.default')) . '/' . trim($subcarpeta, '/');
+    }
+
     public function uploadFile(
         UploadedFile $file,
         string $folder = 'uploads',

@@ -59,13 +59,14 @@ class AdmisionesArchivosTest extends TestCase
         $this->assertStringStartsWith('cedula_', $a);
     }
 
-    public function test_la_carpeta_va_bajo_el_prefijo_y_por_inscripcion(): void
+    public function test_la_carpeta_va_bajo_la_carpeta_del_colegio_y_por_inscripcion(): void
     {
-        config(['filesystems.disks.cloudinary.prefijo' => 'royal']);
+        // Sin carpeta guardada en "Bases de datos": Royal (mysql) usa "royal" y los demás colegios su connection.
+        config(['database.default' => 'mysql']);
         $this->assertSame('royal/Admisiones/documentos/42', $this->llamar('carpetaAdmisiones', 'documentos/42'));
 
-        config(['filesystems.disks.cloudinary.prefijo' => '']);
-        $this->assertSame('Admisiones/documentos/42', $this->llamar('carpetaAdmisiones', 'documentos/42'));
+        config(['database.default' => 'sami_hebreo']);
+        $this->assertSame('sami_hebreo/Admisiones/documentos/42', $this->llamar('carpetaAdmisiones', 'documentos/42'));
     }
 
     public function test_imagenes_y_pdf_se_borran_como_image_y_office_como_raw(): void

@@ -65,11 +65,11 @@ return [
             'report' => false,
         ],
 
-        // Disco de uploads en Cloudinary (UPLOADS_DISK=cloudinary). Mismo direccionamiento que
-        // la migración: <prefijo>/<ruta en BD>. Ver App\Services\Cloudinary\CloudinaryUploadsAdapter.
+        // Disco de uploads en Cloudinary (UPLOADS_DISK=cloudinary): <carpeta del colegio>/<ruta en BD>.
+        // La carpeta se define por colegio en "Bases de datos" (BasesDatosService::carpeta). Ver
+        // App\Services\Cloudinary\CloudinaryUploadsAdapter.
         'cloudinary' => [
             'driver' => 'cloudinary_uploads',
-            'prefijo' => env('CLOUDINARY_UPLOADS_PREFIJO', 'royal'),
             'throw' => false,
             'report' => false,
         ],

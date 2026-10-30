@@ -25,6 +25,12 @@ class BasesDatosService extends Service
         'admin_management' => 'Administración (marcas por dominio, logs)'
     ];
 
+    /** Formato de una carpeta de Cloudinary: segmentos de [A-Za-z0-9_-] separados por "/". */
+    public const PATRON_CARPETA = '/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/';
+
+    /** Carpeta ya resuelta por connection en esta petición: el disco la pide por cada archivo. */
+    private static array $carpetas = [];
+
     public function listar(): array
     {
         try {
@@ -40,6 +46,8 @@ class BasesDatosService extends Service
                     'nombre' => $nombresGuardados[$connection] ?? $nombrePorDefecto,
                     'driver' => $config['driver'] ?? null,
                     'en_linea' => $this->probarConexion($connection),
+                    'carpeta_cloudinary' => self::carpeta($connection),
+                    'carpeta_por_defecto' => self::carpetaPorDefecto($connection),
                 ];
             }
 
@@ -79,13 +87,59 @@ class BasesDatosService extends Service
                 return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
             }
 
-            BaseDatosNombre::where('connection', $connection)->delete();
+            // Solo el nombre: la fila puede guardar también la carpeta de Cloudinary.
+            BaseDatosNombre::where('connection', $connection)->update(['nombre' => null]);
 
             return ['error' => false, 'message' => 'Nombre restablecido al valor por defecto.', 'data' => []];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al restablecer el nombre de la base de datos');
 
             return ['error' => true, 'message' => 'Error en el servidor al restablecer el nombre.', 'data' => []];
+        }
+    }
+
+    /**
+     * Carpeta raíz del colegio en Cloudinary: sus archivos van a `<carpeta>/<ruta>` (disco
+     * `cloudinary`, Admisiones y las subidas de los módulos). Se edita en "Bases de datos";
+     * sin valor guardado, la de fábrica.
+     */
+    public static function carpeta(string $connection): string
+    {
+        if (!isset(self::$carpetas[$connection])) {
+            try {
+                $guardada = BaseDatosNombre::where('connection', $connection)->value('carpeta_cloudinary');
+            } catch (Exception) {
+                $guardada = null; // admin_management caída: no tumbar las subidas, usar la de fábrica
+            }
+            self::$carpetas[$connection] = $guardada ?: self::carpetaPorDefecto($connection);
+        }
+
+        return self::$carpetas[$connection];
+    }
+
+    /** `mysql` (Royal School) conserva su carpeta histórica, "royal" (la de la migración de SAMI); las demás, el nombre de su connection. */
+    public static function carpetaPorDefecto(string $connection): string
+    {
+        return $connection === 'mysql' ? 'royal' : $connection;
+    }
+
+    /** `$carpeta` null = volver a la de fábrica. Solo cambia dónde van los archivos nuevos: los ya subidos no se mueven. */
+    public function cambiarCarpeta(string $connection, ?string $carpeta): array
+    {
+        try {
+            if (!array_key_exists($connection, self::CONNECTIONS)) {
+                return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
+            }
+
+            // El formato ya lo validó el controller (PATRON_CARPETA). Vacía = la de fábrica.
+            BaseDatosNombre::updateOrCreate(['connection' => $connection], ['carpeta_cloudinary' => $carpeta ?: null]);
+            unset(self::$carpetas[$connection]);
+
+            return ['error' => false, 'message' => 'Carpeta de archivos actualizada.', 'data' => ['carpeta_cloudinary' => self::carpeta($connection)]];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al cambiar la carpeta de Cloudinary');
+
+            return ['error' => true, 'message' => 'Error en el servidor al cambiar la carpeta.', 'data' => []];
         }
     }
 

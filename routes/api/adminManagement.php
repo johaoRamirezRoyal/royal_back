@@ -12,6 +12,7 @@ Route::prefix('bases-datos')->group(function () {
     Route::get('/', [BasesDatosController::class, 'listar']);
     Route::put('/', [BasesDatosController::class, 'renombrar']);
     Route::delete('/nombre', [BasesDatosController::class, 'restablecerNombre']);
+    Route::put('/carpeta', [BasesDatosController::class, 'cambiarCarpeta']);
     Route::get('/conexion-activa', [BasesDatosController::class, 'conexionActiva']);
     Route::put('/conexion-activa', [BasesDatosController::class, 'establecerConexionActiva']);
     Route::delete('/conexion-activa', [BasesDatosController::class, 'restablecerConexionActiva']);

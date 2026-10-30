@@ -439,7 +439,7 @@ class InstitucionController extends Controller
             file_put_contents($tmpPath, $pdfBinario);
 
             $archivo = new UploadedFile($tmpPath, $nombrePdf, 'application/pdf', null, true);
-            $resultado = $this->cloudinary_service->uploadFile($archivo, 'Instituciones/CartasRecomendacion');
+            $resultado = $this->cloudinary_service->uploadFile($archivo, CloudinaryService::carpetaColegio('Instituciones/CartasRecomendacion'));
 
             if (! $resultado['error']) {
                 $carta->update([

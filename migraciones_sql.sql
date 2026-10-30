@@ -484,3 +484,12 @@ UPDATE programacion_mant pm
 -- ---------------------------------------------------------------------------
 SET SESSION sql_mode=(SELECT REPLACE(@@sql_mode, 'NO_ZERO_DATE', ''));
 ALTER TABLE programacion_mant ADD fecha_fin DATE NULL AFTER fecha_registro;
+
+-- ---------------------------------------------------------------------------
+-- 2026_10_30_140000_add_carpeta_cloudinary_to_bases_datos_nombres_table.php
+-- OJO: en la base de ADMINISTRACIÓN (connection admin_management), no en la del
+-- colegio. Carpeta raíz de cada colegio en Cloudinary, editable en "Bases de
+-- datos"; NULL = la de fábrica (royal para mysql, la connection para los demás).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `bases_datos_nombres` MODIFY `nombre` VARCHAR(190) NULL;
+ALTER TABLE `bases_datos_nombres` ADD `carpeta_cloudinary` VARCHAR(120) NULL AFTER `nombre`;

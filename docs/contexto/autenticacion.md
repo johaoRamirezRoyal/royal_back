@@ -19,7 +19,9 @@
   `makeCookie($token, $nombre, $minutes = 1 día)`.
 - `config/jwt.php`: `ttl` 60 min, `refresh_ttl` 14 días.
 - `UsuarioResource` (respuesta de `/auth/check` y del login) incluye `foto_perfil`, para
-  que el frontend no tenga que pedir `/info-perfil` solo por el avatar.
+  que el frontend no tenga que pedir `/info-perfil` solo por el avatar, y `carpeta_archivos`:
+  la carpeta raíz del colegio de la sesión en Cloudinary, con la que el frontend arma las URLs
+  de los archivos (ver `infraestructura.md`, "Carpeta raíz por colegio").
 - `AuthServices` es delgado: solo cubre el registro y los dispositivos confiables. El
   resto (login, check, tokens) sigue en `AuthController`/`JwtService`.
 
