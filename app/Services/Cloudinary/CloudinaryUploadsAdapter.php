@@ -28,6 +28,9 @@ use Throwable;
  * - El nombre se sanea como CloudinaryService::uploadFile: fuera de [A-Za-z0-9_-] pasa a "_".
  * - Leer y comprobar existencia usa la URL de entrega (CDN), no la Admin API: esa tiene
  *   cuota por hora y url()/exists() se llaman por fila en los listados.
+ * - Privado (`authenticated`, URL firmada): lo de ArchivosPrivados y todo lo que está en la
+ *   raíz del colegio (fotos de perfil, cotizaciones y facturas de compras).
+ *   El frontend no puede armar esas URLs: las pide a GET /api/public/{ruta}, que redirige.
  */
 class CloudinaryUploadsAdapter implements FilesystemAdapter
 {
@@ -41,8 +44,12 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
         return is_string($this->prefijo) ? $this->prefijo : trim((string) ($this->prefijo)(), '/');
     }
 
-    /** @return array{0: string, 1: string, 2: string} [public_id, resource_type, url] */
-    public function recurso(string $ruta): array
+    /**
+     * `$transformacion` (p. ej. "w_128,c_limit") solo se aplica a `image`.
+     *
+     * @return array{0: string, 1: string, 2: string, 3: string} [public_id, resource_type, url, type]
+     */
+    public function recurso(string $ruta, ?string $transformacion = null): array
     {
         $ruta = ltrim(str_replace('\\', '/', $ruta), '/');
         $carpeta = str_contains($ruta, '/') ? preg_replace('/[^A-Za-z0-9_\-\/]/', '', dirname($ruta)) : '';
@@ -55,10 +62,17 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
             $id .= ".{$ext}";
         }
 
-        $cloud = $this->cloudinary->configuration->cloud->cloudName;
-        $url = "https://res.cloudinary.com/{$cloud}/{$tipo}/upload/{$id}".($tipo === 'image' && $ext !== '' ? ".{$ext}" : '');
+        $cloud = $this->cloudinary->configuration->cloud;
+        $archivo = $id.($tipo === 'image' && $ext !== '' ? ".{$ext}" : '');
+        $transformacion = $tipo === 'image' ? $transformacion : null;
 
-        return [$id, $tipo, $url];
+        if ($carpeta === '' || ArchivosPrivados::esPrivado($id)) {
+            return [$id, $tipo, ArchivosPrivados::url($cloud->cloudName, (string) $cloud->apiSecret, $tipo, $archivo, $transformacion), 'authenticated'];
+        }
+
+        $url = "https://res.cloudinary.com/{$cloud->cloudName}/{$tipo}/upload/".($transformacion ? "{$transformacion}/" : '').$archivo;
+
+        return [$id, $tipo, $url, 'upload'];
     }
 
     /** Lo llama Storage::url(). */
@@ -95,12 +109,13 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
 
     private function subir(string $path, mixed $archivo): void
     {
-        [$id, $tipo] = $this->recurso($path);
+        [$id, $tipo, , $entrega] = $this->recurso($path);
 
         try {
             $this->cloudinary->uploadApi()->upload($archivo, [
                 'public_id' => $id,
                 'resource_type' => $tipo,
+                'type' => $entrega,
                 'overwrite' => true,
                 'invalidate' => true,
             ]);
@@ -131,10 +146,10 @@ class CloudinaryUploadsAdapter implements FilesystemAdapter
 
     public function delete(string $path): void
     {
-        [$id, $tipo] = $this->recurso($path);
+        [$id, $tipo, , $entrega] = $this->recurso($path);
 
         try {
-            $resultado = $this->cloudinary->uploadApi()->destroy($id, ['resource_type' => $tipo, 'invalidate' => true]);
+            $resultado = $this->cloudinary->uploadApi()->destroy($id, ['resource_type' => $tipo, 'type' => $entrega, 'invalidate' => true]);
         } catch (Throwable $e) {
             throw UnableToDeleteFile::atLocation($path, $e->getMessage(), $e);
         }

@@ -3,6 +3,7 @@
 namespace App\Services\inventario;
 
 use App\Enums\Mails;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\Periodo;
 use App\Models\Areas\Areas;
@@ -31,7 +32,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class InventarioServices
 {
@@ -3017,39 +3017,21 @@ class InventarioServices
     }
 
     /**
-     * Bytes de la firma activa del usuario (tabla `firmas`), o null si no tiene o no se pudo
-     * leer — el PDF sale igual, con la línea de firma en blanco. Las firmas subidas desde
-     * OMNIA traen `url` (Cloudinary); las del legacy solo `nombre`, un archivo en
-     * public/upload de SAMI (disco `sami`, igual que imprimirInventario.php).
+     * Bytes de la firma activa del usuario (tabla `firmas`, `url` de Cloudinary), o null si no
+     * tiene o no se pudo leer — el PDF sale igual, con la línea de firma en blanco. Las firmas
+     * del legacy (solo `nombre`, sin `url`) ya no se leen: el usuario la vuelve a subir.
      */
     private function descargarFirma(?int $idUser): ?string
     {
-        $firma = $idUser ? Firma::where('id_user', $idUser)->where('activo', 1)->first() : null;
-        if (! $firma) {
+        $url = $idUser ? Firma::where('id_user', $idUser)->where('activo', 1)->value('url') : null;
+        if (! $url) {
             return null;
         }
 
         try {
-            if ($firma->url) {
-                $res = Http::timeout(5)->get($firma->url);
+            $res = Http::timeout(5)->get(ArchivosPrivados::firmar($url));
 
-                return $res->successful() ? $res->body() : null;
-            }
-
-            if (! $firma->nombre) {
-                return null;
-            }
-
-            // Primero el disco de uploads (Cloudinary en producción, con lo migrado del legacy);
-            // si no está, la carpeta public/upload de SAMI.
-            foreach (array_unique([config('filesystems.uploads_disk', 'public'), 'sami']) as $nombreDisco) {
-                $disco = Storage::disk($nombreDisco);
-                if ($disco->exists($firma->nombre)) {
-                    return $disco->get($firma->nombre);
-                }
-            }
-
-            return null;
+            return $res->successful() ? $res->body() : null;
         } catch (\Throwable $e) {
             Log::warning("No se pudo descargar la firma del usuario {$idUser}: ".$e->getMessage());
 

@@ -42,12 +42,15 @@ Route::get('/encuestas/publica/{token}', [App\Http\Controllers\Encuestas\Encuest
 Route::get('/encuestas/publica/{token}/reservas-hoy', [App\Http\Controllers\Encuestas\EncuestasController::class, 'reservasHoySalon']);
 Route::post('/encuestas/publica/{token}/responder', [App\Http\Controllers\Encuestas\EncuestasController::class, 'responderPublica']);
 
-// Imágenes públicas de biblioteca (sin token — se accede desde <img src>)
+// Imágenes de biblioteca. Con sesión (la cookie viaja en <img src>): sin ella, cualquiera leía
+// por nombre los archivos del disco de uploads, privados incluidos (ver ArchivosPrivados).
 Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
-    ->where('filename', '.+');
+    ->where('filename', '.+')
+    ->middleware('auth:api');
 // Archivos en la raíz del disco de uploads (ej. fotos de perfil)
 Route::get('/biblioteca/imagen/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
-    ->where('filename', '^[^/]+$');
+    ->where('filename', '^[^/]+$')
+    ->middleware('auth:api');
 
 // Cualquier archivo del disco de uploads (privado): /api/public/{directorio/opcional/archivo}
 Route::get('/public/{ruta}', [App\Http\Controllers\Documentos\DocumentoController::class, 'verPublico'])

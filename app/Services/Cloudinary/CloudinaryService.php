@@ -13,25 +13,6 @@ class CloudinaryService
 {
     protected UploadApi $uploadApi;
 
-    // public function __construct()
-    // {
-    //     /**
-    //      * Configuración Cloudinary
-    //      */
-    //     Configuration::instance([
-    //         'cloud' => [
-    //             'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
-    //             'api_key' => env('CLOUDINARY_API_KEY'),
-    //             'api_secret' => env('CLOUDINARY_API_SECRET'),
-    //         ],
-    //         'url' => [
-    //             'secure' => true,
-    //         ],
-    //     ]);
-
-    //     $this->uploadApi = new UploadApi;
-    // }
-
     public function __construct()
     {
         /**
@@ -108,13 +89,8 @@ class CloudinaryService
             $originalName = pathinfo($originalNameComplete, PATHINFO_FILENAME);
             $originalName = preg_replace('/[^A-Za-z0-9\-_]/', '_', $originalName);
 
-            // SOLUCIÓN: Para RAW files, NO incluir extensión en public_id
-            // Cloudinary la añade automáticamente basado en el Content-Type
-            if ($resourceType === 'raw') {
-                $publicId = $originalName;
-            } else {
-                $publicId = $originalName;
-            }
+            // Sin extensión en el public_id, también en raw: Cloudinary la agrega.
+            $publicId = $originalName;
 
             if ($publicIdPersonalizado) {
                 $publicId = preg_replace('/[^A-Za-z0-9\-_]/', '_', $publicIdPersonalizado);
@@ -127,8 +103,8 @@ class CloudinaryService
                 'unique_filename' => false,
                 'overwrite' => true,
                 'public_id' => $publicId,
-                // IMPORTANTE: Forzar el tipo MIME correcto
-                'type' => 'upload',
+                // `authenticated` en las carpetas privadas (ArchivosPrivados): sin firma, 401.
+                'type' => ArchivosPrivados::tipoEntrega("{$folder}/{$publicId}"),
                 // Para PDFs específicamente
                 'format' => $extension,
             ];
@@ -245,6 +221,8 @@ class CloudinaryService
         $extension = strtolower(pathinfo($archivo, PATHINFO_EXTENSION));
         $publicId = 'royal/royal-school/'.substr($archivo, 0, -strlen($extension) - 1);
         $url = $this->getFileUrl($publicId, $extension)['data']['url'] ?? null;
+        // Las firmas de royal-school son privadas (ArchivosPrivados): sin firmar la URL, 401.
+        $url = $url ? ArchivosPrivados::firmar($url) : null;
 
         try {
             // ponytail: sin caché, una descarga por documento; cachear en disco si pesa en lotes.
@@ -285,7 +263,7 @@ class CloudinaryService
                 $publicId,
                 [
                     'resource_type' => $resourceType,
-                    'type' => 'upload',
+                    'type' => ArchivosPrivados::tipoEntrega($publicId),
                     'invalidate' => true,
                 ]
             );

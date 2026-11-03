@@ -4,6 +4,7 @@ namespace App\Http\Controllers\AdminManagement;
 
 use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\BasesDatosService;
+use App\Services\Cloudinary\ArchivosPrivados;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -51,7 +52,14 @@ class BasesDatosController extends Controller implements HasMiddleware
     {
         $request->validate([
             'connection' => ['required', 'string'],
-            'carpeta' => ['nullable', 'string', 'max:120', 'regex:' . BasesDatosService::PATRON_CARPETA],
+            'carpeta' => [
+                'nullable', 'string', 'max:120', 'regex:' . BasesDatosService::PATRON_CARPETA,
+                function (string $atributo, mixed $valor, \Closure $falla) {
+                    if (is_string($valor) && ArchivosPrivados::chocaConCarpetaPrivada($valor)) {
+                        $falla('Ese nombre coincide con una carpeta de archivos privados (Admisiones, certificados, firmas...). Elige otro.');
+                    }
+                },
+            ],
         ], ['carpeta.regex' => 'La carpeta solo puede tener letras sin tildes, números, guiones y "/" entre carpetas.']);
 
         return $this->apiResponse($this->service->cambiarCarpeta($request->input('connection'), $request->input('carpeta')));

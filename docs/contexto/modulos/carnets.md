@@ -32,6 +32,9 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   la foto anterior si estaba en `carnets/`: las legadas pueden usarse en otra parte.
   `DELETE /usuario/{id}/foto` deja `foto_carnet` en NULL con la misma regla para el archivo
   (422 si no tiene foto).
+  - Las fotos de `carnets/` y las legadas (en la raíz del colegio) son **privadas** en Cloudinary
+    (`authenticated`). El frontend las pide a `GET /api/public/{foto_carnet}?w=`, que redirige a
+    la URL firmada. Ver `infraestructura.md`, «Archivos privados en Cloudinary».
 - **Código de barras**: CODE 128 del documento, el mismo que lee "Escanear carnets" de
   Llegadas tarde.
 - `POST /vista-previa {ids}`: lo que saldría impreso, **sin emitir**. Mismas validaciones que

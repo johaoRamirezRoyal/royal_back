@@ -4,8 +4,8 @@
 
 | Grupo | Prefijos |
 |---|---|
-| Sin autenticación | `/` (welcome), `POST /pushNotification/{tenant?}` (Hikvision), `POST /migracion/cloudinary` (token propio), `/auth` (`api/auth.php`), `GET /biblioteca/imagen/{carpeta}/{filename}`, `/admissions`, `/institucion` |
-| `auth:api` (ambos sistemas) | `/documentos`, `/compartido` (+ `anioAcademico.php`, `historiaClinica.php`) |
+| Sin autenticación | `/` (welcome), `POST /pushNotification/{tenant?}` (Hikvision), `POST /migracion/cloudinary` (token propio), `/auth` (`api/auth.php`), `/admissions`, `/institucion` |
+| `auth:api` (ambos sistemas) | `/public/{ruta}`, `GET /biblioteca/imagen/...` (antes sin sesión), `/documentos`, `/compartido` (+ `anioAcademico.php`, `historiaClinica.php`) |
 | `auth:api` + `system:admissions` | `/admisiones`, `/admisiones/tipos-documentos` |
 | `auth:api` + `system:general` | todos los módulos del sistema general (`/usuarios`, `/inventario`, `/gestion-academica`, `/noticias`, `/admin-management`, ...) |
 
@@ -28,8 +28,10 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
   - El disco es `config('filesystems.uploads_disk')`: **`cloudinary` en producción**
     (`APP_ENV=production`) y **`public` en cualquier otro entorno** (`storage/app/public`,
     servido en `public/storage`; requiere `php artisan storage:link`). `UPLOADS_DISK` lo
-    sobrescribe (p. ej. `sami`, que sirve `public/upload` del SAMI legado), así que en el
-    `.env` de producción no debe quedar `UPLOADS_DISK=sami`.
+    sobrescribe. El disco `sami` (`public/upload` del SAMI legado) se quitó: si un `.env`
+    todavía tiene `UPLOADS_DISK=sami`, las subidas fallan.
+  - Las firmas legacy (fila de `firmas` con `nombre` y sin `url`) ya no se leen: el usuario
+    tiene que volver a subir su firma.
   - En la BD se guarda la **`ruta`**; la `url` es solo para exponerla.
   - `rutaLocal($ruta)` da un path real para lo que lo necesita (GD, adjuntos). En un disco
     remoto, descarga a `storage/app/archivos-remotos/` y lo reusa. **No uses
@@ -47,7 +49,8 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
     `CloudinaryService::carpetaColegio()` (cartas de Instituciones, revistas, capacitaciones,
     firmas). Lo transversal (banners de administración, logos de marcas, la migración) no.
   - Viaja al frontend como `carpeta_archivos` en `UsuarioResource`.
-  - Cambiarla no mueve los archivos ya subidos: hay que moverlos en Cloudinary.
+  - Cambiarla no mueve los archivos ya subidos: hay que moverlos en Cloudinary. Para
+    privatizar la raíz anterior: `cloudinary:privatizar --carpeta=<anterior>`.
 - **Disco `cloudinary`** (driver `cloudinary_uploads`,
   `App\Services\Cloudinary\CloudinaryUploadsAdapter`):
   - Usa el mismo direccionamiento que la migración: `<carpeta del colegio, royal en
@@ -85,6 +88,65 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
   - Sube hasta 20 archivos de 10 MB a `royal/<directorio>` y sobrescribe por nombre.
   - Lo usa el script externo `script_liberacion`, que **no** actualiza la BD.
 
+## Archivos privados en Cloudinary
+
+Qué se cambió, por qué, el deploy y los pendientes:
+[`ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md`](../ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md).
+
+Los archivos sensibles se suben con `type: authenticated`: sin la firma `s--...--` en la URL,
+Cloudinary responde 401. La regla está en `App\Services\Cloudinary\ArchivosPrivados`
+(test en `tests/Unit/Cloudinary/ArchivosPrivadosTest.php`):
+
+- Carpetas privadas: las de `ArchivosPrivados::PATRON`, en cualquier nivel del public_id (con o
+  sin la carpeta del colegio delante). Qué guarda cada una: tabla «Qué es privado» del doc de
+  arriba. Incluye `royal-school/firma*` y `royal-school/paz-salvo/sello*`, que el backend baja con
+  `rutaLocalRoyalSchool` (firma la URL); el frontend no los pide.
+- **Una carpeta nueva con datos personales se agrega en `PATRON` y en `esPrivado` de
+  `src/utils/fileUrl.ts` (frontend)**, y después se corre `cloudinary:privatizar`.
+- El disco `cloudinary` además trata como privado todo lo que está en la **raíz** del colegio,
+  porque ahí se guardan fotos de perfil y las cotizaciones y facturas de compras.
+
+Quién pone la firma (nunca el frontend):
+
+- `CloudinaryService::uploadFile`/`deleteFile` y el adapter eligen el `type` con
+  `ArchivosPrivados::tipoEntrega()`. El adapter devuelve URLs firmadas, así que `url()`,
+  `exists()`, `rutaLocal()` y `existentes()` siguen funcionando.
+- **`FirmarArchivosPrivados`** (middleware del grupo `api`): en toda respuesta JSON con sesión,
+  reemplaza las URLs de Cloudinary de archivos privados por la firmada. La BD sigue guardando
+  la URL sin firma (con `/upload/` si es de antes): el middleware la reconoce igual. Así el
+  permiso para ver el archivo es el del endpoint que lo lista. Sin sesión no firma
+  (fail-closed). Solo reconoce strings que son exactamente la URL, sin transformaciones.
+- **`GET /api/public/{ruta}?w=&descargar=`**: con el disco `cloudinary` redirige (302, caché
+  `private` de 7 días) a la URL firmada, con la miniatura (`w_..`) y `fl_attachment` hechos
+  por Cloudinary. El frontend usa esta ruta para los privados del disco (`fileUrl.ts`).
+- Lo que descarga el propio backend desde una URL guardada pasa por
+  `ArchivosPrivados::firmar()` (p. ej. `InventarioServices::descargarFirma`). **Si agregas otro
+  `Http::get($url)` sobre una URL de la BD, fírmala**, o recibirá 401.
+
+La firma no vence: quien tenga una URL firmada la abre. Para que venza haría falta
+`type: private` + `private_download_url` (sin miniaturas) o token auth (plan pago).
+
+**Migración** de lo ya subido: `php artisan cloudinary:privatizar --dry-run` lista lo que pasaría
+a privado y sin `--dry-run` lo hace (`rename` con `to_type: authenticated` e `invalidate`). Usa
+Admin API para listar (1 llamada por cada 500 archivos). Se puede repetir. Correrlo justo
+después del deploy: hasta entonces `deleteFile` busca como `authenticated` los archivos que
+siguen en `upload` y no los borra.
+
+Varios colegios:
+
+- Las carpetas privadas son patrón: valen para cualquier colegio sin configurar nada. Solo la
+  regla de la raíz depende de la carpeta de "Bases de datos". El comando toma la de cada
+  connection; para una carpeta **anterior** (al cambiarla, los archivos no se mueven) pásala
+  con `--carpeta=vieja` (repetible), o su raíz queda pública.
+- "Bases de datos" rechaza una carpeta que contenga el nombre de una carpeta privada
+  (`ArchivosPrivados::chocaConCarpetaPrivada`, p. ej. `certificados`): volvería privado todo
+  ese colegio.
+- Las firmas de historia clínica van a `<carpeta del colegio>/historia-clinica/firmas`. Las de
+  antes siguen mezcladas en `historia-clinica/firmas` (sin colegio), privadas igual.
+
+En la consola de Cloudinary conviene activar *Security → Strict transformations* y verificar
+que *Resource list* esté restringido.
+
 ## Firmas manuales en citas de psicología
 
 `PUT /compartido/citaPsicologia/estado` acepta `firma` (imagen, multipart con `_method=PUT`)
@@ -96,6 +158,16 @@ psicóloga; sin ninguna, 422 antes de cambiar el estado. Por eso
 `UsuariosServices::subirFirmaUsuario` hace `updateOrCreate` sobre `['id_user', 'activo' => 1]`:
 si fuera solo por `id_user` podría pisar una firma manual y cambiar la de una historia ya
 firmada. `listarCitasPsicologia` devuelve `psicologa_tiene_firma` por cita.
+
+Firmas en Cloudinary (todas privadas, ver arriba):
+
+- **Usuario** (`subirFirmaUsuario`): `<carpeta del colegio>/usuarios/firmas/firma_<id_user>_<8 al
+  azar>`. Antes se subía con el nombre original y `overwrite`, y dos `firma.png` se pisaban. Al
+  cambiarla, la anterior queda en Cloudinary: `firmas` solo guarda la `url`.
+- **Historia clínica** (`firma_padre`/`firma_madre`): `<carpeta del colegio>/historia-clinica/firmas`
+  (las de antes, en `historia-clinica/firmas` sin colegio). Se borran como `image`, que es como se
+  suben: con `raw` Cloudinary respondía «not found» y quedaban.
+- **Legacy**: una fila de `firmas` con `nombre` y sin `url` ya no se lee en ningún lado.
 
 ## PDFs
 

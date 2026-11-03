@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Documentos;
 
 use App\Http\Controllers\Controller;
+use App\Services\Cloudinary\CloudinaryUploadsAdapter;
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Storage;
@@ -50,6 +51,7 @@ class DocumentoController extends Controller
     /**
      * Sirve cualquier archivo del disco de uploads (imagen, pdf, etc.).
      * Requiere auth:api. La ruta puede incluir subdirectorios: /api/public/{directorio/archivo}
+     * `?descargar=1` lo entrega como descarga en vez de verlo.
      */
     public function verPublico(Request $request, string $ruta)
     {
@@ -59,20 +61,39 @@ class DocumentoController extends Controller
 
         $disk = Storage::disk(config('filesystems.uploads_disk', 'public'));
 
-        if (!$disk->exists($ruta)) {
-            abort(404);
-        }
-
         // `private` (no `public`): esta ruta va detrás de auth:api, no debe cachearse en
         // proxies/CDNs compartidos, solo en el navegador del propio usuario. Fotos de
         // carnet y demás archivos acá casi nunca cambian una vez subidos — evita que se
         // vuelvan a descargar completas cada vez que se abre el mismo curso/roster.
         $cache = ['Cache-Control' => 'private, max-age=604800'];
+        $ancho = $request->integer('w');
+
+        // Cloudinary: se redirige a la URL firmada (los archivos privados no abren sin firma)
+        // y Cloudinary hace la miniatura; el archivo no pasa por Laravel. Si no existe, el
+        // 404 lo da Cloudinary.
+        $adapter = $disk->getAdapter();
+        if ($adapter instanceof CloudinaryUploadsAdapter) {
+            $transformacion = implode('/', array_filter([
+                in_array($ancho, self::ANCHOS_MINIATURA, true) && in_array(strtolower(pathinfo($ruta, PATHINFO_EXTENSION)), self::EXTENSIONES_IMAGEN, true)
+                    ? "w_{$ancho},c_limit,f_auto,q_auto"
+                    : null,
+                $request->boolean('descargar') ? 'fl_attachment' : null,
+            ]));
+
+            return redirect()->away($adapter->recurso($ruta, $transformacion ?: null)[2], 302, $cache);
+        }
+
+        if (!$disk->exists($ruta)) {
+            abort(404);
+        }
+
+        if ($request->boolean('descargar')) {
+            return $disk->download($ruta);
+        }
 
         // `?w=128`: miniatura de ese ancho para avatares y listas, en vez del original
         // (una foto de celular pesa MB y se muestra en 36px). Si no es una imagen o no se
         // puede leer, se sirve el original.
-        $ancho = $request->integer('w');
         if (in_array($ancho, self::ANCHOS_MINIATURA, true) && ($miniatura = $this->miniatura($disk, $ruta, $ancho))) {
             // response()->file marca la respuesta como `public`: se vuelve a `private` (ver arriba).
             return response()->file($miniatura, $cache)->setPrivate();

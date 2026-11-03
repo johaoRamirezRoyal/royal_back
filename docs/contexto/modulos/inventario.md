@@ -41,6 +41,12 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
   - `PUT /reportes/{id}/visto-bueno` (una fila) y `PUT /reportes/visto-bueno` (todas).
   - El legacy también tocaba `reportes_zonas`; si ese módulo se migra, replica el cambio
     ahí.
+- **Firmas en los PDFs**:
+  - Las de los usuarios salen de `descargarFirma`: la `url` de su firma activa, firmada con
+    `ArchivosPrivados::firmar()` porque `usuarios/firmas` es privada. Sin `url` (firma legacy
+    con solo `nombre`), el PDF sale con la línea en blanco.
+  - El V°B° del reporte operativo usa la firma fija `royal/royal-school/firma_administrativa.jpg`
+    (`rutaLocalRoyalSchool`), también privada.
 
 ## Listados
 

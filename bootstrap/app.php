@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EnsureInstitucionSession;
+use App\Http\Middleware\FirmarArchivosPrivados;
 use App\Http\Middleware\JwtFromCookie;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
@@ -40,6 +41,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToGroup('api', SwitchActiveConnection::class);
         $middleware->appendToGroup('api', LogActividadMiddleware::class);
         $middleware->appendToGroup('api', LogDominioMiddleware::class);
+        // Firma las URLs de archivos privados de Cloudinary en el JSON (ver ArchivosPrivados).
+        $middleware->appendToGroup('api', FirmarArchivosPrivados::class);
         $middleware->encryptCookies(except: ['token', 'admissions_token']);
         $middleware->alias([
             'auth' => Authenticate::class,

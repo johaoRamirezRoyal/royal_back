@@ -27,7 +27,8 @@ Un proveedor es un `Usuario` con `perfil=17`; `proveedor_detalle`, `proveedor_do
 
 - Sin gate: `GET /proveedores`, `/select` (solo activos) y `/tipos-documento`.
 - Opción 61: el detalle, el CRUD (crea el usuario con perfil 17 más su detalle), el
-  estado, los documentos (FileStorage, no Cloudinary), los contactos y los bancos.
+  estado, los documentos (`FileStorageService`, en `proveedores/documentos`; en producción es
+  el disco `cloudinary` y la carpeta es privada), los contactos y los bancos.
 - `fecha_ingreso` no admite `'0000-00-00'` (MySQL en modo estricto): fuérzala a null.
 
 ## Estados
@@ -68,8 +69,9 @@ crea la fila final; `asignar-proveedor` la crea si falta
 | 104 | `GET /seguimiento` (filtros de nivel y perfil solo para 1/2), `POST /{id}/asignar-proveedor` (multipart con `cotizacion_doc`), `POST /{id}/disponible-stock`, `POST /{id}/anular` |
 | 105 | `POST /{id}/verificar-entrega` (multipart con `factura_doc`) |
 
-- Los archivos van a `solicitudes/cotizaciones` y `solicitudes/facturas`; la URL de la
-  cotización sale en la respuesta como `url_cotizacion`.
+- Las cotizaciones y facturas van a la **raíz** del disco de uploads
+  (`SolicitudesServices::CARPETA_COTIZACION`/`CARPETA_FACTURA` están vacías), que en Cloudinary
+  es privada. La URL de la cotización sale en la respuesta como `url_cotizacion`, ya firmada.
 - Las notificaciones por correo no bloquean: un fallo nunca impide gestionar la
   solicitud.
 
