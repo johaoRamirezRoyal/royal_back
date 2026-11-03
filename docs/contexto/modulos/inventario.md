@@ -65,7 +65,8 @@ Reemplaza al legacy `vistas/modulos/reportes`. Un ítem puede tener varias filas
 
 `BloquesController` + `AreasComunesController`. Organiza el inventario en Bloques → Áreas
 → ítems con `categoria.tipo_categoria = 3`. Reutiliza `InventarioServices` para
-reportar, solucionar y mover.
+reportar, solucionar y mover. `obtenerListadoConsolidado` y `conteoPorEstado` ya no
+excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` también lo muestra.
 
 | Opción | Perfiles | Alcance |
 |---|---|---|

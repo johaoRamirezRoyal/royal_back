@@ -458,11 +458,8 @@ class InventarioServices
                 ->where('inventario.activo', 1)
                 ->where('inventario.estado', '!=', 5)
                 ->where('a.activo', 1)
-                ->when(
-                    $filtros['tipo_categoria'] ?? null,
-                    fn ($q, $v) => $q->where('c.tipo_categoria', $v),
-                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
-                )
+                // Sin tipo_categoria: todos los tipos, Área Común (3) incluida.
+                ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
                 ->when($filtros['id_usuario'] ?? null, fn ($q, $v) => $q->where('inventario.id_user', $v))
                 ->when($filtros['id_area'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_area', $v))
                 ->when($filtros['id_bloque_area'] ?? null, fn ($q, $v) => $this->filtrarPorBloqueDeArea($q, $v))
@@ -566,6 +563,8 @@ class InventarioServices
                 ->leftJoin('usuarios as u', 'inventario.id_user', '=', 'u.id_user')
                 ->leftJoin('areas as a', 'inventario.id_area', '=', 'a.id')
                 ->leftJoin('bloques as b', 'inventario.id_bloque', '=', 'b.id')
+                // Bloque del área: los ítems con área no traen inventario.id_bloque.
+                ->leftJoin('bloques as ba', 'a.id_bloque', '=', 'ba.id')
                 ->leftJoin('categoria as c', 'inventario.id_categoria', '=', 'c.id')
                 ->where('inventario.activo', 1)
                 ->whereNotIn('inventario.estado', [4, 5])
@@ -583,14 +582,9 @@ class InventarioServices
                 ->when(! ($filtros['id_area'] ?? null) && ($filtros['id_bloque'] ?? null), fn ($q) => $q->whereIn('inventario.id_bloque', $filtros['id_bloque']))
                 ->when($filtros['id_bloque_area'] ?? null, fn ($q, $v) => $this->filtrarPorBloqueDeArea($q, $v))
                 ->when($filtros['id_categoria'] ?? null, fn ($q, $v) => $q->whereIn('inventario.id_categoria', $v))
-                ->when(
-                    $filtros['tipo_categoria'] ?? null,
-                    fn ($q, $v) => $q->where('c.tipo_categoria', $v),
-                    // Sin tipo_categoria explícito: nunca mezclar Área Común (3) en los
-                    // listados generales de Inventario — ese inventario solo se ve en el
-                    // módulo de Áreas Comunes (que sí manda tipo_categoria=3 a propósito).
-                    fn ($q) => $q->where('c.tipo_categoria', '!=', 3)
-                )
+                // Sin tipo_categoria: todos los tipos — /inventario/listado también muestra
+                // el inventario de Área Común (3). El módulo de Áreas Comunes manda 3 siempre.
+                ->when($filtros['tipo_categoria'] ?? null, fn ($q, $v) => $q->where('c.tipo_categoria', $v))
                 ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->whereIn('inventario.estado', $v))
                 // "Mis áreas" (AreasComunesController::misAreas): fuera lo que está en un área
                 // inactiva, aunque entre por id_bloque (la rama OR de arriba).
@@ -608,7 +602,7 @@ class InventarioServices
                         'e.nombre as estado_nombre',
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
-                        'b.nombre as nom_bloque',
+                        DB::raw('COALESCE(b.nombre, ba.nombre) as nom_bloque'),
                         'c.nombre as categoria_nombre',
                         // Áreas Comunes: último check semestral registrado (migración de
                         // chek_zonas) — ver InventarioServices::registrarCheckInventario.
@@ -668,7 +662,7 @@ class InventarioServices
                         DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(e.nombre ORDER BY inventario.id DESC), ',', 1) as estado_nombre"),
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
-                        'b.nombre as nom_bloque',
+                        DB::raw('COALESCE(b.nombre, ba.nombre) as nom_bloque'),
                         DB::raw('COUNT(inventario.id) as cantidad')
                     )
                     ->groupBy(
@@ -679,7 +673,8 @@ class InventarioServices
                         'u.nombre',
                         'u.apellido',
                         'a.nombre',
-                        'b.nombre'
+                        'b.nombre',
+                        'ba.nombre'
                     )
                     // Columnas ordenables de /inventario/listado (DataTable remoto: sort/dir);
                     // descripción siempre como desempate y orden por defecto.
