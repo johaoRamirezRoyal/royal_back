@@ -41,7 +41,9 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
   `emitir` (`usuariosParaImprimir`: activos, que lleven carnet y con foto; si no, 422) y mismos
   datos, con `carnet` en null (el dibujo no lo usa).
 - `GET /mio` (sin opción): carnet digital del usuario en sesión, `data: null` si su perfil
-  no lleva carnet. La vigencia sale de `AnioEscolarServices::obtenerUltimoAnioEscolar`.
+  no lleva carnet. La vigencia sale de `AnioEscolarServices::obtenerUltimoAnioEscolar`. Trae
+  además `foto_url`: la URL directa de la foto (en Cloudinary, firmada), con la que el frontend
+  arma el PNG del carnet; por `/api/public` no puede (la redirección con cookie choca con CORS).
 
 ## Plantillas (`/carnets/plantillas`, `CarnetPlantillaController`)
 

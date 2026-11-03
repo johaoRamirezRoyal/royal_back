@@ -426,7 +426,11 @@ class CarnetService extends Service
         }
 
         $carnet = Carnet::where('id_user', $idUser)->latest('id')->first();
+        $datos = $this->datosCarnet($usuario, $carnet, $this->vigencia(), $this->plantillas->enUso());
+        // URL directa de la foto (en Cloudinary, ya firmada): el frontend la descarga para armar el
+        // PNG del carnet. /api/public no sirve para eso: la redirección con cookie choca con CORS.
+        $datos['foto_url'] = $this->archivos->url($datos['foto']);
 
-        return ['error' => false, 'message' => 'Carnet obtenido', 'data' => $this->datosCarnet($usuario, $carnet, $this->vigencia(), $this->plantillas->enUso())];
+        return ['error' => false, 'message' => 'Carnet obtenido', 'data' => $datos];
     }
 }
