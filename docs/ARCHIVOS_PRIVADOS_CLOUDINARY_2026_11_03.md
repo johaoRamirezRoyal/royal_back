@@ -57,6 +57,11 @@ frontend pide ahí los privados del disco en vez de armar la URL de Cloudinary.
 
 ## Cambios relacionados
 
+- **Documentos por Laravel (después del deploy).** Al cerrar sesión, los archivos se seguían
+  viendo: la URL firmada no vence y el navegador guardaba el 302 de `/api/public` por 7 días.
+  Ahora el 302 de las fotos va sin caché y los documentos (todo lo privado salvo las fotos) los
+  transmite Laravel con sesión: los del JSON por `GET /api/privado/{token}/{nombre}` y los del
+  disco por `/api/public`. Sigue abierto: una foto firmada que alguien copió sigue abriendo.
 - **`GET /api/biblioteca/imagen/...` ahora exige sesión.** Servía por nombre, sin token,
   cualquier archivo del disco de uploads, privados incluidos. El frontend no lo usaba.
 - **Firmas de usuario que se pisaban** (`UsuariosServices::subirFirmaUsuario`). Se subían con el
@@ -121,7 +126,8 @@ frontend pide ahí los privados del disco en vez de armar la URL de Cloudinary.
 
 ## Limitaciones y pendientes
 
-- La firma no vence: quien tenga una URL firmada la abre. Para que venza haría falta
+- La firma no vence: quien tenga una URL firmada de una foto la abre (los documentos ya no
+  salen firmados al navegador). Para que venza haría falta
   `type: private` + `private_download_url` (sin miniaturas) o token auth (plan pago).
 - La firma de la directora y el sello del paz y salvo fueron públicos con una URL fija: puede
   haber copias fuera. Si preocupa, cambiar las imágenes.

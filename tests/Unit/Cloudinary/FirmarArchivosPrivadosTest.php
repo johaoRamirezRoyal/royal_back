@@ -10,29 +10,38 @@ use Tests\TestCase;
 
 class FirmarArchivosPrivadosTest extends TestCase
 {
-    private const GUARDADA = 'https://res.cloudinary.com/nube/image/upload/v1/royal/Admisiones/documentos/1/c.pdf';
+    private const DOCUMENTO = 'https://res.cloudinary.com/nube/image/upload/v1/royal/Admisiones/documentos/1/c.pdf';
 
-    private function responder(): string
+    private const FOTO = 'https://res.cloudinary.com/nube/image/upload/royal/carnets/f.jpg';
+
+    private function responder(): array
     {
         config(['cloudinary.cloud_name' => 'nube', 'cloudinary.api_secret' => 'secreto']);
 
-        return (new FirmarArchivosPrivados)->handle(new Request, fn () => response()->json([
-            'data' => [['url_archivo' => self::GUARDADA, 'extra' => new \stdClass]],
-        ]))->getContent();
+        $respuesta = (new FirmarArchivosPrivados)->handle(new Request, fn () => response()->json([
+            'data' => [['url_archivo' => self::DOCUMENTO, 'foto' => self::FOTO, 'extra' => new \stdClass]],
+        ]));
+
+        return [$respuesta->getContent(), $respuesta->getData()->data[0]];
     }
 
-    public function test_con_sesion_firma_y_conserva_los_objetos_vacios(): void
+    public function test_con_sesion_el_documento_va_por_el_proxy_y_la_foto_firmada(): void
     {
         $this->actingAs(new User, 'api');
+        [$json, $fila] = $this->responder();
 
-        $this->assertSame(
-            json_encode(['data' => [['url_archivo' => ArchivosPrivados::url('nube', 'secreto', 'image', 'royal/Admisiones/documentos/1/c.pdf'), 'extra' => new \stdClass]]]),
-            $this->responder()
-        );
+        $this->assertMatchesRegularExpression('#/api/privado/[A-Za-z0-9_-]+/c\.pdf$#', $fila->url_archivo);
+        $this->assertSame(['image', 'royal/Admisiones/documentos/1/c.pdf'], ArchivosPrivados::deToken(explode('/', $fila->url_archivo)[5]));
+        $this->assertSame(ArchivosPrivados::url('nube', 'secreto', 'image', 'royal/carnets/f.jpg'), $fila->foto);
+        // getData() sin `true`: un {} vacío no pasa a [].
+        $this->assertStringContainsString('"extra":{}', $json);
     }
 
-    public function test_sin_sesion_no_firma(): void
+    public function test_sin_sesion_no_toca_nada(): void
     {
-        $this->assertStringNotContainsString('authenticated', $this->responder());
+        [$json] = $this->responder();
+
+        $this->assertStringNotContainsString('authenticated', $json);
+        $this->assertStringNotContainsString('privado', $json);
     }
 }

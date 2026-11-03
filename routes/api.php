@@ -57,6 +57,11 @@ Route::get('/public/{ruta}', [App\Http\Controllers\Documentos\DocumentoControlle
     ->where('ruta', '.+')
     ->middleware('auth:api');
 
+// Documento privado que llegó en un JSON (ArchivosPrivados::paraCliente): pasa por Laravel, con sesión.
+Route::get('/privado/{token}/{nombre}', [App\Http\Controllers\Documentos\DocumentoController::class, 'privado'])
+    ->where(['token' => '[A-Za-z0-9_-]+', 'nombre' => '.+'])
+    ->middleware('auth:api');
+
 // Documentos del storage público (disponible para cualquier módulo autenticado)
 Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
     Route::get('/', [App\Http\Controllers\Documentos\DocumentoController::class, 'descargar']);

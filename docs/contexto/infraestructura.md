@@ -106,25 +106,39 @@ Cloudinary responde 401. La regla está en `App\Services\Cloudinary\ArchivosPriv
 - El disco `cloudinary` además trata como privado todo lo que está en la **raíz** del colegio,
   porque ahí se guardan fotos de perfil y las cotizaciones y facturas de compras.
 
-Quién pone la firma (nunca el frontend):
+Quién pone la firma (nunca el frontend). **Una URL firmada no vence**: quien la tenga la abre,
+con sesión o sin ella. Por eso al navegador solo llegan firmadas las **fotos**
+(`ArchivosPrivados::esFoto`: `carnets/<archivo>`; en `/api/public`, también las imágenes de la
+raíz, que son fotos de perfil y carnets de SAMI), que se ven de a decenas en listas. Los
+**documentos** (todo lo demás privado: Admisiones, firmas, certificados, cotizaciones…) pasan
+por Laravel con sesión, sin caché: al cerrar sesión dejan de abrir.
 
 - `CloudinaryService::uploadFile`/`deleteFile` y el adapter eligen el `type` con
   `ArchivosPrivados::tipoEntrega()`. El adapter devuelve URLs firmadas, así que `url()`,
   `exists()`, `rutaLocal()` y `existentes()` siguen funcionando.
 - **`FirmarArchivosPrivados`** (middleware del grupo `api`): en toda respuesta JSON con sesión,
-  reemplaza las URLs de Cloudinary de archivos privados por la firmada. La BD sigue guardando
-  la URL sin firma (con `/upload/` si es de antes): el middleware la reconoce igual. Así el
-  permiso para ver el archivo es el del endpoint que lo lista. Sin sesión no firma
-  (fail-closed). Solo reconoce strings que son exactamente la URL, sin transformaciones.
-- **`GET /api/public/{ruta}?w=&descargar=`**: con el disco `cloudinary` redirige (302, caché
-  `private` de 7 días) a la URL firmada, con la miniatura (`w_..`) y `fl_attachment` hechos
-  por Cloudinary. El frontend usa esta ruta para los privados del disco (`fileUrl.ts`).
+  reemplaza las URLs de Cloudinary de archivos privados (`ArchivosPrivados::paraCliente`): una
+  foto por la firmada, un documento por **`GET /api/privado/{token}/{nombre}`** (token cifrado
+  con `APP_KEY`, así no se puede armar a mano; el nombre con su extensión va al final porque
+  el frontend decide imagen o PDF por cómo termina la URL). La BD sigue guardando la URL sin
+  firma (con `/upload/` si es de antes). Así el permiso para ver el archivo es el del endpoint
+  que lo lista. Sin sesión no toca nada (fail-closed). Solo reconoce strings que son
+  exactamente la URL, sin transformaciones.
+- **`GET /api/public/{ruta}?w=&descargar=`** (disco `cloudinary`): un documento lo transmite
+  (`DocumentoController::transmitir`, con la miniatura de Cloudinary si es imagen); una foto,
+  redirige (302) a la URL firmada con la miniatura y `fl_attachment` hechos por Cloudinary.
+  **El 302 va con `no-store`**: guardado (antes, 7 días), seguía abriendo la foto después de
+  cerrar sesión. El frontend usa esta ruta para los privados del disco (`fileUrl.ts`).
 - Lo que descarga el propio backend desde una URL guardada pasa por
-  `ArchivosPrivados::firmar()` (p. ej. `InventarioServices::descargarFirma`). **Si agregas otro
-  `Http::get($url)` sobre una URL de la BD, fírmala**, o recibirá 401.
+  `ArchivosPrivados::firmar()` (p. ej. `InventarioServices::descargarFirma`), que sí firma
+  también los documentos. **Si agregas otro `Http::get($url)` sobre una URL de la BD, fírmala**,
+  o recibirá 401.
+- En el frontend, un `fetch` de una URL que llegó en el JSON va con `fetchArchivo`
+  (`src/utils/fileUrl.ts`): manda la cookie solo a `/api/privado`, porque Cloudinary responde
+  `Access-Control-Allow-Origin: *` y no admite credenciales.
 
-La firma no vence: quien tenga una URL firmada la abre. Para que venza haría falta
-`type: private` + `private_download_url` (sin miniaturas) o token auth (plan pago).
+Lo que sigue abierto: una foto firmada que alguien copió sigue abriendo. Para que venza haría
+falta `type: private` + `private_download_url` (sin miniaturas) o token auth (plan pago).
 
 **Migración** de lo ya subido: `php artisan cloudinary:privatizar --dry-run` lista lo que pasaría
 a privado y sin `--dry-run` lo hace (`rename` con `to_type: authenticated` e `invalidate`). Usa

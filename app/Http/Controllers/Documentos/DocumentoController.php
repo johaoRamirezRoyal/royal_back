@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Documentos;
 
 use App\Http\Controllers\Controller;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryUploadsAdapter;
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use League\MimeTypeDetection\ExtensionMimeTypeDetector;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 class DocumentoController extends Controller
 {
@@ -49,6 +54,52 @@ class DocumentoController extends Controller
     }
 
     /**
+     * Documento privado que llegó en un JSON (ArchivosPrivados::paraCliente): url_archivo de
+     * Admisiones, firmas... Requiere auth:api. `{nombre}` solo da la extensión al frontend.
+     */
+    public function privado(Request $request, string $token)
+    {
+        $recurso = ArchivosPrivados::deToken($token);
+        if (!$recurso) {
+            abort(404);
+        }
+
+        [$tipo, $archivo] = $recurso;
+
+        return $this->transmitir(ArchivosPrivados::firmada($tipo, $archivo), basename($archivo), $request->boolean('descargar'));
+    }
+
+    /**
+     * Pasa por Laravel un archivo privado de Cloudinary (su URL firmada nunca llega al
+     * navegador), sin caché: al cerrar sesión deja de abrir.
+     */
+    private function transmitir(string $url, string $nombre, bool $descargar)
+    {
+        $origen = Http::withOptions(['stream' => true])->timeout(30)->get($url);
+        if (!$origen->successful()) {
+            abort($origen->status() === 404 ? 404 : 502);
+        }
+
+        $tipo = $origen->header('Content-Type');
+        if ($tipo === '' || str_starts_with($tipo, 'application/octet-stream')) {
+            // Los `raw` (Word, Excel…) llegan como octet-stream: el tipo sale de la extensión.
+            $tipo = (new ExtensionMimeTypeDetector)->detectMimeTypeFromPath($nombre) ?? 'application/octet-stream';
+        }
+        $cuerpo = $origen->toPsrResponse()->getBody();
+
+        return response()->stream(function () use ($cuerpo) {
+            while (!$cuerpo->eof()) {
+                echo $cuerpo->read(65536);
+            }
+        }, 200, [
+            'Content-Type' => $tipo,
+            'Content-Disposition' => HeaderUtils::makeDisposition($descargar ? 'attachment' : 'inline', $nombre, str_replace('%', '', Str::ascii($nombre))),
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /**
      * Sirve cualquier archivo del disco de uploads (imagen, pdf, etc.).
      * Requiere auth:api. La ruta puede incluir subdirectorios: /api/public/{directorio/archivo}
      * `?descargar=1` lo entrega como descarga en vez de verlo.
@@ -68,19 +119,26 @@ class DocumentoController extends Controller
         $cache = ['Cache-Control' => 'private, max-age=604800'];
         $ancho = $request->integer('w');
 
-        // Cloudinary: se redirige a la URL firmada (los archivos privados no abren sin firma)
-        // y Cloudinary hace la miniatura; el archivo no pasa por Laravel. Si no existe, el
-        // 404 lo da Cloudinary.
         $adapter = $disk->getAdapter();
         if ($adapter instanceof CloudinaryUploadsAdapter) {
-            $transformacion = implode('/', array_filter([
-                in_array($ancho, self::ANCHOS_MINIATURA, true) && in_array(strtolower(pathinfo($ruta, PATHINFO_EXTENSION)), self::EXTENSIONES_IMAGEN, true)
-                    ? "w_{$ancho},c_limit,f_auto,q_auto"
-                    : null,
-                $request->boolean('descargar') ? 'fl_attachment' : null,
-            ]));
+            $limpia = ltrim(str_replace('\\', '/', $ruta), '/');
+            $esImagen = in_array(strtolower(pathinfo($limpia, PATHINFO_EXTENSION)), self::EXTENSIONES_IMAGEN, true);
+            $miniatura = $esImagen && in_array($ancho, self::ANCHOS_MINIATURA, true) ? "w_{$ancho},c_limit,f_auto,q_auto" : null;
+            [$id, , , $entrega] = $adapter->recurso($limpia);
 
-            return redirect()->away($adapter->recurso($ruta, $transformacion ?: null)[2], 302, $cache);
+            // Documento privado: pasa por Laravel, así solo lo abre quien tiene sesión en ese
+            // momento (una URL firmada no vence). Las fotos (de carnet, y las imágenes de la raíz:
+            // perfil y carnets de SAMI) van firmadas al CDN: en una lista serían decenas por Laravel.
+            if ($entrega === 'authenticated' && !ArchivosPrivados::esFoto($id) && !($esImagen && !str_contains($limpia, '/'))) {
+                return $this->transmitir($adapter->recurso($limpia, $miniatura)[2], basename($limpia), $request->boolean('descargar'));
+            }
+
+            // Redirección a la URL firmada: Cloudinary hace la miniatura y el archivo no pasa por
+            // Laravel (el 404 lo da Cloudinary). Sin caché: guardado, el 302 seguía abriendo la
+            // foto después de cerrar sesión.
+            $transformacion = implode('/', array_filter([$miniatura, $request->boolean('descargar') ? 'fl_attachment' : null]));
+
+            return redirect()->away($adapter->recurso($limpia, $transformacion ?: null)[2], 302, ['Cache-Control' => 'no-store']);
         }
 
         if (!$disk->exists($ruta)) {
