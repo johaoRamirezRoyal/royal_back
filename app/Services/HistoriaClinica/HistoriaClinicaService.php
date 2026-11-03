@@ -886,11 +886,14 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
+            // 'image': así se subió (imagen o PDF). Con el 'raw' por defecto Cloudinary
+            // respondía "not found", se tomaba como éxito y la firma se quedaba.
             if ($registro->{$campo}) {
-                $this->cloudinaryService->deleteFile($registro->{$campo});
+                $this->cloudinaryService->deleteFile($registro->{$campo}, 'image');
             }
 
-            $resultado = $this->cloudinaryService->uploadFile($file, 'historia-clinica/firmas');
+            // Bajo la carpeta del colegio, como el resto: antes iban todas a historia-clinica/firmas.
+            $resultado = $this->cloudinaryService->uploadFile($file, CloudinaryService::carpetaColegio('historia-clinica/firmas'));
 
             if ($resultado['error']) {
                 return [
@@ -937,7 +940,7 @@ class HistoriaClinicaService extends Service
             // Eliminar firmas de Cloudinary (firma_psicologa no tiene public_id propio: es la firma del usuario)
             foreach (['firma_padre', 'firma_madre'] as $campo) {
                 if ($registro->{$campo}) {
-                    $this->cloudinaryService->deleteFile($registro->{$campo});
+                    $this->cloudinaryService->deleteFile($registro->{$campo}, 'image');
                 }
             }
 

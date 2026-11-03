@@ -14,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class UsuariosServices
 {
@@ -654,7 +655,13 @@ class UsuariosServices
     public function subirFirmaUsuario(int $id_user, UploadedFile $file): array
     {
         try {
-            $resultado = $this->cloudinaryService->uploadFile($file, CloudinaryService::carpetaColegio('usuarios/firmas'));
+            // public_id único: con el nombre original (overwrite) dos usuarios que subían
+            // "firma.png" se pisaban el archivo y uno quedaba firmando con la firma del otro.
+            $resultado = $this->cloudinaryService->uploadFile(
+                $file,
+                CloudinaryService::carpetaColegio('usuarios/firmas'),
+                "firma_{$id_user}_" . Str::lower(Str::random(8))
+            );
 
             if ($resultado['error']) {
                 return ['error' => true, 'message' => $resultado['message']];
