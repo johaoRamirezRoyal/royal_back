@@ -31,7 +31,7 @@ class CloudinaryUploadsAdapterTest extends TestCase
         [$id, $tipo, $url, $entrega] = $this->adapter()->recurso('x_formacion.pdf');
 
         $this->assertSame(['royal/x_formacion', 'image', 'authenticated'], [$id, $tipo, $entrega]);
-        $this->assertMatchesRegularExpression('#^https://res\.cloudinary\.com/nube/image/authenticated/s--[\w-]{8}--/v1/royal/x_formacion\.pdf$#', $url);
+        $this->assertMatchesRegularExpression('#^https://res\.cloudinary\.com/nube/image/authenticated/s--[\w-]{8}--/royal/x_formacion\.pdf$#', $url);
     }
 
     public function test_office_va_como_raw_con_extension_en_el_public_id(): void

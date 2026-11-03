@@ -66,7 +66,7 @@ class ArchivosPrivadosTest extends TestCase
 
     public function test_la_firma_coincide_con_la_del_sdk(): void
     {
-        $sdk = new Cloudinary(['cloud' => ['cloud_name' => 'nube', 'api_key' => 'k', 'api_secret' => 'secreto'], 'url' => ['analytics' => false]]);
+        $sdk = new Cloudinary(['cloud' => ['cloud_name' => 'nube', 'api_key' => 'k', 'api_secret' => 'secreto'], 'url' => ['analytics' => false, 'force_version' => false]]);
 
         $this->assertSame(
             (string) $sdk->image('royal/carnets/a.jpg')->deliveryType('authenticated')->addTransformation('w_128,c_limit')->signUrl()->toUrl(),

@@ -47,7 +47,8 @@ final class ArchivosPrivados
 
     /**
      * URL firmada de un asset `authenticated`. `$archivo` es el public_id con la extensión
-     * (en `raw` ya la trae). La firma cubre transformación + archivo, no la versión.
+     * (en `raw` ya la trae). La firma cubre transformación + archivo, no la versión. Sin `v1/`:
+     * esas URLs quedaron con un 404 en el CDN durante la migración del 2026-11-03.
      */
     public static function url(string $cloud, string $secreto, string $tipoRecurso, string $archivo, ?string $transformacion = null): string
     {
@@ -55,7 +56,7 @@ final class ArchivosPrivados
         $firma = substr(strtr(base64_encode(sha1($firmado . $secreto, true)), '+/', '-_'), 0, 8);
 
         return "https://res.cloudinary.com/{$cloud}/{$tipoRecurso}/authenticated/s--{$firma}--/"
-            . ($transformacion ? "{$transformacion}/" : '') . "v1/{$archivo}";
+            . ($transformacion ? "{$transformacion}/" : '') . $archivo;
     }
 
     /**
