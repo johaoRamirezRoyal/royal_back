@@ -102,6 +102,23 @@ frontend pide ahí los privados del disco en vez de armar la URL de Cloudinary.
 6. Contar las firmas legacy que dejan de verse en los PDFs:
    `SELECT COUNT(*) FROM firmas WHERE activo = 1 AND (url IS NULL OR url = '')`.
 
+### Cómo fue el deploy (2026-11-03)
+
+- Se desplegó el código antes de migrar. Durante ~2 horas las imágenes privadas dieron **404**:
+  el backend ya las pedía como `authenticated` y en Cloudinary seguían como `upload`. **La
+  migración tiene que correr en el mismo momento que el deploy**, no después.
+- Peor: cada URL firmada pedida antes de migrar su archivo quedó con el 404 guardado en el CDN,
+  y seguía rota ya migrada. Arreglo permanente: las URLs firmadas no llevan `v1/` (la versión
+  no entra en la firma, así que cambia la URL sin cambiar la firma).
+- Hubo un parche temporal en `/api/public` (si la URL pública aún respondía, redirigía ahí). Se
+  quitó al terminar la migración.
+- El frontend pide `/api/public/...?c=2` para no usar los 302 que los navegadores guardaron
+  (7 días) hacia URLs rotas. **Se puede quitar desde el 2026-11-11** (`localUrl` en
+  `src/utils/fileUrl.ts`).
+- `cloudinary:privatizar`: 5265 archivos en dos corridas, 0 fallos, y el `--dry-run` posterior
+  dio 0 pendientes. Va a ~0,7 archivos por segundo (Cloudinary procesa los `rename` en fila;
+  lanzarlos en paralelo no lo acelera): unas 2 horas para 5000 archivos.
+
 ## Limitaciones y pendientes
 
 - La firma no vence: quien tenga una URL firmada la abre. Para que venza haría falta

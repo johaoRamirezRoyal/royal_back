@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Services\Cloudinary\CloudinaryUploadsAdapter;
 use Illuminate\Http\Request;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class DocumentoController extends Controller
@@ -81,19 +80,7 @@ class DocumentoController extends Controller
                 $request->boolean('descargar') ? 'fl_attachment' : null,
             ]));
 
-            $url = $adapter->recurso($ruta, $transformacion ?: null)[2];
-
-            // TEMPORAL (migración 2026-11-03): mientras `cloudinary:privatizar` no termina, el
-            // archivo puede seguir como `upload`. Si la URL pública todavía responde, se redirige
-            // ahí, sin caché (dejará de existir al migrarlo). Se pregunta por la pública y no por
-            // la firmada: un 404 de la firmada queda guardado en el CDN y la rompe después.
-            // ponytail: un HEAD extra por imagen; quitar este bloque cuando termine la migración.
-            $publica = preg_replace('#/authenticated/s--[\w-]+--/#', '/upload/', $url);
-            if ($publica !== $url && Http::timeout(5)->head($publica)->successful()) {
-                return redirect()->away($publica, 302, ['Cache-Control' => 'no-store']);
-            }
-
-            return redirect()->away($url, 302, $cache);
+            return redirect()->away($adapter->recurso($ruta, $transformacion ?: null)[2], 302, $cache);
         }
 
         if (!$disk->exists($ruta)) {
