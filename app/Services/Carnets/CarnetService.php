@@ -49,6 +49,21 @@ class CarnetService extends Service
         return in_array($nuevo, self::TRANSICIONES[$actual] ?? [], true);
     }
 
+    /**
+     * Deja constancia de cada estado por el que pasa un carnet (`carnet_movimientos`): en
+     * `carnets` solo queda el último, y con él se perdía, p. ej., quién entregó uno ya anulado.
+     */
+    private function registrarMovimiento(array $idsCarnet, string $estado, $fecha, ?int $idUsuario, ?string $observacion = null): void
+    {
+        DB::table('carnet_movimientos')->insert(array_map(fn ($id) => [
+            'id_carnet' => $id,
+            'estado' => $estado,
+            'fecha' => $fecha,
+            'id_usuario' => $idUsuario,
+            'observacion' => $observacion,
+        ], $idsCarnet));
+    }
+
     /** "1.234.567 .JPG" → "1234567": el nombre del archivo, sin extensión ni separadores. */
     public static function documentoDeArchivo(string $nombreArchivo): string
     {
@@ -183,21 +198,26 @@ class CarnetService extends Service
                 $anterior = Carnet::where('id_user', $u->id_user)->latest('id')->lockForUpdate()->first();
 
                 if ($anterior && in_array($anterior->estado, [...self::POR_ENTREGAR, 'ENTREGADO'], true)) {
+                    $observacion = 'Reemplazado por la versión ' . ($anterior->version + 1);
                     $anterior->update([
                         'estado' => 'ANULADO',
                         'fecha_estado' => $ahora,
-                        'observacion' => 'Reemplazado por la versión ' . ($anterior->version + 1),
+                        'observacion' => $observacion,
                         'id_usuario_estado' => $idUsuarioEmite,
                     ]);
+                    $this->registrarMovimiento([$anterior->id], 'ANULADO', $ahora, $idUsuarioEmite, $observacion);
                 }
 
-                return [$u->id_user => Carnet::create([
+                $nuevo = Carnet::create([
                     'id_user' => $u->id_user,
                     'version' => ($anterior?->version ?? 0) + 1,
                     'estado' => $anterior ? 'REIMPRESO' : 'IMPRESO',
                     'fecha_emision' => $ahora,
                     'id_usuario_emite' => $idUsuarioEmite,
-                ])];
+                ]);
+                $this->registrarMovimiento([$nuevo->id], $nuevo->estado, $ahora, $idUsuarioEmite);
+
+                return [$u->id_user => $nuevo];
             }));
 
             $vigencia = $this->vigencia();
@@ -273,13 +293,16 @@ class CarnetService extends Service
         }
 
         $ahora = now();
-        $carnet->update([
-            'estado' => $estado,
-            'fecha_estado' => $ahora,
-            'fecha_entrega' => $estado === 'ENTREGADO' ? $ahora : $carnet->fecha_entrega,
-            'observacion' => $observacion,
-            'id_usuario_estado' => $idUsuario,
-        ]);
+        DB::transaction(function () use ($carnet, $estado, $observacion, $idUsuario, $ahora) {
+            $carnet->update([
+                'estado' => $estado,
+                'fecha_estado' => $ahora,
+                'fecha_entrega' => $estado === 'ENTREGADO' ? $ahora : $carnet->fecha_entrega,
+                'observacion' => $observacion,
+                'id_usuario_estado' => $idUsuario,
+            ]);
+            $this->registrarMovimiento([$carnet->id], $estado, $ahora, $idUsuario, $observacion);
+        });
 
         return ['error' => false, 'message' => 'Estado del carnet actualizado', 'data' => $carnet->fresh()];
     }
@@ -291,12 +314,18 @@ class CarnetService extends Service
         $ultimos = DB::table('carnets')->selectRaw('MAX(id) AS id')->whereIn('id_user', $idsUsuario)->groupBy('id_user')->pluck('id');
         $ahora = now();
 
-        $entregados = Carnet::whereIn('id', $ultimos)->whereIn('estado', self::POR_ENTREGAR)->update([
-            'estado' => 'ENTREGADO',
-            'fecha_entrega' => $ahora,
-            'fecha_estado' => $ahora,
-            'id_usuario_estado' => $idUsuario,
-        ]);
+        $entregados = DB::transaction(function () use ($ultimos, $ahora, $idUsuario) {
+            $ids = Carnet::whereIn('id', $ultimos)->whereIn('estado', self::POR_ENTREGAR)->lockForUpdate()->pluck('id')->all();
+            Carnet::whereIn('id', $ids)->update([
+                'estado' => 'ENTREGADO',
+                'fecha_entrega' => $ahora,
+                'fecha_estado' => $ahora,
+                'id_usuario_estado' => $idUsuario,
+            ]);
+            $this->registrarMovimiento($ids, 'ENTREGADO', $ahora, $idUsuario);
+
+            return count($ids);
+        });
 
         return ['error' => false, 'message' => "Carnets entregados: $entregados", 'data' => ['entregados' => $entregados]];
     }
@@ -314,6 +343,23 @@ class CarnetService extends Service
                 DB::raw("TRIM(CONCAT(COALESCE(e.nombre, ''), ' ', COALESCE(e.apellido, ''))) as emitido_por"),
                 DB::raw("TRIM(CONCAT(COALESCE(m.nombre, ''), ' ', COALESCE(m.apellido, ''))) as estado_por"),
             ]);
+
+        // Cada estado por el que pasó cada versión, en orden, con quién lo hizo (null si no se sabe).
+        $movimientos = DB::table('carnet_movimientos as mv')
+            ->leftJoin('usuarios as u', 'u.id_user', '=', 'mv.id_usuario')
+            ->whereIn('mv.id_carnet', $carnets->pluck('id'))
+            ->orderBy('mv.fecha')->orderBy('mv.id')
+            ->get([
+                'mv.id_carnet', 'mv.estado', 'mv.fecha', 'mv.observacion',
+                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))), '') as por"),
+            ])
+            ->groupBy('id_carnet');
+
+        foreach ($carnets as $c) {
+            $c->movimientos = ($movimientos[$c->id] ?? collect())
+                ->map(fn ($m) => ['estado' => $m->estado, 'fecha' => $m->fecha, 'por' => $m->por, 'observacion' => $m->observacion])
+                ->values();
+        }
 
         return ['error' => false, 'message' => 'Historial obtenido', 'data' => $carnets];
     }

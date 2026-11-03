@@ -22,6 +22,15 @@ proveedor 17 y egresado 28: `CarnetService::PERFILES_SIN_CARNET`). Controller
     que se dibuja en cada carnet; el frontend imprime con eso.
   - `PUT /{id}/estado` solo sobre el último carnet del usuario. `PUT /entregar {ids}`
     entrega en lote el último carnet por entregar (IMPRESO o REIMPRESO) de cada `id_user` (los demás se omiten).
+  - **`carnet_movimientos`**: cada estado por el que pasa un carnet (impresión, anulación
+    automática al reimprimir, entrega, pérdida, anulación) con fecha, quién y observación.
+    `carnets` solo guarda el último cambio (`fecha_estado`, `id_usuario_estado`): al entregar
+    y luego anular se perdía quién entregó. Lo escribe `registrarMovimiento` en `emitir`,
+    `cambiarEstado` y `entregar`, dentro de la misma transacción; **un cambio de estado nuevo
+    tiene que pasar por ahí**. `GET /usuario/{id}/historial` trae `movimientos` por versión.
+    La migración llenó los carnets que ya existían con lo que se sabía: de los entregados y
+    luego anulados o perdidos no hay quién entregó (`id_usuario` null). Test en
+    `tests/Unit/Carnets/CarnetMovimientosTest.php`.
 - **Foto**: es `usuarios.foto_carnet` (la legada). `POST /usuario/{id}/foto` y
   `POST /fotos` (lote, `fotos[]`, máx. 20 por petición por `max_file_uploads`) suben a
   `carnets/` en el disco de uploads (en Cloudinary, `<carpeta del colegio>/carnets/`; ver

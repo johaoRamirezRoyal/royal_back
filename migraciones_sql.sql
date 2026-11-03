@@ -493,3 +493,21 @@ ALTER TABLE programacion_mant ADD fecha_fin DATE NULL AFTER fecha_registro;
 -- ---------------------------------------------------------------------------
 ALTER TABLE `bases_datos_nombres` MODIFY `nombre` VARCHAR(190) NULL;
 ALTER TABLE `bases_datos_nombres` ADD `carpeta_cloudinary` VARCHAR(120) NULL AFTER `nombre`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_03_120000_create_carnet_movimientos_table.php
+-- carnet_movimientos: cada cambio de estado de un carnet con quién y cuándo
+-- (carnets solo guarda el último y se perdía, p. ej., quién entregó uno ya
+-- anulado). Se llena con la impresión, la entrega y la pérdida o anulación
+-- de los carnets existentes.
+-- ---------------------------------------------------------------------------
+create table `carnet_movimientos` (`id` bigint unsigned not null auto_increment primary key, `id_carnet` bigint unsigned not null, `estado` enum('IMPRESO', 'REIMPRESO', 'ENTREGADO', 'PERDIDO', 'ANULADO') not null, `fecha` datetime not null, `id_usuario` int unsigned null, `observacion` varchar(255) null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `carnet_movimientos` add constraint `carnet_movimientos_id_carnet_foreign` foreign key (`id_carnet`) references `carnets` (`id`) on delete cascade;
+INSERT INTO carnet_movimientos (id_carnet, estado, fecha, id_usuario)
+    SELECT id, CASE WHEN version > 1 THEN 'REIMPRESO' ELSE 'IMPRESO' END, fecha_emision, id_usuario_emite FROM carnets;
+INSERT INTO carnet_movimientos (id_carnet, estado, fecha, id_usuario)
+    SELECT id, 'ENTREGADO', fecha_entrega, CASE WHEN estado = 'ENTREGADO' THEN id_usuario_estado END
+    FROM carnets WHERE fecha_entrega IS NOT NULL;
+INSERT INTO carnet_movimientos (id_carnet, estado, fecha, id_usuario, observacion)
+    SELECT id, estado, fecha_estado, id_usuario_estado, observacion
+    FROM carnets WHERE estado IN ('PERDIDO', 'ANULADO') AND fecha_estado IS NOT NULL;
