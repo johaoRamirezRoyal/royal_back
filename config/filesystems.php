@@ -55,16 +55,6 @@ return [
             'report' => false,
         ],
 
-        // Carpeta public/upload servida directamente por el web server del VPS
-        'sami' => [
-            'driver' => 'local',
-            'root' => env('SAMI_UPLOAD_ROOT', public_path('upload')),
-            'url' => rtrim(env('SAMI_UPLOAD_URL', env('APP_URL').'/public/upload'), '/'),
-            'visibility' => 'public',
-            'throw' => false,
-            'report' => false,
-        ],
-
         // Disco de uploads en Cloudinary (UPLOADS_DISK=cloudinary): <carpeta del colegio>/<ruta en BD>.
         // La carpeta se define por colegio en "Bases de datos" (BasesDatosService::carpeta). Ver
         // App\Services\Cloudinary\CloudinaryUploadsAdapter.

@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 class FileStorageService
 {
     /**
-     * Disco de uploads configurado (sami en el VPS, public en local).
+     * Disco de uploads configurado (cloudinary en producción, public en local).
      */
     private function resolveDisk(?string $disk): string {
         return $disk ?: config('filesystems.uploads_disk', 'public');

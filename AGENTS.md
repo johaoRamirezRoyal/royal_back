@@ -10,8 +10,8 @@ cookie httpOnly. Aquí van las reglas generales; el contexto de cada tema está 
 ## Comandos
 
 ```bash
-composer run setup   # install, .env, migrate, key:generate, npm install/build
-composer run dev     # serve + queue:listen --tries=1 --queue=emails,default + npm run dev
+composer run setup   # install, .env, key:generate, migrate
+composer run dev     # serve + queue:listen --tries=1 --queue=emails,default (npx concurrently)
 composer run test    # config:clear + php artisan test (tests/Unit, tests/Feature)
 php artisan serve    # localhost:8000
 php artisan schedule:work            # el scheduler en local (composer run dev no lo corre)
@@ -123,6 +123,7 @@ esta tabla.
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 
-Otros documentos en `docs/`: `PERMISOS_MIDDLEWARE_2026_10_20.md`,
+Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
+en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md` y `whatsapp-llegadas-tarde.md`.
