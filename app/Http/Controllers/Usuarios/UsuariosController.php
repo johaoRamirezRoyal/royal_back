@@ -63,7 +63,7 @@ class UsuariosController extends Controller
     public function mostrarTodosUsuariosPaginado(Request $request)
     {
         $per_page = $request->input('per-page', 10);
-        $response = $this->service_usuarios->mostrarTodosUsuariosPaginado($per_page);
+        $response = $this->service_usuarios->mostrarTodosUsuariosPaginado($per_page, auth()->id());
 
         if ($response['error']) {
             return $this->error($response['message']);
@@ -91,7 +91,8 @@ class UsuariosController extends Controller
             $estado,
             $sort,
             $dir,
-            $curso_filtro
+            $curso_filtro,
+            auth()->id()
         );
 
         if ($response['error']) {

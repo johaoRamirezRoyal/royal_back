@@ -200,7 +200,7 @@ class UsuariosServices
         }
     }
 
-    public function mostrarTodosUsuariosPaginado($perPage)
+    public function mostrarTodosUsuariosPaginado($perPage, ?int $primeroId = null)
     {
         try {
             $usuarios = Usuario::select([
@@ -223,6 +223,8 @@ class UsuariosServices
                     'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
                 ])
+                // El usuario autenticado va en la primera posición del listado de /users.
+                ->when($primeroId, fn ($q, $id) => $q->orderByRaw('id_user = ? DESC', [$id]))
                 ->orderBy('nombre')
                 ->orderBy('documento')
                 ->whereNotIn('perfil', [17, 6])
@@ -243,7 +245,7 @@ class UsuariosServices
         }
     }
 
-    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda, ?string $estado = null, string $sort = 'nombre', string $dir = 'asc', ?array $curso_filtro = null)
+    public function mostrarUsuariosPaginados(int $perPage, ?array $perfil_filtro, ?array $nivel_filtro, ?string $busqueda, ?string $estado = null, string $sort = 'nombre', string $dir = 'asc', ?array $curso_filtro = null, ?int $primeroId = null)
     {
         $sortable = ['nombre', 'apellido', 'documento', 'correo', 'perfil', 'estado'];
         $sort = in_array($sort, $sortable, true) ? $sort : 'nombre';
@@ -296,6 +298,8 @@ class UsuariosServices
                 ->when($estado, function ($query, $estado) {
                     $query->where('estado', $estado);
                 })
+                // El usuario autenticado va en la primera posición del listado de /users.
+                ->when($primeroId, fn ($q, $id) => $q->orderByRaw('id_user = ? DESC', [$id]))
                 ->orderBy($sort, $dir)
                 ->whereNotIn('perfil', [17, 6])
                 ->paginate((int) $perPage);
