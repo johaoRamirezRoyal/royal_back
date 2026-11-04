@@ -31,6 +31,7 @@ enum Mails
     case CRONOGRAMA_SISTEMAS;   // Inventario y Préstamos
     case ADMISIONES_ESTADO;     // AdmisionesServices: cambio de estado de inscripción
     case RRHH_ASISTENCIA;       // AsistenciaGestionService: salida cerrada automáticamente
+    case COMPRAS_VENTAS;        // SolicitudesServices: copia de los avisos de solicitudes de compra
 
     /** Nombre legible del grupo para la pantalla "Correos institucionales" (Administración del sistema). */
     public function label(): string
@@ -54,6 +55,7 @@ enum Mails
             self::CRONOGRAMA_SISTEMAS => 'Inventario y préstamos (sistemas)',
             self::ADMISIONES_ESTADO => 'Admisiones — Cambio de estado de inscripción',
             self::RRHH_ASISTENCIA => 'RRHH — Salida marcada automáticamente',
+            self::COMPRAS_VENTAS => 'Compras y ventas — Solicitudes de compra',
         };
     }
 

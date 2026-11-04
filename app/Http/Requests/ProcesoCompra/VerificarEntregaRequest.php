@@ -4,6 +4,7 @@ namespace App\Http\Requests\ProcesoCompra;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class VerificarEntregaRequest extends FormRequest
 {
@@ -36,6 +37,30 @@ class VerificarEntregaRequest extends FormRequest
             'factura_doc' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'decision' => ['required', Rule::in(['cerrar', 'devolucion'])],
             'fecha_verificacion' => ['nullable', 'date'],
+        ];
+    }
+
+    /**
+     * Coherencia de la decisión con los rubros: cerrar exige que todo cumpla, y la
+     * devolución exige al menos una observación que explique el motivo.
+     *
+     * @return array<int, callable>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $rubros = [$this->cantidad, $this->calidad, $this->precios, $this->plazos];
+                $observaciones = [$this->observacion_cant, $this->observacion_calidad, $this->observacion_precios, $this->observacion_plazo];
+
+                if ($this->decision === 'cerrar' && in_array('No', $rubros, true)) {
+                    $validator->errors()->add('decision', 'No se puede cerrar la compra: hay rubros que no cumplen. Envíela a devolución.');
+                }
+
+                if ($this->decision === 'devolucion' && empty(array_filter($observaciones))) {
+                    $validator->errors()->add('decision', 'Para enviar a devolución escriba el motivo en las observaciones.');
+                }
+            },
         ];
     }
 

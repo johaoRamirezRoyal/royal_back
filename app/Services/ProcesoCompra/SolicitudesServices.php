@@ -2,6 +2,7 @@
 
 namespace App\Services\ProcesoCompra;
 
+use App\Enums\Mails;
 use App\Models\Inventario\Inventario;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
@@ -12,25 +13,34 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacionInicial;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Support\Permiso;
 use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use App\Support\Permiso;
 
 class SolicitudesServices
 {
     public const ESTADO_PENDIENTE = 0;
+
     public const ESTADO_APROBADA = 1;
+
     public const ESTADO_DEVUELTA = 2;
+
     public const ESTADO_RECHAZADA = 3;
+
     public const ESTADO_CONVERTIDA = 4;
+
     public const ESTADO_CANCELADA = 5;
 
     // Estados de la solicitud final (tabla `solicitudes`):
     public const ESTADO_PENDIENTE_GESTION = 0;
+
     public const ESTADO_FORMALIZADA = 1;
+
     public const ESTADO_CERRADA = 2;
+
     public const ESTADO_DEVOLUCION = 3;
+
     public const ESTADO_DISPONIBLE_STOCK = 4;
 
     private const DECISIONES = [
@@ -46,6 +56,7 @@ class SolicitudesServices
     // Los archivos se guardan en la raíz del disco de uploads para que su URL
     // pública sea directa: /public/upload/<nombre_archivo>.
     private const CARPETA_COTIZACION = '';
+
     private const CARPETA_FACTURA = '';
 
     public function __construct(
@@ -100,16 +111,27 @@ class SolicitudesServices
         return Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $idNivel, soloActivos: true);
     }
 
+    /**
+     * Suma el grupo COMPRAS_VENTAS de `correos_institucionales` a los destinatarios, sin repetidos.
+     *
+     * @param  array<int, string>  $correos
+     * @return array<int, string>
+     */
+    private function conComprasVentas(array $correos): array
+    {
+        return array_values(array_unique([...$correos, ...Mails::COMPRAS_VENTAS->recipients()]));
+    }
+
     // No bloqueante a propósito: un correo caído no debe impedir crear/gestionar la solicitud.
     private function notificarNuevaSolicitud(SolicitudInicial $solicitud): void
     {
-        $correos = $this->coordinadoresDeNivel($solicitud->usuario?->id_nivel);
+        $correos = $this->conComprasVentas($this->coordinadoresDeNivel($solicitud->usuario?->id_nivel));
 
         if (empty($correos)) {
             return;
         }
 
-        $nombreSolicitante = trim(($solicitud->usuario?->nombre ?? '') . ' ' . ($solicitud->usuario?->apellido ?? ''));
+        $nombreSolicitante = trim(($solicitud->usuario?->nombre ?? '').' '.($solicitud->usuario?->apellido ?? ''));
 
         // La vista `emails.generic` ya escapa el contenido completo (`e()`) y convierte
         // saltos de línea con nl2br() — texto plano acá, sin HTML propio.
@@ -144,7 +166,7 @@ class SolicitudesServices
         try {
             $solicitud = SolicitudInicial::find($idSolicitudInicial);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -178,19 +200,19 @@ class SolicitudesServices
             $query = SolicitudInicial::with(['usuario:id_user,nombre,apellido,documento,correo,telefono,perfil', 'productos', 'verificacionInicial'])
                 ->orderByDesc('id');
 
-            if (!empty($filtros['id_user'])) {
+            if (! empty($filtros['id_user'])) {
                 $query->where('id_user', $filtros['id_user']);
             }
 
-            if (!empty($filtros['id_area'])) {
+            if (! empty($filtros['id_area'])) {
                 $query->where('id_area', $filtros['id_area']);
             }
 
-            if (!empty($filtros['id_nivel'])) {
+            if (! empty($filtros['id_nivel'])) {
                 $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', $filtros['id_nivel']));
             }
 
-            if (!empty($filtros['perfil'])) {
+            if (! empty($filtros['perfil'])) {
                 $query->whereHas('usuario', fn ($u) => $u->where('perfil', $filtros['perfil']));
             }
 
@@ -198,15 +220,15 @@ class SolicitudesServices
                 $query->where('estado', (int) $filtros['estado']);
             }
 
-            if (!empty($filtros['fecha_desde'])) {
+            if (! empty($filtros['fecha_desde'])) {
                 $query->whereDate('fecha_solicitud', '>=', $filtros['fecha_desde']);
             }
 
-            if (!empty($filtros['fecha_hasta'])) {
+            if (! empty($filtros['fecha_hasta'])) {
                 $query->whereDate('fecha_solicitud', '<=', $filtros['fecha_hasta']);
             }
 
-            if (!empty($filtros['s'])) {
+            if (! empty($filtros['s'])) {
                 $search = $filtros['s'];
                 $query->where(function ($q) use ($search) {
                     $q->where('id', $search)
@@ -228,7 +250,7 @@ class SolicitudesServices
         try {
             $solicitud = SolicitudInicial::with(['usuario', 'productos', 'verificacionInicial'])->find($id);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -266,27 +288,27 @@ class SolicitudesServices
                 $query->where('id_area', self::AREA_POR_TIPO_SEGUIMIENTO[$filtros['tipo']]);
             }
 
-            if (!empty($filtros['id_user'])) {
+            if (! empty($filtros['id_user'])) {
                 $query->where('id_user', $filtros['id_user']);
             }
 
-            if (!empty($filtros['id_nivel'])) {
+            if (! empty($filtros['id_nivel'])) {
                 $query->whereHas('usuario', fn ($u) => $u->where('id_nivel', $filtros['id_nivel']));
             }
 
-            if (!empty($filtros['perfil'])) {
+            if (! empty($filtros['perfil'])) {
                 $query->whereHas('usuario', fn ($u) => $u->where('perfil', $filtros['perfil']));
             }
 
-            if (!empty($filtros['fecha_desde'])) {
+            if (! empty($filtros['fecha_desde'])) {
                 $query->whereDate('fecha_solicitud', '>=', $filtros['fecha_desde']);
             }
 
-            if (!empty($filtros['fecha_hasta'])) {
+            if (! empty($filtros['fecha_hasta'])) {
                 $query->whereDate('fecha_solicitud', '<=', $filtros['fecha_hasta']);
             }
 
-            if (!empty($filtros['s'])) {
+            if (! empty($filtros['s'])) {
                 $search = $filtros['s'];
                 $query->where(function ($q) use ($search) {
                     $q->where('id', $search)
@@ -363,7 +385,7 @@ class SolicitudesServices
         try {
             $solicitud = Solicitud::find($id);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -382,7 +404,7 @@ class SolicitudesServices
         try {
             $inicial = SolicitudInicial::with('productos', 'usuario')->find($idSolicitudInicial);
 
-            if (!$inicial) {
+            if (! $inicial) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -421,7 +443,7 @@ class SolicitudesServices
         try {
             $inicial = SolicitudInicial::find($idSolicitudInicial);
 
-            if (!$inicial) {
+            if (! $inicial) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -451,7 +473,7 @@ class SolicitudesServices
         try {
             $solicitud = Solicitud::find($id);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -503,7 +525,7 @@ class SolicitudesServices
         try {
             $solicitud = SolicitudInicial::find($idSolicitud);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -544,7 +566,7 @@ class SolicitudesServices
         try {
             $inicial = SolicitudInicial::with('productos')->find($idSolicitudInicial);
 
-            if (!$inicial) {
+            if (! $inicial) {
                 return ['error' => true, 'message' => 'Solicitud inicial no encontrada', 'status' => 404];
             }
 
@@ -558,7 +580,7 @@ class SolicitudesServices
                     return ['error' => true, 'message' => $subida['message'] ?? 'No se pudo guardar la cotización'];
                 }
                 $nombreCotizacion = $subida['nombre_guardado'];
-            } elseif (!$nombreCotizacion) {
+            } elseif (! $nombreCotizacion) {
                 return ['error' => true, 'message' => 'Debe adjuntar la cotización'];
             }
 
@@ -633,7 +655,7 @@ class SolicitudesServices
                     ];
                 });
             } catch (Exception $e) {
-                if (!empty($subida['ruta'])) {
+                if (! empty($subida['ruta'])) {
                     $this->fileStorage->eliminar($subida['ruta']);
                 }
 
@@ -646,6 +668,7 @@ class SolicitudesServices
 
     // Convención heredada: activo=10 -> aplazada, activo=0 -> rechazada (estado se mantiene en 1).
     private const ACTIVO_APLAZADA = 10;
+
     private const ACTIVO_RECHAZADA = 0;
 
     public function aplazar(int $id, string $fechaAplazado, int $idLog): array
@@ -653,7 +676,7 @@ class SolicitudesServices
         try {
             $solicitud = Solicitud::find($id);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -674,7 +697,7 @@ class SolicitudesServices
         try {
             $solicitud = Solicitud::find($id);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -699,7 +722,7 @@ class SolicitudesServices
         try {
             $solicitud = Solicitud::find($idSolicitud);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -713,7 +736,7 @@ class SolicitudesServices
                     return ['error' => true, 'message' => $subida['message'] ?? 'No se pudo guardar la factura'];
                 }
                 $nombreFactura = $subida['nombre_guardado'];
-            } elseif (!$nombreFactura) {
+            } elseif (! $nombreFactura) {
                 return ['error' => true, 'message' => 'Debe adjuntar la factura'];
             }
 
@@ -751,7 +774,7 @@ class SolicitudesServices
 
                 return $resultado;
             } catch (Exception $e) {
-                if (!empty($subida['ruta'])) {
+                if (! empty($subida['ruta'])) {
                     $this->fileStorage->eliminar($subida['ruta']);
                 }
 
@@ -771,6 +794,8 @@ class SolicitudesServices
         if ($solicitante?->correo) {
             $correos[] = $solicitante->correo;
         }
+
+        $correos = $this->conComprasVentas($correos);
 
         if (empty($correos)) {
             return;
