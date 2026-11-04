@@ -90,7 +90,9 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
 
 ## Cursos y estudiantes (`/cursos`, opción 145)
 
-- `GET /cursos/all` sigue abierto (selects de otros módulos). Todo lo demás pide la 145:
+- `GET /cursos/all` sigue abierto (selects de otros módulos). Trae `id_nivel` y `nivel`
+  (`{id, nombre}`) y sale en orden académico (`Cursos::ordenarPorGrado`): el frontend agrupa
+  los selects por nivel. Todo lo demás pide la 145:
   listado paginado (`?s=&estado=activo|inactivo`), `GET`/`PUT /{id}`, `POST /`,
   `GET /{id}/estudiantes`, `GET /estudiantes-buscar`, `POST /{id}/estudiantes`
   (`{ estudiantes: [id_user] }`) y `DELETE /{id}/estudiantes/{idEstudiante}`.
@@ -140,7 +142,9 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   que dirige, y sin el documento del acudiente.
 - "Mi curso" (`GET /cursos/mi-curso`, `PUT /cursos/mi-curso/repiten`, perfiles 3/14): el
   director sugiere quién repite; queda en `promocion_sugerencias` (una por estudiante y año) y la
-  promoción la ve como `sugerido_repetir`. No obliga: promover sigue siendo de la 145.
+  promoción la ve como `sugerido_repetir`. No obliga: promover sigue siendo de la 145. Cada
+  estudiante trae además `foto_carnet`, `carnet_estado` (último carnet) y `solicitud_carnet`
+  (tipo de la pendiente).
 - Director de grupo, carnets (opción 146): `PUT /cursos/mi-curso/carnets/entregar` entrega con
   `CarnetService::entregar` solo los carnets de los estudiantes de su curso. Ver `carnets.md`.
 - Aviso de actas: al registrar actas, `ActasEstudianteService::avisarDirectores` manda un correo

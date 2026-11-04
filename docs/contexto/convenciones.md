@@ -81,7 +81,11 @@ public function rules(): array
    ```
    Agrega el middleware `permiso` (ver [`permisos.md`](permisos.md)).
 6. Si el service debe ser singleton, regístralo en `AppServiceProvider::register()`.
-7. Si creaste una migración, regístrala en `migraciones_sql.sql`.
+7. Si creaste una migración, regístrala en `migraciones_sql.sql`. **Al desplegar, migra antes
+   (o junto) con el código y en cada base de datos de institución** (`SwitchActiveConnection`
+   cambia de BD por colegio; `php artisan migrate` solo migra la conexión por defecto). Ya
+   pasó: el código que consulta `curso.id_director` salió sin su migración y `/observaciones/
+   catalogos` dio 500 a todos los docentes ("Unknown column 'id_director'").
 8. Documenta el módulo en `docs/contexto/modulos/<modulo>.md` y agrégalo al índice de
    `AGENTS.md`.
 
