@@ -4,6 +4,7 @@ namespace App\Services\AnioEscolar;
 
 use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\ConfiguracionAcademica;
+use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Services\Service;
 use Carbon\Carbon;
 
@@ -164,12 +165,18 @@ class AnioEscolarServices extends Service
             $rango = $this->rangoParaAnioInicio($anioInicio, $tipo);
             $anioInicioEsperado = $this->anioInicioParaFecha(Carbon::now(), $tipo);
 
+            $activo = $anioInicio === $anioInicioEsperado;
             $anio = Anio::create([
                 'anio_inicio' => $anioInicio,
                 'anio_fin' => $rango['anio_fin'],
-                'activo' => $anioInicio === $anioInicioEsperado,
+                'activo' => $activo,
                 'fechareg' => Carbon::now(),
             ]);
+
+            // Solo un año habilitado: si nace habilitado, apaga los demás.
+            if ($activo) {
+                $this->deshabilitarOtros($anio->id);
+            }
 
             return [
                 'error' => false,
@@ -188,17 +195,25 @@ class AnioEscolarServices extends Service
 
     /**
      * Habilita/deshabilita manualmente un año escolar puntual (independiente del cron
-     * automático de cierre/apertura).
+     * automático de cierre/apertura). Solo puede haber un año habilitado: habilitar uno
+     * deshabilita los demás.
      */
     public function actualizarEstadoAnioEscolar(int $id, bool $activo): array
     {
         try {
             $anio = Anio::findOrFail($id);
+
+            $otros = 0;
+            if ($activo) {
+                $otros = $this->deshabilitarOtros($anio->id);
+            }
             $anio->update(['activo' => $activo]);
 
             return [
                 'error' => false,
-                'message' => $activo ? 'Año escolar habilitado' : 'Año escolar deshabilitado',
+                'message' => $activo
+                    ? ($otros ? 'Año escolar habilitado; los demás quedaron deshabilitados' : 'Año escolar habilitado')
+                    : 'Año escolar deshabilitado',
                 'data' => $anio,
             ];
         } catch (\Exception $e) {
@@ -267,6 +282,54 @@ class AnioEscolarServices extends Service
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Regla: solo un año escolar habilitado. Deshabilita todos menos `$idHabilitado` y
+     * devuelve cuántos apagó. Lo usan crear, habilitar y el cron de cierre/apertura.
+     */
+    private function deshabilitarOtros(int $idHabilitado): int
+    {
+        return Anio::where('activo', 1)->where('id', '!=', $idHabilitado)->update(['activo' => false]);
+    }
+
+    /**
+     * Cierre de año: el último año escolar que ya terminó y el que le sigue, mientras ese
+     * siguiente no haya empezado su primer periodo académico. Fuera de esa ventana, null.
+     *
+     * Un año "termina" con el fin de su último periodo académico; sin periodos, con el fin de
+     * su rango de calendario. La ventana se cierra cuando arranca el primer periodo del año
+     * siguiente: si nunca se le definen periodos, sigue abierta (y el aviso tiene sentido).
+     *
+     * @return array{anio_cerrado: Anio, anio_siguiente: ?Anio, periodos_siguiente: int}|null
+     */
+    public function estadoCierreAnio(): ?array
+    {
+        $hoy = Carbon::today()->toDateString();
+        $tipo = $this->obtenerTipoCalendario();
+
+        $fin = fn (Anio $a): string => substr((string) (PeriodoAcademico::where('id_anio_escolar', $a->id)->max('fecha_fin')
+            ?? $this->rangoParaAnioInicio((int) $a->anio_inicio, $tipo)['fecha_max']), 0, 10);
+
+        $cerrado = Anio::orderByDesc('anio_inicio')->get()->first(fn (Anio $a) => $fin($a) < $hoy);
+
+        if (! $cerrado) {
+            return null;
+        }
+
+        $siguiente = Anio::where('anio_inicio', (int) $cerrado->anio_inicio + 1)->first();
+        $periodos = $siguiente ? PeriodoAcademico::where('id_anio_escolar', $siguiente->id)->get(['fecha_inicio']) : collect();
+        $inicioSiguiente = $periodos->min('fecha_inicio');
+
+        if ($inicioSiguiente && substr((string) $inicioSiguiente, 0, 10) <= $hoy) {
+            return null;
+        }
+
+        return [
+            'anio_cerrado' => $cerrado,
+            'anio_siguiente' => $siguiente,
+            'periodos_siguiente' => $periodos->count(),
+        ];
     }
 
     /**
