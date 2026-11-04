@@ -55,6 +55,10 @@ inicial 0 ─ aprobar (coordinador/admin) → 1 + crea `solicitudes` en 0
             └─ cancelar (dueño, solo en 0) → 5
 ```
 
+`verificar-entrega`: la `decision` (`cerrar`/`devolucion`) la elige el usuario, no se
+deduce. `VerificarEntregaRequest::after()` rechaza `cerrar` si algún rubro es `No` y
+`devolucion` sin ninguna observación (test en `tests/Unit/ProcesoCompra`).
+
 El `verificar` legacy (60) guarda un checklist en `solicitud_verificacion_inicial` y no
 crea la fila final; `asignar-proveedor` la crea si falta
 (`crearSolicitudFinalDesdeInicial`).
