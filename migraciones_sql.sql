@@ -511,3 +511,29 @@ INSERT INTO carnet_movimientos (id_carnet, estado, fecha, id_usuario)
 INSERT INTO carnet_movimientos (id_carnet, estado, fecha, id_usuario, observacion)
     SELECT id, estado, fecha_estado, id_usuario_estado, observacion
     FROM carnets WHERE estado IN ('PERDIDO', 'ANULADO') AND fecha_estado IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_03_130000_seed_opcion_cursos.php
+-- Opción 145 "Gestión Académica — Cursos y estudiantes" (módulo 14, Académico):
+-- administrar cursos y asignar/quitar estudiantes en /gestion-academica/cursos.
+-- No se otorga a ningún perfil; se asigna desde /permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 145, 'Gestión Académica — Cursos y estudiantes', 14, 1, NOW() FROM DUAL
+    WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 145);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_03_140000_create_cursos_promociones_table.php
+-- cursos_promociones: cada promoción al curso próximo con el año escolar que
+-- cerró; la página de inicio avisa al terminar el año si aún no se promovió.
+-- ---------------------------------------------------------------------------
+create table `cursos_promociones` (`id` bigint unsigned not null auto_increment primary key, `id_anio_escolar` int not null, `total` int unsigned not null, `id_log` int null, `fecha` datetime not null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `cursos_promociones` add index `cursos_promociones_id_anio_escolar_index`(`id_anio_escolar`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_03_150000_add_id_director_to_curso_table.php
+-- curso.id_director: docente director de grupo del curso (opcional; un docente
+-- dirige un solo curso; asignarlo a otro lo reasigna). Sin FK: curso es MyISAM en algunas BD.
+-- ---------------------------------------------------------------------------
+alter table `curso` add `id_director` int null after `curso_proximo`;
+alter table `curso` add index `curso_id_director_index`(`id_director`);

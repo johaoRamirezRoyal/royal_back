@@ -64,6 +64,9 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
   activo.
 - El cron diario `anio-escolar:cerrar-abrir` cierra el año que ya no corresponde y abre el
   que sí. No reactiva un año que se desactivó a mano.
+- **Solo un año habilitado.** Habilitar un año (a mano desde la 99 o la 107, o al crearlo
+  cuando es el vigente) deshabilita los demás (`deshabilitarOtros`). Las pantallas no dejan
+  habilitar varios seleccionados a la vez.
 - Endpoints con la 99: `GET|PUT /configuracion-calendario`, `POST /anios-escolares` y
   `PUT /anios-escolares/estado`.
 - `academico_asistencia_clase` y `academico_asistencia_estudiante` se usaban sin
@@ -84,3 +87,43 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
     `\t`, `\r\n` o puntos.
   - Un documento ambiguo se reporta, nunca se adivina.
   - Las filas válidas se aplican aunque otras fallen.
+
+## Cursos y estudiantes (`/cursos`, opción 145)
+
+- `GET /cursos/all` sigue abierto (selects de otros módulos). Todo lo demás pide la 145:
+  listado paginado (`?s=&estado=activo|inactivo`), `GET`/`PUT /{id}`, `POST /`,
+  `GET /{id}/estudiantes`, `GET /estudiantes-buscar`, `POST /{id}/estudiantes`
+  (`{ estudiantes: [id_user] }`) y `DELETE /{id}/estudiantes/{idEstudiante}`.
+- Un estudiante (perfil 16) tiene un solo curso: `usuarios.id_curso`. Asignar a un curso
+  **mueve** al estudiante si ya tenía otro; quitar lo deja en `NULL`. Las actas y
+  observaciones guardan su propia foto del curso, así que no se reescriben.
+- No hay borrado de cursos (las actas tienen FK `restrictOnDelete`): se desactivan con
+  `activo = 0`, y a un curso inactivo no se le asignan estudiantes.
+- `curso_proximo` legacy usa `0` como "sin curso próximo"; al guardar se manda `null`.
+- `POST /{id}/estudiantes/nuevo` crea el usuario con las reglas de `RegistrarUsuarioRequest`
+  (`CrearEstudianteRequest`): perfil 16, el curso de la ruta, `user` = documento y `id_nivel`
+  sacado del nivel académico del curso (Básica secundaria no tiene fila en `nivel`: va a
+  "Secundaria"). Un curso sin nivel no admite estudiantes nuevos.
+- Promoción: `GET /promocion` (vista previa), `GET /promocion/estudiantes?cursos[]=` (los que
+  pasarían, para revisarlos) y `POST /promocion` (`{ cursos: [id], excluir: [id_user] }`; los
+  excluidos se quedan en su curso).
+  La vista previa omite los cursos sin nivel ("Egresado", "Estudiantes Graduados"): no son grados que se promuevan. Es un
+  solo `UPDATE ... JOIN curso` para que Quinto→Sexto no se encadene con Sexto→Séptimo; solo
+  mueve estudiantes activos de cursos activos cuyo curso próximo existe y está activo. No hay
+  deshacer: cada promoción deja en el log `promocion de cursos` con `id_user`, `de` y `a`.
+- `usuarios.curso_proximo_user` es legacy y está desactualizado (no coincide con
+  `curso.curso_proximo` en la mayoría): la promoción no lo usa.
+- Cierre de año (`AnioEscolarServices::estadoCierreAnio`): un año termina con el fin de su
+  último `periodo_academico` (sin periodos, con el fin de su rango A/B). La ventana va desde ahí
+  hasta que empieza el primer periodo del año siguiente. `GET /cursos/avisos-cierre` (145 o 99)
+  dice en esa ventana si falta promover (`cursos_promociones` sin fila para el año cerrado) y si
+  el año siguiente no tiene periodos académicos; fuera de ella devuelve `data: null`.
+- Cada promoción guarda una fila en `cursos_promociones` con el año que cerró (el terminado si
+  hay ventana; si se promueve antes, el vigente). Si esa escritura falla solo se registra en el
+  log: los estudiantes ya se movieron.
+- Director de grupo: `curso.id_director` (opcional, sin FK) apunta a un docente activo
+  (`Permiso::PERFILES_DOCENTE`). Un docente dirige un solo curso: si se le asigna a otro, se
+  reasigna (`CursosServices::reasignarDirector` deja el anterior sin director y lo avisa) y
+  `GET /cursos/docentes` (145) trae cada docente con el `curso_dirigido` para el select.
+- **Plan (sin implementar):** funciones reales del director de grupo, con los puntos de
+  integración del backend, en `docs/plan-director-de-grupo.md` del frontend.

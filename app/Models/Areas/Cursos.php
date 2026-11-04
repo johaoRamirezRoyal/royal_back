@@ -20,6 +20,7 @@ class Cursos extends Model
         "nombre",
         "id_nivel",
         "curso_proximo",
+        "id_director",
         "activo",
         "id_log"
     ];
@@ -30,6 +31,18 @@ class Cursos extends Model
     public function nivel()
     {
         return $this->belongsTo(NivelAcademico::class, 'id_nivel', 'id');
+    }
+
+    /** Docente director de grupo (opcional). */
+    public function director()
+    {
+        return $this->belongsTo(Usuario::class, 'id_director', 'id_user');
+    }
+
+    /** Curso al que pasan sus estudiantes al cerrar el año escolar. */
+    public function proximo()
+    {
+        return $this->belongsTo(self::class, 'curso_proximo', 'id');
     }
 
     public function usuarios()
