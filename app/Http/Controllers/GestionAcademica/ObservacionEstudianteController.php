@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
+use App\Models\Areas\Cursos;
 use App\Services\GestionAcademica\AccesoObservaciones;
 use App\Services\GestionAcademica\CargaAcademicaService;
 use App\Services\GestionAcademica\ObservacionEstudianteService;
@@ -86,6 +87,10 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
                 ? null
                 : collect($esDocente ? ($this->cargaAcademica->obtenerCursosDocente($usuario->id_user)['data'] ?? []) : [])->pluck('id')->all(),
             tieneElegirDocente: $tiene(self::OPCION_ELEGIR_DOCENTE),
+            // Director de grupo: ve las observaciones de todos los profesores a su curso.
+            idsCursosDirigidos: $esDocente
+                ? Cursos::where('id_director', $usuario->id_user)->where('activo', 1)->pluck('id')->all()
+                : [],
         );
     }
 

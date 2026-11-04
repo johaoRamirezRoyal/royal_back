@@ -17,6 +17,9 @@ final class AccesoObservaciones
      *                                               (133/99), array = los suyos (docente).
      * @param  bool  $tieneElegirDocente  Opción 139 "Elegir docente". Sin ella, la observación
      *                                     queda a nombre de quien la registra.
+     * @param  array<int>  $idsCursosDirigidos  Cursos que dirige (director de grupo): ve las
+     *                                          observaciones de TODOS los profesores a los
+     *                                          estudiantes que hoy están en ellos.
      */
     public function __construct(
         public readonly int $idUsuario,
@@ -24,6 +27,7 @@ final class AccesoObservaciones
         public readonly bool $puedeRegistrar,
         public readonly ?array $idsCursosRegistro,
         public readonly bool $tieneElegirDocente = false,
+        public readonly array $idsCursosDirigidos = [],
     ) {
     }
 
@@ -33,7 +37,10 @@ final class AccesoObservaciones
         return $this->verTodas ? null : ($this->puedeRegistrar ? $this->idsCursosRegistro : []);
     }
 
-    /** null = sin filtro por autor; si no, solo las propias (como docente o como quien la registró). */
+    /**
+     * null = sin filtro por autor; si no, las propias (como docente o como quien la registró)
+     * más las de los estudiantes de $idsCursosDirigidos (ver ObservacionEstudianteService::observaciones).
+     */
     public function soloDocente(): ?int
     {
         return $this->verTodas ? null : $this->idUsuario;

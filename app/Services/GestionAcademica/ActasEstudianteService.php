@@ -2,11 +2,15 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Mail\GenericMail;
 use App\Models\AnioEscolar\Anio;
 use App\Models\GestionAcademica\ActaEstudiante;
+use App\Services\MailService;
 use App\Services\Service;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -387,12 +391,64 @@ class ActasEstudianteService extends Service
                 ->filter()
                 ->values();
 
+            $this->avisarDirectores($creadas, $idUsuario);
+
             return ['error' => false, 'message' => $creadas->count() === 1 ? 'Acta registrada' : $creadas->count() . ' actas registradas', 'data' => [
                 'actas' => $creadas,
                 'advertencias' => $advertencias,
             ]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => 'Error al registrar las actas: ' . $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
+     * Aviso al director de grupo: un correo por director con las actas nuevas de los estudiantes
+     * que HOY están en su curso (no si él mismo las registró). Se envía después de responder y
+     * fuera de la transacción: si falla, solo queda en el log y el acta sigue guardada.
+     */
+    private function avisarDirectores(Collection $actas, int $idUsuarioRegistra): void
+    {
+        try {
+            $directores = DB::table('usuarios as e')
+                ->join('curso as c', 'c.id', '=', 'e.id_curso')
+                ->join('usuarios as d', 'd.id_user', '=', 'c.id_director')
+                ->whereIn('e.id_user', $actas->pluck('id_estudiante')->unique())
+                ->where('c.activo', 1)
+                ->where('d.estado', 'activo')
+                ->where('d.id_user', '!=', $idUsuarioRegistra)
+                ->get(['e.id_user', DB::raw("TRIM(CONCAT(COALESCE(e.nombre, ''), ' ', COALESCE(e.apellido, ''))) as estudiante"), 'c.nombre as curso', 'd.correo'])
+                ->keyBy('id_user');
+
+            if ($directores->isEmpty()) {
+                return;
+            }
+
+            $url = rtrim((string) config('app.frontend_url'), '/');
+            $tipo = fn (string $t) => $t === ActaEstudiante::TIPO_DIALOGO_FORMATIVO ? 'diálogo formativo' : 'convivencial';
+
+            $correos = $actas->filter(fn ($a) => $directores->has($a->id_estudiante))
+                ->groupBy(fn ($a) => $directores[$a->id_estudiante]->correo)
+                ->map(function ($delDirector) use ($directores, $tipo, $url) {
+                    $curso = $directores[$delDirector->first()->id_estudiante]->curso;
+                    $lineas = $delDirector->map(fn ($a) => '- ' . preg_replace('/\s*\.$/', '', $directores[$a->id_estudiante]->estudiante)
+                        . ': acta de ' . $tipo((string) $a->tipo) . ' del ' . substr((string) $a->fecha, 0, 10)
+                        . " ({$url}/gestion-convivencial/hoja-de-vida/{$a->id_estudiante})");
+
+                    return "Se registraron actas a estudiantes de {$curso}, el curso que diriges:\n\n" . $lineas->implode("\n");
+                });
+
+            dispatch(function () use ($correos) {
+                foreach ($correos as $correo => $contenido) {
+                    try {
+                        app(MailService::class)->send($correo, new GenericMail('Nueva acta en tu curso', $contenido));
+                    } catch (Throwable $e) {
+                        Log::error('No se avisó al director de grupo del acta', ['correo' => $correo, 'message' => $e->getMessage()]);
+                    }
+                }
+            })->afterResponse();
+        } catch (Throwable $e) {
+            Log::error('No se preparó el aviso al director de grupo', ['message' => $e->getMessage()]);
         }
     }
 

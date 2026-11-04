@@ -30,6 +30,13 @@ class CarnetService extends Service
     /** Estados de un carnet impreso que todavía no se entrega (REIMPRESO = versión 2 en adelante). */
     public const POR_ENTREGAR = ['IMPRESO', 'REIMPRESO'];
 
+    /**
+     * Tipos que se pueden solicitar (opción 147). Solo se solicita sobre un carnet ya impreso: el
+     * primero lo imprime Carnets (144) sin solicitud, así que PRIMERA_VEZ ya no se acepta (sigue
+     * en el enum de la tabla para el historial).
+     */
+    public const TIPOS_SOLICITUD = ['PERDIDA', 'DANO', 'CAMBIO_DATOS'];
+
     /** Desde cada estado, a cuáles se puede pasar a mano. PERDIDO y ANULADO son finales. */
     private const TRANSICIONES = [
         'IMPRESO' => ['ENTREGADO', 'PERDIDO', 'ANULADO'],
@@ -219,6 +226,10 @@ class CarnetService extends Service
 
                 return [$u->id_user => $nuevo];
             }));
+
+            // Emitir resuelve la solicitud pendiente de cada uno (si la había).
+            DB::table('carnet_solicitudes')->whereIn('id_user', $usuarios->pluck('id_user'))->where('estado', 'PENDIENTE')
+                ->update(['estado' => 'ATENDIDA', 'id_atiende' => $idUsuarioEmite, 'fecha_atencion' => $ahora, 'respuesta' => 'Carnet emitido']);
 
             $vigencia = $this->vigencia();
             $plantillas = $this->plantillas->enUso();
@@ -478,5 +489,94 @@ class CarnetService extends Service
         $datos['foto_url'] = $this->archivos->url($datos['foto']);
 
         return ['error' => false, 'message' => 'Carnet obtenido', 'data' => $datos];
+    }
+
+    /**
+     * Registra una solicitud de carnet para `$idUser` (quién puede pedirla para quién lo decide el
+     * controller). Solo para quien lleva carnet, ya tiene impreso el primero y no tiene otra PENDIENTE.
+     */
+    public function solicitar(int $idUser, string $tipo, ?string $observacion, int $idSolicita): array
+    {
+        if (! $this->poblacion(null)->where('id_user', $idUser)->exists()) {
+            return ['error' => true, 'message' => 'Ese usuario no lleva carnet', 'status' => 422];
+        }
+        if (! Carnet::where('id_user', $idUser)->exists()) {
+            return ['error' => true, 'message' => 'Aún no se ha impreso su primer carnet: se solicita cuando ya tenga uno', 'status' => 422];
+        }
+        if (DB::table('carnet_solicitudes')->where('id_user', $idUser)->where('estado', 'PENDIENTE')->exists()) {
+            return ['error' => true, 'message' => 'Ya hay una solicitud de carnet pendiente para esta persona', 'status' => 422];
+        }
+
+        $id = DB::table('carnet_solicitudes')->insertGetId([
+            'id_user' => $idUser,
+            'tipo' => $tipo,
+            'observacion' => $observacion ? trim($observacion) : null,
+            'estado' => 'PENDIENTE',
+            'id_solicita' => $idSolicita,
+            'fecha' => now(),
+        ]);
+
+        return ['error' => false, 'message' => 'Solicitud de carnet enviada', 'data' => ['id' => $id]];
+    }
+
+    /**
+     * Seguimiento: las solicitudes de esas personas, la más reciente primero, con su estado, quién
+     * la pidió y, si ya se respondió, quién, cuándo y con qué respuesta.
+     */
+    public function seguimiento(array $idsUsuario, int $limite = 50): array
+    {
+        $nombre = fn (string $t, string $como) => DB::raw("TRIM(CONCAT(COALESCE({$t}.nombre, ''), ' ', COALESCE({$t}.apellido, ''))) as {$como}");
+
+        $filas = DB::table('carnet_solicitudes as s')
+            ->join('usuarios as u', 'u.id_user', '=', 's.id_user')
+            ->leftJoin('usuarios as q', 'q.id_user', '=', 's.id_solicita')
+            ->leftJoin('usuarios as a', 'a.id_user', '=', 's.id_atiende')
+            ->whereIn('s.id_user', $idsUsuario)
+            ->orderByDesc('s.fecha')
+            ->orderByDesc('s.id')
+            ->limit($limite)
+            ->get(['s.id', 's.id_user', 's.tipo', 's.observacion', 's.estado', 's.fecha', 's.respuesta', 's.fecha_atencion',
+                $nombre('u', 'nombre'), $nombre('q', 'solicita'), $nombre('a', 'atiende')]);
+
+        return ['error' => false, 'message' => 'Seguimiento de solicitudes', 'data' => $filas];
+    }
+
+    /**
+     * Solicitudes de un estado (por defecto las pendientes), con para quién, su curso, quién la
+     * pidió y, si ya se respondió, quién y cuándo. Pendientes: la más antigua primero; respondidas:
+     * la más reciente primero.
+     */
+    public function solicitudes(?string $estado, int $porPagina): array
+    {
+        $estado = $estado ?: 'PENDIENTE';
+        $nombre = fn (string $t, string $como) => DB::raw("TRIM(CONCAT(COALESCE({$t}.nombre, ''), ' ', COALESCE({$t}.apellido, ''))) as {$como}");
+
+        $paginador = DB::table('carnet_solicitudes as s')
+            ->join('usuarios as u', 'u.id_user', '=', 's.id_user')
+            ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
+            ->leftJoin('usuarios as q', 'q.id_user', '=', 's.id_solicita')
+            ->leftJoin('usuarios as a', 'a.id_user', '=', 's.id_atiende')
+            ->where('s.estado', $estado)
+            ->when($estado === 'PENDIENTE', fn ($q) => $q->orderBy('s.fecha'), fn ($q) => $q->orderByDesc('s.fecha_atencion'))
+            ->select(['s.id', 's.id_user', 's.tipo', 's.observacion', 's.estado', 's.fecha', 's.respuesta', 's.fecha_atencion', 'u.documento', 'c.nombre as curso',
+                $nombre('u', 'nombre'), $nombre('q', 'solicita'), $nombre('a', 'atiende')])
+            ->paginate($porPagina);
+
+        return ['error' => false, 'message' => 'Solicitudes de carnet', 'data' => $paginador];
+    }
+
+    /** Atiende (o rechaza) una solicitud pendiente. */
+    public function responderSolicitud(int $id, string $estado, ?string $respuesta, int $idUsuario): array
+    {
+        $total = DB::table('carnet_solicitudes')->where('id', $id)->where('estado', 'PENDIENTE')->update([
+            'estado' => $estado,
+            'respuesta' => $respuesta ? trim($respuesta) : null,
+            'id_atiende' => $idUsuario,
+            'fecha_atencion' => now(),
+        ]);
+
+        return $total
+            ? ['error' => false, 'message' => $estado === 'ATENDIDA' ? 'Solicitud atendida' : 'Solicitud rechazada', 'data' => null]
+            : ['error' => true, 'message' => 'La solicitud no existe o ya fue respondida', 'status' => 404];
     }
 }

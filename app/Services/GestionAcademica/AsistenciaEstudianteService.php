@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  */
 class AsistenciaEstudianteService extends Service
 {
+    public function __construct(
+        private CargaAcademicaService $cargaAcademica,
+    ) {}
+
     public function verAsistenciaEstudiantesFiltrada(
         ?int $id_estudiante = null,
         ?int $id_curso = null,
@@ -139,18 +143,10 @@ class AsistenciaEstudianteService extends Service
         try {
             $cursosDocente = null;
             if ($id_docente_scope !== null) {
-                // leftJoin: una carga "suelta" (sin asignatura) no tiene fila en
-                // academico_docente_asignatura — el docente se resuelve directo en
-                // ca.id_docente en ese caso (ver CargaAcademicaService::añadirCargaAcademicaSuelta).
-                $cursosDocente = DB::table('academico_carga_academica as ca')
-                    ->leftJoin('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
-                    ->where(function ($q) use ($id_docente_scope) {
-                        $q->where('ca.id_docente', $id_docente_scope)
-                            ->orWhere('da.id_docente', $id_docente_scope);
-                    })
-                    ->where('ca.activo', 1)
-                    ->pluck('ca.id_curso')
-                    ->unique()
+                // Única fuente de "sus cursos": carga (también la suelta) + el curso que dirige.
+                $cursosDocente = collect($this->cargaAcademica->obtenerCursosDocente($id_docente_scope)['data'] ?? [])
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
                     ->values();
 
                 if ($cursosDocente->isEmpty()) {

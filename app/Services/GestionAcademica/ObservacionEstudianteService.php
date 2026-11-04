@@ -69,16 +69,26 @@ class ObservacionEstudianteService
             ->when($idsCursos !== null, fn ($q) => $q->whereIn('u.id_curso', $idsCursos));
     }
 
-    /** Observaciones con sus nombres resueltos; con `$soloDocente`, solo las que él registró. */
-    private function observaciones(?int $soloDocente = null): Builder
+    /**
+     * Observaciones con sus nombres resueltos. Con `$acceso` sin "ver todas": las que el usuario
+     * registró más, si dirige un curso, las de cualquier profesor a los estudiantes que HOY
+     * están en él (`u.id_curso`, no el curso de la observación: ve también su historial).
+     */
+    private function observaciones(?AccesoObservaciones $acceso = null): Builder
     {
+        $soloDocente = $acceso?->soloDocente();
+        $dirigidos = $acceso?->idsCursosDirigidos ?? [];
+
         return DB::table('academico_observacion_estudiante as o')
             ->join('usuarios as u', 'u.id_user', '=', 'o.id_estudiante')
             ->leftJoin('curso as c', 'c.id', '=', 'o.id_curso')
             ->leftJoin('academico_asignatura as asig', 'asig.id', '=', 'o.id_asignatura')
             ->leftJoin('usuarios as doc', 'doc.id_user', '=', 'o.id_docente')
             ->join('periodo_academico as p', 'p.id', '=', 'o.id_periodo_academico')
-            ->when($soloDocente !== null, fn ($q) => $q->where(fn ($w) => $w->where('o.id_docente', $soloDocente)->orWhere('o.id_usuario_registra', $soloDocente)))
+            ->when($soloDocente !== null, fn ($q) => $q->where(fn ($w) => $w
+                ->where('o.id_docente', $soloDocente)
+                ->orWhere('o.id_usuario_registra', $soloDocente)
+                ->when($dirigidos, fn ($w) => $w->orWhereIn('u.id_curso', $dirigidos))))
             ->select([
                 'o.id',
                 'o.fecha',
@@ -239,7 +249,7 @@ class ObservacionEstudianteService
     public function listar(AccesoObservaciones $acceso, array $filtros, int $pagina, int $porPagina, ?string $busqueda, ?string $orden, ?string $direccion): array
     {
         try {
-            $filtradas = $this->observaciones($acceso->soloDocente())
+            $filtradas = $this->observaciones($acceso)
                 ->when(filled($filtros['id_periodo'] ?? null), fn ($q) => $q->where('o.id_periodo_academico', $filtros['id_periodo']))
                 ->when(filled($filtros['fecha_inicio'] ?? null), fn ($q) => $q->where('o.fecha', '>=', $filtros['fecha_inicio']))
                 ->when(filled($filtros['fecha_fin'] ?? null), fn ($q) => $q->where('o.fecha', '<=', $filtros['fecha_fin']))
@@ -261,7 +271,8 @@ class ObservacionEstudianteService
 
             $query = $filtradas
                 ->joinSub($ultimas, 'ult', 'ult.id', '=', 'o.id')
-                ->addSelect(['ult.total_rango', 'ult.positivas_rango', 'ult.negativas_rango'])
+                // foto_carnet: la tabla muestra la foto de cada estudiante.
+                ->addSelect(['ult.total_rango', 'ult.positivas_rango', 'ult.negativas_rango', 'u.foto_carnet'])
                 ->when(filled($busqueda), function ($q) use ($busqueda) {
                     $like = '%' . $busqueda . '%';
                     $q->where(fn ($w) => $w
@@ -357,7 +368,7 @@ class ObservacionEstudianteService
             $periodo = $idPeriodo ? $periodos->firstWhere('id', $idPeriodo) : $periodos->firstWhere('actual', true);
 
             $observaciones = $periodo
-                ? $this->observaciones($acceso->soloDocente())
+                ? $this->observaciones($acceso)
                     ->where('o.id_estudiante', $idEstudiante)
                     ->where('o.id_periodo_academico', $periodo['id'])
                     ->orderByDesc('o.fecha')
@@ -523,7 +534,7 @@ class ObservacionEstudianteService
             return [self::fallo('Tu permiso solo permite consultar observaciones, no modificarlas.', 403), null];
         }
 
-        $obs = $this->observaciones($acceso->soloDocente())->where('o.id', $id)->first();
+        $obs = $this->observaciones($acceso)->where('o.id', $id)->first();
 
         if (! $obs) {
             return [self::fallo('Observación no encontrada.', 404), null];

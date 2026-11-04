@@ -50,15 +50,10 @@ class CursosServices
     public function getCursos()
     {
         try {
-            $cursos = Cursos::select(
-                'id',
-                'nombre',
-                'curso_proximo',
-                'activo'
-            )->orderBy('id', 'asc')
-                ->get();
-
-            return $cursos;
+            // Con su nivel y en orden académico: los selects del frontend los agrupan por nivel.
+            return Cursos::ordenarPorGrado(
+                Cursos::with('nivel:id,nombre')->get(['id', 'nombre', 'curso_proximo', 'activo', 'id_nivel'])
+            );
         } catch (Throwable $err) {
             return [
                 'error' => true,
@@ -246,20 +241,128 @@ class CursosServices
         }
     }
 
-    /** Estudiantes activos de esos cursos, para revisar uno a uno antes de promover. */
+    /**
+     * Estudiantes activos de esos cursos, para revisar uno a uno antes de promover.
+     * `sugerido_repetir`: su director de grupo sugirió que repita el año que se cierra.
+     */
     public function estudiantesParaPromocion(array $idsCursos): array
     {
         try {
-            $estudiantes = Usuario::whereIn('id_curso', $idsCursos)
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
-                ->where('estado', 'activo')
+            $estudiantes = $this->conSugerencia(Usuario::whereIn('id_curso', $idsCursos))
                 ->orderBy('nombre') // legacy: muchos traen el nombre completo aquí y "." de apellido
-                ->get(['id_user', 'nombre', 'apellido', 'documento', 'id_curso']);
+                ->get();
 
             return ['error' => false, 'message' => 'Estudiantes a promover', 'data' => $estudiantes];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /** Estudiantes activos de la consulta con su marca `sugerido_repetir` del año que se cierra. */
+    private function conSugerencia($query)
+    {
+        $anio = $this->anioQueSeCierra();
+
+        return $query->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->where('estado', 'activo')
+            ->select(['id_user', 'nombre', 'apellido', 'documento', 'id_curso'])
+            ->selectRaw(
+                'EXISTS (SELECT 1 FROM promocion_sugerencias s WHERE s.id_estudiante = usuarios.id_user AND s.id_anio_escolar = ?) as sugerido_repetir',
+                [$anio ?? 0],
+            );
+    }
+
+    /**
+     * "Mi curso" del director de grupo: su curso activo, a dónde pasan y sus estudiantes con la
+     * marca de quién sugirió que repita. null si no dirige ninguno.
+     */
+    public function miCurso(int $idDocente): array
+    {
+        try {
+            $curso = Cursos::with('proximo:id,nombre')->where('id_director', $idDocente)->where('activo', 1)->first(['id', 'nombre', 'curso_proximo']);
+
+            if (! $curso) {
+                return ['error' => false, 'message' => 'No diriges ningún curso', 'data' => null];
+            }
+
+            return ['error' => false, 'message' => 'Tu curso', 'data' => [
+                'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre, 'proximo' => $curso->proximo?->nombre],
+                'estudiantes' => $this->conSugerencia(Usuario::where('id_curso', $curso->id))
+                    ->addSelect('foto_carnet') // la lista muestra la foto de cada estudiante
+                    // Estado del último carnet (null = nunca se le imprimió), para "Carnets por entregar".
+                    ->selectRaw('(SELECT k.estado FROM carnets k WHERE k.id_user = usuarios.id_user ORDER BY k.id DESC LIMIT 1) as carnet_estado')
+                    // Tipo de la solicitud de carnet pendiente (null si no hay), para no pedirla dos veces.
+                    ->selectRaw("(SELECT cs.tipo FROM carnet_solicitudes cs WHERE cs.id_user = usuarios.id_user AND cs.estado = 'PENDIENTE' LIMIT 1) as solicitud_carnet")
+                    ->orderBy('nombre')
+                    ->get(),
+            ]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Estudiantes activos que hoy están en el curso que dirige el docente: de esos ids, o todos
+     * con null.
+     */
+    public function estudiantesDeMiCurso(int $idDocente, ?array $idsEstudiantes): array
+    {
+        $idCurso = Cursos::where('id_director', $idDocente)->where('activo', 1)->value('id');
+
+        return $idCurso
+            ? Usuario::where('id_curso', $idCurso)->where('perfil', self::PERFIL_ESTUDIANTE)->where('estado', 'activo')
+                ->when($idsEstudiantes !== null, fn ($q) => $q->whereIn('id_user', $idsEstudiantes))->pluck('id_user')->all()
+            : [];
+    }
+
+    /**
+     * Guarda quiénes sugiere el director que repitan (reemplaza su lista del año que se cierra).
+     * Solo estudiantes que hoy están en su curso; los demás ids se ignoran.
+     */
+    public function sugerirRepiten(int $idDocente, array $idsEstudiantes): array
+    {
+        try {
+            $curso = Cursos::where('id_director', $idDocente)->where('activo', 1)->first(['id', 'nombre']);
+            $anio = $this->anioQueSeCierra();
+
+            if (! $curso) {
+                return ['error' => true, 'message' => 'No diriges ningún curso', 'status' => 403];
+            }
+            if (! $anio) {
+                return ['error' => true, 'message' => 'No hay un año escolar vigente'];
+            }
+
+            $validos = Usuario::where('id_curso', $curso->id)->where('perfil', self::PERFIL_ESTUDIANTE)->where('estado', 'activo')
+                ->whereIn('id_user', $idsEstudiantes)->pluck('id_user');
+
+            DB::transaction(function () use ($curso, $anio, $validos, $idDocente) {
+                // Un estudiante solo puede tener una sugerencia por año (único): se borra también la
+                // que tuviera desde otro curso antes de pasarse a este.
+                DB::table('promocion_sugerencias')->where('id_anio_escolar', $anio)
+                    ->where(fn ($q) => $q->where('id_curso', $curso->id)->orWhereIn('id_estudiante', $validos))
+                    ->delete();
+                DB::table('promocion_sugerencias')->insert($validos->map(fn ($id) => [
+                    'id_anio_escolar' => $anio,
+                    'id_curso' => $curso->id,
+                    'id_estudiante' => $id,
+                    'id_director' => $idDocente,
+                    'fecha' => now(),
+                ])->all());
+            });
+
+            return ['error' => false, 'message' => $validos->isEmpty()
+                ? "Ningún estudiante de {$curso->nombre} quedó sugerido para repetir"
+                : "Se sugirió que {$validos->count()} estudiante(s) de {$curso->nombre} repitan", 'data' => ['total' => $validos->count()]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** El año que se cierra: el que ya terminó si estamos en la ventana de cierre; si no, el vigente. */
+    private function anioQueSeCierra(): ?int
+    {
+        return $this->anios->estadoCierreAnio()['anio_cerrado']->id
+            ?? $this->anios->obtenerUltimoAnioEscolar()['data']?->id;
     }
 
     /**
@@ -308,8 +411,7 @@ class CursosServices
     private function registrarPromocion(int $total, int $idLog): void
     {
         try {
-            $idAnio = $this->anios->estadoCierreAnio()['anio_cerrado']->id
-                ?? $this->anios->obtenerUltimoAnioEscolar()['data']?->id;
+            $idAnio = $this->anioQueSeCierra();
 
             if ($idAnio) {
                 DB::table('cursos_promociones')->insert([

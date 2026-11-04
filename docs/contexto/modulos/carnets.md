@@ -78,3 +78,28 @@ fondo + `elementos` en fracciones de la imagen. Tabla `carnet_plantillas`, servi
   en `carnets/plantillas/`.
 - `GET /carnets/fuentes` y `/fuentes/{archivo}`: las tipografías de cumpleaños **sin opción**
   (el carnet digital de cualquiera las necesita); las de `/noticias/cumpleanos` piden la 69.
+
+## Entrega por el director de grupo (opción 146)
+
+- `PUT /api/cursos/mi-curso/carnets/entregar {ids}` (CursosController, ruta y controller con la
+  146): el director marca entregados los carnets por entregar de los estudiantes de su curso;
+  los demás ids se ignoran. Usa `CarnetService::entregar`, así que el movimiento queda igual
+  que al entregar desde Carnets.
+
+## Solicitudes de carnet (opción 147)
+
+- Tabla `carnet_solicitudes`: `tipo` `PERDIDA` | `DANO` | `CAMBIO_DATOS` (`CarnetService::TIPOS_SOLICITUD`;
+  `PRIMERA_VEZ` sigue en el enum solo por historial), `estado` `PENDIENTE` → `ATENDIDA` | `RECHAZADA`,
+  quién la pidió (`id_solicita`) y quién respondió. `CarnetService::solicitar` exige: que lleve
+  carnet (`poblacion`), que **ya tenga impreso el primero** (una fila en `carnets`: el primero lo
+  imprime la 144 sin solicitud) y **una sola PENDIENTE por persona**.
+- `CarnetSolicitudController` (archivo aparte porque `CarnetController` exige la 144 en todo):
+  - con la **147**: `POST /carnets/solicitudes {tipo, observacion?, id_user?}` (sin `id_user`, la
+    propia; con él, solo si el estudiante está hoy en el curso que dirige, vía
+    `CursosServices::estudiantesDeMiCurso`) y el **seguimiento**: `GET /carnets/solicitudes/mias` (las
+    del carnet propio) y `GET /carnets/solicitudes/mi-curso` (las de los estudiantes del curso que
+    dirige), de la más reciente a la más antigua, con quién respondió, cuándo y la respuesta;
+  - con la **144**: `GET /carnets/solicitudes?estado=` (paginado) y `PUT /carnets/solicitudes/{id}
+    {estado: ATENDIDA|RECHAZADA, respuesta?}` (solo sobre una PENDIENTE).
+- `emitir` deja ATENDIDA ("Carnet emitido") la pendiente de cada carnet que imprime.
+- Test: `tests/Unit/Carnets/SolicitudesCarnetTest.php`.

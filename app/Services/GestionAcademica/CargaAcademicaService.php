@@ -138,11 +138,10 @@ class CargaAcademicaService extends Service
     }
 
     /**
-     * Lista plana (id, nombre) de los cursos donde el docente tiene carga académica
-     * activa — para poblar selectores de autoservicio (ej. el filtro de curso en el
-     * dashboard de Métricas de Asistencia) sin exponer el resto del listado de carga
-     * académica. Misma lógica de scoping que
-     * AsistenciaEstudianteService::metricasPorCurso.
+     * Lista plana (id, nombre) de los cursos del docente: donde tiene carga académica activa
+     * y el curso activo que dirige (curso.id_director). Es la ÚNICA fuente de "sus cursos":
+     * la usan Observaciones, Actas (138), Métricas de asistencia y Mis llegadas tarde, así
+     * el director de grupo ve su curso en todas por igual aunque no le dicte clase.
      */
     public function obtenerCursosDocente(int $idDocente): array
     {
@@ -151,6 +150,12 @@ class CargaAcademicaService extends Service
             // academico_docente_asignatura — el docente se resuelve directo en `ca.id_docente`
             // o, si esa carga sí es por asignatura, en `da.id_docente` (ver
             // CargaAcademicaService::añadirCargaAcademicaSuelta).
+            $dirigidos = DB::table('curso as c')
+                ->where('c.id_director', $idDocente)
+                ->where('c.activo', 1)
+                ->select('c.id', 'c.nombre');
+
+            // UNION (sin ALL) ya quita el curso repetido si además le dicta clase.
             $cursos = DB::table('academico_carga_academica as ca')
                 ->leftJoin('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
                 ->join('curso as c', 'c.id', '=', 'ca.id_curso')
@@ -160,8 +165,8 @@ class CargaAcademicaService extends Service
                 })
                 ->where('ca.activo', 1)
                 ->select('c.id', 'c.nombre')
-                ->distinct()
-                ->orderBy('c.nombre')
+                ->union($dirigidos)
+                ->orderBy('nombre')
                 ->get();
 
             return [

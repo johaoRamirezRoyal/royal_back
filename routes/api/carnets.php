@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Carnets\CarnetController;
 use App\Http\Controllers\Carnets\CarnetPlantillaController;
+use App\Http\Controllers\Carnets\CarnetSolicitudController;
 use App\Support\Permiso;
 use Illuminate\Support\Facades\Route;
 
@@ -10,7 +11,17 @@ Route::get('/mio', [CarnetController::class, 'mio']);
 Route::get('/fuentes', [CarnetPlantillaController::class, 'fuentes']);
 Route::get('/fuentes/{archivo}', [CarnetPlantillaController::class, 'archivoFuente']);
 
+// Solicitudes de carnet: pedir (147, el propio o como director de su curso) y responder (144).
+Route::middleware(Permiso::ruta([Permiso::CARNETS_SOLICITAR]))->group(function () {
+    Route::post('/solicitudes', [CarnetSolicitudController::class, 'store']);
+    // Seguimiento: las del carnet propio y las de los estudiantes del curso que dirige.
+    Route::get('/solicitudes/mias', [CarnetSolicitudController::class, 'mias']);
+    Route::get('/solicitudes/mi-curso', [CarnetSolicitudController::class, 'miCurso']);
+});
+
 Route::middleware(Permiso::ruta([Permiso::CARNETS]))->group(function () {
+    Route::get('/solicitudes', [CarnetSolicitudController::class, 'index']);
+    Route::put('/solicitudes/{id}', [CarnetSolicitudController::class, 'responder'])->whereNumber('id');
     Route::get('/', [CarnetController::class, 'index']);
     Route::post('/emitir', [CarnetController::class, 'emitir']);
     Route::post('/vista-previa', [CarnetController::class, 'vistaPrevia']);

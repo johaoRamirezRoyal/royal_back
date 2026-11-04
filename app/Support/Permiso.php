@@ -81,6 +81,8 @@ final class Permiso
     public const CURSOS_ALTURA = 143;                   // "Gestión Humana — Cursos de altura"
     public const CARNETS = 144;                         // "Carnets institucionales" (imprimir, fotos y entregas)
     public const CURSOS = 145;                          // "Gestión Académica — Cursos y estudiantes"
+    public const CARNETS_MI_CURSO = 146;                // "Director de grupo — Entregar carnets de su curso"
+    public const CARNETS_SOLICITAR = 147;               // "Solicitar carnet" (el propio o, como director, de su curso)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

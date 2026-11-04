@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Estudiantes;
 
 use App\Http\Controllers\Controller;
+use App\Models\Areas\Cursos;
+use App\Models\Usuarios\Usuario;
 use App\Services\Estudiantes\VinculacionAcudienteService;
+use Illuminate\Support\Arr;
 use App\Services\Usuarios\UsuariosServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,13 +95,30 @@ class VinculacionAcudienteController extends Controller
         return $this->success($response['message'], $response['data']);
     }
 
+    /**
+     * Con la 131, los acudientes completos. Sin ella, solo el director de grupo del curso en el
+     * que HOY está el estudiante, y solo el contacto (sin documento del acudiente).
+     */
     public function acudientes(Request $request, int $idEstudiante)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
-            return $rechazo;
+        if (! $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+            return $this->success('Datos obtenidos satisfactoriamente', $this->vinculacionService->acudientesVinculados($idEstudiante));
         }
 
-        return $this->success('Datos obtenidos satisfactoriamente', $this->vinculacionService->acudientesVinculados($idEstudiante));
+        $esSuDirector = Usuario::where('id_user', $idEstudiante)
+            ->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->whereIn('id_curso', Cursos::where('id_director', $request->user()->id_user)->where('activo', 1)->select('id'))
+            ->exists();
+
+        if (! $esSuDirector) {
+            return $this->error('No tienes permiso para esta acción', 403);
+        }
+
+        $contacto = collect($this->vinculacionService->acudientesVinculados($idEstudiante))
+            ->map(fn ($a) => Arr::only($a->toArray(), ['id_user', 'nombre', 'apellido', 'correo', 'telefono']))
+            ->values();
+
+        return $this->success('Datos obtenidos satisfactoriamente', $contacto);
     }
 
     public function vincular(Request $request)

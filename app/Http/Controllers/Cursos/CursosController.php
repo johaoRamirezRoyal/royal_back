@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Cursos\CrearEstudianteRequest;
 use App\Http\Requests\Cursos\CursoRequest;
+use App\Services\Carnets\CarnetService;
 use App\Services\Cursos\CursosServices;
 use App\Services\Usuarios\UsuariosServices;
 use App\Support\Permiso;
@@ -41,6 +42,62 @@ class CursosController extends Controller
             $request->input('estado'),
             (int) $request->input('per-page', 15),
         ));
+    }
+
+    /**
+     * GET /api/cursos/mi-curso — autoservicio del director de grupo (perfil docente): su curso y
+     * sus estudiantes con quién sugirió que repita. data null si no dirige ninguno.
+     */
+    public function miCurso(Request $request): JsonResponse
+    {
+        if (! in_array((int) $request->user()->perfil, Permiso::PERFILES_DOCENTE, true)) {
+            return $this->error('No tienes permiso para esta acción', 403);
+        }
+
+        return $this->apiResponse($this->cursos->miCurso($request->user()->id_user));
+    }
+
+    /**
+     * PUT /api/cursos/mi-curso/repiten { estudiantes: [id_user, ...] } — reemplaza la lista de
+     * los que el director sugiere que repitan. Solo sugerencia: promover sigue siendo de la 145.
+     */
+    public function sugerirRepiten(Request $request): JsonResponse
+    {
+        if (! in_array((int) $request->user()->perfil, Permiso::PERFILES_DOCENTE, true)) {
+            return $this->error('No tienes permiso para esta acción', 403);
+        }
+
+        $data = $request->validate([
+            'estudiantes' => ['present', 'array', 'max:200'],
+            'estudiantes.*' => ['integer'],
+        ]);
+
+        return $this->apiResponse($this->cursos->sugerirRepiten($request->user()->id_user, $data['estudiantes']));
+    }
+
+    /**
+     * PUT /api/cursos/mi-curso/carnets/entregar { ids: [id_user, ...] } — opción 146: el director
+     * marca entregados los carnets por entregar de SU curso (los demás ids se ignoran). La
+     * entrega y su movimiento los hace CarnetService, igual que en Carnets (144).
+     */
+    public function entregarCarnetsMiCurso(Request $request, CarnetService $carnets): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, Permiso::CARNETS_MI_CURSO)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $ids = $this->cursos->estudiantesDeMiCurso($request->user()->id_user, $data['ids']);
+
+        if (! $ids) {
+            return $this->error('Ninguno de esos estudiantes está en el curso que diriges', 422);
+        }
+
+        return $this->apiResponse($carnets->entregar($ids, $request->user()->id_user));
     }
 
     /** GET /api/cursos/docentes — para elegir director de grupo. */

@@ -7,9 +7,9 @@ use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\LlegadasTarde as LlegadaTardeModel;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
+use App\Services\GestionAcademica\CargaAcademicaService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Support\Permiso;
 use App\Services\Usuarios\PermisosPerfil;
 
@@ -41,6 +41,7 @@ class LlegadasTardeController extends Controller
 
     public function __construct(
         private LlegadasTarde $llegadas_tarde,
+        private CargaAcademicaService $cargaAcademica,
     ) {}
 
     private function tieneAccesoCompleto(Request $request): bool
@@ -59,18 +60,13 @@ class LlegadasTardeController extends Controller
             ->all();
     }
 
-    /** IDs de los estudiantes activos matriculados en los cursos donde el Docente
-     * autenticado tiene carga académica activa — mismo join que
-     * AsistenciaEstudianteService::metricasPorCurso usa para resolver "sus cursos".
-     * Vacío (ningún curso asignado todavía) es un resultado válido, no un error. */
+    /** IDs de los estudiantes activos de "sus cursos" (carga académica activa, también la
+     * suelta, y el curso que dirige) — CargaAcademicaService::obtenerCursosDocente, la misma
+     * fuente que Observaciones, Actas y Métricas de asistencia. Vacío (ningún curso todavía)
+     * es un resultado válido, no un error. */
     private function idsAlumnosDeCursosDocente(Request $request): array
     {
-        $cursos = DB::table('academico_carga_academica as ca')
-            ->join('academico_docente_asignatura as da', 'da.id', '=', 'ca.id_docente_asignatura')
-            ->where('da.id_docente', $request->user()->id_user)
-            ->where('ca.activo', 1)
-            ->pluck('ca.id_curso')
-            ->unique();
+        $cursos = collect($this->cargaAcademica->obtenerCursosDocente($request->user()->id_user)['data'] ?? [])->pluck('id');
 
         if ($cursos->isEmpty()) {
             return [];

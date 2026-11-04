@@ -125,5 +125,23 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   (`Permiso::PERFILES_DOCENTE`). Un docente dirige un solo curso: si se le asigna a otro, se
   reasigna (`CursosServices::reasignarDirector` deja el anterior sin director y lo avisa) y
   `GET /cursos/docentes` (145) trae cada docente con el `curso_dirigido` para el select.
+- **"Los cursos del docente" tienen una sola fuente:** `CargaAcademicaService::obtenerCursosDocente()`
+  (carga activa por asignatura o suelta, más el curso activo que dirige). La usan Observaciones,
+  Actas (138), Métricas de asistencia (`metricasPorCurso`) y Mis llegadas tarde. No vuelvas a
+  escribir esa consulta en otro lado: las copias ya divergieron una vez (la de llegadas tarde
+  ignoraba la carga suelta). Prueba: `tests/Unit/GestionAcademica/CursosDelDocenteTest.php`.
+- Director de grupo sin opciones: en Observaciones ve también las de todos los profesores a
+  los estudiantes que hoy están en su curso (`AccesoObservaciones::$idsCursosDirigidos`; editar
+  sigue siendo solo de quien la registró) y en Actas, las de esos estudiantes.
 - **Plan (sin implementar):** funciones reales del director de grupo, con los puntos de
   integración del backend, en `docs/plan-director-de-grupo.md` del frontend.
+- Director de grupo, contacto de acudientes: `GET /vinculacion-acudientes/estudiante/{id}/acudientes`
+  deja pasar a los perfiles 3/14; sin la 131 solo responde si el estudiante está hoy en el curso
+  que dirige, y sin el documento del acudiente.
+- "Mi curso" (`GET /cursos/mi-curso`, `PUT /cursos/mi-curso/repiten`, perfiles 3/14): el
+  director sugiere quién repite; queda en `promocion_sugerencias` (una por estudiante y año) y la
+  promoción la ve como `sugerido_repetir`. No obliga: promover sigue siendo de la 145.
+- Director de grupo, carnets (opción 146): `PUT /cursos/mi-curso/carnets/entregar` entrega con
+  `CarnetService::entregar` solo los carnets de los estudiantes de su curso. Ver `carnets.md`.
+- Aviso de actas: al registrar actas, `ActasEstudianteService::avisarDirectores` manda un correo
+  al director del curso actual de cada estudiante (después de responder; si falla, solo log).

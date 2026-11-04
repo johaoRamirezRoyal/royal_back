@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
+use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\ActaEstudiante;
 use App\Services\GestionAcademica\ActasEstudianteService;
 use App\Services\GestionAcademica\CargaAcademicaService;
@@ -35,10 +36,10 @@ class ActasEstudianteController extends Controller
     ) {}
 
     /**
-     * Lectura: con 136/137 ve todas. Un docente (perfil 3/14) sin ellas ve solo las actas que él
-     * solicitó (`id_docente_solicita`), sin necesitar la 138. Con solo la 138, limita el servicio
-     * a los estudiantes de los cursos donde el usuario tiene carga académica activa más las actas
-     * que él solicitó. Sin ninguna, rechaza.
+     * Lectura: con 136/137 ve todas. Con la 138, las de los estudiantes de sus cursos (carga
+     * académica activa y el curso que dirige) más las que solicitó. Un docente (perfil 3/14) sin
+     * ninguna ve las que solicitó (`id_docente_solicita`) y, si es director de grupo, las de los
+     * estudiantes de su curso. Sin nada de eso, rechaza.
      */
     private function sinLectura(Request $request): ?JsonResponse
     {
@@ -48,16 +49,19 @@ class ActasEstudianteController extends Controller
             return null;
         }
 
-        // [] de cursos = solo las que solicitó (ver ActasEstudianteService::limitarACursos).
-        if (in_array((int) $request->user()->perfil, ActaEstudiante::PERFILES_DOCENTE, true)) {
-            $this->service->limitarACursos([], $request->user()->id_user);
+        // 138 antes que el perfil: si no, un docente con la 138 caía en "solo las que solicitó".
+        if (PermisosPerfil::tiene($request, self::OPCION_MIS_ESTUDIANTES)) {
+            $cursos = $this->cargaAcademica->obtenerCursosDocente($request->user()->id_user)['data'] ?? [];
+            $this->service->limitarACursos(collect($cursos)->pluck('id')->all(), $request->user()->id_user);
 
             return null;
         }
 
-        if (PermisosPerfil::tiene($request, self::OPCION_MIS_ESTUDIANTES)) {
-            $cursos = $this->cargaAcademica->obtenerCursosDocente($request->user()->id_user)['data'] ?? [];
-            $this->service->limitarACursos(collect($cursos)->pluck('id')->all(), $request->user()->id_user);
+        // Docente sin opciones: las que solicitó más las de los estudiantes del curso que dirige
+        // ([] si no dirige ninguno = solo las solicitadas; ver ActasEstudianteService::limitarACursos).
+        if (in_array((int) $request->user()->perfil, ActaEstudiante::PERFILES_DOCENTE, true)) {
+            $dirigidos = Cursos::where('id_director', $request->user()->id_user)->where('activo', 1)->pluck('id')->all();
+            $this->service->limitarACursos($dirigidos, $request->user()->id_user);
 
             return null;
         }

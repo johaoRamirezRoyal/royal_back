@@ -537,3 +537,39 @@ alter table `cursos_promociones` add index `cursos_promociones_id_anio_escolar_i
 -- ---------------------------------------------------------------------------
 alter table `curso` add `id_director` int null after `curso_proximo`;
 alter table `curso` add index `curso_id_director_index`(`id_director`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_04_100000_create_promocion_sugerencias_table.php
+-- promocion_sugerencias: estudiantes que el director de grupo sugiere que repitan
+-- el año que se cierra ("Mi curso"). Solo sugerencia: la promoción los trae
+-- retirados y coordinación decide. Un estudiante, una fila por año.
+-- ---------------------------------------------------------------------------
+create table `promocion_sugerencias` (`id` bigint unsigned not null auto_increment primary key, `id_anio_escolar` int not null, `id_curso` int not null, `id_estudiante` int not null, `id_director` int not null, `fecha` datetime not null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `promocion_sugerencias` add unique `promocion_sugerencias_id_anio_escolar_id_estudiante_unique`(`id_anio_escolar`, `id_estudiante`);
+alter table `promocion_sugerencias` add index `promocion_sugerencias_id_curso_index`(`id_curso`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_04_110000_seed_opcion_carnets_mi_curso.php
+-- Opción 146 "Director de grupo — Entregar carnets de su curso" (módulo 10):
+-- el director marca entregados los carnets de su curso desde "Mi curso".
+-- No se otorga a ningún perfil; se asigna desde /permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 146, 'Director de grupo — Entregar carnets de su curso', 10, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 146);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_04_120000_create_carnet_solicitudes_table.php
+-- carnet_solicitudes: pedidos de carnet (el propio o, como director, de un
+-- estudiante de su curso; opción 147) con tipo; los atiende la 144. Una sola
+-- PENDIENTE por persona; emitir el carnet la deja ATENDIDA.
+-- ---------------------------------------------------------------------------
+create table `carnet_solicitudes` (`id` bigint unsigned not null auto_increment primary key, `id_user` int not null, `tipo` enum('PRIMERA_VEZ', 'PERDIDA', 'DANO', 'CAMBIO_DATOS') not null, `observacion` varchar(255) null, `estado` enum('PENDIENTE', 'ATENDIDA', 'RECHAZADA') not null default 'PENDIENTE', `id_solicita` int not null, `fecha` datetime not null, `id_atiende` int null, `fecha_atencion` datetime null, `respuesta` varchar(255) null) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `carnet_solicitudes` add index `carnet_solicitudes_id_user_index`(`id_user`);
+alter table `carnet_solicitudes` add index `carnet_solicitudes_estado_index`(`estado`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_04_120100_seed_opcion_solicitar_carnet.php
+-- Opción 147 "Solicitar carnet" (módulo 10). No se otorga a ningún perfil.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 147, 'Solicitar carnet', 10, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 147);
