@@ -59,6 +59,10 @@ inicial 0 ─ aprobar (coordinador/admin) → 1 + crea `solicitudes` en 0
 deduce. `VerificarEntregaRequest::after()` rechaza `cerrar` si algún rubro es `No` y
 `devolucion` sin ninguna observación (test en `tests/Unit/ProcesoCompra`).
 
+Correos (fuera de la transacción, no bloqueantes): al crear → coordinadores del nivel; al
+verificar la entrega → solicitante + coordinadores. Los dos llevan además el grupo
+`COMPRAS_VENTAS` de `correos_institucionales`.
+
 El `verificar` legacy (60) guarda un checklist en `solicitud_verificacion_inicial` y no
 crea la fila final; `asignar-proveedor` la crea si falta
 (`crearSolicitudFinalDesdeInicial`).

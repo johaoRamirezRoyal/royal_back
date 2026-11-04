@@ -227,6 +227,7 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 | `CRONOGRAMA_SISTEMAS` | avisos de Inventario y Préstamos |
 | `ADMISIONES_ESTADO` | cambio de estado de una inscripción |
 | `RRHH_ASISTENCIA` | cierre automático de asistencias vencidas |
+| `COMPRAS_VENTAS` | copia de los avisos de solicitudes de compra (nueva solicitud y verificación de entrega) |
 | `DIRECCION_ADMINISTRATIVA` | avisos de Áreas Comunes |
 | `NOTICIAS_*` | listas de distribución de Noticias (`NOTICIAS_TODOS` es también el fallback del banner informativo) |
 
