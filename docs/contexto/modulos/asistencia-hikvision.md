@@ -135,16 +135,18 @@ Los dos últimos reemplazaron un selector libre de perfiles. Hay un tope de
   `"{unix del escaneo}.{nonce}.{firma}"` que vale 10 min (`VIGENCIA_PASE_QR`), lo que tarda el
   login con OTP. No marca nada. El pase es **de un solo uso** (`consumirPaseQr`, en caché): un
   enlace reenviado por chat no marca a nadie más (409).
-- `POST /asistencia-gestion/qr/marcar` (`{token}` o `{pase}`; con pase se registra la hora del
-  escaneo, no la del login; `throttle:asistencia` es 10/min **por usuario**, no por IP, porque
-  todo el personal sale por la IP del colegio; cualquier usuario con sesión,
-  `throttle:asistencia`):
-  - El token vale 3 ventanas (~90 s).
-  - El usuario sale de la sesión y la hora de `now()`.
-  - Tiene un debounce de 60 s por usuario y pasa por `registrarMarcacion` con `QR = 1`.
+- `POST /asistencia-gestion/qr/marcar` (`{token}` o `{pase}`, cualquier usuario con sesión,
+  `throttle:asistencia`: 10/min **por usuario**, no por IP, porque todo el personal sale por
+  la IP del colegio):
+  - El token vale 3 ventanas (~90 s); el pase, 10 min y una sola vez.
+  - El usuario sale de la sesión. La hora es `now()` con token y la del escaneo con pase.
+  - Orden: firma/vigencia → red → perfil → gastar el pase (409 si ya se usó) → debounce de
+    60 s por usuario → `registrarMarcacion` con `QR = 1`.
+  - El uso único y el debounce viven en la caché (`Cache::add`): con varios servidores, la
+    caché tiene que ser compartida (`database`/`redis`, no `file`).
 - `ASISTENCIA_QR_REDES` (lista de CIDR) limita las redes desde donde se puede marcar. Usa
   `$request->ip()`: detrás de un proxy, configura los proxies de confianza. Sin esa
-  restricción, el QR se puede reenviar en vivo durante ~90 s.
+  restricción, un token se puede reenviar en vivo durante ~90 s (un pase, a una sola persona).
 
 ## Escaneo de carnets (`POST /llegadas-tarde/escanear`)
 
