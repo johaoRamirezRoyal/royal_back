@@ -3,7 +3,6 @@
 namespace App\Services\inventario;
 
 use App\Enums\Mails;
-use App\Services\Cloudinary\ArchivosPrivados;
 use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\Periodo;
 use App\Models\Areas\Areas;
@@ -25,6 +24,7 @@ use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Pdf\Inventario\ReporteOperativoPdfService;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Carbon\Carbon;
@@ -1140,10 +1140,22 @@ class InventarioServices
                 ];
             }
 
-            $actualizados = Inventario::whereIn('id', $ids)->update([
-                'id_categoria' => $idCategoria,
-                'user_log' => $idLog,
-            ]);
+            // Solo ítems vigentes, mismo criterio que obtenerListadoConsolidado (lo que
+            // muestra el modal): activos y ni Liberados (4) ni Descontinuados (5).
+            $actualizados = Inventario::whereIn('id', $ids)
+                ->where('activo', 1)
+                ->whereNotIn('estado', [4, 5])
+                ->update([
+                    'id_categoria' => $idCategoria,
+                    'user_log' => $idLog,
+                ]);
+
+            if ($actualizados === 0) {
+                return [
+                    'error' => true,
+                    'message' => 'Ninguno de los ítems seleccionados está vigente (inactivo, liberado o descontinuado)',
+                ];
+            }
 
             return [
                 'error' => false,

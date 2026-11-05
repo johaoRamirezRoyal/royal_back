@@ -580,3 +580,11 @@ INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
 -- cancelar/finalizar colgaba de la 41, que tienen casi todos los perfiles). Solo renombra.
 -- ---------------------------------------------------------------------------
 UPDATE `cron_opciones` SET `nombre` = 'Reservas — Editar y cancelar reservas' WHERE `id` = 120;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_140000_seed_opcion_mis_areas_comunes_con_areas.php
+-- Opción 149 "Mis áreas comunes — Ver áreas del bloque" (módulo 6). Con solo la 119 el
+-- responsable ve lo asignado directo al bloque; con la 149 también sus áreas. No se otorga.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 149, 'Mis áreas comunes — Ver áreas del bloque', 6, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 149);

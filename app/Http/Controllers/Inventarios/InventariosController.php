@@ -13,9 +13,11 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
+use App\Models\Areas\Areas;
 use App\Models\Areas\Bloque;
 use App\Models\CursosAltura\CursoAltura;
 use App\Services\inventario\InventarioServices;
+use App\Services\Usuarios\PermisosPerfil;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -132,6 +134,11 @@ class InventariosController extends Controller
         }
 
         $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual', 'sort', 'dir']);
+
+        if (! PermisosPerfil::tiene($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            $filtros = $this->limitarAMisBloques($request, $filtros);
+        }
+
         // `per-page` es el que manda el DataTable remoto de /inventario/listado.
         $per_page = $request->input('per-page', $request->input('per_page', 15));
 
@@ -150,6 +157,40 @@ class InventariosController extends Controller
             'message' => $listado['message'],
             'data' => $listado['data'],
         ]);
+    }
+
+    /**
+     * Alcance de quien entra solo con la 119 "Mis areas comunes": los bloques donde es
+     * responsable (bloque_usuario) y, únicamente con la 149, las áreas de esos bloques.
+     * Sin la 149 ve solo lo asignado directo al bloque. Sin bloques a cargo, nada.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function limitarAMisBloques(Request $request, array $filtros): array
+    {
+        $misBloques = Bloque::where('activo', 1)
+            ->whereHas('responsables', fn ($q) => $q->where('usuarios.id_user', $request->user()->id_user))
+            ->pluck('id')
+            ->all();
+
+        $pedidos = array_map('intval', $filtros['id_bloque'] ?? []);
+        $bloques = $pedidos ? array_values(array_intersect($pedidos, $misBloques)) : $misBloques;
+
+        $areas = [];
+        if ($bloques && PermisosPerfil::tiene($request, Permiso::MIS_AREAS_COMUNES_CON_AREAS)) {
+            $permitidas = Areas::whereIn('id_bloque', $bloques)->pluck('id')->all();
+            $areas = array_values(array_intersect(array_map('intval', $filtros['id_area'] ?? []), $permitidas));
+        }
+
+        unset($filtros['id_area'], $filtros['id_bloque_area']);
+        // [0]: ningún bloque tiene id 0 — lista vacía con la misma forma paginada.
+        $filtros['id_bloque'] = $bloques ?: [0];
+        if ($areas) {
+            $filtros['id_area'] = $areas;
+        }
+
+        return $filtros;
     }
 
     // GET /inventario/listado-consolidado/conteo — Total / Liberados / Reportados / Mant. preventivo

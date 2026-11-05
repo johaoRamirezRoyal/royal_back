@@ -72,7 +72,8 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 |---|---|---|
 | 108 Administrador | 1, 2 | todo el módulo |
 | 109 Uso | 11, 26 | todo el módulo, pero `obtenerTodosLosBloques` lo limita a su `id_nivel` si no tiene la 108 |
-| 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) |
+| 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) y, de ellos, solo lo asignado directo al bloque. Con solo la 119 (sin 12/17/108/109), `listadoConsolidado` limita los filtros en el servidor (`InventariosController::limitarAMisBloques`) |
+| 149 Mis áreas comunes — Ver áreas del bloque | ninguno | complemento de la 119: suma las áreas de sus bloques y su inventario |
 | 141 Mis áreas — de mi nivel | ninguno (se asigna en `/permisos`) | `/inventario/mis-areas` del frontend: ítems tipo 3 de los bloques activos de su `id_nivel` (directos o en sus áreas) |
 | 142 Mis áreas — de mis áreas a cargo | ninguno | lo mismo, pero de las áreas donde tiene ítems con `inventario.id_user` = él |
 

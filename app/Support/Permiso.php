@@ -84,6 +84,7 @@ final class Permiso
     public const CARNETS_MI_CURSO = 146;                // "Director de grupo — Entregar carnets de su curso"
     public const CARNETS_SOLICITAR = 147;               // "Solicitar carnet" (el propio o, como director, de su curso)
     public const ASISTENCIA_PANTALLA_QR = 148;          // "Asistencia — Pantalla del código QR" (solo la pantalla de portería)
+    public const MIS_AREAS_COMUNES_CON_AREAS = 149;     // "Mis áreas comunes — Ver áreas del bloque" (complemento de la 119)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás
