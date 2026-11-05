@@ -47,7 +47,8 @@ class AsistenciaGestionController extends Controller
     /** QR de la pantalla de portería (ver AsistenciaGestionService::tokenQr). */
     public function tokenQr(Request $request): JsonResponse
     {
-        if (!PermisosPerfil::tiene($request, self::OPCION_VER_TODAS)) {
+        // La 148 da solo la pantalla; la 63 la incluye junto con ver la asistencia de todos.
+        if (!PermisosPerfil::tiene($request, self::OPCION_VER_TODAS) && !PermisosPerfil::tiene($request, Permiso::ASISTENCIA_PANTALLA_QR)) {
             return $this->error('No tienes permiso para mostrar el código de asistencia', 403);
         }
 
