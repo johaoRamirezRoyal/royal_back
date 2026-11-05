@@ -35,6 +35,10 @@ Route::group(['prefix' => 'auth'], function () {
 Route::get('/banner-informativo', [App\Http\Controllers\BannerInformativoController::class, 'obtener']);
 Route::get('/banners-modulo', [App\Http\Controllers\BannerInformativoController::class, 'porModulo']);
 
+// QR de asistencia escaneado sin sesión: canjea el token (~90 s) por un pase que sobrevive al
+// login. No marca nada; la marcación sigue pidiendo sesión (AsistenciaGestionController::paseQr).
+Route::post('/asistencia-gestion/qr/pase', [App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController::class, 'paseQr'])->middleware('throttle:asistencia-pase');
+
 // Encuesta pública por salón (sin token — se accede vía QR físico pegado en el salón,
 // anónima, cualquiera con el link puede responder). El token identifica el salón, no su
 // id — ver EncuestasServices::obtenerEncuestaPublica/responderPublica.

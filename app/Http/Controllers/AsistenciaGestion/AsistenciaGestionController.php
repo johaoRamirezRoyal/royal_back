@@ -56,6 +56,20 @@ class AsistenciaGestionController extends Controller
     }
 
     /**
+     * Público (sin sesión): quien escanea el QR sin haber iniciado sesión canjea el token por
+     * un pase que sobrevive al login (ver AsistenciaGestionService::paseQr).
+     */
+    public function paseQr(Request $request): JsonResponse
+    {
+        $pase = $this->asistenciaService->paseQr((string) $request->input('token', ''));
+        if ($pase === null) {
+            return $this->error('El código ya venció. Escanea de nuevo el de la pantalla.', 422);
+        }
+
+        return $this->apiResponse(['error' => false, 'message' => 'OK', 'data' => ['pase' => $pase]]);
+    }
+
+    /**
      * El trabajador escanea el QR de portería con su celular. Quién marca sale de la sesión y
      * la hora del reloj del servidor; del cliente solo llega el token, que prueba que estuvo
      * frente a la pantalla en los últimos ~90 s. Con ASISTENCIA_QR_REDES (CIDRs separados por
@@ -63,8 +77,12 @@ class AsistenciaGestionController extends Controller
      */
     public function marcarConQr(Request $request): JsonResponse
     {
-        $token = (string) $request->input('token', '');
-        if (!$this->asistenciaService->tokenQrValido($token)) {
+        // Con sesión llega el token; si escaneó sin sesión, el pase de paseQr (hora del escaneo).
+        $pase = (string) $request->input('pase', '');
+        $momento = $pase !== ''
+            ? $this->asistenciaService->momentoPaseQr($pase)
+            : ($this->asistenciaService->tokenQrValido((string) $request->input('token', '')) ? now() : null);
+        if ($momento === null) {
             return $this->error('El código ya venció. Escanea de nuevo el de la pantalla.', 422);
         }
 
@@ -78,15 +96,20 @@ class AsistenciaGestionController extends Controller
             return $this->error('Tu perfil no registra asistencia de trabajadores.', 403);
         }
 
+        // Antes del debounce: si el pase ya se usó, no le gasta los 60 s al usuario.
+        if ($pase !== '' && !$this->asistenciaService->consumirPaseQr($pase)) {
+            return $this->error('Este código ya se usó. Escanea de nuevo el de la pantalla.', 409);
+        }
+
         // Mismo criterio que el debounce del webhook: un doble escaneo no puede leerse como la salida.
         if (!Cache::add('asistencia-qr:' . config('database.default') . ':' . $usuario->id_user, true, 60)) {
             return $this->error('Ya registramos tu marcación hace un momento.', 429);
         }
 
-        $hora = now()->format('H:i:s');
+        $hora = $momento->format('H:i:s');
         $resultado = $this->asistenciaService->registrarMarcacion(
             (int) $usuario->id_user,
-            now()->toDateString(),
+            $momento->toDateString(),
             $hora,
             AsistenciaGestionService::METODO_QR
         );

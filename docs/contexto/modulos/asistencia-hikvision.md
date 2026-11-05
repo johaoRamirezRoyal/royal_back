@@ -127,10 +127,17 @@ Los dos últimos reemplazaron un selector libre de perfiles. Hay un tope de
 
 ## QR de portería
 
-- `GET /asistencia-gestion/qr/token` (opción 63): token `"{ventana}.{firma}"` que cambia
+- `GET /asistencia-gestion/qr/token` (opción 63 o 148, la 148 da solo la pantalla): token `"{ventana}.{firma}"` que cambia
   cada 30 s, con HMAC sobre `app.key` y `database.default` (el QR de un colegio no sirve
   en otro). No guarda estado.
-- `POST /asistencia-gestion/qr/marcar` (`{token}`, cualquier usuario con sesión,
+- `POST /asistencia-gestion/qr/pase` (`{token}`, **público**, `throttle:asistencia-pase`, 60/min
+  por IP): quien escanea sin sesión cambia el token por un pase
+  `"{unix del escaneo}.{nonce}.{firma}"` que vale 10 min (`VIGENCIA_PASE_QR`), lo que tarda el
+  login con OTP. No marca nada. El pase es **de un solo uso** (`consumirPaseQr`, en caché): un
+  enlace reenviado por chat no marca a nadie más (409).
+- `POST /asistencia-gestion/qr/marcar` (`{token}` o `{pase}`; con pase se registra la hora del
+  escaneo, no la del login; `throttle:asistencia` es 10/min **por usuario**, no por IP, porque
+  todo el personal sale por la IP del colegio; cualquier usuario con sesión,
   `throttle:asistencia`):
   - El token vale 3 ventanas (~90 s).
   - El usuario sale de la sesión y la hora de `now()`.

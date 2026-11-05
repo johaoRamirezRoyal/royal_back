@@ -165,6 +165,8 @@ class AsistenciaGestionService extends Service
     // VENTANAS_VALIDAS_QR ventanas (la actual y las anteriores), unos 90 s en total.
     private const VENTANA_QR = 30;
     private const VENTANAS_VALIDAS_QR = 3;
+    // Pase de quien escaneó sin sesión: tiempo para iniciar sesión (clave + OTP por correo).
+    private const VIGENCIA_PASE_QR = 600;
 
     /**
      * Token del QR de la pantalla: "{ventana}.{firma}". La firma incluye la base del colegio,
@@ -175,7 +177,7 @@ class AsistenciaGestionService extends Service
         $ventana = intdiv(time(), self::VENTANA_QR);
 
         return [
-            'token' => $ventana . '.' . $this->firmaQr($ventana),
+            'token' => $ventana . '.' . $this->firma('asistencia-qr', $ventana),
             'segundos_restantes' => self::VENTANA_QR - (time() % self::VENTANA_QR),
         ];
     }
@@ -188,12 +190,49 @@ class AsistenciaGestionService extends Service
         $edad = intdiv(time(), self::VENTANA_QR) - (int) $ventana;
 
         return $edad >= 0 && $edad < self::VENTANAS_VALIDAS_QR
-            && hash_equals($this->firmaQr((int) $ventana), $firma);
+            && hash_equals($this->firma('asistencia-qr', (int) $ventana), $firma);
     }
 
-    private function firmaQr(int $ventana): string
+    /**
+     * Pase para marcar después de iniciar sesión: quien escanea sin sesión pierde el token
+     * (~90 s) mientras escribe la clave o el OTP. El QR se valida al escanear y el pase firma
+     * ese momento, que es la hora que se registra. Vale VIGENCIA_PASE_QR segundos.
+     */
+    public function paseQr(string $token): ?string
     {
-        return substr(hash_hmac('sha256', 'asistencia-qr|' . config('database.default') . '|' . $ventana, (string) config('app.key')), 0, 32);
+        if (!$this->tokenQrValido($token)) return null;
+
+        // Nonce: dos escaneos en el mismo segundo no deben dar el mismo pase (es de un solo uso).
+        $escaneo = time() . '.' . bin2hex(random_bytes(8));
+
+        return $escaneo . '.' . $this->firma('asistencia-qr-pase', $escaneo);
+    }
+
+    /** Momento del escaneo si el pase es válido y sigue vigente. */
+    public function momentoPaseQr(string $pase): ?\Carbon\Carbon
+    {
+        [$segundo, $nonce, $firma] = array_pad(explode('.', $pase, 3), 3, '');
+        if ($firma === '') return null; // lo demás alterado lo rechaza hash_equals
+
+        $edad = time() - (int) $segundo;
+        if ($edad < 0 || $edad > self::VIGENCIA_PASE_QR || !hash_equals($this->firma('asistencia-qr-pase', $segundo . '.' . $nonce), $firma)) return null;
+
+        return \Carbon\Carbon::createFromTimestamp((int) $segundo, config('app.timezone'));
+    }
+
+    /**
+     * Un pase marca una sola vez: reenviado por chat no sirve para nadie más. False si ya se
+     * usó. El registro dura lo que la vigencia del pase; después vence solo.
+     */
+    public function consumirPaseQr(string $pase): bool
+    {
+        return \Illuminate\Support\Facades\Cache::add('asistencia-qr-pase:' . config('database.default') . ':' . $pase, true, self::VIGENCIA_PASE_QR + 60);
+    }
+
+    /** HMAC con la base del colegio: un QR o pase de un colegio no sirve en otro. La etiqueta separa token de pase. */
+    private function firma(string $etiqueta, string|int $dato): string
+    {
+        return substr(hash_hmac('sha256', $etiqueta . '|' . config('database.default') . '|' . $dato, (string) config('app.key')), 0, 32);
     }
 
     public function registrarMarcacion(int $idUsuario, string $fecha, string $hora, int $metodo = self::METODO_TERMINAL): array

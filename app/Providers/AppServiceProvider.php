@@ -54,10 +54,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Cuota propia por dispositivo/IP (no por usuario autenticado): un kiosco
-        // compartido donde marcan varios trabajadores no debe agotar la cuota de
-        // uno por las marcaciones de otro.
-        RateLimiter::for('asistencia', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
+        // Marcar con QR: por usuario. Por IP, todo el personal tras la IP del colegio
+        // compartía 20/min y en la hora pico recibía 429.
+        RateLimiter::for('asistencia', fn (Request $request) => Limit::perMinute(10)->by('u' . ($request->user()?->id_user ?? $request->ip())));
+        // Canje público del QR por un pase (sin sesión, solo hay IP): más holgado por el NAT del
+        // colegio; solo calcula un HMAC. Contador aparte del de marcar.
+        RateLimiter::for('asistencia-pase', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
 
         // Disco `cloudinary` (config/filesystems.php): credenciales de config/cloudinary.php.
         Storage::extend('cloudinary_uploads', function ($app, array $config) {
