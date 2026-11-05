@@ -13,6 +13,7 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
+use App\Models\Areas\Bloque;
 use App\Models\CursosAltura\CursoAltura;
 use App\Services\inventario\InventarioServices;
 use App\Support\Permiso;
@@ -162,6 +163,20 @@ class InventariosController extends Controller
         return $this->apiResponse(
             $this->inventario_services->conteoPorEstado($request->only(['id_usuario', 'id_area', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 's']))
         );
+    }
+
+    // Catálogo del filtro "Bloque" del listado: todos los bloques activos, tengan o no
+    // áreas. GET /api/bloques no sirve acá: exige permisos de Áreas comunes.
+    public function bloquesCatalogo(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse([
+            'error' => false,
+            'data' => Bloque::where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']),
+        ]);
     }
 
     public function editarDescripcionGrupo(EditarDescripcionListadoInventarioRequest $request)

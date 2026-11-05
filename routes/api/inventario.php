@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/listado', [InventariosController::class, 'obtenerListadoInventario'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::MIS_INVENTARIOS]));
 Route::get('/listado-consolidado', [InventariosController::class, 'listadoConsolidado'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::PRESTAMOS_INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO, Permiso::MIS_AREAS_COMUNES]));
 Route::get('/listado-consolidado/conteo', [InventariosController::class, 'conteoPorEstado'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
+Route::get('/listado-consolidado/bloques', [InventariosController::class, 'bloquesCatalogo'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::put('/listado-consolidado/descripcion', [InventariosController::class, 'editarDescripcionGrupo'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::post('/listado-consolidado/incrementar', [InventariosController::class, 'incrementarCantidadGrupo'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::post('/listado-consolidado/disminuir', [InventariosController::class, 'disminuirCantidadGrupo'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
