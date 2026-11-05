@@ -573,3 +573,10 @@ alter table `carnet_solicitudes` add index `carnet_solicitudes_estado_index`(`es
 -- ---------------------------------------------------------------------------
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 147, 'Solicitar carnet', 10, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 147);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120000_renombrar_opcion_editar_reservas.php
+-- La opción 120 pasa a cubrir editar, cancelar y finalizar cualquier reserva (antes
+-- cancelar/finalizar colgaba de la 41, que tienen casi todos los perfiles). Solo renombra.
+-- ---------------------------------------------------------------------------
+UPDATE `cron_opciones` SET `nombre` = 'Reservas — Editar y cancelar reservas' WHERE `id` = 120;

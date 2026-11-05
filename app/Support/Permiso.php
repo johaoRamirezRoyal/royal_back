@@ -22,7 +22,7 @@ final class Permiso
     public const CERTIFICADOS_LISTADO = 25;             // "Certificados solicitados"
     public const PERMISOS_SISTEMA = 28;                 // "Permisos" (/permisos: cron_opciones/cron_permisos)
     public const SALONES = 40;                          // "Salones"
-    public const RESERVAS_GESTIONAR = 41;               // "Reserva de salones"
+    public const RESERVAS_GESTIONAR = 41;               // "Reserva de salones" (crear; cancelar ajenas es la 120)
     public const LISTADO_MAESTRO = 46;                  // "Registro - Listado maestro de documentos"
     public const ENFERMERIA_CATEGORIAS = 54;            // "Enfermeria"
     public const ENFERMERIA_ATENCIONES = 57;            // "Atencion Medica"
@@ -58,7 +58,7 @@ final class Permiso
     public const ACUDIENTES_GESTION = 112;              // "Gestión de Acudientes"
     public const COMPRAS_GENERAR_SOLICITUDES = 114;     // "Compras — Generar solicitudes"
     public const MIS_AREAS_COMUNES = 119;               // "Mis areas comunes"
-    public const RESERVAS_EDITAR = 120;                 // "Editar Reservas"
+    public const RESERVAS_EDITAR = 120;                 // "Reservas — Editar y cancelar reservas" (editar, cancelar, finalizar cualquiera)
     public const PERMISOS_LICENCIAS_CONFIGURACION = 121; // "Permisos y Licencias — Configuración de catálogos"
     public const EVALUACIONES_ADMIN = 122;              // "Evaluaciones — Configuración y administración"
     public const EVALUACIONES_RESULTADOS = 123;         // "Evaluaciones — Ver resultados"
