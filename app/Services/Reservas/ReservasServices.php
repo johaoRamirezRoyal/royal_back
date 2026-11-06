@@ -57,7 +57,12 @@ class ReservasServices extends Service
     /**
      * `$sinLimiteFecha`: el Super Admin (perfil 1) reserva sin la ventana de tiempo de
      * validarFechaReserva (anticipación, domingo, corte de las 12:00). El resto de
-     * validaciones (choque de salón, portátiles, sonido) sigue aplicando.
+     * validaciones (choque de salón) sigue aplicando.
+     *
+     * Portátiles y sonido NO se validan por ahora (ni disponibilidad ni recurso del salón):
+     * las reglas anteriores estaban mal (conteo doble de portátiles prestados, `'no'`
+     * truthy en sonido) y se rediseñarán. Si no alcanzan los portátiles, el préstamo
+     * automático presta los que haya.
      */
     public function crearReserva(array $data, bool $sinLimiteFecha = false): array
     {
@@ -67,16 +72,6 @@ class ReservasServices extends Service
             return [
                 'error' => true,
                 'message' => 'El salón no existe o está inactivo.',
-                'data' => [],
-            ];
-        }
-
-        $sonidoSolicitado = $data['sonido'] ?? false;
-
-        if ($sonidoSolicitado && ! $salon->sonido) {
-            return [
-                'error' => true,
-                'message' => 'El salón no tiene disponibilidad de sonido.',
                 'data' => [],
             ];
         }
@@ -164,18 +159,6 @@ class ReservasServices extends Service
                     'message' => "La hora {$combo['hora']} no existe.",
                     'data' => [],
                 ];
-            }
-
-            if ($portatilSolicitado > 0) {
-                $disponibilidad = $this->validarDisponibilidadPortatil($combo['fecha'], $combo['hora']);
-
-                if ($disponibilidad['disponibles'] < $portatilSolicitado) {
-                    return [
-                        'error' => true,
-                        'message' => "No hay suficientes portátiles disponibles para el {$combo['fecha']} hora {$combo['hora']}.",
-                        'data' => $disponibilidad,
-                    ];
-                }
             }
         }
 
@@ -530,18 +513,6 @@ class ReservasServices extends Service
                 }
             }
 
-            $sonidoSolicitado = array_key_exists('sonido', $data) ? $data['sonido'] : ($reserva->sonido && $reserva->sonido !== 'no' && $reserva->sonido !== '0');
-
-            if ($sonidoSolicitado && (! $salon || $salon->sonido !== 'si')) {
-                DB::rollBack();
-
-                return [
-                    'error' => true,
-                    'message' => 'El salón no tiene disponibilidad de sonido.',
-                    'data' => [],
-                ];
-            }
-
             // Reconcilia los préstamos de portátiles (mismo marcador "reserva #{id}" que usa
             // crearReserva) cuando cambia la cantidad solicitada o la reserva se mueve de
             // fecha/hora — en ese caso se libera todo lo prestado para la franja vieja y se
@@ -576,18 +547,9 @@ class ReservasServices extends Service
                         $this->prestamosService->registrarLog($prestamo->inventario, 1, Auth::id());
                     }
                 } elseif ($solicitado > $yaAsignados) {
+                    // Sin validar disponibilidad (temporal, ver crearReserva): si no
+                    // alcanzan, limit() presta los que haya.
                     $faltan = $solicitado - $yaAsignados;
-                    $disponibilidad = $this->validarDisponibilidadPortatil($fechaEfectiva, (int) $horaEfectiva);
-
-                    if ($disponibilidad['disponibles'] < $faltan) {
-                        DB::rollBack();
-
-                        return [
-                            'error' => true,
-                            'message' => "No hay suficientes portátiles disponibles ({$disponibilidad['disponibles']}) para los {$faltan} adicionales solicitados.",
-                            'data' => $disponibilidad,
-                        ];
-                    }
 
                     $portatiles = Inventario::where('descripcion', 'like', '%PORTATIL%')
                         ->where('activo', 1)

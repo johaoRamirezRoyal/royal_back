@@ -311,10 +311,11 @@ class InventariosController extends Controller
         ]);
     }
 
-    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado.
+    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado y en
+    // Reporte de Áreas Comunes (pestaña Correctivos).
     public function reportePdf(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 
