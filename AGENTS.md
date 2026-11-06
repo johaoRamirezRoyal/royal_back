@@ -98,7 +98,8 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
   `boost:update`: no lo edites a mano. Si contradice una convención de este archivo, gana
   la de este archivo.
 - **Pendiente**: los comandos programados (`asistencia:cerrar-vencidas`,
-  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`) solo usan la conexión por
+  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`,
+  `periodos-administrativos:sincronizar-en-curso`) solo usan la conexión por
   defecto y no recorren todos los colegios (`mysql`, `sami_hebreo`).
 
 ## Contexto por tema (`docs/contexto/`)

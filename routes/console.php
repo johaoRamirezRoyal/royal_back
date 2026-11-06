@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Usuarios\Usuario;
+use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -29,6 +31,11 @@ Schedule::command('periodos:desactivar-vencidos')->daily();
 // `php artisan schedule:run` corriendo cada minuto en el servidor
 // (deploy/royal-back-scheduler.timer/.service).
 Schedule::command('anio-escolar:cerrar-abrir')->daily();
+
+// Marca en curso el periodo administrativo (tabla `periodos`) cuyas fechas cubren hoy (ver
+// PeriodoServices::sincronizarEnCurso). Después del cierre/apertura de año. Misma nota
+// operativa: requiere `php artisan schedule:run` cada minuto en el servidor.
+Schedule::command('periodos-administrativos:sincronizar-en-curso')->dailyAt('00:05');
 
 // Purga logs_actividad con más de 90 días (ver LogsActividadService::purgarLogsAntiguos).
 // Laravel no tiene un ->everyThreeDays() nativo, así que se usa cron directo: corre a
@@ -62,11 +69,12 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function () {
-    $hikvisionService = app(\App\Services\Hikvisionattendance\hikvisionattendanceService::class);
+    $hikvisionService = app(hikvisionattendanceService::class);
     $idsConfigurados = $hikvisionService->deviceIds();
 
     if (! $this->option('device') && ! $this->option('all')) {
         $this->error('Debes indicar --device=<id> o --all. Dispositivos configurados: '.implode(', ', $idsConfigurados));
+
         return 1;
     }
 
@@ -76,6 +84,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
     foreach ($objetivo as $deviceId) {
         if (! in_array($deviceId, $idsConfigurados, true)) {
             $this->error("Dispositivo desconocido: {$deviceId}");
+
             continue;
         }
 
@@ -85,6 +94,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
 
         if ($listado['error']) {
             $this->error('No se pudo obtener el listado del dispositivo: '.$listado['message']);
+
             continue;
         }
 
@@ -94,6 +104,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
         if ($total === 0) {
             $this->info('El dispositivo no tiene usuarios registrados.');
             $dispositivosVaciados++;
+
             continue;
         }
 
@@ -104,6 +115,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
 
         if (! $this->option('force') && ! $this->confirm("¿Confirmas ELIMINAR estos {$total} usuarios del dispositivo {$deviceId}? Esta acción es irreversible.")) {
             $this->info('Operación cancelada para este dispositivo.');
+
             continue;
         }
 
@@ -111,6 +123,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
 
         if ($resultado['error']) {
             $this->error('Error al eliminar: '.$resultado['message']);
+
             continue;
         }
 
@@ -122,7 +135,7 @@ Artisan::command('hikvision:wipe-all {--force} {--device=} {--all}', function ()
     // configurados quedaron vacíos: si solo se vació uno de varios, el usuario
     // aún puede marcar en los demás terminales.
     if ($dispositivosVaciados === count($idsConfigurados)) {
-        \App\Models\Usuarios\Usuario::where('asistenciaRegistrada', true)
+        Usuario::where('asistenciaRegistrada', true)
             ->update(['asistenciaRegistrada' => false]);
     } elseif ($dispositivosVaciados > 0) {
         $this->warn('Solo se vaciaron '.$dispositivosVaciados.'/'.count($idsConfigurados).' dispositivos configurados: no se reseteó el flag asistenciaRegistrada (los usuarios aún pueden marcar en los demás terminales).');
