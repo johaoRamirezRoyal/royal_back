@@ -28,6 +28,8 @@ class AsignarProveedorRequest extends FormRequest
                 'integer',
                 Rule::exists('usuarios', 'id_user')->where('perfil', 17)->where('estado', 'activo'),
             ],
+            // Solicitud final que se edita (las del legacy no tienen solicitud inicial).
+            'id_solicitud' => ['nullable', 'integer', Rule::exists('solicitudes', 'id')],
             'iva' => ['nullable', 'string', 'max:200'],
             'cotizacion_doc' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             // Confirmación / estudio de la solicitud
@@ -36,9 +38,11 @@ class AsignarProveedorRequest extends FormRequest
             'fecha_aplazado' => ['nullable', 'date'],
             'observaciones' => ['nullable', 'string', 'max:1300'],
             'justificacion' => ['nullable', 'string', 'max:1000'],
-            // Precios e IVA por producto
+            // Productos de la solicitud final: sin `id` es una línea nueva agregada en el estudio.
             'productos' => ['nullable', 'array'],
-            'productos.*.id' => ['required', 'integer', Rule::exists('solicitud_productos', 'id')],
+            'productos.*.id' => ['nullable', 'integer', Rule::exists('solicitud_productos', 'id')],
+            'productos.*.producto' => ['required', 'string', 'max:1000'],
+            'productos.*.cantidad' => ['required', 'integer', 'min:1'],
             'productos.*.precio' => ['nullable', 'string', 'max:200'],
             'productos.*.iva' => ['nullable', 'string', 'max:100'],
         ];
@@ -53,6 +57,12 @@ class AsignarProveedorRequest extends FormRequest
             'cotizacion_doc.mimes' => 'La cotización debe ser PDF, JPG, JPEG, PNG o WEBP',
             'cotizacion_doc.max' => 'La cotización no puede superar los 10MB',
             'iva.max' => 'El IVA no puede superar los 200 caracteres',
+            'productos.*.id.exists' => 'Uno de los productos no existe',
+            'productos.*.producto.required' => 'Todos los productos deben tener descripción',
+            'productos.*.producto.max' => 'La descripción del producto no puede superar los 1000 caracteres',
+            'productos.*.cantidad.required' => 'Todos los productos deben tener cantidad',
+            'productos.*.cantidad.integer' => 'La cantidad de cada producto debe ser un número entero',
+            'productos.*.cantidad.min' => 'La cantidad de cada producto debe ser al menos 1',
         ];
     }
 }

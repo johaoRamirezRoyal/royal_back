@@ -55,6 +55,18 @@ inicial 0 ─ aprobar (coordinador/admin) → 1 + crea `solicitudes` en 0
             └─ cancelar (dueño, solo en 0) → 5
 ```
 
+`asignar-proveedor` también guarda los productos del estudio
+(`SolicitudesServices::guardarProductosDelEstudio`):
+- Con `id` actualiza descripción, cantidad, precio e IVA. Sin `id` crea el producto.
+- Lo que no llega se conserva.
+- Un producto con unidades en el inventario (`Inventario::unidadesIngresadas`, o filas legacy
+  asociadas por descripción) no puede bajar de esa cantidad ni cambiar de descripción: la
+  excepción revierte todo.
+- `solicitud_productos_inicial` no se toca.
+- Se puede mandar `id_solicitud` (la final): las del legacy no tienen solicitud inicial, y
+  usar su id como el de una inicial editaba otra solicitud.
+- Una solicitud cerrada, en devolución o en stock (2, 3, 4) conserva su estado al editarla.
+
 `verificar-entrega`: la `decision` (`cerrar`/`devolucion`) la elige el usuario, no se
 deduce. `VerificarEntregaRequest::after()` rechaza `cerrar` si algún rubro es `No` y
 `devolucion` sin ninguna observación (test en `tests/Unit/ProcesoCompra`).

@@ -564,14 +564,18 @@ class SolicitudesServices
     public function asignarProveedor(int $idSolicitudInicial, array $datos, ?UploadedFile $cotizacion, int $idLog): array
     {
         try {
-            $inicial = SolicitudInicial::with('productos')->find($idSolicitudInicial);
+            // Con `id_solicitud` (la final) se edita esa misma: las solicitudes del legacy no
+            // tienen solicitud inicial, y tomar su id como el de una inicial apuntaba a otra.
+            $existente = ! empty($datos['id_solicitud']) ? Solicitud::find($datos['id_solicitud']) : null;
+            $inicial = $existente
+                ? ($existente->id_solicitud_inicial ? SolicitudInicial::with('productos')->find($existente->id_solicitud_inicial) : null)
+                : SolicitudInicial::with('productos')->find($idSolicitudInicial);
 
-            if (! $inicial) {
-                return ['error' => true, 'message' => 'Solicitud inicial no encontrada', 'status' => 404];
+            if (! $existente && ! $inicial) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
-            $existente = Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
-
+            $existente ??= Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
             $subida = null;
             $nombreCotizacion = $existente?->cotizacion_doc;
             if ($cotizacion) {
@@ -585,16 +589,21 @@ class SolicitudesServices
             }
 
             try {
-                return DB::transaction(function () use ($inicial, $datos, $nombreCotizacion, $idLog) {
+                return DB::transaction(function () use ($inicial, $existente, $datos, $nombreCotizacion, $idLog) {
                     // La final ya fue creada al registrar la solicitud; se completa/edita aquí.
-                    $solicitud = Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
+                    $solicitud = $existente;
+                    // Datos base: los de la inicial o, en las del legacy (sin inicial), los de la final.
+                    $base = $inicial ?? $solicitud;
 
-                    $observacion = $datos['observaciones'] ?? $inicial->observacion;
-                    $fechaSolicitud = $datos['fecha_solicitado'] ?? $inicial->fecha_solicitud;
+                    $observacion = $datos['observaciones'] ?? $base->observacion;
+                    $fechaSolicitud = $datos['fecha_solicitado'] ?? $base->fecha_solicitud;
 
                     // Estado decidido en el estudio: aprobada/pendiente -> activo 1,
-                    // aplazada -> activo 10 + fecha, rechazada -> activo 0 + motivo.
-                    $estadoFinal = self::ESTADO_FORMALIZADA;
+                    // aplazada -> activo 10 + fecha, rechazada -> activo 0 + motivo. Una ya
+                    // cerrada, en devolución o en stock (2, 3, 4) conserva su estado al editarla.
+                    $estadoFinal = $solicitud && in_array((int) $solicitud->estado, [2, 3, 4], true)
+                        ? (int) $solicitud->estado
+                        : self::ESTADO_FORMALIZADA;
                     $activo = 1;
                     $fechaAplazado = null;
                     $motivo = null;
@@ -607,10 +616,10 @@ class SolicitudesServices
                     }
 
                     $campos = [
-                        'id_user' => $inicial->id_user,
-                        'id_area' => $inicial->id_area,
+                        'id_user' => $base->id_user,
+                        'id_area' => $base->id_area,
                         'fecha_solicitud' => $fechaSolicitud,
-                        'justificacion' => $datos['justificacion'] ?? $inicial->justificacion,
+                        'justificacion' => $datos['justificacion'] ?? $base->justificacion,
                         'id_log' => $idLog,
                         'estado' => $estadoFinal,
                         'observacion' => $observacion,
@@ -630,17 +639,9 @@ class SolicitudesServices
                         $solicitud = $this->crearSolicitudFinalDesdeInicial($inicial, $campos, $idLog);
                     }
 
-                    // Precios e IVA decididos por producto en el estudio.
-                    foreach (($datos['productos'] ?? []) as $p) {
-                        SolicitudProducto::where('id_solicitud', $solicitud->id)
-                            ->where('id', $p['id'])
-                            ->update([
-                                'precio' => $p['precio'] ?? null,
-                                'iva' => $p['iva'] ?? null,
-                            ]);
-                    }
+                    $this->guardarProductosDelEstudio($solicitud, $datos['productos'] ?? [], $idLog);
 
-                    $inicial->update([
+                    $inicial?->update([
                         'estado' => self::ESTADO_CONVERTIDA,
                         'id_log' => $idLog,
                     ]);
@@ -663,6 +664,54 @@ class SolicitudesServices
             }
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Productos editados en el estudio: con `id` se actualizan (descripción, cantidad, precio,
+     * IVA); sin `id` se crean. Lo que no llega se conserva (el borrador de eliminados es solo
+     * del frontend). Un producto con unidades ya en el inventario no puede bajar de esa
+     * cantidad ni cambiar de descripción: rompería el restante y el vínculo de las compras
+     * legacy, que se asocian por descripción. Se llama dentro de la transacción: una excepción
+     * revierte todo.
+     *
+     * @param  array<int, array{id?: ?int, producto: string, cantidad: int|string, precio?: ?string, iva?: ?string}>  $productos
+     */
+    private function guardarProductosDelEstudio(Solicitud $solicitud, array $productos, int $idLog): void
+    {
+        foreach ($productos as $p) {
+            $campos = [
+                'producto' => trim($p['producto']),
+                'cantidad' => (string) (int) $p['cantidad'],
+                'precio' => $p['precio'] ?? null,
+                'iva' => $p['iva'] ?? null,
+            ];
+
+            if (empty($p['id'])) {
+                SolicitudProducto::create($campos + ['id_solicitud' => $solicitud->id, 'id_log' => $idLog]);
+
+                continue;
+            }
+
+            $producto = SolicitudProducto::where('id_solicitud', $solicitud->id)->find($p['id']);
+            if (! $producto) {
+                throw new Exception("El producto #{$p['id']} no pertenece a esta solicitud");
+            }
+
+            $ingresado = Inventario::unidadesIngresadas($solicitud->id, $producto->id);
+            $conInventarioLegacy = Inventario::where('id_compra', $solicitud->id)
+                ->where(fn ($q) => $q->whereNull('detalles')->orWhere('detalles', ''))
+                ->where('descripcion', mb_substr((string) $producto->producto, 0, 200))
+                ->exists();
+
+            if ((int) $campos['cantidad'] < $ingresado) {
+                throw new Exception("\"{$producto->producto}\" ya tiene {$ingresado} unidad(es) en el inventario: la cantidad no puede ser menor.");
+            }
+            if (($ingresado > 0 || $conInventarioLegacy) && $campos['producto'] !== trim((string) $producto->producto)) {
+                throw new Exception("\"{$producto->producto}\" ya tiene unidades en el inventario: no se puede cambiar su descripción.");
+            }
+
+            $producto->update($campos);
         }
     }
 

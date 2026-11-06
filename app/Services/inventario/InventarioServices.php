@@ -1004,14 +1004,7 @@ class InventarioServices
                     }
 
                     $disponible = (int) $producto->cantidad;
-                    $yaIngresado = Inventario::where('id_compra', $idSolicitud)
-                        ->where(fn ($q) => $q->where('detalles', (string) $producto->id)
-                            ->orWhere('detalles', 'like', "{$producto->id}-%"))
-                        ->count()
-                        + (int) DB::table('agregar_inv_product')
-                            ->where('id_compra', $idSolicitud)
-                            ->where('id_producto', $producto->id)
-                            ->sum('consumo')
+                    $yaIngresado = Inventario::unidadesIngresadas($idSolicitud, $producto->id)
                         + ($ingresadoEnRequest[$producto->id] ?? 0);
 
                     $cantidad = (int) $articulo['cantidad'];
