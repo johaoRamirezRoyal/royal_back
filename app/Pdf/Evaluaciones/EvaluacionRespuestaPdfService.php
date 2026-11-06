@@ -126,7 +126,7 @@ class EvaluacionRespuestaPdfService
     private function drawHeader(TCPDF $pdf, string $tituloEvaluacion): void
     {
         $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoMarca.png');
-        $logoCell = $this->logoPath && is_file($this->logoPath) ? '<img src="'.$this->logoPath.'" width="32">' : '';
+        $logoCell = $this->logoPath && is_file($this->logoPath) ? '<img src="@'.base64_encode(file_get_contents($this->logoPath)).'" width="32">' : '';
 
         $html = '
         <table cellpadding="4" style="width:100%; border-bottom:2px solid #b91c1c;">

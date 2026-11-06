@@ -454,7 +454,7 @@ class InventariosController extends Controller
             $request->input('id_user'),
             $request->input('id_anio'),
             $request->input('id_periodo'),
-            $request->input('search'),
+            $request->input('search', $request->input('s')),
             $request->input('estado'),
             $request->input('tipo_categoria'),
             $request->input('per_page'),

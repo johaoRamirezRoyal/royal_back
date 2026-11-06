@@ -60,7 +60,7 @@ class HistorialChecksPdfService
         $pdf->AddPage();
 
         $logoPath = $data['logo_path'] ?? null;
-        $logoCell = $logoPath && is_file($logoPath) ? '<img src="'.$logoPath.'" width="110">' : '';
+        $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="110">' : '';
 
         $encabezado = '
         <table border="1" cellpadding="6" style="width:100%; text-align:center;">

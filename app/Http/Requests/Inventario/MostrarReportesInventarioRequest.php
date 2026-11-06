@@ -24,6 +24,8 @@ class MostrarReportesInventarioRequest extends FormRequest
             'id_categoria' => ['nullable', 'integer', Rule::exists('categoria', 'id')],
             'estado_solucion' => ['nullable', 'string', 'in:pendiente,solucionado,todos'],
             'search' => ['nullable', 'string', 'max:100'],
+            // La DataTable del frontend manda la búsqueda como `s`.
+            's' => ['nullable', 'string', 'max:100'],
             'estado' => ['nullable', 'integer'],
             'tipo_categoria' => ['nullable', 'integer', Rule::exists('subcategoria_inventario', 'id')],
             'tipo_reporte' => ['nullable', 'integer'],

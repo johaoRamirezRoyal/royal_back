@@ -45,7 +45,7 @@ class HojaVidaPdfService
         $equipo = $data['equipo'];
         // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
         $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
-        $logoCell = $logoPath && is_file($logoPath) ? '<img src="'.$logoPath.'" width="150">' : '';
+        $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="150">' : '';
 
         $encabezado = '
         <table border="1" cellpadding="6" style="width:100%; text-align:center;">

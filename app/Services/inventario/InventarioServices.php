@@ -851,7 +851,7 @@ class InventarioServices
                 ];
             }
 
-            return $this->descontinuarInventario($ids, $idLog);
+            return $this->descontinuarInventario($ids, $idLog, notificar: false);
         } catch (\Exception $e) {
             return [
                 'error' => true,
@@ -1679,8 +1679,9 @@ class InventarioServices
      * Summary of descontinuarInventario
      *
      * @param  mixed  $id_log
+     * @param  bool  $notificar  false al disminuir la cantidad de un grupo desde el listado: ese ajuste no avisa por correo.
      */
-    public function descontinuarInventario(array $ids, ?int $id_log = null)
+    public function descontinuarInventario(array $ids, ?int $id_log = null, bool $notificar = true)
     {
         try {
 
@@ -1724,7 +1725,7 @@ class InventarioServices
                 ];
             });
 
-            if (! $result['error']) {
+            if (! $result['error'] && $notificar) {
 
                 $actor = InventarioEmailHelper::nombreUsuario($id_log);
                 $fecha = now()->format('d/m/Y H:i');

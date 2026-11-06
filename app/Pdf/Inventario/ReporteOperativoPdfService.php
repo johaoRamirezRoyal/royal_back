@@ -41,12 +41,12 @@ class ReporteOperativoPdfService
 
         // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
         $logoPath = $cloudinary->rutaLocalRoyalSchool('logotipoBackground.png');
-        $logoCell = $logoPath && is_file($logoPath) ? '<img src="'.$logoPath.'" width="120">' : '';
+        $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="120">' : '';
 
         // V°B°: firma fija de la directora administrativa, como en el legacy (img/firma_administrativa.jpg).
         $firmaDirectoraPath = $data['visto_bueno'] ? $cloudinary->rutaLocalRoyalSchool('firma_administrativa.jpg') : null;
         $firmaDirectora = $firmaDirectoraPath && is_file($firmaDirectoraPath)
-            ? '<img src="'.$firmaDirectoraPath.'" height="35">'
+            ? '<img src="@'.base64_encode(file_get_contents($firmaDirectoraPath)).'" height="35">'
             : '';
 
         $solucion = $data['solucion'] ?? null;
