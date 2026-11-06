@@ -41,7 +41,7 @@ Route::put('/reportes/{id}/visto-bueno', [InventariosController::class, 'vistoBu
 Route::get('/reportes/{id}/pdf', [InventariosController::class, 'reportePdf'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
 // También Áreas Comunes (108/109): programan preventivos desde su listado.
 Route::post('/mantenimiento', [InventariosController::class, 'programarMantenimientoPreventivo'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
-Route::post('/mantenimiento/pdf', [InventariosController::class, 'generarMantenimientoPdf'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
+Route::post('/mantenimiento/pdf', [InventariosController::class, 'generarMantenimientoPdf'])->middleware(Permiso::ruta([Permiso::INVENTARIO, Permiso::AREAS_COMUNES_ADMIN, Permiso::AREAS_COMUNES_USO]));
 Route::post('/mantenimiento/guia-pdf', [InventariosController::class, 'guiaMantenimientoPdf'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::get('/mantenimiento/periodos', [InventariosController::class, 'periodosMantenimiento'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));
 Route::get('/mantenimiento/sin-mantenimiento', [InventariosController::class, 'sinMantenimiento'])->middleware(Permiso::ruta([Permiso::INVENTARIO]));

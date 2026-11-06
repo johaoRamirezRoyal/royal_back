@@ -601,7 +601,7 @@ class InventariosController extends Controller
     // equipos recién programados), sirve para Sistemas y Operativos por igual.
     public function generarMantenimientoPdf(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\ProcesoCompra;
 
+use App\Models\ProcesoCompra\Proveedores\TipoDocumentoProveedor;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ProveedorDocumentoRequest extends FormRequest
 {
@@ -28,7 +30,7 @@ class ProveedorDocumentoRequest extends FormRequest
     {
         return [
             'archivo' => [$this->esCreacion() ? 'required' : 'nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:10240'],
-            'tipo_documento' => ['required', 'integer', 'exists:tipo_documento_proveedor,id'],
+            'tipo_documento' => ['required', 'integer', Rule::exists(TipoDocumentoProveedor::class, 'id')],
             'activo' => ['nullable', 'integer', 'in:0,1'],
         ];
     }
