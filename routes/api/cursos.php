@@ -7,6 +7,12 @@ use Illuminate\Support\Facades\Route;
 // Abierto a cualquier usuario autenticado: lo usan los selects de curso de otros módulos.
 Route::get('/all', [CursosController::class, 'findAll']);
 
+// Catálogo de grados: lo leen Cursos (145) y Configuración académica (99); lo edita la 99.
+// Antes de /{id}: "grados" no es un id.
+Route::get('/grados', [CursosController::class, 'grados'])->middleware(Permiso::ruta([Permiso::CURSOS, Permiso::GESTION_ACADEMICA]));
+Route::post('/grados', [CursosController::class, 'guardarGrado'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::put('/grados/{id}', [CursosController::class, 'guardarGrado'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+
 // Avisos de cierre de año en la página de inicio: promoción (145) o periodos (99).
 Route::get('/avisos-cierre', [CursosController::class, 'avisosCierreAnio'])->middleware(Permiso::ruta([Permiso::CURSOS, Permiso::GESTION_ACADEMICA]));
 

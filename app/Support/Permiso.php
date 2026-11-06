@@ -84,6 +84,9 @@ final class Permiso
     public const CARNETS_MI_CURSO = 146;                // "Director de grupo — Entregar carnets de su curso"
     public const CARNETS_SOLICITAR = 147;               // "Solicitar carnet" (el propio o, como director, de su curso)
     public const ASISTENCIA_PANTALLA_QR = 148;          // "Asistencia — Pantalla del código QR" (solo la pantalla de portería)
+    public const NOTAS_CONSULTAR = 149;                 // "Gestión Académica — Consultar notas" (solo lectura, cualquier curso)
+    public const LOGROS_GESTIONAR = 150;                // "Gestión Académica — Gestionar logros" (editar/enviar, cursos de su nivel)
+    public const LOGROS_APROBAR = 151;                  // "Gestión Académica — Aprobar logros" (aprobar/devolver/reabrir y editar, su nivel)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

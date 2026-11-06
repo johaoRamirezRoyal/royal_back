@@ -30,6 +30,32 @@ class CursosController extends Controller
         return $this->success('Se han encontrado cursos', $this->cursos->getCursos());
     }
 
+    /** GET /api/cursos/grados — catálogo de grados: lo leen Cursos (145) y Configuración académica (99). */
+    public function grados(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_CURSOS, Permiso::GESTION_ACADEMICA)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->cursos->listarGrados());
+    }
+
+    /** POST /api/cursos/grados y PUT /api/cursos/grados/{id}: solo Configuración académica (99). */
+    public function guardarGrado(Request $request, ?int $id = null): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, Permiso::GESTION_ACADEMICA)) {
+            return $rechazo;
+        }
+        $data = $request->validate([
+            'nombre' => ['required', 'string', 'max:80'],
+            'id_nivel_academico' => ['nullable', 'integer', 'exists:nivel_academico,id'],
+            'orden' => ['nullable', 'integer', 'min:0'],
+            'activo' => ['nullable', 'boolean'],
+        ], ['nombre.required' => 'El nombre del grado es obligatorio']);
+
+        return $this->apiResponse($this->cursos->guardarGrado($data, $id));
+    }
+
     /** GET /api/cursos?s=&estado=activo|inactivo&per-page= */
     public function listar(Request $request): JsonResponse
     {

@@ -114,7 +114,7 @@ esta tabla.
 | [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, correo, config, Boost |
 | [`convenciones.md`](docs/contexto/convenciones.md) | plantillas de código y cómo crear un módulo nuevo |
 | [`modulos/asistencia-hikvision.md`](docs/contexto/modulos/asistencia-hikvision.md) | terminales Hikvision, webhook de marcaciones, asistencia de trabajadores, QR de portería, escaneo de carnets |
-| [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
+| [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos y catálogo de grados (`curso.id_grado`), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
 | [`modulos/gestion-convivencial.md`](docs/contexto/modulos/gestion-convivencial.md) | Observaciones, Registro de actas |
 | [`modulos/noticias.md`](docs/contexto/modulos/noticias.md) | Noticias, cumpleaños, correos de distribución, rate-limit |
 | [`modulos/compras.md`](docs/contexto/modulos/compras.md) | proveedores, solicitudes, agregar al inventario |
@@ -122,6 +122,7 @@ esta tabla.
 | [`modulos/evaluaciones.md`](docs/contexto/modulos/evaluaciones.md) | Evaluaciones (Gestor de Calidad) y Encuestas |
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
+| [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, dimensiones, escala de desempeños, logros por grado (grupo) y su aprobación (opciones 149–151), planilla, plazo de corrección, migraciones |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,

@@ -171,6 +171,16 @@ class PeriodoAcademicoServices extends Service
                 ];
             }
 
+            // Las notas apuntan al periodo sin FK (periodo_academico es MyISAM): borrarlo las
+            // dejaría huérfanas.
+            if (\App\Models\GestionAcademica\Valoracion::whereIn('id_periodo_academico', $ids_periodo_academico)->exists()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se puede eliminar un periodo que ya tiene notas registradas. Desactívalo en su lugar.',
+                    'data' => []
+                ];
+            }
+
             $eliminados = PeriodoAcademico::whereIn('id', $ids_periodo_academico)->delete();
 
             if ($eliminados === 0) {

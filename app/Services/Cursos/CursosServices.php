@@ -3,6 +3,7 @@
 namespace App\Services\Cursos;
 
 use App\Models\Areas\Cursos;
+use App\Models\Areas\Grado;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Support\Permiso;
@@ -47,12 +48,43 @@ class CursosServices
         }
     }
 
+    // ─── Grados (catálogo; Configuración académica, 99) ─────────
+
+    /** Grados con su nivel y cuántos cursos activos tiene cada uno, en orden. */
+    public function listarGrados(): array
+    {
+        try {
+            $grados = Grado::orderBy('orden')->orderBy('nombre')->get()
+                ->map(fn (Grado $g) => $g->only(['id', 'nombre', 'id_nivel_academico', 'orden', 'activo'])
+                    + ['cursos' => Cursos::where('id_grado', $g->id)->where('activo', 1)->count()]);
+
+            return ['error' => false, 'message' => 'Grados', 'data' => $grados];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function guardarGrado(array $data, ?int $id = null): array
+    {
+        try {
+            $grado = $id ? Grado::find($id) : new Grado();
+            if (! $grado) {
+                return ['error' => true, 'message' => 'No se encontró el grado', 'status' => 404];
+            }
+            $grado->fill($data)->save();
+
+            return ['error' => false, 'message' => $id ? 'Grado actualizado' : 'Grado creado', 'data' => $grado];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     public function getCursos()
     {
         try {
             // Con su nivel y en orden académico: los selects del frontend los agrupan por nivel.
             return Cursos::ordenarPorGrado(
-                Cursos::with('nivel:id,nombre')->get(['id', 'nombre', 'curso_proximo', 'activo', 'id_nivel'])
+                Cursos::with('nivel:id,nombre')->get(['id', 'nombre', 'curso_proximo', 'activo', 'id_nivel', 'id_grado'])
             );
         } catch (Throwable $err) {
             return [
@@ -88,7 +120,7 @@ class CursosServices
     /** Cursos con nivel, curso próximo y cuántos estudiantes activos tienen hoy. */
     private function query()
     {
-        return Cursos::with(['nivel:id,nombre', 'proximo:id,nombre,activo', 'director:id_user,nombre,apellido'])
+        return Cursos::with(['nivel:id,nombre', 'grado:id,nombre', 'proximo:id,nombre,activo', 'director:id_user,nombre,apellido'])
             ->withCount(['usuarios as total_estudiantes' => fn ($q) => $q
                 ->where('perfil', self::PERFIL_ESTUDIANTE)
                 ->where('estado', 'activo')]);
@@ -128,6 +160,8 @@ class CursosServices
             $curso = Cursos::create([
                 'nombre' => trim($data['nombre']),
                 'id_nivel' => $data['id_nivel'],
+                // Sin grado elegido, se propone el del catálogo que encabeza el nombre ("Primero A" → Primero).
+                'id_grado' => array_key_exists('id_grado', $data) ? $data['id_grado'] : Grado::paraNombreDeCurso($data['nombre']),
                 'curso_proximo' => $data['curso_proximo'] ?? null,
                 'id_director' => $data['id_director'] ?? null,
                 'activo' => (int) ($data['activo'] ?? 1),
@@ -154,6 +188,8 @@ class CursosServices
             $curso->update([
                 'nombre' => trim($data['nombre']),
                 'id_nivel' => $data['id_nivel'],
+                // Renombrar no cambia el grado: solo cambia si se envía.
+                'id_grado' => array_key_exists('id_grado', $data) ? $data['id_grado'] : $curso->id_grado,
                 'curso_proximo' => $data['curso_proximo'] ?? null,
                 'id_director' => $data['id_director'] ?? null,
                 'activo' => (int) ($data['activo'] ?? $curso->activo),

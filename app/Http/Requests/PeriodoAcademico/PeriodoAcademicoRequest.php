@@ -43,6 +43,14 @@ class PeriodoAcademicoRequest extends FormRequest
                 'after:fecha_inicio'
             ],
 
+            // Hasta cuándo se pueden registrar o corregir notas del periodo (NULL = hasta
+            // fecha_fin). No antes del fin: es el plazo para corregir después de cerrarlo.
+            'fecha_limite_notas' => [
+                'nullable',
+                'date',
+                'after_or_equal:fecha_fin'
+            ],
+
             'activo' => [
                 'nullable',
                 'boolean'
@@ -104,6 +112,9 @@ class PeriodoAcademicoRequest extends FormRequest
             'fecha_fin.required' => 'La fecha de finalización es obligatoria.',
             'fecha_fin.date' => 'La fecha de finalización no es válida.',
             'fecha_fin.after' => 'La fecha de finalización debe ser posterior a la fecha de inicio.',
+
+            'fecha_limite_notas.date' => 'La fecha límite de notas no es válida.',
+            'fecha_limite_notas.after_or_equal' => 'La fecha límite de notas no puede ser anterior al fin del periodo.',
 
             'activo.boolean' => 'El campo activo debe ser verdadero o falso.'
         ];

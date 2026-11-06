@@ -12,6 +12,8 @@ class PeriodoAcademico extends Model
         'nombre',
         'fecha_inicio',
         'fecha_fin',
+        // Hasta cuándo se califica o corrige el periodo; NULL = hasta fecha_fin (ver NotasService).
+        'fecha_limite_notas',
         'activo'
     ];
 
