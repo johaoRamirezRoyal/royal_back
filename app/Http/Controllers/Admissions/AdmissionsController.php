@@ -13,6 +13,7 @@ use App\Http\Requests\Admisiones\RegistrarInscripcionRequest;
 use App\Http\Requests\Admissions\FamilyRegisterRequest;
 use App\Http\Requests\Admissions\VerificationCodeRequest;
 use App\Http\Traits\HasAuthCookie;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Admisiones\AdmisionesServices;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -1158,6 +1159,12 @@ class AdmissionsController extends Controller
             $firmaManual,
             $request->user()?->id_user
         );
+
+        // Si no se guardó, la firma manual recién subida queda sin uso: se borra, salvo que el
+        // error haya sido después de enlazarla a la historia (ahí ya hay una fila que la usa).
+        if (($response['error'] ?? false) && $firmaManual && ! Firma::where('url', $firmaManual['url'])->exists()) {
+            $this->cloudinary_service->deleteFileByUrl($firmaManual['url']);
+        }
 
         return $this->apiResponse($response);
     }

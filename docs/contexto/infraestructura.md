@@ -169,18 +169,34 @@ de subir nada). Se sube a `Admisiones/CitasPsicologia/<id>/firma` y se crea un `
 con `activo = 0` a nombre de la psicóloga de la cita, enlazado a la historia
 (`hce_observaciones_firmas.id_firma_psicologa`). Sin firma manual se usa la activa de la
 psicóloga; sin ninguna, 422 antes de cambiar el estado. Por eso
-`UsuariosServices::subirFirmaUsuario` hace `updateOrCreate` sobre `['id_user', 'activo' => 1]`:
-si fuera solo por `id_user` podría pisar una firma manual y cambiar la de una historia ya
-firmada. `listarCitasPsicologia` devuelve `psicologa_tiene_firma` por cita.
+`UsuariosServices::subirFirmaUsuario` solo toca la fila activa del usuario (nunca una firma
+manual), y si al reemplazarla una historia ya apunta a ella (`id_firma_psicologa`), la deja
+inactiva y crea otra: la historia conserva la firma con la que se firmó.
+`listarCitasPsicologia` devuelve `psicologa_tiene_firma` por cita.
+
+**`CloudinaryService` en local:** el disco local SOLO se usa en `APP_ENV` `local` y `testing`
+(`CloudinaryService::usaCloudinary`); cualquier otro entorno (producción) sube y borra siempre en
+Cloudinary, sin importar `UPLOADS_DISK`. En local `uploadFile` guarda en el disco `public` y devuelve
+`/api/public/{ruta}` (con sesión), y `deleteFile`/`deleteFileByUrl` solo borran en ese disco: una
+URL de Cloudinary (datos copiados de producción) nunca se borra desde local. El `.env` local trae
+las credenciales reales, por eso la regla.
 
 Firmas en Cloudinary (todas privadas, ver arriba):
 
 - **Usuario** (`subirFirmaUsuario`): `<carpeta del colegio>/usuarios/firmas/firma_<id_user>_<8 al
   azar>`. Antes se subía con el nombre original y `overwrite`, y dos `firma.png` se pisaban. Al
-  cambiarla, la anterior queda en Cloudinary: `firmas` solo guarda la `url`.
+  cambiarla, la anterior se borra de Cloudinary (después de guardar la nueva; si falla, solo se
+  registra), salvo que una historia clínica la use: ahí se conserva con su fila inactiva. El
+  `public_id` sale de la `url` con `ArchivosPrivados::recursoDe`.
+- **Manual de una cita** (Super Admin al marcarla atendida): fila inactiva de `firmas`. Si la
+  historia pasa a otra firma (se vuelve a atender) o se elimina, `Firma::descartarSiNoSeUsa` borra
+  la fila y su archivo cuando ninguna historia la usa; nunca toca la activa. Si el cambio de estado
+  falla antes de enlazarla, el controlador borra el archivo recién subido.
 - **Historia clínica** (`firma_padre`/`firma_madre`): `<carpeta del colegio>/historia-clinica/firmas`
   (las de antes, en `historia-clinica/firmas` sin colegio). Se borran como `image`, que es como se
-  suben: con `raw` Cloudinary respondía «not found» y quedaban.
+  suben: con `raw` Cloudinary respondía «not found» y quedaban. Al reemplazarla, la anterior se
+  borra después de guardar la nueva (antes se borraba primero y, si la subida fallaba, el registro
+  quedaba apuntando a un archivo inexistente).
 - **Legacy**: una fila de `firmas` con `nombre` y sin `url` ya no se lee en ningún lado.
 
 ## PDFs

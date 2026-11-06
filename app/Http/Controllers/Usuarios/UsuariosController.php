@@ -362,8 +362,8 @@ class UsuariosController extends Controller
     // POST /usuarios/firma (multipart, campo firma)
     public function subirFirma(Request $request)
     {
-        // Solo PNG/JPG: la firma se incrusta en PDFs de pdfmake (frontend), que no maneja otros
-        // formatos. Misma regla que FORMATOS_FIRMA en MiFirmaModal.tsx (frontend).
+        // Solo PNG/JPG: la firma se incrusta en PDFs (pdf-lib en la historia clínica del frontend,
+        // TCPDF en el reporte de inventario), que no manejan otros formatos. Misma regla que FORMATOS_FIRMA en MiFirmaModal.tsx (frontend).
         $request->validate(
             ['firma' => 'required|file|mimes:png,jpg,jpeg'],
             ['firma.mimes' => 'La firma debe ser una imagen PNG o JPG.']
