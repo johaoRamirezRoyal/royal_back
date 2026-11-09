@@ -7,6 +7,7 @@ use Cloudinary\Configuration\Configuration;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use App\Services\AdminManagement\BasesDatosService;
 
 class CloudinaryService
@@ -94,6 +95,10 @@ class CloudinaryService
 
             if ($publicIdPersonalizado) {
                 $publicId = preg_replace('/[^A-Za-z0-9\-_]/', '_', $publicIdPersonalizado);
+            }
+
+            if (! self::usaCloudinary()) {
+                return $this->guardarLocal($file, $folder, $publicId, $extension, $resourceType);
             }
 
             $options = [
@@ -244,6 +249,98 @@ class CloudinaryService
     }
 
     /**
+     * Si este entorno escribe en Cloudinary. El disco local SOLO se usa en `local` y `testing`:
+     * cualquier otro entorno (producción) va siempre a Cloudinary, sin importar UPLOADS_DISK, para
+     * que un .env mal puesto nunca deje los archivos de producción en el disco del servidor. En
+     * local las credenciales del .env son las reales: sin esta regla una prueba subía —o
+     * borraba— en la nube de producción.
+     */
+    public static function usaCloudinary(): bool
+    {
+        return ! app()->environment(['local', 'testing']);
+    }
+
+    /**
+     * uploadFile en local: guarda en el disco `public` y responde con la misma forma.
+     * La URL es la de GET /api/public/{ruta} (con sesión), no la de /storage: así lo privado
+     * (firmas, documentos) tampoco queda abierto en local.
+     */
+    private function guardarLocal(UploadedFile $file, string $folder, string $publicId, string $extension, string $resourceType): array
+    {
+        $ruta = $file->storeAs($folder, "{$publicId}.{$extension}", 'public');
+        if (! $ruta) {
+            throw new \RuntimeException('No se pudo guardar el archivo en el disco local.');
+        }
+
+        $url = url('/api/public/' . implode('/', array_map('rawurlencode', explode('/', $ruta))));
+
+        return [
+            'error' => false,
+            'message' => 'Archivo guardado en el disco local (fuera de producción no se sube a Cloudinary).',
+            'data' => [
+                'public_id' => "{$folder}/{$publicId}",
+                'public_id_with_extension' => $ruta,
+                'url' => $url,
+                'url_with_extension' => $url,
+                'format' => $extension,
+                'size' => $file->getSize(),
+                'resource_type' => $resourceType,
+            ],
+        ];
+    }
+
+    /** deleteFile fuera de producción: borra el archivo del disco local; nunca toca Cloudinary. */
+    private function borrarLocal(string $publicId): array
+    {
+        $publicId = ltrim($publicId, '/');
+        if (str_contains($publicId, '..')) {
+            return ['error' => true, 'message' => 'public_id no válido.'];
+        }
+
+        $disco = Storage::disk('public');
+        $base = basename($publicId);
+        // Con o sin extensión: los public_id de imagen no la llevan.
+        $archivos = array_filter(
+            $disco->files(dirname($publicId) === '.' ? '' : dirname($publicId)),
+            fn (string $f) => basename($f) === $base || str_starts_with(basename($f), "{$base}.")
+        );
+        $disco->delete(array_values($archivos));
+
+        return [
+            'error' => false,
+            'message' => $archivos ? 'Archivo local eliminado.' : 'Fuera de producción no se borra en Cloudinary; no había archivo local.',
+            'data' => ['public_id' => $publicId],
+        ];
+    }
+
+    /**
+     * Elimina un archivo privado a partir de la URL que guarda la BD (las firmas no guardan el
+     * public_id). Error si la URL no es de un archivo privado de esta nube.
+     */
+    public function deleteFileByUrl(string $url): array
+    {
+        if (! self::usaCloudinary()) {
+            // Fuera de producción solo se borra lo que guardarLocal subió (/api/public/...); una URL
+            // de Cloudinary (datos copiados de producción) se deja tal cual.
+            $ruta = parse_url($url, PHP_URL_PATH);
+            if (is_string($ruta) && str_starts_with($ruta, '/api/public/')) {
+                return $this->borrarLocal(rawurldecode(substr($ruta, strlen('/api/public/'))));
+            }
+
+            return ['error' => false, 'message' => 'Fuera de producción no se borra en Cloudinary.'];
+        }
+
+        $recurso = ArchivosPrivados::recursoDe($url);
+        if (! $recurso) {
+            return ['error' => true, 'message' => "URL no reconocida, no se borra: {$url}"];
+        }
+
+        [$tipo, , $publicId] = $recurso;
+
+        return $this->deleteFile($publicId, $tipo);
+    }
+
+    /**
      * Eliminar archivo de Cloudinary
      */
     public function deleteFile(
@@ -257,6 +354,10 @@ class CloudinaryService
                     'error' => true,
                     'message' => 'El public_id no puede estar vacío.',
                 ];
+            }
+
+            if (! self::usaCloudinary()) {
+                return $this->borrarLocal($publicId);
             }
 
             $result = $this->uploadApi->destroy(

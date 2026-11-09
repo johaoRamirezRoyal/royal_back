@@ -3,6 +3,7 @@
 namespace App\Services\AsistenciaTrabajadores;
 
 use App\Enums\Mails;
+use Carbon\Carbon;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\AsistenciaGestionMarcacion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
@@ -45,6 +46,10 @@ class AsistenciaGestionService extends Service
     // dispararía el límite del proveedor (ver el incidente de rate-limit de Noticias) — por
     // encima de esto se omite ese correo y se registra en logs.
     private const MAX_DESTINATARIOS_LLEGADA_TARDE = 30;
+
+    // Una marcación de la terminal que llega con más atraso que esto no dispara avisos de
+    // tardanza (trabajadores aquí; estudiantes en HikvisionController). Ver notificarLlegadaTarde.
+    public const MINUTOS_MAXIMOS_ATRASO_AVISO = 120;
 
     // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
     private const GRUPO_LABEL_POR_GROUP_ID = [
@@ -267,6 +272,26 @@ class AsistenciaGestionService extends Service
                 ];
             }
 
+            // La entrada es la marcación MÁS TEMPRANA del día, no la primera en llegar: una
+            // terminal sin red envía sus eventos después, y uno atrasado puede ser anterior a
+            // la entrada ya guardada. Esta pasa a ser la entrada y la anterior sigue como una
+            // marcación más (puede ser la salida). Atómico, igual que la salida.
+            $entradaGuardada = $asistencia->hora_asistencia?->format('H:i:s');
+            if ($entradaGuardada !== null && $hora < $entradaGuardada) {
+                $adelantada = AsistenciaGestion::where('id', $asistencia->id)
+                    ->where('hora_asistencia', '>', $hora)
+                    ->update(['hora_asistencia' => $hora]);
+
+                if ($adelantada > 0) {
+                    Log::info('Entrada adelantada por una marcación anterior que llegó después', [
+                        'id_asistencia' => $asistencia->id,
+                        'entrada_anterior' => $entradaGuardada,
+                        'entrada_nueva' => $hora,
+                    ]);
+                    $hora = $entradaGuardada;
+                }
+            }
+
             AsistenciaGestionMarcacion::create(['id_asistencia' => $asistencia->id, 'hora' => $hora]);
 
             $horaMinimaSalida = $this->horaMinimaSalidaParaUsuario($idUsuario);
@@ -451,6 +476,22 @@ class AsistenciaGestionService extends Service
         $fecha = $asistencia->fecha_asistencia->toDateString();
         $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
         $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
+
+        // Marcación de la terminal que llegó con mucho atraso (la terminal estuvo sin red y
+        // mandó sus eventos después): la tardanza queda registrada, pero un "llegaste tarde"
+        // horas después confunde más de lo que ayuda. `fechareg` es cuándo llegó el evento.
+        // Solo terminal: un registro manual o por QR se crea en el momento.
+        $atrasoMinutos = $asistencia->fechareg
+            ? (int) Carbon::parse("{$fecha} {$asistencia->hora_asistencia->format('H:i:s')}")->diffInMinutes($asistencia->fechareg, false)
+            : 0;
+        if ((int) $asistencia->QR === self::METODO_TERMINAL && $atrasoMinutos > self::MINUTOS_MAXIMOS_ATRASO_AVISO) {
+            Log::info('Aviso de llegada tarde omitido: la marcación llegó con atraso', [
+                'id_asistencia' => $asistencia->id,
+                'atrasoMinutos' => $atrasoMinutos,
+            ]);
+            $asistencia->update(['correo_llegada_tarde' => 'atrasado', 'correo_llegada_tarde_at' => now()]);
+            return;
+        }
 
         $correosDestino = [];
         $nombresDestino = [];
@@ -824,6 +865,29 @@ class AsistenciaGestionService extends Service
      * observación es opcional y, si se manda, reemplaza la existente (para dejar el motivo
      * de la revocación); si no, se conserva la que ya tenía el registro.
      */
+    /** Correo al trabajador: su llegada tarde fue revocada y ya no cuenta. */
+    private function avisarRevocacion(AsistenciaGestion $asistencia, ?string $observacion): void
+    {
+        $usuario = $asistencia->usuario;
+
+        if (!$usuario?->correo) {
+            Log::info('Aviso de revocación omitido: el trabajador no tiene correo', ['id_asistencia' => $asistencia->id]);
+            return;
+        }
+
+        $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
+        $fecha = $asistencia->fecha_asistencia->toDateString();
+        $hora = substr((string) $asistencia->hora_asistencia?->format('H:i:s'), 0, 5);
+        $motivo = trim((string) $observacion) !== '' ? "\n\nMotivo: " . trim((string) $observacion) : '';
+
+        // Si falla, MailService::sendGeneric ya lo deja en el log.
+        $this->mailService->sendGeneric(
+            $usuario->correo,
+            'Llegada tarde revocada',
+            "Hola {$nombre},\n\nTe informamos que la llegada tarde registrada el {$fecha} a las {$hora} fue revocada. Ya no cuenta como llegada tarde en tu historial.{$motivo}"
+        );
+    }
+
     public function revocarLlegadaTarde(int $id, ?string $observacion = null): array
     {
         try {
@@ -846,10 +910,32 @@ class AsistenciaGestionService extends Service
                 ];
             }
 
+            // Solo se revoca una tardanza real (el frontend ya oculta la acción en las demás).
+            if (!$asistencia->esTardanza()) {
+                return [
+                    'error' => true,
+                    'message' => 'Este registro no es una llegada tarde',
+                    'data' => null,
+                    'status' => 422,
+                ];
+            }
+
             $asistencia->update(array_merge(
                 ['revocado' => true],
                 $observacion !== null ? ['observacion' => $observacion] : []
             ));
+
+            // Después de responder y fuera del guardado: si el correo falla, la revocación ya quedó.
+            app()->terminating(function () use ($asistencia, $observacion) {
+                try {
+                    $this->avisarRevocacion($asistencia, $observacion);
+                } catch (\Throwable $e) {
+                    Log::error('Error al avisar la revocación de llegada tarde', [
+                        'id_asistencia' => $asistencia->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            });
 
             return [
                 'error' => false,

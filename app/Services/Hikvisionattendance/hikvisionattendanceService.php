@@ -303,8 +303,83 @@ class hikvisionattendanceService
                 'host' => $d->host,
                 'port' => $d->puerto,
                 'isConnected' => $conexion[$d->device_id]['isConnected'] ?? false,
+                // Última revisión del reloj (hikvision:sincronizar-reloj); null si aún no hay.
+                'reloj' => Cache::get($this->cacheKeyReloj($d->device_id)),
             ])
             ->all();
+    }
+
+    /** Desfase tolerado entre el reloj de una terminal y el del servidor antes de corregirlo. */
+    public const SEGUNDOS_TOLERANCIA_RELOJ = 10;
+
+    private function cacheKeyReloj(string $deviceId): string
+    {
+        return 'hikvision:reloj:' . config('database.default') . ':' . $deviceId;
+    }
+
+    /**
+     * Revisa el reloj de cada terminal activa del colegio vigente contra el del servidor y,
+     * si se desfasa más de SEGUNDOS_TOLERANCIA_RELOJ (y `$corregir`), le pone la hora del
+     * servidor. La hora del reloj importa: es la que manda cada evento y la que se registra
+     * como marcación (HikvisionController::momentoDelEvento).
+     *
+     * Se corrige poniendo la hora a mano (`timeMode` manual) y no configurando NTP: las
+     * terminales están en la red interna y no hay garantía de que alcancen un servidor NTP;
+     * el servidor sí es una fuente confiable y esto corre cada hora. Si la terminal estaba en
+     * NTP y aun así se desfasó, su NTP no funcionaba.
+     *
+     * El resultado de cada terminal queda en caché (1 día) para la pantalla de Terminales.
+     *
+     * @return array<string, array{desfase_segundos: int|null, corregido: bool, error: string|null, revisado_at: string}>
+     */
+    public function sincronizarRelojes(bool $corregir = true): array
+    {
+        $resultados = [];
+
+        foreach ($this->devices() as $device) {
+            $id = $device['id'];
+            $resultado = ['desfase_segundos' => null, 'corregido' => false, 'error' => null, 'revisado_at' => now()->toIso8601String()];
+
+            try {
+                $client = $this->client($id);
+                $hora = $this->parseXmlResponse($client->get('/ISAPI/System/time')->getBody()->getContents()) ?? [];
+                $localTime = $hora['localTime'] ?? null;
+
+                if (!is_string($localTime) || $localTime === '') {
+                    throw new \RuntimeException('La terminal no devolvió su hora (localTime).');
+                }
+
+                $desfase = Carbon::parse($localTime)->getTimestamp() - now()->getTimestamp();
+                $resultado['desfase_segundos'] = $desfase;
+
+                if ($corregir && abs($desfase) > self::SEGUNDOS_TOLERANCIA_RELOJ) {
+                    $zona = is_string($hora['timeZone'] ?? null) ? $hora['timeZone'] : null;
+                    $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+                        . '<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">'
+                        . '<timeMode>manual</timeMode>'
+                        . '<localTime>' . now()->format('Y-m-d\TH:i:sP') . '</localTime>'
+                        . ($zona ? '<timeZone>' . htmlspecialchars($zona, ENT_XML1) . '</timeZone>' : '')
+                        . '</Time>';
+
+                    $client->put('/ISAPI/System/time', ['body' => $xml, 'headers' => ['Content-Type' => 'application/xml']]);
+                    $resultado['corregido'] = true;
+
+                    Log::warning('[hikvision] Reloj de la terminal desfasado: se le puso la hora del servidor', [
+                        'device' => $id,
+                        'desfase_segundos' => $desfase,
+                        'modo_anterior' => $hora['timeMode'] ?? null,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                $resultado['error'] = $this->extraerMensajeError($e);
+                Log::warning('[hikvision] No se pudo revisar el reloj de la terminal', ['device' => $id, 'error' => $resultado['error']]);
+            }
+
+            Cache::put($this->cacheKeyReloj($id), $resultado, now()->addDay());
+            $resultados[$id] = $resultado;
+        }
+
+        return $resultados;
     }
 
     /**

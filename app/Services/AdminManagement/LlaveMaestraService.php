@@ -5,6 +5,7 @@ namespace App\Services\AdminManagement;
 use App\Models\LlaveMaestra;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 /**
@@ -17,6 +18,9 @@ use Illuminate\Support\Str;
 class LlaveMaestraService
 {
     private const MINUTOS_VIGENCIA = 10;
+
+    /** Lo devuelve redimir() cuando la cuenta destino ya tiene una sesión abierta por llave. */
+    public const SESION_ABIERTA = 'sesion_abierta';
 
     /**
      * @return array{key: string, expira_en: \Illuminate\Support\Carbon}|null null si el
@@ -46,10 +50,11 @@ class LlaveMaestraService
     }
 
     /**
-     * @return array{id_user: int, connection: string, generado_por: int}|null null si la
-     * llave no existe, ya se usó, está expirada o fue revocada.
+     * @return array{id_user: int, connection: string, generado_por: int}|string|null null si la
+     * llave no existe, ya se usó, está expirada o fue revocada; SESION_ABIERTA si la cuenta
+     * destino ya tiene una sesión por llave abierta (la llave no se consume).
      */
-    public function redimir(string $rawKey, string $ip): ?array
+    public function redimir(string $rawKey, string $ip): array|string|null
     {
         $llave = LlaveMaestra::where('token_hash', hash('sha256', $rawKey))
             ->whereNull('usado_en')
@@ -60,6 +65,16 @@ class LlaveMaestraService
             return null;
         }
 
+        // Cache::add es atómico: dos canjes simultáneos para la misma cuenta no abren dos sesiones.
+        // ponytail: dura lo mismo que el JWT (no hay refresh); se libera antes en logout.
+        if (!Cache::add(
+            $this->claveSesion($llave->connection_objetivo, $llave->id_user_objetivo),
+            true,
+            now()->addMinutes((int) config('jwt.ttl'))
+        )) {
+            return self::SESION_ABIERTA;
+        }
+
         $llave->update(['usado_en' => now(), 'ip_uso' => $ip]);
 
         return [
@@ -67,6 +82,17 @@ class LlaveMaestraService
             'connection' => $llave->connection_objetivo,
             'generado_por' => $llave->generado_por,
         ];
+    }
+
+    /** Libera la cuenta para otro canje: logout de una sesión por llave, o canje que no llegó a emitir token. */
+    public function cerrarSesion(string $connection, int $idUser): void
+    {
+        Cache::forget($this->claveSesion($connection, $idUser));
+    }
+
+    private function claveSesion(string $connection, int $idUser): string
+    {
+        return "llave_maestra_sesion:{$connection}:{$idUser}";
     }
 
     public function listar(): Collection

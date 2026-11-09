@@ -470,12 +470,18 @@ class AuthController extends Controller
             return response()->json(['error' => true, 'message' => 'Llave inválida, ya usada o expirada.'], 401);
         }
 
+        if ($resultado === LlaveMaestraService::SESION_ABIERTA) {
+            return response()->json(['error' => true, 'message' => 'Ya hay una sesión abierta con llave maestra para esta cuenta. Ciérrala antes de usar otra llave.'], 409);
+        }
+
         $connection = $resultado['connection'];
         config(['database.default' => $connection]);
 
         $usuario = Usuario::on($connection)->find($resultado['id_user']);
 
         if (! $usuario || $usuario->estado !== 'activo') {
+            $this->llaveMaestra->cerrarSesion($connection, $resultado['id_user']);
+
             return response()->json(['error' => true, 'message' => 'El usuario destino ya no está activo.'], 404);
         }
 
@@ -630,6 +636,15 @@ class AuthController extends Controller
         $token = $request->cookie($cookieName);
 
         if ($token) {
+            try {
+                $payload = $this->jwt->getPayload($token);
+                if (! empty($payload['via_llave_maestra'])) {
+                    $this->llaveMaestra->cerrarSesion($payload['db_connection'], (int) $payload['user_id']);
+                }
+            } catch (\Exception $e) {
+                // Token vencido: su marca de sesión en caché ya venció con él.
+            }
+
             try {
                 JWTAuth::setToken($token)->invalidate();
             } catch (\Exception $e) {

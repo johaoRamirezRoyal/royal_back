@@ -64,6 +64,11 @@ Schedule::command('logs-dominio:purgar-antiguos')->cron('15 2 */3 * *');
 // segundo en paralelo. Misma nota operativa que los jobs de arriba.
 Schedule::command('noticias:enviar-diarias')->hourly()->withoutOverlapping();
 
+// Revisa el reloj de las terminales Hikvision de todos los colegios y les pone la hora del
+// servidor si se desfasan más de 10 s (ver hikvisionattendanceService::sincronizarRelojes):
+// la hora de cada marcación es la que manda la terminal. Misma nota operativa que arriba.
+Schedule::command('hikvision:sincronizar-reloj')->hourly()->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

@@ -11,6 +11,8 @@ Route::post('/manual', [AsistenciaGestionController::class, 'registrarAsistencia
 // Marcación con QR (respaldo de las terminales): la pantalla de portería pide el token que
 // cambia cada 30 s; el trabajador lo escanea y marca con su propia sesión.
 Route::get('/qr/token', [AsistenciaGestionController::class, 'tokenQr'])->middleware(Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::ASISTENCIA_PANTALLA_QR]));
+// Salir de la pantalla completa del QR: pide la contraseña de la sesión (5 fallos = 15 min de bloqueo).
+Route::post('/qr/salir-pantalla', [AsistenciaGestionController::class, 'salirPantallaQr'])->middleware([Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::ASISTENCIA_PANTALLA_QR]), 'intentos:5,15']);
 Route::post('/qr/marcar', [AsistenciaGestionController::class, 'marcarConQr'])->middleware('throttle:asistencia');
 Route::get('/', [AsistenciaGestionController::class, 'obtenerAsistencia']);
 Route::get('/grafica', [AsistenciaGestionController::class, 'obtenerDatosGrafica']);

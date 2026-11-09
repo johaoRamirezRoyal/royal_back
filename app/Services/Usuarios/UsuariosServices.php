@@ -5,6 +5,7 @@ namespace App\Services\Usuarios;
 use App\Mail\NuevoUsuarioMail;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\PerfilUsuario\InfoAdicionalUsuario;
+use App\Models\HistoriaClinica\HceObservacionesFirmas;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
@@ -671,19 +672,40 @@ class UsuariosServices
                 return ['error' => true, 'message' => $resultado['message']];
             }
 
+            $nueva = [
+                'nombre' => $file->getClientOriginalName(),
+                'url' => $resultado['data']['url'],
+                'activo' => 1,
+                'user_log' => $id_user,
+            ];
+
             // Solo la activa: las inactivas son firmas subidas a mano para una historia clínica
-            // (AdmisionesServices::actualizarEstadoCitaPsicologia) y no deben pisarse.
-            Firma::updateOrCreate(
-                ['id_user' => $id_user, 'activo' => 1],
-                [
-                    'nombre' => $file->getClientOriginalName(),
-                    'url' => $resultado['data']['url'],
-                    'activo' => 1,
-                    'user_log' => $id_user,
-                ]
-            );
+            // (AdmisionesServices::actualizarEstadoCitaPsicologia) o firmas reemplazadas que
+            // siguen firmando una historia, y no deben pisarse.
+            $anterior = Firma::where('id_user', $id_user)->where('activo', 1)->first();
+            $urlABorrar = null;
+
+            if (! $anterior) {
+                Firma::create($nueva);
+            } elseif (HceObservacionesFirmas::where('id_firma_psicologa', $anterior->id)->exists()) {
+                // Una historia clínica ya firmada apunta a esta fila (por id): se conserva, con su
+                // archivo, para que no cambie de firma ni la pierda.
+                $anterior->update(['activo' => 0]);
+                Firma::create($nueva);
+            } else {
+                $urlABorrar = $anterior->url;
+                $anterior->update($nueva);
+            }
 
             Usuario::where('id_user', $id_user)->update(['firma_digital' => 1]);
+
+            // Después de guardar la nueva: si el borrado falla, solo queda un archivo huérfano.
+            if ($urlABorrar) {
+                $borrado = $this->cloudinaryService->deleteFileByUrl($urlABorrar);
+                if ($borrado['error']) {
+                    Log::warning("No se pudo borrar de Cloudinary la firma reemplazada del usuario {$id_user}: {$borrado['message']}");
+                }
+            }
 
             return [
                 'error' => false,

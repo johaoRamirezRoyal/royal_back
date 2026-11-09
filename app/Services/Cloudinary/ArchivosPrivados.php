@@ -82,7 +82,7 @@ final class ArchivosPrivados
      * guarda la BD: con /upload/ si es de antes de la migración, o /authenticated/ sin firmar);
      * null si no. No soporta transformaciones en la URL: la BD nunca las guarda.
      */
-    private static function privadoDe(string $url): ?array
+    public static function recursoDe(string $url): ?array
     {
         $cloud = (string) config('cloudinary.cloud_name');
         $patron = '#^https?://res\.cloudinary\.com/' . preg_quote($cloud, '#')
@@ -102,7 +102,7 @@ final class ArchivosPrivados
     /** La URL de un archivo privado, firmada (para que la descargue el propio backend); cualquier otra, tal cual. */
     public static function firmar(string $url): string
     {
-        $privado = self::privadoDe($url);
+        $privado = self::recursoDe($url);
 
         return $privado ? self::firmada($privado[0], $privado[1]) : $url;
     }
@@ -116,7 +116,7 @@ final class ArchivosPrivados
      */
     public static function paraCliente(string $url): string
     {
-        $privado = self::privadoDe($url);
+        $privado = self::recursoDe($url);
         if (!$privado) {
             return $url;
         }

@@ -1781,10 +1781,18 @@ class AdmisionesServices extends Service
                     'user_log' => $userLog,
                 ]);
 
+                $idFirmaAnterior = HceObservacionesFirmas::where('id_inscripcion', $cita->id_inscripcion)->value('id_firma_psicologa');
+
                 HceObservacionesFirmas::updateOrCreate(
                     ['id_inscripcion' => $cita->id_inscripcion],
                     ['id_firma_psicologa' => $firmaPsicologa->id]
                 );
+
+                // Volver a atender la cita cambia la firma de la historia: la anterior, si era
+                // manual (o una «Mi firma» ya reemplazada) y nadie más la usa, se borra con su archivo.
+                if ($idFirmaAnterior && (int) $idFirmaAnterior !== $firmaPsicologa->id) {
+                    Firma::find($idFirmaAnterior)?->descartarSiNoSeUsa();
+                }
 
                 $idEstadoRevisionFinalizada = Estado::where('nombre', 'REVISION FINALIZADA. A LA ESPERA DE RESULTADOS')->value('id');
 

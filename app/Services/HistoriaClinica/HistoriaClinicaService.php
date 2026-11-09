@@ -886,11 +886,7 @@ class HistoriaClinicaService extends Service
                 ];
             }
 
-            // 'image': así se subió (imagen o PDF). Con el 'raw' por defecto Cloudinary
-            // respondía "not found", se tomaba como éxito y la firma se quedaba.
-            if ($registro->{$campo}) {
-                $this->cloudinaryService->deleteFile($registro->{$campo}, 'image');
-            }
+            $publicIdAnterior = $registro->{$campo};
 
             // Bajo la carpeta del colegio, como el resto: antes iban todas a historia-clinica/firmas.
             $resultado = $this->cloudinaryService->uploadFile($file, CloudinaryService::carpetaColegio('historia-clinica/firmas'));
@@ -907,6 +903,14 @@ class HistoriaClinicaService extends Service
                 $campo . '_url' => $resultado['data']['url'],
                 $campo => $resultado['data']['public_id'],
             ]);
+
+            // La anterior se borra después de guardar la nueva: antes se borraba primero y, si la
+            // subida fallaba, el registro quedaba apuntando a un archivo que ya no existía.
+            // 'image': así se subió (imagen o PDF). Con el 'raw' por defecto Cloudinary
+            // respondía "not found", se tomaba como éxito y la firma se quedaba.
+            if ($publicIdAnterior) {
+                $this->cloudinaryService->deleteFile($publicIdAnterior, 'image');
+            }
 
             return [
                 'error' => false,
@@ -945,6 +949,9 @@ class HistoriaClinicaService extends Service
             }
 
             $registro->delete();
+
+            // La de la psicóloga, si era manual (inactiva) y ya ninguna otra historia la usa.
+            $registro->firmaPsicologa?->descartarSiNoSeUsa();
 
             return [
                 'error' => false,
