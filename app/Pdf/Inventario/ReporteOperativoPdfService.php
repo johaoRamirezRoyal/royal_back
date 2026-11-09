@@ -12,7 +12,7 @@ use TCPDF;
 class ReporteOperativoPdfService
 {
     /**
-     * @param  array{usuario: string, area: string, fecha: string, hora: string, fecha_dia: string, id: int|string, descripcion: string, marca: string, estado: string, observacion: string, firma_reporta: ?string, visto_bueno: bool, solucion: ?array{responsable: string, fecha: string, descripcion: string, firma: ?string}}  $data
+     * @param  array{titulo?: string, etiqueta_reporta?: string, usuario: string, area: string, fecha: string, hora: string, fecha_dia: string, id: int|string, descripcion: string, marca: string, estado: string, observacion: string, firma_reporta: ?string, visto_bueno: bool, solucion: ?array{responsable: string, fecha: string, descripcion: string, firma: ?string}}  $data
      */
     public function generate(array $data): string
     {
@@ -60,7 +60,7 @@ class ReporteOperativoPdfService
         <table border="1" cellpadding="4" style="width:100%; text-align:center;">
             <tr>
                 <td style="width:32%;">'.$logoCell.'</td>
-                <td style="width:46%; font-size:10px; font-weight:bold;"><br>PROCESO DE MANTENIMIENTO<br><br>REPORTE OPERATIVO</td>
+                <td style="width:46%; font-size:10px; font-weight:bold;"><br>PROCESO DE MANTENIMIENTO<br><br>'.e($data['titulo'] ?? 'REPORTE OPERATIVO').'</td>
                 <td style="width:22%; font-size:10px; font-weight:bold;">VERSIÓN 01<br>03-06-2025<br>1-1</td>
             </tr>
         </table>
@@ -94,7 +94,7 @@ class ReporteOperativoPdfService
             </tr>
             <tr>
                 <td></td>
-                <td>_________________________<br><b>Reporte Realizado Por</b></td>
+                <td>_________________________<br><b>'.e($data['etiqueta_reporta'] ?? 'Reporte Realizado Por').'</b></td>
                 <td>_________________________<br><b>V°B° Directora Administrativa</b></td>
                 <td>_________________________<br><b>Reporte Remitido a</b></td>
             </tr>

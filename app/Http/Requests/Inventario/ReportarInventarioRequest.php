@@ -27,8 +27,8 @@ class ReportarInventarioRequest extends FormRequest
             'id_periodo' => ['required', 'integer', Rule::exists('periodos', 'id')],
             // Fecha del reporte: solo con la opción Fecha de Reporte (la valida el controller).
             'fechareg' => ['sometimes', 'required', 'date', 'before_or_equal:today'],
-            // Operativo con curso de alturas vigente, si el trabajo es en altura.
-            'id_operativo' => CursoAltura::reglaOperativo(),
+            // Trabajadores con curso de alturas vigente, si el trabajo es en altura.
+            ...CursoAltura::reglasOperativos(),
         ];
     }
 
@@ -73,7 +73,7 @@ class ReportarInventarioRequest extends FormRequest
             'id_anio' => $this->id_anio,
             'id_periodo' => $this->id_periodo,
             'fechareg' => $this->input('fechareg'),
-            'id_operativo' => $this->input('id_operativo'),
+            'id_operativos' => $this->input('id_operativos', []),
         ];
     }
 }

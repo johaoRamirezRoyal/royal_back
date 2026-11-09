@@ -62,6 +62,9 @@ class InventariosController extends Controller
 
     private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
 
+    // Gestión Humana > Trabajos en altura: solo descarga el PDF del reporte/mantenimiento.
+    private const OPCION_CURSOS_ALTURA = Permiso::CURSOS_ALTURA;
+
     protected $inventario_services;
 
     public function __construct(
@@ -293,6 +296,27 @@ class InventariosController extends Controller
 
     // GET /inventario/{id}/hoja-vida/pdf — mismos permisos que historialInventario (ambos
     // alimentan la misma "hoja de vida" del frontend).
+    // GET /inventario/listado-consolidado/carta-entrega/pdf — "Carta de entrega" en
+    // /inventario/listado, con los mismos filtros de la tabla.
+    public function cartaEntregaPdf(ListadoInventarioRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's']);
+        $resultado = $this->inventario_services->generarCartaEntregaPdf($filtros, $request->user()->correo);
+
+        if ($resultado['error']) {
+            return response()->json($resultado, 422);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$resultado['data']['nombre_archivo'].'"',
+        ]);
+    }
+
     public function hojaVidaPdf(Request $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
@@ -311,11 +335,11 @@ class InventariosController extends Controller
         ]);
     }
 
-    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado y en
-    // Reporte de Áreas Comunes (pestaña Correctivos).
+    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado, en
+    // Reporte de Áreas Comunes (todas las pestañas) y en Trabajos en altura.
     public function reportePdf(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_CURSOS_ALTURA)) {
             return $rechazo;
         }
 
@@ -435,7 +459,7 @@ class InventariosController extends Controller
             $data['id_anio'],
             $data['id_periodo'],
             $data['fechareg'],
-            $data['id_operativo'] ? (int) $data['id_operativo'] : null
+            array_map('intval', $data['id_operativos'] ?? [])
         );
 
         return $this->apiResponse($resultado);
@@ -571,7 +595,7 @@ class InventariosController extends Controller
             'id_log' => 'required|integer|exists:usuarios,id_user',
             'con_solucion' => 'boolean',
             'id_tecnico' => 'nullable|integer|exists:usuarios,id_user',
-            'id_operativo' => CursoAltura::reglaOperativo(),
+            ...CursoAltura::reglasOperativos(),
         ]);
 
         if ($validator->fails()) {
@@ -591,7 +615,7 @@ class InventariosController extends Controller
             $data['periodo'],
             $data['con_solucion'] ?? false,
             $data['id_tecnico'] ?? null,
-            isset($data['id_operativo']) ? (int) $data['id_operativo'] : null
+            array_map('intval', $data['id_operativos'] ?? [])
         );
 
         return $this->apiResponse($resultado);

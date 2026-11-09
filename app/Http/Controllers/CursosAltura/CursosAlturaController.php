@@ -5,6 +5,7 @@ namespace App\Http\Controllers\CursosAltura;
 use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CursosAltura\CursoAlturaRequest;
+use App\Models\CursosAltura\CursoAltura;
 use App\Services\CursosAltura\CursosAlturaServices;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
@@ -62,15 +63,56 @@ class CursosAlturaController extends Controller
     }
 
     /**
-     * GET /api/cursos-altura/operativos-vigentes
+     * GET /api/cursos-altura/operativos-vigentes?fecha= — vigentes en `fecha` (hoy por
+     * defecto). También con 143: el editor de Trabajos en altura lo usa.
      */
     public function operativosVigentes(Request $request): JsonResponse
     {
-        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES_AREAS)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION, ...self::OPCIONES_AREAS)) {
             return $rechazo;
         }
 
-        return $this->apiResponse($this->cursosAltura->operativosVigentes());
+        $data = $request->validate(['fecha' => ['nullable', 'date']]);
+
+        return $this->apiResponse($this->cursosAltura->operativosVigentes($data['fecha'] ?? null));
+    }
+
+    /**
+     * GET /api/cursos-altura/trabajos?per-page=&s= — trabajos en altura (Gestión Humana).
+     */
+    public function listarTrabajos(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        $s = $request->input('s') ? trim($request->input('s')) : null;
+
+        return $this->paginatedResponse(
+            $this->cursosAltura->listarTrabajos(['s' => $s], (int) $request->input('per-page', 15))
+        );
+    }
+
+    /**
+     * PUT /api/cursos-altura/trabajos/{id} — fecha y trabajadores; sin trabajadores se borra.
+     * Cada trabajador debe tener curso vigente en la fecha del trabajo.
+     */
+    public function actualizarTrabajo(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        // La fecha primero: la regla de vigencia la necesita válida.
+        $fecha = $request->validate(['fecha_trabajo' => ['required', 'date']])['fecha_trabajo'];
+        $data = $request->validate(CursoAltura::reglasOperativos($fecha));
+
+        return $this->apiResponse($this->cursosAltura->actualizarTrabajo(
+            $id,
+            $fecha,
+            array_map('intval', $data['id_operativos'] ?? []),
+            $request->user()->id_user
+        ));
     }
 
     /**
@@ -123,7 +165,7 @@ class CursosAlturaController extends Controller
      */
     public function permisoPdf(Request $request, int $idReporte): JsonResponse|Response
     {
-        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES_AREAS)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION, ...self::OPCIONES_AREAS)) {
             return $rechazo;
         }
 

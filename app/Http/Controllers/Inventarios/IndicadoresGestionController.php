@@ -6,11 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventario\IndicadorGestionFiltroRequest;
 use App\Http\Requests\Inventario\IndicadorGestionRequest;
 use App\Services\inventario\IndicadoresGestionServices;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Support\Permiso;
-use App\Services\Usuarios\PermisosPerfil;
 
 class IndicadoresGestionController extends Controller
 {
@@ -20,8 +20,7 @@ class IndicadoresGestionController extends Controller
 
     public function __construct(
         private IndicadoresGestionServices $servicio,
-    ) {
-    }
+    ) {}
 
     private function sinAcceso(Request $request, int $tipoCategoria): ?JsonResponse
     {
@@ -47,7 +46,11 @@ class IndicadoresGestionController extends Controller
             $tipo,
             $request->input('id_anio'),
             $request->input('periodo'),
-            $request->input('id_categoria')
+            $request->input('id_categoria'),
+            $request->input('s'),
+            $request->input('sort'),
+            $request->input('dir', 'desc'),
+            (int) $request->input('per-page', 20)
         ));
     }
 

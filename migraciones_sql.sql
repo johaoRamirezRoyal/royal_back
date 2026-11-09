@@ -588,3 +588,25 @@ UPDATE `cron_opciones` SET `nombre` = 'Reservas — Editar y cancelar reservas' 
 -- ---------------------------------------------------------------------------
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 149, 'Mis áreas comunes — Ver áreas del bloque', 6, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 149);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_09_100000_indice_filtros_indicadores_gestion.php
+-- Índice (categoria, anio, periodo) en indicadores_gestion: filtros del listado paginado de
+-- /indicadores-gestion y chequeo de duplicado al generar un indicador.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `indicadores_gestion` ADD INDEX `indicadores_gestion_categoria_anio_periodo_index`(`categoria`, `anio`, `periodo`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_09_120000_create_trabajos_altura_tables
+-- Trabajos en altura: un reporte/mantenimiento de Áreas Comunes puede tener varios
+-- operativos con curso vigente y una fecha de trabajo propia. Copia los
+-- reportes.id_operativo existentes (la columna queda sin uso, se borra más adelante).
+-- ---------------------------------------------------------------------------
+create table `trabajos_altura` (`id` int not null auto_increment, `id_reporte` int not null, `fecha_trabajo` date not null, `user_log` int null, `fechareg` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `trabajos_altura` add constraint `trabajos_altura_id_reporte_foreign` foreign key (`id_reporte`) references `reportes` (`id`) on delete cascade;
+alter table `trabajos_altura` add unique `trabajos_altura_id_reporte_unique`(`id_reporte`);
+create table `trabajos_altura_operativos` (`id_trabajo` int not null, `id_operativo` int not null, primary key (`id_trabajo`, `id_operativo`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operativos_id_trabajo_foreign` foreign key (`id_trabajo`) references `trabajos_altura` (`id`) on delete cascade;
+alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operativos_id_operativo_foreign` foreign key (`id_operativo`) references `usuarios` (`id_user`);
+INSERT INTO trabajos_altura (id_reporte, fecha_trabajo) SELECT id, DATE(CASE WHEN tipo_reporte = 2 THEN COALESCE(fecha_respuesta, fechareg) ELSE fechareg END) FROM reportes WHERE id_operativo IS NOT NULL AND id_reporte IS NULL;
+INSERT INTO trabajos_altura_operativos (id_trabajo, id_operativo) SELECT ta.id, rp.id_operativo FROM trabajos_altura ta JOIN reportes rp ON rp.id = ta.id_reporte;

@@ -19,6 +19,7 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\HistorialChecksPdfService;
+use App\Pdf\Inventario\CartaEntregaPdfService;
 use App\Pdf\Inventario\HojaVidaPdfService;
 use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Pdf\Inventario\ReporteOperativoPdfService;
@@ -26,6 +27,7 @@ use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\branding\MarcaDominioService;
 use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
+use App\Services\CursosAltura\CursosAlturaServices;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -38,6 +40,7 @@ class InventarioServices
     public function __construct(
         private MailService $mailService,
         private ProgramacionMantServices $programacionMant,
+        private CursosAlturaServices $cursosAltura,
     ) {}
 
     private function destinatarios(?string $responsableCorreo = null, ?string $reportadorCorreo = null, ?string $solucionadorCorreo = null): array
@@ -660,6 +663,9 @@ class InventarioServices
                         DB::raw("CAST(SUBSTRING_INDEX(GROUP_CONCAT(inventario.id_categoria ORDER BY inventario.id DESC), ',', 1) AS UNSIGNED) as id_categoria"),
                         DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(c.nombre ORDER BY inventario.id DESC), ',', 1) as categoria_nombre"),
                         DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(e.nombre ORDER BY inventario.id DESC), ',', 1) as estado_nombre"),
+                        // Carta de entrega: marca/observación del ítem más reciente ('||' porque llevan comas).
+                        DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(inventario.marca, '') ORDER BY inventario.id DESC SEPARATOR '||'), '||', 1) as marca"),
+                        DB::raw("SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(inventario.observacion, '') ORDER BY inventario.id DESC SEPARATOR '||'), '||', 1) as observacion"),
                         DB::raw("CONCAT(u.nombre, ' ', u.apellido) as nom_user"),
                         'a.nombre as nom_area',
                         DB::raw('COALESCE(b.nombre, ba.nombre) as nom_bloque'),
@@ -1907,7 +1913,7 @@ class InventarioServices
         int $id_anio,
         int $id_periodo,
         ?string $fechareg = null,
-        ?int $id_operativo = null
+        array $id_operativos = []
     ): array {
         // Con fecha elegida (opción Fecha de Reporte) se conserva la hora actual, para no
         // dejar todos los reportes de ese día a las 00:00.
@@ -1915,7 +1921,7 @@ class InventarioServices
 
         try {
 
-            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo, $fechaReporte, $id_operativo) {
+            $resultado = DB::transaction(function () use ($ids, $id_log, $descripcion, $id_anio, $id_periodo, $fechaReporte, $id_operativos) {
 
                 // 2 = ya reportado, 5 = descontinuado — un ítem con mantenimiento
                 // preventivo pendiente (6) SÍ se puede reportar (ej. un daño nuevo,
@@ -1941,7 +1947,7 @@ class InventarioServices
                         'observacion' => $descripcion,
                     ]);
 
-                    Reportes::create([
+                    $reporte = Reportes::create([
                         'id_inventario' => $item->id,
                         'id_area' => $item->id_area,
                         'tipo_reporte' => 1,
@@ -1953,8 +1959,10 @@ class InventarioServices
                         'id_anio' => $id_anio,
                         'periodo' => $id_periodo,
                         'fechareg' => $fechaReporte,
-                        'id_operativo' => $id_operativo,
                     ]);
+
+                    // Trabajadores en alturas (trabajos_altura); reportes.id_operativo ya no se usa.
+                    $this->cursosAltura->asignarTrabajo($reporte->id, $fechaReporte->toDateString(), $id_operativos, $id_log);
                 }
 
                 $this->registrarLog($inventario->all(), 2, $id_log);
@@ -2094,9 +2102,9 @@ class InventarioServices
                     // filtraba por esta columna más abajo pero no se devolvía, así que el
                     // frontend no podía distinguir el tipo fila por fila.
                     'rp.tipo_reporte',
-                    // Operativo con curso de alturas asignado (permiso de alturas en PDF).
-                    'rp.id_operativo',
-                    DB::raw("(SELECT CONCAT(uo.nombre, ' ', uo.apellido) FROM usuarios uo WHERE uo.id_user = rp.id_operativo) AS nom_operativo")
+                    // Trabajo en altura y sus trabajadores (permiso de alturas en PDF).
+                    DB::raw('(SELECT ta.id FROM trabajos_altura ta WHERE ta.id_reporte = rp.id) AS id_trabajo_altura'),
+                    DB::raw("(SELECT GROUP_CONCAT(CONCAT(uo.nombre, ' ', uo.apellido) ORDER BY uo.nombre SEPARATOR ', ') FROM trabajos_altura ta JOIN trabajos_altura_operativos tao ON tao.id_trabajo = ta.id JOIN usuarios uo ON uo.id_user = tao.id_operativo WHERE ta.id_reporte = rp.id) AS nom_operativo")
                 )
                 // Sin distinct(): cada fila ya es única por rp.id (PK de `reportes`), y todos
                 // los leftJoin de consultaReportes son sobre columnas únicas, así que no pueden
@@ -2634,8 +2642,8 @@ class InventarioServices
      *                                no se indica, se mantiene el fallback histórico: el dueño
      *                                del equipo para el reporte, y quien programa para la
      *                                solución (si $conSolucion).
-     * @param  int|null  $id_operativo  Operativo con curso de alturas vigente, si el trabajo es
-     *                                  en altura (reportes.id_operativo, ver CursosAlturaServices).
+     * @param  array<int, int>  $id_operativos  Operativos con curso de alturas vigente, si el
+     *                                          trabajo es en altura (trabajos_altura, ver CursosAlturaServices).
      */
     public function programarMantenimientoPreventivo(
         array $ids,
@@ -2647,7 +2655,7 @@ class InventarioServices
         ?int $periodo,
         bool $conSolucion = false,
         ?int $id_tecnico = null,
-        ?int $id_operativo = null
+        array $id_operativos = []
     ): array {
         try {
             // Solo se excluyen los descontinuados (5) y los que ya tienen un preventivo ABIERTO
@@ -2711,7 +2719,7 @@ class InventarioServices
                 $periodo,
                 $conSolucion,
                 $id_tecnico,
-                $id_operativo,
+                $id_operativos,
                 &$creados,
                 &$inventariosActualizados
             ) {
@@ -2738,8 +2746,9 @@ class InventarioServices
                         // La fecha del mantenimiento (programado o solucionado) se lee siempre de
                         // `fecha_respuesta` — ver fechaMantenimientoSql().
                         'fecha_respuesta' => $fecha,
-                        'id_operativo' => $id_operativo,
                     ]);
+
+                    $this->cursosAltura->asignarTrabajo($reporte->id, (string) $fecha, $id_operativos, $id_log);
 
                     // Un ítem reportado (2) conserva ese estado: si pasara a 6, su reporte de
                     // daño saldría de la bandeja de reportados (consultaReportes exige
@@ -2882,6 +2891,52 @@ class InventarioServices
     }
 
     /**
+     * PDF "Carta de entrega" (legacy imprimir/cartaEntregaOficial.php) con los grupos del
+     * listado consolidado que matchean los filtros de /inventario/listado.
+     *
+     * @param  array<string, mixed>  $filtros  mismos de obtenerListadoConsolidado
+     */
+    public function generarCartaEntregaPdf(array $filtros, ?string $correoUsuario): array
+    {
+        try {
+            unset($filtros['individual'], $filtros['descripcion']);
+            $listado = $this->obtenerListadoConsolidado($filtros, 10000);
+            if ($listado['error']) {
+                return $listado;
+            }
+
+            $filas = collect($listado['data']->items())->map(fn ($g) => [
+                'usuario' => trim((string) $g->nom_user) ?: 'Sin usuario asignado',
+                'area' => $g->nom_area ?? $g->nom_bloque ?? 'Sin área asignada',
+                'cantidad' => (int) $g->cantidad,
+                'descripcion' => (string) $g->descripcion,
+                'marca' => (string) $g->marca,
+                'estado' => (string) $g->estado_nombre,
+                'observacion' => (string) $g->observacion,
+            ])->all();
+
+            if (! $filas) {
+                return ['error' => true, 'message' => 'No hay inventario con los filtros actuales.', 'data' => []];
+            }
+
+            // Mismo criterio que el logo fijo de PDFs: la institución es Royal School salvo que
+            // el dominio del usuario tenga marca propia.
+            $institucion = app(MarcaDominioService::class)->resolverPorCorreo($correoUsuario)['nombre'] ?: 'Royal School';
+
+            return [
+                'error' => false,
+                'message' => 'PDF generado correctamente',
+                'data' => [
+                    'contenido' => app(CartaEntregaPdfService::class)->generate(['institucion' => $institucion, 'filas' => $filas]),
+                    'nombre_archivo' => 'carta_entrega_'.now()->format('Y-m-d-His').'.pdf',
+                ],
+            ];
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage(), 'data' => []];
+        }
+    }
+
+    /**
      * PDF de hoja de vida de un equipo — recreación del legacy
      * (imprimir/listado_hoja_de_vida/hojaDeVida.php): datos del equipo + historial completo de
      * `reportes` (originales y filas de solución), con el tiempo de respuesta de cada solución.
@@ -2962,6 +3017,13 @@ class InventarioServices
     {
         try {
             $reporte = Reportes::with(['usuario:id_user,nombre,apellido', 'inventario.area:id,nombre'])->find($idReporte);
+            // Preventivo (tipo 2): `id_user` es el dueño del equipo y `observacion` el texto fijo
+            // "Mantenimiento Preventivo"; quien lo programó es `id_log` y el detalle va en `descripcion`.
+            $preventivo = (int) $reporte?->tipo_reporte === 2;
+            $idQuienReporta = $preventivo ? $reporte->id_log : $reporte?->id_user;
+            $quienReporta = $preventivo
+                ? Usuario::where('id_user', $reporte->id_log)->selectRaw("CONCAT(nombre, ' ', apellido) AS n")->value('n')
+                : trim(($reporte?->usuario->nombre ?? '').' '.($reporte?->usuario->apellido ?? ''));
 
             if (! $reporte || ! $reporte->inventario) {
                 return ['error' => true, 'message' => 'No se encontró el reporte.', 'data' => []];
@@ -2989,8 +3051,14 @@ class InventarioServices
             }
 
             $contenido = app(ReporteOperativoPdfService::class)->generate([
-                'usuario' => trim(($reporte->usuario->nombre ?? '').' '.($reporte->usuario->apellido ?? '')),
-                'area' => $item->area->nombre ?? '',
+                'titulo' => $preventivo ? 'MANTENIMIENTO PREVENTIVO' : 'REPORTE OPERATIVO',
+                'etiqueta_reporta' => $preventivo ? 'Programado Por' : 'Reporte Realizado Por',
+                'usuario' => trim($quienReporta ?? ''),
+                // Área del reporte o del ítem; un ítem de Áreas Comunes asignado solo al bloque
+                // no tiene área, entonces va el bloque.
+                'area' => DB::table('areas')->where('id', $reporte->id_area ?? $item->id_area)->value('nombre')
+                    ?? DB::table('bloques')->where('id', $item->id_bloque)->value('nombre')
+                    ?? '',
                 'fecha' => $reporte->fechareg?->format('Y-m-d H:i:s') ?? '',
                 'hora' => $reporte->fechareg?->format('H:i:s') ?? '',
                 'fecha_dia' => $reporte->fechareg?->format('Y-m-d') ?? '',
@@ -2998,8 +3066,8 @@ class InventarioServices
                 'descripcion' => $item->descripcion ?? '',
                 'marca' => $item->marca ?? '',
                 'estado' => Estado::where('id', $item->estado)->value('nombre') ?? '',
-                'observacion' => $reporte->observacion ?? '',
-                'firma_reporta' => $this->descargarFirma($reporte->id_user),
+                'observacion' => $preventivo ? ($reporte->descripcion ?: $reporte->observacion ?? '') : ($reporte->observacion ?? ''),
+                'firma_reporta' => $this->descargarFirma($idQuienReporta),
                 'visto_bueno' => (bool) $solucion?->visto_bueno,
                 'solucion' => $datosSolucion,
             ]);

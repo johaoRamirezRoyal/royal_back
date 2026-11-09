@@ -83,8 +83,8 @@ class CursosAlturaTest extends TestCase
             'descripcion' => 'Prueba automática',
             'id_anio' => DB::table('anio_escolar')->value('id'),
             'id_periodo' => DB::table('periodos')->value('id'),
-            'id_operativo' => $this->operativo->id_user,
-        ], $this->auth())->assertUnprocessable()->assertJsonValidationErrors('id_operativo');
+            'id_operativos' => [$this->operativo->id_user],
+        ], $this->auth())->assertUnprocessable()->assertJsonValidationErrors('id_operativos.0');
     }
 
     public function test_programar_mantenimiento_con_operativo_sin_curso_vigente_da_422(): void
@@ -98,27 +98,67 @@ class CursosAlturaTest extends TestCase
             'periodo' => DB::table('periodos')->value('id'),
             'id_log' => $this->operativo->id_user,
             'con_solucion' => false,
-            'id_operativo' => $this->operativo->id_user,
-        ], $this->auth())->assertUnprocessable()->assertJsonPath('message', 'El operativo seleccionado no tiene un curso de altura vigente.');
+            'id_operativos' => [$this->operativo->id_user],
+        ], $this->auth())->assertUnprocessable()->assertJsonPath('message', fn ($m) => str_ends_with($m, 'no tiene un curso de altura vigente.'));
     }
 
-    public function test_permiso_pdf_de_reporte_sin_operativo_da_404(): void
+    public function test_permiso_pdf_de_reporte_sin_trabajadores_da_404(): void
     {
-        $reporte = DB::table('reportes')->whereNull('id_operativo')->whereNull('id_reporte')->value('id');
+        $reporte = DB::table('reportes')->whereNull('id_reporte')
+            ->whereNotIn('id', DB::table('trabajos_altura')->select('id_reporte'))->value('id');
 
         $this->get("/api/cursos-altura/permiso/{$reporte}/pdf", $this->auth())->assertNotFound();
     }
 
-    public function test_permiso_pdf_de_reporte_con_operativo(): void
+    public function test_reportar_con_dos_trabajadores_crea_un_trabajo_y_el_pdf_los_lista(): void
     {
-        $this->curso($this->operativo->id_user, now()->subYear()->toDateString(), null);
-        $reporte = DB::table('reportes as rp')->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
-            ->whereNull('rp.id_reporte')->value('rp.id');
-        DB::table('reportes')->where('id', $reporte)->update(['id_operativo' => $this->operativo->id_user]);
+        [$a, $b] = $this->dosOperativosVigentes();
+        $item = DB::table('inventario')->whereNotIn('estado', [2, 5])->value('id');
+
+        $this->postJson('/api/inventario/reportar', [
+            'ids' => [$item],
+            'id_log' => $a,
+            'descripcion' => 'Prueba automática',
+            'id_anio' => DB::table('anio_escolar')->value('id'),
+            'id_periodo' => DB::table('periodos')->value('id'),
+            'id_operativos' => [$a, $b],
+        ], $this->auth())->assertOk();
+
+        $reporte = DB::table('reportes')->where('id_inventario', $item)->whereNull('id_reporte')->max('id');
+        $trabajo = DB::table('trabajos_altura')->where('id_reporte', $reporte)->first();
+        $this->assertNotNull($trabajo);
+        $this->assertEqualsCanonicalizing([$a, $b], DB::table('trabajos_altura_operativos')->where('id_trabajo', $trabajo->id)->pluck('id_operativo')->all());
 
         $this->get("/api/cursos-altura/permiso/{$reporte}/pdf", $this->auth())
             ->assertOk()
             ->assertHeader('Content-Type', 'application/pdf');
+    }
+
+    public function test_editar_trabajo_valida_el_curso_en_la_fecha_del_trabajo_y_sin_trabajadores_lo_borra(): void
+    {
+        [$a] = $this->dosOperativosVigentes();
+        $trabajo = $this->trabajo([$a]);
+
+        // El curso de $a arranca hace un año: no cubre una fecha de hace dos.
+        $this->putJson("/api/cursos-altura/trabajos/{$trabajo}", [
+            'fecha_trabajo' => now()->subYears(2)->toDateString(),
+            'id_operativos' => [$a],
+        ], $this->auth())->assertUnprocessable()->assertJsonValidationErrors('id_operativos.0');
+
+        $this->putJson("/api/cursos-altura/trabajos/{$trabajo}", [
+            'fecha_trabajo' => now()->subMonth()->toDateString(),
+            'id_operativos' => [$a],
+        ], $this->auth())->assertOk();
+        $this->assertSame(now()->subMonth()->toDateString(), DB::table('trabajos_altura')->where('id', $trabajo)->value('fecha_trabajo'));
+
+        $fila = collect($this->getJson('/api/cursos-altura/trabajos?per-page=500', $this->auth())->assertOk()->json('data.data'))->firstWhere('id', $trabajo);
+        $this->assertSame([$a], array_column($fila['operativos'], 'id_user'));
+
+        $this->putJson("/api/cursos-altura/trabajos/{$trabajo}", [
+            'fecha_trabajo' => now()->toDateString(),
+            'id_operativos' => [],
+        ], $this->auth())->assertOk();
+        $this->assertFalse(DB::table('trabajos_altura')->where('id', $trabajo)->exists());
     }
 
     public function test_crear_guarda_el_certificado_en_el_disco_de_uploads(): void
@@ -133,6 +173,39 @@ class CursosAlturaTest extends TestCase
         ], $this->auth())->assertOk()->json('data.ruta_certificado');
 
         Storage::disk('public')->assertExists($ruta);
+    }
+
+    /** Dos operativos sin curso previo, ahora con uno vigente desde hace un año. @return array{0: int, 1: int} */
+    private function dosOperativosVigentes(): array
+    {
+        $ids = Usuario::where('estado', 'activo')
+            ->whereIn('perfil', PermisosLicenciasServices::PERFILES_ASIGNABLES)
+            ->whereNotIn('id_user', DB::table('cursos_altura')->select('id_user'))
+            ->limit(2)->pluck('id_user')->all();
+
+        if (count($ids) < 2) {
+            $this->markTestSkipped('Faltan dos operativos sin curso.');
+        }
+
+        foreach ($ids as $id) {
+            $this->curso($id, now()->subYear()->toDateString(), null);
+        }
+
+        return $ids;
+    }
+
+    /** @param  array<int, int>  $operativos */
+    private function trabajo(array $operativos): int
+    {
+        $reporte = DB::table('reportes as rp')->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
+            ->whereNull('rp.id_reporte')
+            ->whereNotIn('rp.id', DB::table('trabajos_altura')->select('id_reporte'))->value('rp.id');
+        $id = DB::table('trabajos_altura')->insertGetId(['id_reporte' => $reporte, 'fecha_trabajo' => now()->toDateString()]);
+        foreach ($operativos as $op) {
+            DB::table('trabajos_altura_operativos')->insert(['id_trabajo' => $id, 'id_operativo' => $op]);
+        }
+
+        return $id;
     }
 
     private function curso(int $idUser, string $expedicion, ?string $fin): void

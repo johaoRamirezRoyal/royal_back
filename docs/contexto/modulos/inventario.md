@@ -137,18 +137,40 @@ opcional). Para el CRUD se usa la opción **143**.
 
 - **Operativos**: los usuarios activos con perfil en
   `PermisosLicenciasServices::PERFILES_ASIGNABLES` (10, 23, 27, 32).
-- **Curso vigente**: `CursoAltura::scopeVigentes`. Exige `activo = 1` y
-  `fecha_expedicion <= hoy`, y además `fecha_finalizacion` NULL o `>= hoy`.
-- **`reportes.id_operativo`** (antes `evidencia`, un longblob legacy que nunca se usó) guarda
-  el operativo de un trabajo en altura. Hay dos formas de llenarlo:
-  - Al reportar un daño (`POST /inventario/reportar`).
-  - Al programar un preventivo (`POST /inventario/mantenimiento`).
+- **Curso vigente**: `CursoAltura::scopeVigentes($fecha)`. Exige `activo = 1` y
+  `fecha_expedicion <= fecha`, y además `fecha_finalizacion` NULL o `>= fecha` (hoy si no
+  se da la fecha).
+- **Trabajos en altura** (`trabajos_altura` 1 a 1 con el reporte padre, con `fecha_trabajo`
+  propia, + `trabajos_altura_operativos`; modelo `TrabajoAltura`): un reporte o mantenimiento
+  puede tener **varios** operativos. Se crean con `CursosAlturaServices::asignarTrabajo()`,
+  dentro de la transacción de:
+  - reportar un daño (`POST /inventario/reportar`);
+  - programar un preventivo (`POST /inventario/mantenimiento`).
 
-  En los dos casos se valida con `CursoAltura::reglaOperativo()`: si el operativo no tiene un
-  curso vigente, responde 422.
-- `GET /cursos-altura/operativos-vigentes` y `GET /cursos-altura/permiso/{idReporte}/pdf`
-  aceptan las opciones de Inventario y de Áreas Comunes (12, 108, 109, 119, 141, 142).
+  Los dos reciben `id_operativos` (arreglo) y lo validan con `CursoAltura::reglasOperativos()`:
+  si alguno no tiene curso vigente hoy, responde 422 con su nombre. `consultaReportes`
+  devuelve `id_trabajo_altura` y `nom_operativo` (nombres separados por coma).
+- **`reportes.id_operativo`** (antes `evidencia`) quedó **sin uso**: la migración
+  `2026_11_09_120000_create_trabajos_altura_tables` copió sus datos. **Pendiente**: borrar la
+  columna en otra migración cuando producción ya corra este código.
+- **Gestión Humana > Trabajos en altura** (opción 143): `GET /cursos-altura/trabajos` (paginado,
+  `s` busca por ítem, área o trabajador) y `PUT /cursos-altura/trabajos/{id}`
+  (`fecha_trabajo` + `id_operativos`). Al editar, el curso debe cubrir la **fecha del
+  trabajo**, no hoy. Con `id_operativos` vacío se borra el trabajo (deja de ser en altura).
+  Cambiar `fecha_trabajo` no toca las fechas de `reportes`.
+- `GET /cursos-altura/operativos-vigentes?fecha=` y `GET /cursos-altura/permiso/{idReporte}/pdf`
+  aceptan las opciones de Inventario, Áreas Comunes y Cursos de altura (12, 108, 109, 119,
+  141, 142, 143).
 - **El PDF** lo genera `PermisoAlturasPdfService` y sigue el formato de la Resolución
-  4272/2021: datos del trabajo, trabajador autorizado con su curso, lista de verificación
-  SÍ/NO, observaciones y tres firmas. La lista de verificación, la altura y las firmas se
-  llenan a mano en sitio. Si el reporte no tiene operativo, el endpoint responde 404.
+  4272/2021: datos del trabajo (con `fecha_trabajo`), una fila por trabajador con el curso que
+  cubre esa fecha (o el más reciente), lista de verificación SÍ/NO, observaciones y una firma
+  por trabajador más coordinador y quien autoriza. Lo demás se llena a mano en sitio. Si el
+  reporte no tiene trabajo en altura, el endpoint responde 404.
+
+## Carta de entrega (`/inventario/listado`)
+
+Botón "Carta de entrega": `GET /api/inventario/listado-consolidado/carta-entrega/pdf` (permiso INVENTARIO) con los mismos filtros del listado (`buildConsolidadoParams`). Recreación de `cartaEntregaOficial.php` (no de `cartaEntrega.php`, que usaba tabla temporal): una fila por grupo (usuario, área, descripción) con cantidad; marca/observación del ítem más reciente del grupo. Backend: `InventarioServices::generarCartaEntregaPdf` + `CartaEntregaPdfService`. Nombre de institución: marca del dominio del usuario, si no "Royal School" (no se usa `super_empresa`).
+
+## Indicadores de gestión (`/indicadores-gestion`)
+
+`GET /api/indicadores-gestion` pagina en el servidor (DataTable remoto: `page`, `per-page`, `s`, `sort`, `dir` + `tipo_categoria`, `id_anio`, `periodo`, `id_categoria`) y devuelve `resumen` (`total`, `promedio`, `bajo_meta`) de todos los registros filtrados, no de la página. La página arranca sin año filtrado (histórico completo); la gráfica sigue por `/grafica`.

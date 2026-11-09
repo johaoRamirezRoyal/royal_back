@@ -3,6 +3,7 @@
 namespace App\Services\CursosAltura;
 
 use App\Models\CursosAltura\CursoAltura;
+use App\Models\CursosAltura\TrabajoAltura;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\PermisoAlturasPdfService;
 use App\Services\FileStorageService;
@@ -57,12 +58,12 @@ class CursosAlturaServices
         }
     }
 
-    /** Operativos con curso vigente hoy (select de "requiere personal en alturas"). */
-    public function operativosVigentes(): array
+    /** Operativos con curso vigente en $fecha, hoy por defecto (select de trabajadores en alturas). */
+    public function operativosVigentes(?string $fecha = null): array
     {
         try {
             $usuarios = CursoAltura::filtrarOperativos(Usuario::query())
-                ->whereIn('id_user', CursoAltura::vigentes()->select('id_user'))
+                ->whereIn('id_user', CursoAltura::vigentes($fecha)->select('id_user'))
                 ->orderBy('nombre')
                 ->get(['id_user', 'nombre', 'apellido']);
 
@@ -138,51 +139,148 @@ class CursosAlturaServices
     }
 
     /**
+     * Crea el trabajo en altura de un reporte/mantenimiento recién creado. Sin transacción
+     * propia: la llama InventarioServices dentro de la suya. Los ids ya vienen validados.
+     *
+     * @param  array<int, int>  $idsOperativos
+     */
+    public function asignarTrabajo(int $idReporte, string $fecha, array $idsOperativos, int $idLog): void
+    {
+        if (empty($idsOperativos)) {
+            return;
+        }
+
+        TrabajoAltura::create([
+            'id_reporte' => $idReporte,
+            'fecha_trabajo' => Carbon::parse($fecha)->toDateString(),
+            'user_log' => $idLog,
+        ])->operativos()->sync(array_map('intval', $idsOperativos));
+    }
+
+    /** Trabajos en altura (Gestión Humana > Trabajos en altura). */
+    public function listarTrabajos(array $filtros, int $perPage): array
+    {
+        try {
+            $query = TrabajoAltura::query()
+                ->join('reportes as rp', 'rp.id', '=', 'trabajos_altura.id_reporte')
+                ->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
+                ->leftJoin('areas as ar', 'ar.id', '=', DB::raw('COALESCE(rp.id_area, iv.id_area)'))
+                ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(iv.id_bloque, ar.id_bloque)'))
+                ->with('operativos:id_user,nombre,apellido,documento')
+                ->select([
+                    'trabajos_altura.id', 'trabajos_altura.id_reporte', 'trabajos_altura.fecha_trabajo',
+                    'rp.tipo_reporte',
+                    DB::raw('COALESCE(NULLIF(TRIM(rp.descripcion), \'\'), rp.observacion) AS descripcion'),
+                    'iv.descripcion as item', 'ar.nombre as area', 'b.nombre as bloque',
+                    DB::raw('EXISTS(SELECT 1 FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3) AS solucionado'),
+                ])
+                ->orderByDesc('trabajos_altura.fecha_trabajo')
+                ->orderByDesc('trabajos_altura.id');
+
+            if (! empty($filtros['s'])) {
+                $s = "%{$filtros['s']}%";
+                $query->where(fn ($q) => $q->where('iv.descripcion', 'like', $s)
+                    ->orWhere('ar.nombre', 'like', $s)
+                    ->orWhereHas('operativos', fn ($o) => $o->where(DB::raw("CONCAT(nombre, ' ', apellido)"), 'like', $s)));
+            }
+
+            $paginator = $query->paginate($perPage);
+            $paginator->getCollection()->each(fn ($t) => $t->solucionado = (bool) $t->solucionado);
+
+            return ['error' => false, 'message' => 'Trabajos obtenidos correctamente', 'data' => $paginator];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Cambia la fecha y los operativos de un trabajo en altura. Sin operativos, el trabajo
+     * deja de ser en altura y se borra.
+     *
+     * @param  array<int, int>  $idsOperativos
+     */
+    public function actualizarTrabajo(int $id, string $fecha, array $idsOperativos, int $idLog): array
+    {
+        try {
+            $trabajo = TrabajoAltura::find($id);
+
+            if (! $trabajo) {
+                return ['error' => true, 'message' => 'Trabajo en altura no encontrado', 'status' => 404];
+            }
+
+            if (empty($idsOperativos)) {
+                $trabajo->delete();
+
+                return ['error' => false, 'message' => 'El trabajo ya no requiere personal en alturas', 'data' => []];
+            }
+
+            DB::transaction(function () use ($trabajo, $fecha, $idsOperativos, $idLog) {
+                $trabajo->update(['fecha_trabajo' => $fecha, 'user_log' => $idLog]);
+                $trabajo->operativos()->sync(array_map('intval', $idsOperativos));
+            });
+
+            return ['error' => false, 'message' => 'Trabajo actualizado correctamente', 'data' => $trabajo->fresh('operativos:id_user,nombre,apellido,documento')];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Permiso de Trabajo en Alturas (Res. 4272 de 2021) de un reporte/mantenimiento con
-     * operativo asignado (reportes.id_operativo).
+     * trabajo en altura: todos sus operativos en un solo PDF.
      */
     public function permisoAlturasPdf(int $idReporte): array
     {
         try {
-            $reporte = DB::table('reportes as rp')
+            $trabajo = TrabajoAltura::with('operativos:id_user,nombre,apellido,documento')->where('id_reporte', $idReporte)->first();
+
+            $reporte = $trabajo ? DB::table('reportes as rp')
                 ->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
-                ->join('usuarios as op', 'op.id_user', '=', 'rp.id_operativo')
                 ->leftJoin('areas as ar', 'ar.id', '=', DB::raw('COALESCE(rp.id_area, iv.id_area)'))
                 ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(iv.id_bloque, ar.id_bloque)'))
                 ->where('rp.id', $idReporte)
                 ->whereNull('rp.id_reporte')
                 ->first([
-                    'rp.id', 'rp.tipo_reporte', 'rp.fechareg', 'rp.fecha_respuesta', 'rp.id_operativo',
+                    'rp.id', 'rp.tipo_reporte',
                     DB::raw('COALESCE(NULLIF(TRIM(rp.descripcion), \'\'), rp.observacion) AS descripcion'),
                     'iv.descripcion as item', 'ar.nombre as area', 'b.nombre as bloque',
-                    DB::raw("CONCAT(op.nombre, ' ', op.apellido) AS operativo"), 'op.documento',
-                ]);
+                ]) : null;
 
-            if (! $reporte) {
-                return ['error' => true, 'message' => 'El reporte no existe o no tiene operativo de alturas asignado', 'status' => 404];
+            if (! $reporte || $trabajo->operativos->isEmpty()) {
+                return ['error' => true, 'message' => 'El reporte no existe o no tiene trabajadores de alturas asignados', 'status' => 404];
             }
 
-            // El curso que cubre la fecha del trabajo; si ya no hay uno, el más reciente.
-            $curso = CursoAltura::where('activo', 1)
-                ->where('id_user', $reporte->id_operativo)
+            $fecha = $trabajo->fecha_trabajo->toDateString();
+            // Por operativo: el curso que cubre la fecha del trabajo; si no hay, el más reciente.
+            $cursos = CursoAltura::where('activo', 1)
+                ->whereIn('id_user', $trabajo->operativos->pluck('id_user'))
                 ->orderByDesc('fecha_expedicion')
-                ->first();
+                ->get()
+                ->groupBy('id_user');
 
-            $fechaTrabajo = $reporte->tipo_reporte == 2 ? $reporte->fecha_respuesta : $reporte->fechareg;
+            $operativos = $trabajo->operativos->map(function ($op) use ($cursos, $fecha) {
+                $delOperativo = $cursos->get($op->id_user, collect());
+                $curso = $delOperativo->first(fn ($c) => $c->fecha_expedicion->toDateString() <= $fecha
+                    && ($c->fecha_finalizacion === null || $c->fecha_finalizacion->toDateString() >= $fecha)) ?? $delOperativo->first();
+
+                return [
+                    'nombre' => trim("{$op->nombre} {$op->apellido}"),
+                    'documento' => $op->documento ?? '',
+                    'curso_expedicion' => $curso?->fecha_expedicion?->format('d/m/Y') ?? 'Sin registro',
+                    'curso_vigencia' => $curso ? ($curso->fecha_finalizacion?->format('d/m/Y') ?? 'Sin vencimiento') : 'Sin registro',
+                ];
+            })->all();
 
             $contenido = $this->permisoPdf->generate([
                 'consecutivo' => $reporte->id,
                 'tipo' => $reporte->tipo_reporte == 2 ? 'Mantenimiento preventivo' : 'Mantenimiento correctivo',
                 'fecha_emision' => Carbon::now()->format('d/m/Y'),
-                'fecha_trabajo' => $fechaTrabajo ? Carbon::parse($fechaTrabajo)->format('d/m/Y') : '',
+                'fecha_trabajo' => $trabajo->fecha_trabajo->format('d/m/Y'),
                 'bloque' => $reporte->bloque ?? '',
                 'area' => $reporte->area ?? '',
                 'item' => $reporte->item ?? '',
                 'descripcion' => $reporte->descripcion ?? '',
-                'operativo' => $reporte->operativo,
-                'documento' => $reporte->documento ?? '',
-                'curso_expedicion' => $curso?->fecha_expedicion?->format('d/m/Y') ?? 'Sin registro',
-                'curso_vigencia' => $curso ? ($curso->fecha_finalizacion?->format('d/m/Y') ?? 'Sin vencimiento') : 'Sin registro',
+                'operativos' => $operativos,
             ]);
 
             return ['error' => false, 'message' => 'PDF generado', 'data' => [
