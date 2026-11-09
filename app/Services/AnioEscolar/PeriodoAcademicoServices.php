@@ -10,25 +10,64 @@ class PeriodoAcademicoServices extends Service
 {
     public function __construct(private AnioEscolarServices $anioEscolarServices) {}
 
+    /**
+     * Error de las fechas de un periodo, o null si son válidas. Pura (la usa el test
+     * FechasPeriodoAcademicoTest): `$rango` es el del año escolar (`fecha_min`/`fecha_max`,
+     * según el calendario A o B) y `$otros` los demás periodos de ese año, para no solaparse.
+     *
+     * @param  array{fecha_min: string, fecha_max: string}  $rango
+     * @param  iterable<array{nombre: ?string, fecha_inicio: string, fecha_fin: string}>  $otros
+     */
+    public static function errorDeFechas(string $inicio, string $fin, array $rango, iterable $otros): ?string
+    {
+        $inicio = substr($inicio, 0, 10);
+        $fin = substr($fin, 0, 10);
+
+        if ($fin <= $inicio) {
+            return 'La fecha de finalización debe ser posterior a la de inicio';
+        }
+        if ($inicio < $rango['fecha_min'] || $fin > $rango['fecha_max']) {
+            return "El periodo debe estar dentro del año escolar: del {$rango['fecha_min']} al {$rango['fecha_max']}";
+        }
+        foreach ($otros as $o) {
+            // Se solapan si cada uno empieza antes de que el otro termine (los extremos cuentan).
+            if ($inicio <= substr($o['fecha_fin'], 0, 10) && $fin >= substr($o['fecha_inicio'], 0, 10)) {
+                $nombre = $o['nombre'] ?: 'otro periodo';
+
+                return "Las fechas se cruzan con {$nombre} (del " . substr($o['fecha_inicio'], 0, 10) . ' al ' . substr($o['fecha_fin'], 0, 10) . ')';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resuelve el año escolar por la fecha de inicio y valida las fechas contra su rango y los
+     * demás periodos del año. Devuelve [año, null] o [null, mensaje de error].
+     */
+    private function validarFechas(string $inicio, string $fin, ?int $excluirId = null): array
+    {
+        $anio = $this->anioEscolarServices->obtenerAnioEscolarPorFecha($inicio);
+        if (! $anio) {
+            return [null, 'No existe un año escolar registrado para la fecha de inicio indicada'];
+        }
+
+        $otros = PeriodoAcademico::where('id_anio_escolar', $anio->id)
+            ->when($excluirId, fn ($q) => $q->where('id', '!=', $excluirId))
+            ->get(['nombre', 'fecha_inicio', 'fecha_fin'])
+            ->map(fn ($p) => ['nombre' => $p->nombre, 'fecha_inicio' => (string) $p->fecha_inicio, 'fecha_fin' => (string) $p->fecha_fin]);
+
+        $error = self::errorDeFechas($inicio, $fin, $this->anioEscolarServices->rangoDeAnioEscolar($anio), $otros);
+
+        return $error ? [null, $error] : [$anio, null];
+    }
+
     public function agregarPeriodoAcademico(array $data): array
     {
         try {
-            $anioEscolar = $this->anioEscolarServices->obtenerAnioEscolarPorFecha($data['fecha_inicio']);
-
-            if (!$anioEscolar) {
-                return [
-                    'error' => true,
-                    'message' => 'No existe un año escolar registrado para la fecha de inicio indicada',
-                    'data' => []
-                ];
-            }
-
-            if ($data['fecha_fin'] > "{$anioEscolar->anio_fin}-06-30") {
-                return [
-                    'error' => true,
-                    'message' => "La fecha de finalización debe estar dentro del año escolar {$anioEscolar->anio_inicio}-{$anioEscolar->anio_fin} (hasta el 30 de junio de {$anioEscolar->anio_fin})",
-                    'data' => []
-                ];
+            [$anioEscolar, $error] = $this->validarFechas($data['fecha_inicio'], $data['fecha_fin']);
+            if ($error) {
+                return ['error' => true, 'message' => $error, 'data' => []];
             }
 
             $data['id_anio_escolar'] = $anioEscolar->id;
@@ -131,6 +170,20 @@ class PeriodoAcademicoServices extends Service
                     'message' => 'No se ha encontrado el periodo académico con el ID: ' . $id_periodo,
                     'data' => []
                 ];
+            }
+
+            // Con fechas nuevas se revalidan (rango del año y cruces) y el año escolar se vuelve a
+            // resolver por la fecha de inicio: un periodo movido de año cambia de año.
+            if (isset($data['fecha_inicio']) || isset($data['fecha_fin'])) {
+                [$anio, $error] = $this->validarFechas(
+                    (string) ($data['fecha_inicio'] ?? $periodo_academico->fecha_inicio),
+                    (string) ($data['fecha_fin'] ?? $periodo_academico->fecha_fin),
+                    $periodo_academico->id,
+                );
+                if ($error) {
+                    return ['error' => true, 'message' => $error, 'data' => []];
+                }
+                $data['id_anio_escolar'] = $anio->id;
             }
 
             $periodoAcademicoUpdate = $periodo_academico->update($data);

@@ -77,6 +77,9 @@ asistente de nivel.
 
 ## Plazos
 
+Años escolares (calendario A/B, año vigente, crons) y periodos académicos (validación de fechas,
+cruces): ver `gestion-academica.md`. Lo propio de notas:
+
 - `periodo_academico.fecha_limite_notas` (nullable, ≥ `fecha_fin`, se edita con el periodo). Se
   califica y corrige desde `fecha_inicio` hasta `fecha_limite_notas ?? fecha_fin`
   (`NotasService::periodoEditable`, test en `tests/Unit/GestionAcademica/PeriodoEditableNotasTest.php`).
