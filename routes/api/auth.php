@@ -11,7 +11,8 @@ Route::prefix('admissions')->group(function () {
     Route::post('revoke-admisiones', [TokenExchangeController::class, 'revoke']);
 });
 
-Route::post('login', [AuthController::class, 'login']);
+// 5 contraseñas incorrectas para un correo desde una IP = 15 min de bloqueo (ver LimitarIntentosFallidos).
+Route::post('login', [AuthController::class, 'login'])->middleware('intentos:5,15');
 Route::post('login/verify-otp', [AuthController::class, 'verifyLoginOtp']);
 Route::post('login/resend-otp', [AuthController::class, 'resendLoginOtp']);
 Route::post('master-key/redeem', [AuthController::class, 'redeemMasterKey']);

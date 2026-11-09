@@ -9,6 +9,7 @@ use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\IpUtils;
 use App\Support\Permiso;
@@ -53,6 +54,25 @@ class AsistenciaGestionController extends Controller
         }
 
         return $this->apiResponse(['error' => false, 'message' => 'OK', 'data' => $this->asistenciaService->tokenQr()]);
+    }
+
+    /**
+     * Salir de la pantalla completa del QR. Esa pantalla queda 24/7 en portería con la sesión
+     * de quien la abrió: sin validar, cualquiera que pase la cerraría y usaría esa cuenta. Pide
+     * la contraseña de la sesión (el frontend solo deja salir si esto responde bien). Limitado
+     * por la ruta (throttle) para que no se pueda adivinar.
+     */
+    public function salirPantallaQr(Request $request): JsonResponse
+    {
+        if (!PermisosPerfil::tiene($request, self::OPCION_VER_TODAS) && !PermisosPerfil::tiene($request, Permiso::ASISTENCIA_PANTALLA_QR)) {
+            return $this->error('No tienes permiso para mostrar el código de asistencia', 403);
+        }
+
+        if (!Hash::check((string) $request->input('password', ''), (string) $request->user()->pass)) {
+            return $this->error('La contraseña no es correcta.', 422);
+        }
+
+        return $this->apiResponse(['error' => false, 'message' => 'OK', 'data' => null]);
     }
 
     /**

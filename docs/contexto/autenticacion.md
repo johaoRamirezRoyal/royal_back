@@ -25,6 +25,16 @@
 - `AuthServices` es delgado: solo cubre el registro y los dispositivos confiables. El
   resto (login, check, tokens) sigue en `AuthController`/`JwtService`.
 
+## Intentos fallidos (`LimitarIntentosFallidos`, alias `intentos`)
+
+Middleware para rutas que piden contraseña: `->middleware('intentos:5,15')` = 5 fallos
+(respuestas 401 o 422) y 15 min de bloqueo (429 con mensaje en español y `Retry-After`). Un
+acierto reinicia la cuenta. La clave es ruta + IP + cuenta (el `user` del body o el usuario de
+la sesión): nadie bloquea la cuenta de otro desde su equipo. No tiene tope global por IP.
+Lo usan `POST /auth/login` y `POST /asistencia-gestion/qr/salir-pantalla`. Test:
+`tests/Feature/LimitarIntentosFallidosTest.php`. Para una ruta nueva de contraseña, úsalo en
+vez de `throttle` (que cuenta todas las peticiones, también las buenas).
+
 ## Verificación de equipo nuevo (`dispositivos_confiables`)
 
 Solo aplica al login del sistema general; admisiones e instituciones tienen su propio OTP.
