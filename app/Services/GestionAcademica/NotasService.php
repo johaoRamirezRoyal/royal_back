@@ -349,24 +349,28 @@ class NotasService extends Service
         return $calificador === self::CALIFICA_DOCENTE_ASIGNATURA ? $tieneCarga : $dirige;
     }
 
-    /** ¿El docente tiene carga en el curso para esta unidad? DIMENSION nunca; ASIGNATURA, esa asignatura; AREA, cualquiera de las asignaturas activas del área. */
-    private function tieneCarga(int $idUser, int $idCurso, Dimension $unidad): bool
+    /** Ids de las asignaturas en las que el docente tiene carga activa en ese curso (o esos cursos). */
+    private function asignaturasConCarga(int $idUser, int|array $idsCurso): Collection
     {
-        $idsAsignatura = match ($unidad->tipo) {
-            Dimension::ASIGNATURA => [(int) $unidad->id_asignatura],
-            Dimension::AREA => DB::table('academico_asignatura')->where('id_area', $unidad->id_area)->where('activo', 1)->pluck('id')->all(),
-            default => [],
-        };
-        if (! $idsAsignatura) {
-            return false;
-        }
-
         return DB::table('academico_carga_academica as c')
             ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
-            ->where('c.id_curso', $idCurso)->where('c.activo', 1)
+            ->whereIn('c.id_curso', (array) $idsCurso)->where('c.activo', 1)
             ->where('da.activo', 1)->where('da.id_docente', $idUser)
-            ->whereIn('da.id_asignatura', $idsAsignatura)
-            ->exists();
+            ->distinct()->pluck('da.id_asignatura')->map(fn ($id) => (int) $id);
+    }
+
+    /**
+     * "Tiene carga" en la unidad, dadas las asignaturas con carga del docente: DIMENSION nunca;
+     * ASIGNATURA, la suya; AREA, alguna asignatura activa del área.
+     */
+    private static function cubre(Dimension $unidad, Collection $conCarga): bool
+    {
+        return match ($unidad->tipo) {
+            Dimension::ASIGNATURA => $conCarga->contains((int) $unidad->id_asignatura),
+            Dimension::AREA => $conCarga->isNotEmpty() && DB::table('academico_asignatura')
+                ->where('id_area', $unidad->id_area)->where('activo', 1)->whereIn('id', $conCarga)->exists(),
+            default => false,
+        };
     }
 
     /** Cursos activos del grado, en orden académico, con su director de grupo. */
@@ -539,7 +543,7 @@ class NotasService extends Service
                 ];
             })->values();
 
-            $plan = $this->datosPlan($curso, $periodo, $this->rol($actor, $curso));
+            $plan = $this->datosPlan($curso, $periodo, $actor);
             $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
 
             return ['error' => false, 'message' => 'Planilla', 'data' => [
@@ -598,18 +602,45 @@ class NotasService extends Service
     }
 
     /**
-     * Qué es quien pide respecto de los logros del grado del curso: director de grupo de alguno de
-     * sus cursos ('docente'), y si gestiona / aprueba en su nivel.
+     * Qué es quien pide respecto de los logros del grado del curso. 'docente': según el calificador
+     * del nivel, director de grupo de alguno de sus cursos (DIRECTOR_GRUPO) o con carga activa en
+     * alguno (DOCENTE_ASIGNATURA). 'gestiona' / 'aprueba': 150 / 151 en su nivel. 'modo_unidad':
+     * DIMENSION o ASIGNATURA (lo usa acciones()); 'calificador' va para unidadesEditables().
      */
     private function rol(array $actor, Cursos $curso): array
     {
         $enNivel = $actor['niveles'] === null || in_array($curso->id_nivel, $actor['niveles'], true);
+        $modo = self::modoDelNivel($curso->id_nivel);
+        $cursosGrado = self::cursosDelGrado($curso->id_grado)->pluck('id')->all();
 
         return [
-            'docente' => $this->dirige($actor['id'], self::cursosDelGrado($curso->id_grado)->pluck('id')->all()),
+            'docente' => $modo['calificador'] === self::CALIFICA_DOCENTE_ASIGNATURA
+                ? $this->asignaturasConCarga($actor['id'], $cursosGrado)->isNotEmpty()
+                : $this->dirige($actor['id'], $cursosGrado),
             'gestiona' => $enNivel && ($actor['gestiona'] || $actor['aprueba']),
             'aprueba' => $enNivel && $actor['aprueba'],
+            'modo_unidad' => $modo['tipo_unidad'] === Dimension::ASIGNATURA ? Dimension::ASIGNATURA : Dimension::DIMENSION,
+            'calificador' => $modo['calificador'],
         ];
+    }
+
+    /**
+     * Ids de las unidades del grado cuyos logros puede editar quien pide (aparte del estado del
+     * plan, que decide acciones()): quien gestiona, todas; en modo DIMENSION, todas para el docente
+     * del grado; en modo ASIGNATURA, el docente solo las de sus asignaturas con carga en algún curso
+     * del grado (con calificador DIRECTOR_GRUPO, el director edita todas).
+     */
+    private function unidadesEditables(array $actor, Cursos $curso, array $rol, Collection $unidades): Collection
+    {
+        if ($rol['gestiona'] || ($rol['docente'] && ($rol['modo_unidad'] !== Dimension::ASIGNATURA || $rol['calificador'] !== self::CALIFICA_DOCENTE_ASIGNATURA))) {
+            return $unidades->pluck('id')->values();
+        }
+        if (! $rol['docente']) {
+            return collect();
+        }
+        $conCarga = $this->asignaturasConCarga($actor['id'], self::cursosDelGrado($curso->id_grado)->pluck('id')->all());
+
+        return $unidades->filter(fn (Dimension $u) => self::cubre($u, $conCarga))->pluck('id')->values();
     }
 
     /** Los logros se pueden trabajar hasta la fecha límite del periodo (también antes de que empiece). */
@@ -618,16 +649,21 @@ class NotasService extends Service
         return Carbon::today()->toDateString() <= ($periodo->fecha_limite_notas ?? $periodo->fecha_fin);
     }
 
-    /** Acciones permitidas según el estado, el rol y el plazo. */
+    /**
+     * Acciones permitidas según el estado, el rol y el plazo. En modo ASIGNATURA
+     * (`$rol['modo_unidad']`) solo quien gestiona envía a revisión: así un docente no cierra el plan
+     * antes de que los demás carguen los suyos. Sin esa clave, como en modo DIMENSION.
+     */
     public static function acciones(string $estado, array $rol, bool $abierto): array
     {
         $editable = in_array($estado, [LogroPlan::BORRADOR, LogroPlan::DEVUELTO], true);
         $participa = $rol['docente'] || $rol['gestiona'];
+        $enviaSoloGestor = ($rol['modo_unidad'] ?? Dimension::DIMENSION) === Dimension::ASIGNATURA;
 
         return [
             // En revisión solo quien aprueba ajusta los logros.
             'editar' => $abierto && (($editable && $participa) || ($estado === LogroPlan::EN_REVISION && $rol['aprueba'])),
-            'enviar' => $abierto && $editable && $participa,
+            'enviar' => $abierto && $editable && ($enviaSoloGestor ? $rol['gestiona'] : $participa),
             'aprobar' => $estado === LogroPlan::EN_REVISION && $rol['aprueba'],
             'devolver' => $estado === LogroPlan::EN_REVISION && $rol['aprueba'],
             'reabrir' => $abierto && $estado === LogroPlan::APROBADO && $rol['aprueba'],
@@ -654,11 +690,15 @@ class NotasService extends Service
     }
 
     /**
-     * Plan de logros del grado del curso: estado, si lo comparten varios cursos, logros,
-     * dimensiones, historial (lo más reciente primero) y qué puede hacer quien pide.
+     * Plan de logros del grado del curso: estado, si lo comparten varios cursos, logros, unidades
+     * (cada una con `editable`: si quien pide puede editar sus logros, aparte del estado del plan),
+     * historial (lo más reciente primero) y qué puede hacer quien pide.
      */
-    private function datosPlan(Cursos $curso, PeriodoAcademico $periodo, array $rol): array
+    private function datosPlan(Cursos $curso, PeriodoAcademico $periodo, array $actor): array
     {
+        $rol = $this->rol($actor, $curso);
+        $unidades = $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad']);
+        $editables = $this->unidadesEditables($actor, $curso, $rol, $unidades);
         $plan = $this->buscarPlan($curso->id_grado, $periodo->id);
         $historial = $plan->exists
             ? $plan->historial()->with('usuario:id_user,nombre,apellido')->orderByDesc('id')->get()
@@ -678,7 +718,7 @@ class NotasService extends Service
             'compartido' => self::cursosDelGrado($curso->id_grado)->count() > 1,
             'logros' => $this->logrosDe($curso->id_grado, $periodo->id),
             // Las unidades del grado (del tipo de su nivel): cada logro pertenece a una.
-            'dimensiones' => $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad']),
+            'dimensiones' => $unidades->map(fn (Dimension $u) => $u->toArray() + ['editable' => $editables->contains($u->id)])->values(),
             'historial' => $historial,
             'puede' => self::acciones($plan->estado, $rol, self::periodoAbiertoParaLogros($periodo)),
         ];
@@ -700,7 +740,7 @@ class NotasService extends Service
             return ['error' => false, 'message' => 'Plan de logros', 'data' => [
                 'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
                 'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
-            ] + $this->datosPlan($curso, $periodo, $this->rol($actor, $curso))];
+            ] + $this->datosPlan($curso, $periodo, $actor)];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -719,9 +759,63 @@ class NotasService extends Service
     }
 
     /**
-     * Reemplaza los logros del grado en el periodo: los que traen id se actualizan, los nuevos se
-     * crean y los que no vienen se borran (con sus valoraciones, por cascada). Cada cambio queda
-     * en el historial.
+     * Qué hace guardarLogros con la lista enviada, según las unidades que quien guarda puede editar
+     * (`$editables`). Pura (test: CambiosDeLogrosTest).
+     *
+     * - Un logro de una unidad no editable que viene sin cambios se ignora (el frontend manda la
+     *   lista completa); si viene cambiado, movido o nuevo en esa unidad, se rechaza.
+     * - Se eliminan solo los existentes de unidades editables que no vienen: los de los demás
+     *   docentes se conservan.
+     *
+     * @param  array<int, array{id_dimension: int, descripcion: string}>  $existentes  por id de logro
+     * @param  array<int, array{id?: int|null, id_dimension: int, descripcion: string}>  $enviados
+     * @param  array<int, int>  $editables  ids de unidad
+     * @return array{rechazada: ?int, ignorar: array<int, int>, eliminar: array<int, int>}
+     *   rechazada: la primera unidad no editable que se intentó tocar; ignorar: índices de
+     *   `$enviados` que no se tocan (también ids ajenos al grado y periodo); eliminar: ids de logro.
+     */
+    public static function cambiosDeLogros(array $existentes, array $enviados, array $editables): array
+    {
+        $puede = fn ($idUnidad) => in_array((int) $idUnidad, array_map('intval', $editables), true);
+        $ignorar = $vienen = [];
+
+        foreach (array_values($enviados) as $i => $l) {
+            $id = $l['id'] ?? null;
+            $destino = (int) $l['id_dimension'];
+            if ($id !== null) {
+                if (! isset($existentes[$id])) {
+                    $ignorar[] = $i;
+                    continue;
+                }
+                $vienen[] = (int) $id;
+                $actual = $existentes[$id];
+                if (! $puede($actual['id_dimension'])) {
+                    $igual = $destino === (int) $actual['id_dimension'] && trim((string) $l['descripcion']) === trim((string) $actual['descripcion']);
+                    if ($igual) {
+                        $ignorar[] = $i;
+                        continue;
+                    }
+
+                    return ['rechazada' => (int) $actual['id_dimension'], 'ignorar' => [], 'eliminar' => []];
+                }
+            }
+            if (! $puede($destino)) {
+                return ['rechazada' => $destino, 'ignorar' => [], 'eliminar' => []];
+            }
+        }
+
+        $eliminar = array_values(array_filter(
+            array_map('intval', array_keys($existentes)),
+            fn ($id) => ! in_array($id, $vienen, true) && $puede($existentes[$id]['id_dimension']),
+        ));
+
+        return ['rechazada' => null, 'ignorar' => $ignorar, 'eliminar' => $eliminar];
+    }
+
+    /**
+     * Guarda los logros del grado en el periodo: los que traen id se actualizan, los nuevos se
+     * crean y los que no vienen se borran, pero solo en las unidades que quien guarda puede editar
+     * (cambiosDeLogros). No se quita un logro que ya tiene notas. Cada cambio queda en el historial.
      *
      * @param  array<int, array{id?: int|null, id_dimension: int, descripcion: string}>  $logros
      */
@@ -738,36 +832,71 @@ class NotasService extends Service
             [$curso, $periodo] = $cp;
             $idGrado = $curso->id_grado;
             $plan = $this->buscarPlan($idGrado, $idPeriodo);
-            if (! self::acciones($plan->estado, $this->rol($actor, $curso), self::periodoAbiertoParaLogros($periodo))['editar']) {
+            $rol = $this->rol($actor, $curso);
+            if (! self::acciones($plan->estado, $rol, self::periodoAbiertoParaLogros($periodo))['editar']) {
                 return ['error' => true, 'message' => $plan->estado === LogroPlan::APROBADO
                     ? 'Los logros están aprobados. Para cambiarlos, quien aprueba debe reabrirlos.'
                     : 'No puedes editar estos logros en su estado actual o ya pasó el plazo del periodo.'];
             }
 
-            // Todo indicador pertenece a una dimensión del grado (obligatoria).
+            // Todo indicador pertenece a una unidad del grado (obligatoria), del tipo de su nivel.
+            $porAsignatura = $rol['modo_unidad'] === Dimension::ASIGNATURA;
             $dimensiones = $this->dimensionesDe($idGrado, self::modoDelNivel($curso->id_nivel)['tipo_unidad'])->keyBy('id');
             if ($dimensiones->isEmpty()) {
-                return ['error' => true, 'message' => 'Este grado no tiene dimensiones: asígnaselas en Configuración académica → Dimensiones antes de definir logros.'];
+                return ['error' => true, 'message' => $porAsignatura
+                    ? 'Este grado no tiene asignaturas vinculadas: sincroniza las unidades en Configuración académica antes de definir logros.'
+                    : 'Este grado no tiene dimensiones: asígnaselas en Configuración académica → Dimensiones antes de definir logros.'];
             }
             foreach ($logros as $l) {
                 if (! $dimensiones->has($l['id_dimension'] ?? null)) {
-                    return ['error' => true, 'message' => 'Cada logro debe pertenecer a una de las dimensiones del grado.'];
+                    return ['error' => true, 'message' => $porAsignatura
+                        ? 'Cada logro debe pertenecer a una de las asignaturas del grado.'
+                        : 'Cada logro debe pertenecer a una de las dimensiones del grado.'];
                 }
             }
 
-            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $logros, $dimensiones) {
+            $existentes = Logro::where('id_grado', $idGrado)->where('id_periodo_academico', $idPeriodo)->get()->keyBy('id');
+            $editables = $this->unidadesEditables($actor, $curso, $rol, $dimensiones->values());
+            // Los de una unidad que el grado ya no tiene (por reubicar) los mueve quien edita todo el grado.
+            if ($rol['gestiona'] || ! $porAsignatura) {
+                $editables = $editables->merge($existentes->pluck('id_dimension')->diff($dimensiones->keys()))->unique();
+            }
+
+            $cambios = self::cambiosDeLogros(
+                $existentes->map(fn (Logro $l) => ['id_dimension' => (int) $l->id_dimension, 'descripcion' => $l->descripcion])->all(),
+                $logros,
+                $editables->map(fn ($id) => (int) $id)->all(),
+            );
+            if ($cambios['rechazada'] !== null) {
+                $nombre = $dimensiones->get($cambios['rechazada'])?->nombre ?? Dimension::find($cambios['rechazada'])?->nombre ?? 'esa unidad';
+
+                return ['error' => true, 'message' => $porAsignatura
+                    ? "No puedes editar los logros de «{$nombre}»: solo los de las asignaturas en las que tienes carga en este grado."
+                    : "No puedes editar los logros de «{$nombre}»."];
+            }
+
+            // Quitar un logro borraría sus notas (cascada): se rechaza todo el guardado.
+            $conNotas = ValoracionLogro::whereIn('id_logro', $cambios['eliminar'])
+                ->selectRaw('id_logro, count(*) as n')->groupBy('id_logro')->pluck('n', 'id_logro');
+            if ($conNotas->isNotEmpty()) {
+                $idLogro = (int) $conNotas->keys()->first();
+                $n = (int) $conNotas->first();
+
+                return ['error' => true, 'message' => "No se puede quitar el logro «{$existentes->get($idLogro)?->descripcion}»: ya tiene {$n} "
+                    . ($n === 1 ? 'nota registrada' : 'notas registradas') . ' y se perderían. Edita su texto en lugar de quitarlo, o quita primero esas notas en la planilla.'];
+            }
+
+            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $logros, $dimensiones, $existentes, $cambios) {
                 $plan->save();
-                $existentes = Logro::where('id_grado', $idGrado)->where('id_periodo_academico', $idPeriodo)->get()->keyBy('id');
-                $conservar = [];
 
                 foreach (array_values($logros) as $orden => $l) {
+                    if (in_array($orden, $cambios['ignorar'], true)) {
+                        continue;
+                    }
                     $descripcion = trim($l['descripcion']);
                     $idDimension = (int) $l['id_dimension'];
                     $enDimension = ' (' . $dimensiones->get($idDimension)?->nombre . ')';
                     $logro = isset($l['id']) ? $existentes->get($l['id']) : null;
-                    if (isset($l['id']) && ! $logro) {
-                        continue; // id ajeno a este grado y periodo: se ignora
-                    }
                     if (! $logro) {
                         $logro = new Logro(['id_grado' => $idGrado, 'id_periodo_academico' => $idPeriodo, 'id_docente' => $actor['id']]);
                         $this->registrar($plan, $actor['id'], 'LOGRO_CREADO', $descripcion . $enDimension);
@@ -775,13 +904,12 @@ class NotasService extends Service
                         $this->registrar($plan, $actor['id'], 'LOGRO_EDITADO', "«{$logro->descripcion}» → «{$descripcion}»{$enDimension}");
                     }
                     $logro->fill(['descripcion' => $descripcion, 'id_dimension' => $idDimension, 'orden' => $orden])->save();
-                    $conservar[] = $logro->id;
                 }
 
-                foreach ($existentes->except($conservar) as $quitado) {
-                    $this->registrar($plan, $actor['id'], 'LOGRO_ELIMINADO', $quitado->descripcion);
+                foreach ($cambios['eliminar'] as $idLogro) {
+                    $this->registrar($plan, $actor['id'], 'LOGRO_ELIMINADO', $existentes->get($idLogro)?->descripcion);
                 }
-                Logro::whereIn('id', $existentes->keys()->diff($conservar))->delete();
+                Logro::whereIn('id', $cambios['eliminar'])->delete();
             });
 
             return ['error' => false, 'message' => 'Logros guardados', 'data' => $this->logrosDe($idGrado, $idPeriodo)];

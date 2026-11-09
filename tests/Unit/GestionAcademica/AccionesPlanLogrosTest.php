@@ -43,4 +43,27 @@ class AccionesPlanLogrosTest extends TestCase
             $this->assertSame($esperado, $this->puede($estado, $rol, $abierto), "$estado abierto=" . var_export($abierto, true) . ' rol=' . json_encode($rol));
         }
     }
+
+    /** En modo ASIGNATURA solo quien gestiona envía; lo demás no cambia. Con DIMENSION explícito, como sin la clave. */
+    public function test_modo_asignatura(): void
+    {
+        $asig = fn (array $rol) => $rol + ['modo_unidad' => 'ASIGNATURA'];
+        $dim = fn (array $rol) => $rol + ['modo_unidad' => 'DIMENSION'];
+
+        $casos = [
+            ['BORRADOR', $asig(self::DOCENTE), true, ['editar']],             // edita lo suyo, no envía
+            ['DEVUELTO', $asig(self::DOCENTE), true, ['editar']],
+            ['BORRADOR', $asig(self::GESTOR), true, ['editar', 'enviar']],
+            ['BORRADOR', $asig(self::APROBADOR), true, ['editar', 'enviar']],
+            ['BORRADOR', $asig(self::GESTOR), false, []],                     // fuera de plazo, nada
+            ['EN_REVISION', $asig(self::DOCENTE), true, []],
+            ['EN_REVISION', $asig(self::APROBADOR), true, ['editar', 'aprobar', 'devolver']],
+            ['APROBADO', $asig(self::APROBADOR), true, ['reabrir']],
+            ['BORRADOR', $dim(self::DOCENTE), true, ['editar', 'enviar']],     // DIMENSION: el docente envía
+        ];
+
+        foreach ($casos as [$estado, $rol, $abierto, $esperado]) {
+            $this->assertSame($esperado, $this->puede($estado, $rol, $abierto), "$estado rol=" . json_encode($rol));
+        }
+    }
 }
