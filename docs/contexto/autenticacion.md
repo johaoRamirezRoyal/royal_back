@@ -57,6 +57,12 @@ contraseña (para soporte).
   `via_llave_maestra: true` y `generado_por`, que `AuthController::check()` devuelve para
   que el frontend muestre su aviso.
 - `revocar()` no borra la fila: pone `expira_en = now()` para conservar la auditoría.
+- **Una sola sesión por llave a la vez por cuenta**: `redimir()` marca en caché
+  `llave_maestra_sesion:{connection}:{id_user}` (`Cache::add`, dura `jwt.ttl`). Si ya existe,
+  devuelve `SESION_ABIERTA`, no consume la llave y el canje responde 409. `logout` la libera
+  si el token tenía `via_llave_maestra`. Si la sesión se pierde sin logout (borrar cookies),
+  la cuenta queda bloqueada para otra llave hasta que venza el TTL; para liberarla a mano,
+  `Cache::forget` de esa clave.
 
 ## Página de acceso en el navegador (`PaginaAccesoNavegador`)
 
