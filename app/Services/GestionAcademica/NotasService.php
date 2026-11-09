@@ -373,6 +373,27 @@ class NotasService extends Service
         };
     }
 
+    /**
+     * Ids de las unidades del grado del curso (del tipo de su nivel) que el usuario puede calificar
+     * en ese curso, según `calificadorPermite`: con DIRECTOR_GRUPO, todas si dirige el curso; con
+     * DOCENTE_ASIGNATURA, las de sus asignaturas con carga en ese curso. No mira plazo ni plan.
+     */
+    public function unidadesCalificables(int $idUser, Cursos|int $curso): Collection
+    {
+        $curso = $curso instanceof Cursos ? $curso : Cursos::find($curso, ['id', 'id_nivel', 'id_grado']);
+        if (! $curso || $curso->id_grado === null) {
+            return collect();
+        }
+        $modo = self::modoDelNivel($curso->id_nivel);
+        $porCarga = $modo['calificador'] === self::CALIFICA_DOCENTE_ASIGNATURA;
+        $dirige = ! $porCarga && $this->dirige($idUser, $curso->id);
+        $conCarga = $porCarga ? $this->asignaturasConCarga($idUser, $curso->id) : collect();
+
+        return $this->dimensionesDe($curso->id_grado, $modo['tipo_unidad'])
+            ->filter(fn (Dimension $u) => self::calificadorPermite($modo['calificador'], $dirige, self::cubre($u, $conCarga)))
+            ->pluck('id')->values();
+    }
+
     /** Cursos activos del grado, en orden académico, con su director de grupo. */
     private static function cursosDelGrado(int $idGrado): Collection
     {
@@ -424,7 +445,7 @@ class NotasService extends Service
     /** Cursos cualitativos activos (con grado y nivel cargados), en orden académico. */
     private static function cursosCualitativos(?callable $filtro = null): Collection
     {
-        $q = Cursos::with(['grado:id,nombre', 'nivel:id,nombre,metodo_calificacion', 'director:id_user,nombre,apellido'])
+        $q = Cursos::with(['grado:id,nombre', 'nivel:id,nombre,metodo_calificacion,tipo_unidad,calificador', 'director:id_user,nombre,apellido'])
             ->where('activo', 1)->whereNotNull('id_grado');
         if ($filtro) {
             $filtro($q);
@@ -434,12 +455,30 @@ class NotasService extends Service
             ->filter(fn (Cursos $c) => self::esCursoCualitativo($c))->values());
     }
 
-    /** Cursos que el docente dirige (director de grupo) en niveles cualitativos, y los periodos del año. */
+    /**
+     * Cursos cualitativos que califica el docente, y los periodos del año: los que dirige en niveles
+     * DIRECTOR_GRUPO y aquellos en que tiene carga activa en niveles DOCENTE_ASIGNATURA. Cada uno con
+     * `unidades_calificables` (ids; puede venir vacío si sus asignaturas aún no están sincronizadas).
+     */
     public function misCursos(int $idDocente): array
     {
         try {
-            $cursos = self::cursosCualitativos(fn ($q) => $q->where('id_director', $idDocente))
-                ->map(fn (Cursos $c) => ['id_curso' => $c->id, 'curso' => $c->nombre, 'grado' => $c->grado?->nombre])
+            $conCarga = DB::table('academico_carga_academica as c')
+                ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+                ->where('c.activo', 1)->where('da.activo', 1)->where('da.id_docente', $idDocente)
+                ->distinct()->pluck('c.id_curso')->map(fn ($id) => (int) $id);
+
+            $cursos = self::cursosCualitativos(fn ($q) => $q->where(fn ($q) => $q->where('id_director', $idDocente)->orWhereIn('id', $conCarga)))
+                ->filter(fn (Cursos $c) => ($c->nivel?->calificador ?? self::CALIFICA_DIRECTOR) === self::CALIFICA_DOCENTE_ASIGNATURA
+                    ? $conCarga->contains($c->id)
+                    : (int) $c->id_director === $idDocente)
+                ->map(fn (Cursos $c) => [
+                    'id_curso' => $c->id,
+                    'curso' => $c->nombre,
+                    'grado' => $c->grado?->nombre,
+                    'calificador' => $c->nivel?->calificador ?? self::CALIFICA_DIRECTOR,
+                    'unidades_calificables' => $this->unidadesCalificables($idDocente, $c),
+                ])
                 ->values();
 
             return ['error' => false, 'message' => 'Tus cursos', 'data' => ['cursos' => $cursos, 'periodos' => $this->periodosDelAnio()]];
@@ -544,7 +583,13 @@ class NotasService extends Service
             })->values();
 
             $plan = $this->datosPlan($curso, $periodo, $actor);
+            $modo = self::modoDelNivel($curso->id_nivel);
             $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
+            // Se califica en plazo, con los logros aprobados y solo las unidades que le tocan a quien pide.
+            $abierta = self::periodoEditable($periodo) && $plan['estado'] === LogroPlan::APROBADO;
+            $calificables = $this->unidadesCalificables($actor['id'], $curso);
+            $dimensiones = collect($plan['dimensiones'])
+                ->map(fn (array $u) => ['editable' => $abierta && $calificables->contains($u['id'])] + $u)->values();
 
             return ['error' => false, 'message' => 'Planilla', 'data' => [
                 'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
@@ -556,12 +601,24 @@ class NotasService extends Service
                 ],
                 'periodo_editable' => self::periodoEditable($periodo),
                 'es_director' => $esDirector,
-                'editable' => $esDirector && self::periodoEditable($periodo) && $plan['estado'] === LogroPlan::APROBADO,
+                'tipo_unidad' => $modo['tipo_unidad'],
+                'calificador' => $modo['calificador'],
+                // Con DIRECTOR_GRUPO, como siempre (también sin unidades); con DOCENTE_ASIGNATURA, si
+                // alguna unidad es editable.
+                'editable' => $modo['calificador'] === self::CALIFICA_DOCENTE_ASIGNATURA
+                    ? $dimensiones->contains('editable', true)
+                    : $esDirector && $abierta,
                 'escala' => $this->escalaDelNivel($curso->id_nivel)->map->only(['id', 'nombre', 'abreviatura', 'descripcion', 'color'])->values(),
                 'logros' => $plan['logros'],
-                'dimensiones' => $plan['dimensiones'],
-                // Estado de los logros, historial y acciones de quien pide.
-                'plan' => ['estado' => $plan['estado'], 'grado' => $plan['grado'], 'compartido' => $plan['compartido'], 'historial' => $plan['historial'], 'puede' => $plan['puede']],
+                // editable aquí = puede calificar esa unidad en este curso (en plazo y con el plan aprobado).
+                'dimensiones' => $dimensiones,
+                // Estado de los logros, historial y acciones de quien pide. unidades_editables: las
+                // unidades cuyos logros puede editar (plan.dimensiones[].editable de verPlan).
+                'plan' => [
+                    'estado' => $plan['estado'], 'grado' => $plan['grado'], 'compartido' => $plan['compartido'],
+                    'historial' => $plan['historial'], 'puede' => $plan['puede'],
+                    'unidades_editables' => collect($plan['dimensiones'])->where('editable', true)->pluck('id')->values(),
+                ],
                 'estudiantes' => $estudiantes,
             ]];
         } catch (Throwable $e) {
@@ -1027,7 +1084,7 @@ class NotasService extends Service
         if ($error = $this->sinCualitativa($idCurso) ?? $this->validarVentana($idPeriodo)) {
             return $error;
         }
-        $curso = Cursos::with('nivel:id,calificador')->find($idCurso, ['id', 'id_nivel', 'id_grado']);
+        $curso = Cursos::find($idCurso, ['id', 'id_nivel', 'id_grado']);
         if (! $curso) {
             return ['error' => true, 'message' => 'Curso no encontrado'];
         }
@@ -1042,11 +1099,9 @@ class NotasService extends Service
             $logroDimension = $this->logrosDe($curso->id_grado, $idPeriodo)->pluck('id_dimension', 'id');
             $alumnosValidos = $this->estudiantesDePlanilla($idCurso, $idPeriodo)->pluck('id_user')->flip();
 
-            // Quién califica cada unidad depende del nivel (calificadorPermite).
-            $dirige = $this->dirige($idDocente, $idCurso);
-            $calificador = $curso->nivel?->calificador;
-            $unidades = Dimension::whereIn('id', $dimensionesValidas->keys())->get(['id', 'nombre', 'tipo', 'id_area', 'id_asignatura'])->keyBy('id');
-            $puedeCalificar = $unidades->map(fn (Dimension $u) => self::calificadorPermite($calificador, $dirige, $this->tieneCarga($idDocente, $idCurso, $u)));
+            // Quién califica cada unidad depende del nivel (unidadesCalificables → calificadorPermite).
+            $unidades = Dimension::whereIn('id', $dimensionesValidas->keys())->get(['id', 'nombre'])->keyBy('id');
+            $calificables = $this->unidadesCalificables($idDocente, $curso)->flip();
 
             foreach ($estudiantes as $e) {
                 if (! $alumnosValidos->has($e['id_estudiante'])) {
@@ -1056,7 +1111,7 @@ class NotasService extends Service
                     if (! $dimensionesValidas->has($d['id_dimension'])) {
                         return ['error' => true, 'message' => 'Una dimensión no corresponde al grado de este curso'];
                     }
-                    if (! $puedeCalificar->get($d['id_dimension'])) {
+                    if (! $calificables->has($d['id_dimension'])) {
                         return ['error' => true, 'message' => 'No te corresponde calificar «' . $unidades->get($d['id_dimension'])?->nombre . '» en este curso.'];
                     }
                     $escalas = array_merge([$d['id_escala'] ?? null], array_column($d['logros'] ?? [], 'id_escala'));

@@ -15,16 +15,19 @@ use Illuminate\Validation\Rule;
 
 /**
  * Notas cualitativas (ver docs/contexto/modulos/notas.md). Controller aparte de
- * GestionAcademicaController: calificar es autoservicio del director de grupo y la consulta
- * (149) no debe abrir nada más del módulo. Los logros son por grado (no por asignatura).
+ * GestionAcademicaController: calificar es autoservicio del docente y la consulta (149) no
+ * debe abrir nada más del módulo. Los logros son por grado; quién califica y quién es "docente"
+ * del plan depende del nivel (nivel_academico.calificador: director de grupo, o docente con carga
+ * en la asignatura).
  *
- * - Escala, dimensiones y método por nivel: opción 99.
- * - Calificar (mis-cursos, guardar planilla): perfiles docente; el service exige además ser el
- *   director de grupo del curso y que los logros del grado estén APROBADOS.
- * - Logros y su estado (guardar logros, ver plan, cambiar estado): los directores de grupo del
- *   grado y quien tenga la 150 (gestionar) o la 151 (aprobar) en su nivel. El service decide qué
- *   acción cabe en cada estado.
- * - Ver planilla: director del grado, 150/151 de su nivel, 99 o 149 (solo lectura).
+ * - Escala, unidades (dimensiones), sincronización y modo por nivel: opción 99.
+ * - Calificar (mis-cursos, guardar planilla): perfiles docente; el controller descarta a quien no
+ *   califica ninguna unidad del curso y el service valida cada unidad y que los logros del grado
+ *   estén APROBADOS.
+ * - Logros y su estado (guardar logros, ver plan, cambiar estado): los docentes del grado (según
+ *   el calificador) y quien tenga la 150 (gestionar) o la 151 (aprobar) en su nivel. El service
+ *   decide qué acción cabe en cada estado y qué unidades edita cada uno.
+ * - Ver planilla: docente del grado, 150/151 de su nivel, 99 o 149 (solo lectura).
  * - Consulta por curso: 99 o 149.
  */
 class NotasController extends Controller implements HasMiddleware
@@ -286,9 +289,10 @@ class NotasController extends Controller implements HasMiddleware
             'estudiantes.*.dimensiones.*.observacion.max' => 'Una observación no puede superar los 2000 caracteres.',
         ]);
 
+        // Aquí solo se descarta a quien no califica nada en el curso; el service valida unidad por unidad.
         $idDocente = $request->user()->id_user;
-        if (! $this->service->dirige($idDocente, $body['id_curso'])) {
-            return $this->error('Solo el director de grupo del curso califica', 403);
+        if ($this->service->unidadesCalificables($idDocente, (int) $body['id_curso'])->isEmpty()) {
+            return $this->error('No te corresponde calificar en este curso', 403);
         }
 
         return $this->apiResponse($this->service->guardarPlanilla($idDocente, $body['id_curso'], $body['id_periodo'], $body['estudiantes']));
