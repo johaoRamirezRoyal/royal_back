@@ -3,6 +3,7 @@
 namespace App\Services\ProcesoCompra;
 
 use App\Enums\Mails;
+use App\Mail\ProcesoCompra\OrdenCompraMail;
 use App\Models\Inventario\Inventario;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
@@ -277,7 +278,7 @@ class SolicitudesServices
                 // aprobador y datos de contacto del proveedor: los usa el PDF de orden de compra;
                 // detalle_producto, el buscador del seguimiento.
                 'aprobador:id_user,nombre,apellido',
-                'proveedor:id_proveedor,nombre,num_identificacion,comercial_nombre,telefono_comercial,ciudad,detalle_producto',
+                'proveedor:id_proveedor,nombre,num_identificacion,comercial_nombre,telefono_comercial,ciudad,detalle_producto,correo,correo_comercial',
                 'productos',
                 'verificacion:id_solicitud,factura_doc,id_log,fecha_verificacion,cantidad,observacion_cant,calidad,observacion_calidad,precios,observacion_precios,plazos,observacion_plazo',
                 'verificacion.usuario:id_user,nombre,apellido',
@@ -392,6 +393,70 @@ class SolicitudesServices
             $solicitud->update(['anulada' => 1, 'id_log' => $idLog]);
 
             return ['error' => false, 'message' => 'Solicitud anulada correctamente'];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Envía la orden de compra (PDF generado por el frontend) al proveedor asignado.
+     * Los destinatarios salen del proveedor en BD (`correo` y `correo_comercial`), nunca
+     * del body. Solo formalizada o en devolución (reenvío), con todos los productos con
+     * cantidad y precio > 0. El correo lleva como contacto (y responder-a) el grupo
+     * COMPRAS_VENTAS. No guarda nada: el envío no deja registro en la solicitud.
+     */
+    public function enviarOrdenCompra(int $id, UploadedFile $pdf): array
+    {
+        try {
+            $solicitud = Solicitud::with([
+                'proveedor:id_proveedor,nombre,correo,correo_comercial',
+                'productos:id,id_solicitud,cantidad,precio',
+            ])->find($id);
+
+            if (! $solicitud || $solicitud->anulada) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+            }
+
+            if (! in_array((int) $solicitud->estado, [self::ESTADO_FORMALIZADA, self::ESTADO_DEVOLUCION], true)) {
+                return ['error' => true, 'message' => 'Solo se puede enviar la orden de una solicitud formalizada o en devolución', 'status' => 422];
+            }
+
+            if (! $solicitud->proveedor) {
+                return ['error' => true, 'message' => 'La solicitud no tiene proveedor asignado', 'status' => 422];
+            }
+
+            // En BD cantidad y precio son strings y el precio puede ser null.
+            $positivo = fn ($valor): bool => is_numeric($valor) && (float) $valor > 0;
+            $productosInvalidos = $solicitud->productos->contains(
+                fn (SolicitudProducto $p) => ! $positivo($p->cantidad) || ! $positivo($p->precio)
+            );
+
+            if ($solicitud->productos->isEmpty() || $productosInvalidos) {
+                return ['error' => true, 'message' => 'Todos los productos deben tener cantidad y precio mayores a 0 (revise el estudio)', 'status' => 422];
+            }
+
+            $correos = array_values(array_unique(array_filter(
+                [trim((string) $solicitud->proveedor->correo), trim((string) $solicitud->proveedor->correo_comercial)],
+                fn (string $correo) => filter_var($correo, FILTER_VALIDATE_EMAIL) !== false,
+            )));
+
+            if (empty($correos)) {
+                return ['error' => true, 'message' => 'El proveedor no tiene un correo válido registrado', 'status' => 422];
+            }
+
+            $numero = str_pad((string) $solicitud->id, 3, '0', STR_PAD_LEFT);
+            $enviado = $this->mailService->send($correos, new OrdenCompraMail(
+                $numero,
+                (string) $solicitud->proveedor->nombre,
+                $pdf->get(),
+                Mails::COMPRAS_VENTAS->recipients(),
+            ));
+
+            if (! $enviado) {
+                return ['error' => true, 'message' => 'No se pudo enviar el correo al proveedor', 'status' => 502];
+            }
+
+            return ['error' => false, 'message' => 'Orden de compra enviada a '.implode(', ', $correos), 'data' => ['correos' => $correos]];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }

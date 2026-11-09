@@ -86,7 +86,7 @@ crea la fila final; `asignar-proveedor` la crea si falta
 | Sesión | `POST /solicitudes`, `GET /mias`, `POST /{id}/cancelar` |
 | Perfil (bandeja) | `GET /solicitudes`, `POST /{id}/aprobar`, `POST /{id}/rechazar-inicial` |
 | 60 | `GET /{id}`, `POST /{id}/verificar`, `PUT /{id}/aplazar`, `PUT /{id}/rechazar`, `POST /{id}/agregar-inventario` |
-| 104 | `GET /seguimiento` (filtros de nivel y perfil solo para 1/2), `POST /{id}/asignar-proveedor` (multipart con `cotizacion_doc`), `POST /{id}/disponible-stock`, `POST /{id}/anular` |
+| 104 | `GET /seguimiento` (filtros de nivel y perfil solo para 1/2), `POST /{id}/asignar-proveedor` (multipart con `cotizacion_doc`), `POST /{id}/disponible-stock`, `POST /{id}/anular`, `POST /{id}/enviar-orden` (multipart con `orden_pdf`: el PDF lo genera el frontend; se envía con `OrdenCompraMail` a `correo` y `correo_comercial` del proveedor, sin guardar registro. Solo en estado 1 o 3, con todos los productos con cantidad y precio > 0 y algún correo válido; si no, 422. El grupo `COMPRAS_VENTAS` va como contacto en el cuerpo y como responder-a) |
 | 105 | `POST /{id}/verificar-entrega` (multipart con `factura_doc`) |
 
 - Las cotizaciones y facturas van a la **raíz** del disco de uploads
