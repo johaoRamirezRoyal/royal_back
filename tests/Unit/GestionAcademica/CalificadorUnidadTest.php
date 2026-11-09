@@ -32,6 +32,18 @@ class CalificadorUnidadTest extends TestCase
         $this->assertSame($esperado, NotasService::calificadorPermite($calificador, $dirige, $tieneCarga));
     }
 
+    public function test_modo_del_nivel(): void
+    {
+        $this->assertNull(NotasService::errorDeModo('DIMENSION', 'DIRECTOR_GRUPO'));
+        $this->assertNull(NotasService::errorDeModo('ASIGNATURA', 'DOCENTE_ASIGNATURA'));
+        $this->assertNull(NotasService::errorDeModo('ASIGNATURA', 'DIRECTOR_GRUPO'));
+
+        $this->assertStringContainsString('aún no está disponible', (string) NotasService::errorDeModo('AREA', 'DOCENTE_ASIGNATURA'));
+        $this->assertNotNull(NotasService::errorDeModo('DIMENSION', 'DOCENTE_ASIGNATURA')); // una dimensión no tiene carga
+        $this->assertNotNull(NotasService::errorDeModo('OTRO', 'DIRECTOR_GRUPO'));
+        $this->assertNotNull(NotasService::errorDeModo('ASIGNATURA', 'OTRO'));
+    }
+
     public function test_tipo_de_unidad_consistente(): void
     {
         $this->assertNull(Dimension::errorDeTipo('DIMENSION', null, null));

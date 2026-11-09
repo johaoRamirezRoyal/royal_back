@@ -19,6 +19,7 @@ use App\Services\Service;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -91,13 +92,16 @@ class NotasService extends Service
 
     // ─── Dimensiones y método por nivel (Configuración académica, 99) ─────────
 
-    /** Catálogo de dimensiones con los ids de los grados que se evalúan con cada una. */
-    public function listarDimensiones(): array
+    /**
+     * Catálogo de unidades evaluables de un tipo (por defecto DIMENSION, así la pestaña de
+     * Dimensiones no se llena de asignaturas) con los ids de los grados que se evalúan con cada una.
+     */
+    public function listarDimensiones(?string $tipo = null): array
     {
         try {
             $uso = DB::table('academico_grado_dimension')->get()->groupBy('id_dimension');
-            $data = Dimension::orderBy('orden')->orderBy('nombre')->get()
-                ->map(fn (Dimension $d) => $d->only(['id', 'nombre', 'descripcion', 'orden', 'activo'])
+            $data = Dimension::where('tipo', $tipo ?? Dimension::DIMENSION)->orderBy('orden')->orderBy('nombre')->get()
+                ->map(fn (Dimension $d) => $d->only(['id', 'nombre', 'descripcion', 'tipo', 'id_area', 'id_asignatura', 'orden', 'activo'])
                     + ['grados' => ($uso[$d->id] ?? collect())->pluck('id_grado')->map(fn ($id) => (int) $id)->values()]);
 
             return ['error' => false, 'message' => 'Dimensiones', 'data' => $data];
@@ -153,25 +157,139 @@ class NotasService extends Service
         }
     }
 
-    public function listarMetodosNivel(): array
+    /**
+     * Crea o actualiza la unidad ASIGNATURA de cada asignatura (nombre y activo; el orden de una
+     * existente no se toca, las nuevas van al final en orden alfabético) y vincula a cada grado las
+     * unidades de las asignaturas con carga activa en alguno de sus cursos activos. Idempotente; no
+     * quita vínculos. Solo escribe en academico_dimension y academico_grado_dimension (InnoDB).
+     */
+    public function sincronizarUnidadesAsignatura(): array
     {
         try {
-            return ['error' => false, 'message' => 'Métodos de calificación', 'data' => NivelAcademico::orderBy('id')->get(['id', 'nombre', 'metodo_calificacion'])];
+            $asignaturas = DB::table('academico_asignatura')->get(['id', 'nombre', 'activo']);
+
+            $data = DB::transaction(function () use ($asignaturas) {
+                $existentes = Dimension::where('tipo', Dimension::ASIGNATURA)->get()->keyBy('id_asignatura');
+                $creadas = $actualizadas = 0;
+
+                foreach ($asignaturas->filter(fn ($a) => $existentes->has($a->id)) as $a) {
+                    $unidad = $existentes->get($a->id)->fill(['nombre' => mb_substr(trim((string) $a->nombre), 0, 80), 'activo' => (bool) $a->activo]);
+                    if ($unidad->isDirty()) {
+                        $unidad->save();
+                        $actualizadas++;
+                    }
+                }
+
+                $orden = (int) Dimension::max('orden');
+                $nuevas = $asignaturas->reject(fn ($a) => $existentes->has($a->id))
+                    ->sortBy(fn ($a) => Str::ascii(Str::lower((string) $a->nombre)));
+                foreach ($nuevas as $a) {
+                    Dimension::create([
+                        'tipo' => Dimension::ASIGNATURA, 'id_asignatura' => $a->id,
+                        'nombre' => mb_substr(trim((string) $a->nombre), 0, 80), 'activo' => (bool) $a->activo, 'orden' => ++$orden,
+                    ]);
+                    $creadas++;
+                }
+
+                $unidadDe = Dimension::where('tipo', Dimension::ASIGNATURA)->pluck('id', 'id_asignatura');
+                $vinculos = DB::table('academico_carga_academica as c')
+                    ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+                    ->join('curso as cu', 'cu.id', '=', 'c.id_curso')
+                    ->where('c.activo', 1)->where('da.activo', 1)->where('cu.activo', 1)->whereNotNull('cu.id_grado')
+                    ->distinct()->get(['cu.id_grado', 'da.id_asignatura'])
+                    ->filter(fn ($p) => $unidadDe->has($p->id_asignatura))
+                    ->map(fn ($p) => ['id_grado' => (int) $p->id_grado, 'id_dimension' => (int) $unidadDe[$p->id_asignatura]])
+                    ->values()->all();
+
+                return [
+                    'creadas' => $creadas,
+                    'actualizadas' => $actualizadas,
+                    'vinculos_nuevos' => $vinculos ? DB::table('academico_grado_dimension')->insertOrIgnore($vinculos) : 0,
+                ];
+            });
+
+            return ['error' => false, 'message' => "Unidades sincronizadas: {$data['creadas']} creadas, {$data['actualizadas']} actualizadas y {$data['vinculos_nuevos']} vínculos con grados nuevos", 'data' => $data];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
     }
 
-    public function cambiarMetodoNivel(int $idNivel, string $metodo): array
+    public function listarMetodosNivel(): array
+    {
+        try {
+            return ['error' => false, 'message' => 'Métodos de calificación', 'data' => NivelAcademico::orderBy('id')->get(['id', 'nombre', 'metodo_calificacion', 'tipo_unidad', 'calificador'])];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Combinación válida de unidad y calificador de un nivel, o el error. AREA aún no se ofrece; una
+     * DIMENSION nunca tiene carga académica, así que con dimensiones califica el director de grupo.
+     */
+    public static function errorDeModo(string $tipoUnidad, string $calificador): ?string
+    {
+        if ($tipoUnidad === Dimension::AREA) {
+            return 'La evaluación por área aún no está disponible.';
+        }
+        if (! in_array($tipoUnidad, [Dimension::DIMENSION, Dimension::ASIGNATURA], true)) {
+            return 'Tipo de unidad no válido: DIMENSION o ASIGNATURA.';
+        }
+        if (! in_array($calificador, [self::CALIFICA_DIRECTOR, self::CALIFICA_DOCENTE_ASIGNATURA], true)) {
+            return 'Calificador no válido: DIRECTOR_GRUPO o DOCENTE_ASIGNATURA.';
+        }
+        if ($tipoUnidad === Dimension::DIMENSION && $calificador !== self::CALIFICA_DIRECTOR) {
+            return 'Con dimensiones califica el director de grupo: una dimensión no tiene carga académica.';
+        }
+
+        return null;
+    }
+
+    /** Por qué no se puede cambiar la unidad del nivel (ya tiene logros o notas), o null. */
+    private function usoDelNivel(int $idNivel): ?string
+    {
+        $cursos = Cursos::where('id_nivel', $idNivel)->get(['id', 'id_grado']);
+        $logros = Logro::whereIn('id_grado', $cursos->pluck('id_grado')->filter()->unique())->count();
+        $notas = Valoracion::whereIn('id_curso', $cursos->pluck('id'))->count();
+        if ($logros === 0 && $notas === 0) {
+            return null;
+        }
+
+        return "ya tiene {$logros} logro(s) y {$notas} nota(s) registradas con la unidad actual, y cambiarla las dejaría sin unidad";
+    }
+
+    /**
+     * Cambia el método de calificación, la unidad evaluable (`tipo_unidad`) y/o el calificador de un
+     * nivel. Lo que no viene se conserva. Al pasar a ASIGNATURA sincroniza las unidades.
+     *
+     * @param  array{metodo?: string, tipo_unidad?: string, calificador?: string}  $cambios
+     */
+    public function cambiarMetodoNivel(int $idNivel, array $cambios): array
     {
         try {
             $nivel = NivelAcademico::find($idNivel);
             if (! $nivel) {
                 return ['error' => true, 'message' => 'No se encontró el nivel'];
             }
-            $nivel->update(['metodo_calificacion' => $metodo]);
+            $tipo = $cambios['tipo_unidad'] ?? $nivel->tipo_unidad ?? Dimension::DIMENSION;
+            $calificador = $cambios['calificador'] ?? $nivel->calificador ?? self::CALIFICA_DIRECTOR;
+            if ($error = self::errorDeModo($tipo, $calificador)) {
+                return ['error' => true, 'message' => $error];
+            }
+            $cambiaTipo = $tipo !== ($nivel->tipo_unidad ?? Dimension::DIMENSION);
+            if ($cambiaTipo && ($motivo = $this->usoDelNivel($nivel->id))) {
+                return ['error' => true, 'message' => "No se puede cambiar la unidad evaluable de {$nivel->nombre}: {$motivo}."];
+            }
 
-            return ['error' => false, 'message' => "{$nivel->nombre}: método de calificación actualizado", 'data' => $nivel->only(['id', 'nombre', 'metodo_calificacion'])];
+            $nivel->update(array_filter(['metodo_calificacion' => $cambios['metodo'] ?? null]) + ['tipo_unidad' => $tipo, 'calificador' => $calificador]);
+
+            $mensaje = "{$nivel->nombre}: calificación actualizada";
+            if ($cambiaTipo && $tipo === Dimension::ASIGNATURA) {
+                $sync = $this->sincronizarUnidadesAsignatura();
+                $mensaje .= $sync['error'] ? ". No se pudieron sincronizar las asignaturas: {$sync['message']}" : ". {$sync['message']}";
+            }
+
+            return ['error' => false, 'message' => $mensaje, 'data' => $nivel->only(['id', 'nombre', 'metodo_calificacion', 'tipo_unidad', 'calificador'])];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -262,6 +380,17 @@ class NotasService extends Service
     private static function nombreDe(?Usuario $u): ?string
     {
         return $u ? (trim("{$u->nombre} {$u->apellido}") ?: null) : null;
+    }
+
+    /** Unidad evaluable y calificador del nivel (los valores por defecto si no hay nivel). */
+    private static function modoDelNivel(?int $idNivel): array
+    {
+        $nivel = $idNivel ? NivelAcademico::find($idNivel, ['id', 'tipo_unidad', 'calificador']) : null;
+
+        return [
+            'tipo_unidad' => $nivel?->tipo_unidad ?? Dimension::DIMENSION,
+            'calificador' => $nivel?->calificador ?? self::CALIFICA_DIRECTOR,
+        ];
     }
 
     /**
@@ -368,13 +497,17 @@ class NotasService extends Service
             ->get(['id', 'id_dimension', 'descripcion', 'orden']);
     }
 
-    /** Dimensiones activas con las que se evalúa el grado, en su orden. */
-    private function dimensionesDe(int $idGrado): Collection
+    /**
+     * Unidades activas con las que se evalúa el grado, en su orden. Con `$tipo` (el `tipo_unidad`
+     * del nivel), solo las de ese tipo: en un plan no se mezclan dimensiones y asignaturas.
+     */
+    private function dimensionesDe(int $idGrado, ?string $tipo = null): Collection
     {
         return Dimension::where('activo', 1)
             ->whereIn('id', DB::table('academico_grado_dimension')->where('id_grado', $idGrado)->pluck('id_dimension'))
+            ->when($tipo, fn ($q) => $q->where('tipo', $tipo))
             ->orderBy('orden')->orderBy('nombre')
-            ->get(['id', 'nombre', 'descripcion']);
+            ->get(['id', 'nombre', 'descripcion', 'tipo', 'id_area', 'id_asignatura']);
     }
 
     /** Califica solo el director de grupo del curso, en plazo y con los logros aprobados; los demás ven. */
@@ -544,8 +677,8 @@ class NotasService extends Service
             'grado' => (string) $curso->grado?->nombre,
             'compartido' => self::cursosDelGrado($curso->id_grado)->count() > 1,
             'logros' => $this->logrosDe($curso->id_grado, $periodo->id),
-            // Las dimensiones del grado: cada logro pertenece a una.
-            'dimensiones' => $this->dimensionesDe($curso->id_grado),
+            // Las unidades del grado (del tipo de su nivel): cada logro pertenece a una.
+            'dimensiones' => $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad']),
             'historial' => $historial,
             'puede' => self::acciones($plan->estado, $rol, self::periodoAbiertoParaLogros($periodo)),
         ];
@@ -612,7 +745,7 @@ class NotasService extends Service
             }
 
             // Todo indicador pertenece a una dimensión del grado (obligatoria).
-            $dimensiones = $this->dimensionesDe($idGrado)->keyBy('id');
+            $dimensiones = $this->dimensionesDe($idGrado, self::modoDelNivel($curso->id_nivel)['tipo_unidad'])->keyBy('id');
             if ($dimensiones->isEmpty()) {
                 return ['error' => true, 'message' => 'Este grado no tiene dimensiones: asígnaselas en Configuración académica → Dimensiones antes de definir logros.'];
             }
@@ -686,7 +819,7 @@ class NotasService extends Service
                     return ['error' => true, 'message' => 'Define al menos un logro antes de enviarlos a revisión.'];
                 }
                 // Un logro con una dimensión que el grado ya no tiene no se califica.
-                $validas = $this->dimensionesDe($curso->id_grado)->pluck('id');
+                $validas = $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad'])->pluck('id');
                 if ($logros->contains(fn ($l) => ! $validas->contains($l->id_dimension))) {
                     return ['error' => true, 'message' => 'Hay logros sin una dimensión del grado: asígnales una antes de continuar.'];
                 }
@@ -776,7 +909,7 @@ class NotasService extends Service
 
         try {
             $escalaValida = $this->escalaDelNivel($curso->id_nivel)->pluck('id')->flip();
-            $dimensionesValidas = $this->dimensionesDe($curso->id_grado)->pluck('id')->flip();
+            $dimensionesValidas = $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad'])->pluck('id')->flip();
             // id_logro → id_dimension: cada logro se califica dentro de su dimensión.
             $logroDimension = $this->logrosDe($curso->id_grado, $idPeriodo)->pluck('id_dimension', 'id');
             $alumnosValidos = $this->estudiantesDePlanilla($idCurso, $idPeriodo)->pluck('id_user')->flip();
@@ -858,7 +991,7 @@ class NotasService extends Service
         }
 
         try {
-            $curso = Cursos::find($idCurso, ['id', 'id_grado']);
+            $curso = Cursos::find($idCurso, ['id', 'id_nivel', 'id_grado']);
             if (! $curso) {
                 return ['error' => true, 'message' => 'Curso no encontrado'];
             }
@@ -867,7 +1000,7 @@ class NotasService extends Service
                 ->get(['id_estudiante', 'id_dimension', 'id_escala']);
 
             // Las del grado y, si una ya no aplica pero tiene notas, también esa.
-            $dimensiones = Dimension::whereIn('id', $this->dimensionesDe($curso->id_grado)->pluck('id')->merge($notas->pluck('id_dimension'))->unique())
+            $dimensiones = Dimension::whereIn('id', $this->dimensionesDe($curso->id_grado, self::modoDelNivel($curso->id_nivel)['tipo_unidad'])->pluck('id')->merge($notas->pluck('id_dimension'))->unique())
                 ->orderBy('orden')->orderBy('nombre')->get(['id', 'nombre', 'descripcion']);
 
             $estudiantes = self::estudiantesDelCurso($idCurso, $notas->pluck('id_estudiante')->unique())

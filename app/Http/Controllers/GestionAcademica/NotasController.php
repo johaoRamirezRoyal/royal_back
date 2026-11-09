@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
+use App\Models\GestionAcademica\Dimension;
+use App\Models\Usuarios\NivelAcademico;
 use App\Services\GestionAcademica\NotasService;
 use App\Services\Usuarios\PermisosPerfil;
 use App\Support\Permiso;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Validation\Rule;
 
 /**
  * Notas cualitativas (ver docs/contexto/modulos/notas.md). Controller aparte de
@@ -34,7 +37,7 @@ class NotasController extends Controller implements HasMiddleware
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]), only: [
                 'listarEscalas', 'crearEscala', 'actualizarEscala', 'ordenarEscalas',
                 'listarDimensiones', 'crearDimension', 'actualizarDimension', 'ordenarDimensiones', 'asignarGrados',
-                'listarMetodosNivel', 'cambiarMetodoNivel',
+                'listarMetodosNivel', 'cambiarMetodoNivel', 'sincronizarUnidades',
             ]),
             new Middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE), only: ['misCursos', 'guardarPlanilla']),
             new Middleware(Permiso::ruta(self::LOGROS, Permiso::PERFILES_DOCENTE), only: ['guardarLogros', 'cambiarEstadoPlan']),
@@ -133,9 +136,18 @@ class NotasController extends Controller implements HasMiddleware
         ];
     }
 
-    public function listarDimensiones()
+    /** ?tipo=DIMENSION|AREA|ASIGNATURA (por defecto DIMENSION). */
+    public function listarDimensiones(Request $request)
     {
-        return $this->apiResponse($this->service->listarDimensiones());
+        $q = $request->validate(['tipo' => ['nullable', Rule::in([Dimension::DIMENSION, Dimension::AREA, Dimension::ASIGNATURA])]]);
+
+        return $this->apiResponse($this->service->listarDimensiones($q['tipo'] ?? null));
+    }
+
+    /** Crea / actualiza una unidad ASIGNATURA por asignatura y la vincula a los grados donde tiene carga. */
+    public function sincronizarUnidades()
+    {
+        return $this->apiResponse($this->service->sincronizarUnidadesAsignatura());
     }
 
     public function crearDimension(Request $request)
@@ -164,12 +176,20 @@ class NotasController extends Controller implements HasMiddleware
         return $this->apiResponse($this->service->listarMetodosNivel());
     }
 
-    /** { metodo: CUALITATIVA | CUANTITATIVA | AMBAS } */
+    /**
+     * { metodo?: CUALITATIVA | CUANTITATIVA | AMBAS, tipo_unidad?: DIMENSION | ASIGNATURA,
+     *   calificador?: DIRECTOR_GRUPO | DOCENTE_ASIGNATURA }, al menos uno. Las combinaciones las
+     * valida el service (NotasService::errorDeModo) con mensajes en español.
+     */
     public function cambiarMetodoNivel(Request $request, int $id)
     {
-        $body = $request->validate(['metodo' => ['required', \Illuminate\Validation\Rule::in(\App\Models\Usuarios\NivelAcademico::METODOS)]]);
+        $body = $request->validate([
+            'metodo' => ['required_without_all:tipo_unidad,calificador', Rule::in(NivelAcademico::METODOS)],
+            'tipo_unidad' => ['sometimes', 'string', 'max:12'],
+            'calificador' => ['sometimes', 'string', 'max:20'],
+        ]);
 
-        return $this->apiResponse($this->service->cambiarMetodoNivel($id, $body['metodo']));
+        return $this->apiResponse($this->service->cambiarMetodoNivel($id, $body));
     }
 
     public function misCursos(Request $request)

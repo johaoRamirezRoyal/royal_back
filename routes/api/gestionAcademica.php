@@ -546,6 +546,8 @@ Route::prefix('/notas')->group(function () {
     Route::put('/dimensiones/orden', [NotasController::class, 'ordenarDimensiones'])->middleware($escala);
     Route::put('/dimensiones/{id}', [NotasController::class, 'actualizarDimension'])->whereNumber('id')->middleware($escala);
     Route::put('/dimensiones/{id}/grados', [NotasController::class, 'asignarGrados'])->whereNumber('id')->middleware($escala);
+    // Unidades ASIGNATURA desde academico_asignatura y sus vínculos con grados (por la carga académica).
+    Route::post('/unidades/sincronizar', [NotasController::class, 'sincronizarUnidades'])->middleware($escala);
     Route::get('/metodos-nivel', [NotasController::class, 'listarMetodosNivel'])->middleware($escala);
     Route::put('/metodos-nivel/{id}', [NotasController::class, 'cambiarMetodoNivel'])->whereNumber('id')->middleware($escala);
 
