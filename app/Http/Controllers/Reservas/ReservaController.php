@@ -101,6 +101,8 @@ class ReservaController extends Controller
             fechaHasta: $request->input('fecha_hasta'),
             cancelado: $request->boolean('cancelado') ?: null,
             perpage: $request->input('per_page', 10),
+            // "Mis reservas" pide desc para ver primero lo más reciente.
+            orden: $request->input('orden') === 'desc' ? 'desc' : 'asc',
         );
 
         if ($response['error']) {

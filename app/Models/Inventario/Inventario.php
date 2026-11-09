@@ -6,9 +6,9 @@ use App\Models\Areas\Areas;
 use App\Models\Areas\Bloque;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Usuarios\Usuario;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 class Inventario extends Model

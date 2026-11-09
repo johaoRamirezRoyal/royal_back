@@ -176,8 +176,10 @@ class ReservasServices extends Service
                     ]);
 
                     if ($portatilSolicitado > 0) {
-                        $portatiles = Inventario::where('descripcion', 'like', '%PORTATIL%')
-                            ->where('activo', 1)
+                        // disponiblePrestamo excluye los equipos con un préstamo abierto aunque su
+                        // `estado` no sea 8: si no, registrarPrestamo lanza "ya se encuentra
+                        // prestado" y se revierte toda la reserva.
+                        $portatiles = Inventario::disponiblePrestamo('PORTATIL', null)
                             ->whereNotIn('estado', [2, 5, 8])
                             ->lockForUpdate()
                             ->limit($portatilSolicitado)
@@ -551,8 +553,8 @@ class ReservasServices extends Service
                     // alcanzan, limit() presta los que haya.
                     $faltan = $solicitado - $yaAsignados;
 
-                    $portatiles = Inventario::where('descripcion', 'like', '%PORTATIL%')
-                        ->where('activo', 1)
+                    // Mismo criterio que crearReserva: sin préstamo abierto.
+                    $portatiles = Inventario::disponiblePrestamo('PORTATIL', null)
                         ->whereNotIn('estado', [2, 5, 8])
                         ->lockForUpdate()
                         ->limit($faltan)
@@ -601,7 +603,8 @@ class ReservasServices extends Service
         ?string $fechaDesde,
         ?string $fechaHasta,
         ?bool $cancelado,
-        ?int $perpage = 10
+        ?int $perpage = 10,
+        string $orden = 'asc'
     ): array {
         try {
 
@@ -632,7 +635,7 @@ class ReservasServices extends Service
                         $query->whereNull('fecha_cancelado');
                     }
                 })
-                ->orderBy('fecha_reserva')
+                ->orderBy('fecha_reserva', $orden)
                 ->orderBy('id_salon')
                 ->orderBy('hora_reserva')
                 ->paginate($perpage);
