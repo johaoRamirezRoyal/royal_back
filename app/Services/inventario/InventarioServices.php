@@ -2786,8 +2786,8 @@ class InventarioServices
                 // mantenimiento) en /inventario/mantenimiento/programacion. Su franja en el
                 // calendario va del primer al último mantenimiento realmente asignado (las
                 // fechas son aleatorias dentro del rango, ver fechaMantenimientoAleatoria). El
-                // tipo es el de la categoría del primer ítem (un lote no mezcla Sistemas y
-                // Operativos); las Áreas Comunes (tipo_categoria 3) cuentan como Operativos.
+                // tipo es el de la categoría del primer ítem (un lote no mezcla tipos):
+                // 1 Sistemas, 3 Áreas Comunes y cualquier otro cuenta como Operativos (2).
                 $fechas = collect($creados)->pluck('fecha');
                 $tipo = (int) DB::table('categoria')->where('id', $inventarios->first()->id_categoria)->value('tipo_categoria');
                 $this->programacionMant->crearDesdeMantenimiento(
@@ -2796,7 +2796,11 @@ class InventarioServices
                     $fechas->max()->toDateString(),
                     $periodo,
                     $id_log,
-                    $tipo === 1 ? 1 : 2,
+                    match ($tipo) {
+                        1 => 1,
+                        3 => 3,
+                        default => 2,
+                    },
                     $conSolucion
                 );
 

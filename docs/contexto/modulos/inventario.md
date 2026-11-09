@@ -112,7 +112,7 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 - Rutas `inventario/mantenimiento/programacion` (opción `Permiso::INVENTARIO`). Recrea
   `/mantenimientos/programacion` del legacy sobre sus mismas tablas:
   - `programacion_mant`: `estado` 0 Pendiente, 1 Terminado, 2 Completado parcial, 3 Aplazado,
-    4 Cancelado; `tipo` 1 Sistemas, 2 Operativos; `periodo` = `periodos.id` (antes ordinal
+    4 Cancelado; `tipo` 1 Sistemas, 2 Operativos, 3 Áreas comunes (3 no existe en el legacy); `periodo` = `periodos.id` (antes ordinal
     1/2, migrado en `2026_10_30_120000`; los años sin periodos registrados quedaron NULL);
     `fecha_fin` = último día de la franja (NULL = un solo día; `2026_10_30_130000`). Los
     filtros `desde`/`hasta` traen las programaciones que se cruzan con ese rango.
@@ -125,8 +125,8 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 - `GET .../calendario` (cronograma) devuelve solo programaciones, sin paginar.
 - `programarMantenimientoPreventivo` crea una programación por lote (misma descripción,
   periodo y usuario; `fecha_registro`/`fecha_fin` = primer y último día realmente asignado
-  a los equipos, no el rango elegido, porque cada equipo cae en un día aleatorio; `tipo` según la categoría del primer ítem, Áreas
-  Comunes cuenta como Operativos; estado 1 si se generó con solución, si no 0).
+  a los equipos, no el rango elegido, porque cada equipo cae en un día aleatorio; `tipo` según la categoría del primer ítem (Áreas
+  Comunes → 3; las anteriores a este cambio quedaron como Operativos); estado 1 si se generó con solución, si no 0).
 
 ## Trabajo en alturas (`CursosAlturaController`, `routes/api/cursosAltura.php`)
 

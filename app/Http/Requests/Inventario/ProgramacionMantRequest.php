@@ -15,7 +15,7 @@ class ProgramacionMantRequest extends FormRequest
     {
         return [
             'descripcion' => ['required', 'string', 'max:255'],
-            'tipo' => ['required', 'integer', 'in:1,2'],
+            'tipo' => ['required', 'integer', 'in:1,2,3'],
             'fecha_registro' => ['required', 'date'],
             'fecha_fin' => ['nullable', 'date', 'after_or_equal:fecha_registro'],
             'periodo' => ['required', 'integer', 'exists:periodos,id'],

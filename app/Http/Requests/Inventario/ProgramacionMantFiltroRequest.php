@@ -18,7 +18,7 @@ class ProgramacionMantFiltroRequest extends FormRequest
             'id_periodo' => ['nullable', 'integer'],
             'mes' => ['nullable', 'string', 'max:20'],
             'estado' => ['nullable', 'integer', 'between:0,4'],
-            'tipo' => ['nullable', 'integer', 'in:1,2'],
+            'tipo' => ['nullable', 'integer', 'in:1,2,3'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date'],
             's' => ['nullable', 'string', 'max:255'],
