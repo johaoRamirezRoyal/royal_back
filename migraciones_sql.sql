@@ -586,19 +586,26 @@ ALTER TABLE curso ADD COLUMN id_grado INT NULL AFTER id_nivel;
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_05_120000_create_academico_notas_cualitativas_tables.php
--- Notas cualitativas: método de calificación por nivel, fecha límite de notas
--- del periodo, escala de desempeños (general o por niveles), dimensiones por
--- grado, logros por grado + periodo (cada uno en una dimensión), plan de logros
--- con su historial y valoraciones por estudiante + dimensión + periodo.
--- Sin FK a tablas MyISAM (periodo, curso).
+-- Notas cualitativas: método de calificación, tipo de unidad evaluable y
+-- calificador por nivel; fecha límite de notas del periodo; escala de
+-- desempeños (general o por niveles); unidades evaluables (academico_dimension:
+-- DIMENSION | AREA | ASIGNATURA, con CHECK ck_unidad_tipo) por grado; logros
+-- por grado + periodo; plan de logros con historial; valoraciones por
+-- estudiante + unidad + periodo. Sin FK a tablas MyISAM (periodo, curso,
+-- asignatura).
 -- ---------------------------------------------------------------------------
 alter table `nivel_academico` add `metodo_calificacion` varchar(12) not null default 'CUALITATIVA' after `nombre`;
+alter table `nivel_academico` add `tipo_unidad` varchar(12) not null default 'DIMENSION' after `metodo_calificacion`;
+alter table `nivel_academico` add `calificador` varchar(20) not null default 'DIRECTOR_GRUPO' after `tipo_unidad`;
 ALTER TABLE periodo_academico ADD COLUMN fecha_limite_notas DATE NULL AFTER fecha_fin;
 create table `academico_escala_valoracion` (`id` int not null auto_increment, `nombre` varchar(50) not null, `abreviatura` varchar(10) null, `descripcion` varchar(500) null, `color` varchar(20) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
 create table `academico_escala_valoracion_nivel` (`id_escala` int not null, `id_nivel_academico` int not null, primary key (`id_escala`, `id_nivel_academico`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
 alter table `academico_escala_valoracion_nivel` add constraint `academico_escala_valoracion_nivel_id_escala_foreign` foreign key (`id_escala`) references `academico_escala_valoracion` (`id`) on delete cascade;
 alter table `academico_escala_valoracion_nivel` add index `academico_escala_valoracion_nivel_id_nivel_academico_index`(`id_nivel_academico`);
-create table `academico_dimension` (`id` int not null auto_increment, `nombre` varchar(80) not null, `descripcion` varchar(500) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+create table `academico_dimension` (`id` int not null auto_increment, `nombre` varchar(80) not null, `descripcion` varchar(500) null, `tipo` varchar(12) not null default 'DIMENSION', `id_area` int null, `id_asignatura` int null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_dimension` add unique `academico_dimension_id_area_unique`(`id_area`);
+alter table `academico_dimension` add unique `academico_dimension_id_asignatura_unique`(`id_asignatura`);
+ALTER TABLE academico_dimension ADD CONSTRAINT ck_unidad_tipo CHECK ( (tipo = 'DIMENSION' AND id_area IS NULL AND id_asignatura IS NULL) OR (tipo = 'AREA' AND id_area IS NOT NULL AND id_asignatura IS NULL) OR (tipo = 'ASIGNATURA' AND id_asignatura IS NOT NULL AND id_area IS NULL));
 create table `academico_grado_dimension` (`id_grado` int not null, `id_dimension` int not null, primary key (`id_grado`, `id_dimension`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
 alter table `academico_grado_dimension` add constraint `academico_grado_dimension_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`) on delete cascade;
 alter table `academico_grado_dimension` add constraint `academico_grado_dimension_id_dimension_foreign` foreign key (`id_dimension`) references `academico_dimension` (`id`) on delete cascade;

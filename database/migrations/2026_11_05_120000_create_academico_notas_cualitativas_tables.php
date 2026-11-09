@@ -9,10 +9,17 @@ use Illuminate\Support\Facades\Schema;
  * Notas cualitativas (ver docs/contexto/modulos/notas.md):
  *
  * - nivel_academico.metodo_calificacion: CUALITATIVA | CUANTITATIVA | AMBAS.
+ * - nivel_academico.tipo_unidad: DIMENSION | AREA | ASIGNATURA, qué unidad evaluable usa el nivel.
+ * - nivel_academico.calificador: DIRECTOR_GRUPO | DOCENTE_ASIGNATURA, quién califica en el nivel
+ *   (ver NotasService::calificadorPermite).
  * - periodo_academico.fecha_limite_notas: plazo para calificar y corregir (NULL = fecha_fin).
  * - academico_escala_valoracion (+ _nivel): desempeños; sin niveles = escala general.
- * - academico_dimension (+ academico_grado_dimension): dimensiones y los grados que se evalúan
- *   con cada una. Solo evaluación cualitativa.
+ * - academico_dimension (+ academico_grado_dimension): cada fila es una **unidad evaluable**
+ *   (`tipo` DIMENSION | AREA | ASIGNATURA) y los grados que se evalúan con ella. DIMENSION en
+ *   preescolar; AREA y ASIGNATURA apuntan a academico_area / academico_asignatura (`id_area` /
+ *   `id_asignatura`, cada uno a lo sumo una vez) SIN FK: academico_asignatura es MyISAM. Los
+ *   valida NotasService (y el CHECK ck_unidad_tipo donde MySQL lo aplica, ≥ 8.0.16). La columna
+ *   y las tablas conservan el nombre "dimension" (id_dimension) para no romper la API.
  * - academico_logro: indicadores por grado + periodo, cada uno en una dimensión del grado (no
  *   dependen de la asignatura). Primero A y Primero B comparten los de Primero.
  * - academico_logro_plan (+ _historial): estado de los logros del grado en el periodo.
@@ -33,6 +40,8 @@ return new class extends Migration
     {
         Schema::table('nivel_academico', function (Blueprint $table) {
             $table->string('metodo_calificacion', 12)->default('CUALITATIVA')->after('nombre');
+            $table->string('tipo_unidad', 12)->default('DIMENSION')->after('metodo_calificacion'); // DIMENSION | AREA | ASIGNATURA
+            $table->string('calificador', 20)->default('DIRECTOR_GRUPO')->after('tipo_unidad');    // DIRECTOR_GRUPO | DOCENTE_ASIGNATURA
         });
         DB::statement('ALTER TABLE periodo_academico ADD COLUMN fecha_limite_notas DATE NULL AFTER fecha_fin');
 
@@ -58,10 +67,17 @@ return new class extends Migration
             $table->integer('id')->autoIncrement()->primary();
             $table->string('nombre', 80);
             $table->string('descripcion', 500)->nullable();
+            $table->string('tipo', 12)->default('DIMENSION');
+            $table->integer('id_area')->nullable()->unique();
+            $table->integer('id_asignatura')->nullable()->unique();
             $table->unsignedSmallInteger('orden')->default(0);
             $table->boolean('activo')->default(true);
             $table->timestamps();
         });
+        DB::statement("ALTER TABLE academico_dimension ADD CONSTRAINT ck_unidad_tipo CHECK (
+            (tipo = 'DIMENSION' AND id_area IS NULL AND id_asignatura IS NULL)
+            OR (tipo = 'AREA' AND id_area IS NOT NULL AND id_asignatura IS NULL)
+            OR (tipo = 'ASIGNATURA' AND id_asignatura IS NOT NULL AND id_area IS NULL))");
 
         Schema::create('academico_grado_dimension', function (Blueprint $table) {
             $table->integer('id_grado');
@@ -160,7 +176,7 @@ return new class extends Migration
         Schema::dropIfExists('academico_escala_valoracion');
         DB::statement('ALTER TABLE periodo_academico DROP COLUMN fecha_limite_notas');
         Schema::table('nivel_academico', function (Blueprint $table) {
-            $table->dropColumn('metodo_calificacion');
+            $table->dropColumn(['metodo_calificacion', 'tipo_unidad', 'calificador']);
         });
     }
 };

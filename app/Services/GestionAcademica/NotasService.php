@@ -113,7 +113,12 @@ class NotasService extends Service
             if (! $dimension) {
                 return ['error' => true, 'message' => 'No se encontró la dimensión'];
             }
-            $dimension->fill($data)->save();
+            $dimension->fill($data);
+            // Unidad consistente (como el CHECK de la migración); hoy la API solo crea DIMENSION.
+            if ($error = Dimension::errorDeTipo($dimension->tipo, $dimension->id_area, $dimension->id_asignatura)) {
+                return ['error' => true, 'message' => $error];
+            }
+            $dimension->save();
 
             return ['error' => false, 'message' => $id ? 'Dimensión actualizada' : 'Dimensión creada', 'data' => $dimension];
         } catch (Throwable $e) {
@@ -215,6 +220,35 @@ class NotasService extends Service
     public function dirige(int $idUser, int|array $idsCurso): bool
     {
         return Cursos::whereIn('id', (array) $idsCurso)->where('activo', 1)->where('id_director', $idUser)->exists();
+    }
+
+    public const CALIFICA_DIRECTOR = 'DIRECTOR_GRUPO';
+    public const CALIFICA_DOCENTE_ASIGNATURA = 'DOCENTE_ASIGNATURA';
+
+    /** Regla pura: con DOCENTE_ASIGNATURA, quien tiene carga en la unidad; en cualquier otro caso (incluido null), el director de grupo. */
+    public static function calificadorPermite(?string $calificador, bool $dirige, bool $tieneCarga): bool
+    {
+        return $calificador === self::CALIFICA_DOCENTE_ASIGNATURA ? $tieneCarga : $dirige;
+    }
+
+    /** ¿El docente tiene carga en el curso para esta unidad? DIMENSION nunca; ASIGNATURA, esa asignatura; AREA, cualquiera de las asignaturas activas del área. */
+    private function tieneCarga(int $idUser, int $idCurso, Dimension $unidad): bool
+    {
+        $idsAsignatura = match ($unidad->tipo) {
+            Dimension::ASIGNATURA => [(int) $unidad->id_asignatura],
+            Dimension::AREA => DB::table('academico_asignatura')->where('id_area', $unidad->id_area)->where('activo', 1)->pluck('id')->all(),
+            default => [],
+        };
+        if (! $idsAsignatura) {
+            return false;
+        }
+
+        return DB::table('academico_carga_academica as c')
+            ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+            ->where('c.id_curso', $idCurso)->where('c.activo', 1)
+            ->where('da.activo', 1)->where('da.id_docente', $idUser)
+            ->whereIn('da.id_asignatura', $idsAsignatura)
+            ->exists();
     }
 
     /** Cursos activos del grado, en orden académico, con su director de grupo. */
@@ -732,7 +766,7 @@ class NotasService extends Service
         if ($error = $this->sinCualitativa($idCurso) ?? $this->validarVentana($idPeriodo)) {
             return $error;
         }
-        $curso = Cursos::find($idCurso, ['id', 'id_nivel', 'id_grado']);
+        $curso = Cursos::with('nivel:id,calificador')->find($idCurso, ['id', 'id_nivel', 'id_grado']);
         if (! $curso) {
             return ['error' => true, 'message' => 'Curso no encontrado'];
         }
@@ -747,6 +781,12 @@ class NotasService extends Service
             $logroDimension = $this->logrosDe($curso->id_grado, $idPeriodo)->pluck('id_dimension', 'id');
             $alumnosValidos = $this->estudiantesDePlanilla($idCurso, $idPeriodo)->pluck('id_user')->flip();
 
+            // Quién califica cada unidad depende del nivel (calificadorPermite).
+            $dirige = $this->dirige($idDocente, $idCurso);
+            $calificador = $curso->nivel?->calificador;
+            $unidades = Dimension::whereIn('id', $dimensionesValidas->keys())->get(['id', 'nombre', 'tipo', 'id_area', 'id_asignatura'])->keyBy('id');
+            $puedeCalificar = $unidades->map(fn (Dimension $u) => self::calificadorPermite($calificador, $dirige, $this->tieneCarga($idDocente, $idCurso, $u)));
+
             foreach ($estudiantes as $e) {
                 if (! $alumnosValidos->has($e['id_estudiante'])) {
                     return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
@@ -754,6 +794,9 @@ class NotasService extends Service
                 foreach ($e['dimensiones'] ?? [] as $d) {
                     if (! $dimensionesValidas->has($d['id_dimension'])) {
                         return ['error' => true, 'message' => 'Una dimensión no corresponde al grado de este curso'];
+                    }
+                    if (! $puedeCalificar->get($d['id_dimension'])) {
+                        return ['error' => true, 'message' => 'No te corresponde calificar «' . $unidades->get($d['id_dimension'])?->nombre . '» en este curso.'];
                     }
                     $escalas = array_merge([$d['id_escala'] ?? null], array_column($d['logros'] ?? [], 'id_escala'));
                     foreach (array_filter($escalas) as $idEscala) {

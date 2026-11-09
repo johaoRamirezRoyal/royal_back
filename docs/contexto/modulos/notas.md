@@ -9,6 +9,7 @@ numérica) está pendiente. Frontend: `frontend/docs/contexto/modulos/notas.md`.
 
 ```
 nivel_academico.metodo_calificacion ─ CUALITATIVA | CUANTITATIVA | AMBAS
+nivel_academico.tipo_unidad ─ DIMENSION | AREA | ASIGNATURA · calificador ─ DIRECTOR_GRUPO | DOCENTE_ASIGNATURA
 academico_grado ──< academico_grado_dimension >── academico_dimension
 grado + periodo
   └─ academico_logro_plan (estado) ──< academico_logro (indicador, en una dimensión del grado)
@@ -24,10 +25,11 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   (`NivelAcademico::califCualitativa`): `esCursoCualitativo` / `cursosCualitativos` filtran las
   listas y `sinCualitativa` rechaza los endpoints (un curso sin grado, como "Stem A" o "Egresado":
   "Asígnaselo en Cursos"). Todos los niveles arrancaron en `CUALITATIVA`.
-- **Dimensiones** (`academico_dimension`; cognitiva, comunicativa, corporal…; solo cualitativa):
-  catálogo, no se borran (se desactivan). Se definen **por grado** (`academico_grado_dimension`):
-  `dimensionesDe($idGrado)`. Se asignan **desde la dimensión**
-  (`PUT /notas/dimensiones/{id}/grados`), para aplicar una dimensión común a varios grados de una vez.
+- **Unidades evaluables / dimensiones** (`academico_dimension`; solo cualitativa): catálogo, no se
+  borran (se desactivan). Cada fila es una **unidad evaluable** (ver "Unidad evaluable y quién
+  califica"): hoy todas son `DIMENSION` (cognitiva, comunicativa, corporal…). Se definen **por
+  grado** (`academico_grado_dimension`): `dimensionesDe($idGrado)`. Se asignan **desde la unidad**
+  (`PUT /notas/dimensiones/{id}/grados`), para aplicar una común a varios grados de una vez.
 - **Logros (indicadores)** (`academico_logro`): por **grado + periodo** (no por asignatura), y cada
   uno en una dimensión del grado (`id_dimension`, obligatoria). Todos los cursos del grado (Primero A
   y Primero B) los comparten con su aprobación. Los endpoints reciben un `id_curso` (cualquiera del
@@ -39,8 +41,9 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   niveles; sin niveles es la escala general. Un curso usa la escala activa de su nivel y, si su
   nivel no tiene, la general (`escalaDelNivel`). No se borran: se desactivan.
   `PUT /notas/escalas/orden` renumera una escala 1, 2, 3… según el orden arrastrado.
-- **Quién califica**: el **director de grupo** del curso (`curso.id_director`; `dirige()`), no los
-  docentes de la carga académica. Un curso sin director no lo califica nadie hasta asignarlo (Cursos).
+- **Quién califica**: depende de `nivel_academico.calificador` (ver "Unidad evaluable y quién
+  califica"). Por defecto (`DIRECTOR_GRUPO`) el **director de grupo** del curso (`curso.id_director`;
+  `dirige()`). Un curso sin director no lo califica nadie hasta asignarlo (Cursos).
 - **Valoración** (`academico_valoracion`, unique estudiante + dimensión + periodo): **desempeño
   final de la dimensión** (lo elige el director; no se deriva de los logros) + observación.
   `academico_valoracion_logro`: desempeño por logro (de esa dimensión). `id_curso` es la foto del
@@ -48,6 +51,42 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   observación ni logros) = sin nota: se borra la fila.
 - Sin FK a `periodo_academico` ni `curso` (MyISAM en algunas BD): valida el service. Por eso un
   periodo con notas no se puede eliminar (`eliminarPeriodoAcademico`).
+
+## Unidad evaluable y quién califica
+
+Base para llevar lo cualitativo a básica y media sin cambiar la API (la tabla y `id_dimension`
+conservan su nombre):
+
+- `academico_dimension.tipo`: `DIMENSION` (preescolar, sin área ni asignatura), `AREA` (`id_area` →
+  `academico_area`) o `ASIGNATURA` (`id_asignatura` → `academico_asignatura`). `id_area` e
+  `id_asignatura` son únicos (una unidad por área o asignatura) y **sin FK** (`academico_asignatura` es
+  MyISAM). La consistencia la exige el CHECK `ck_unidad_tipo` (MariaDB ≥ 10.2 / MySQL ≥ 8.0.16; la
+  local es MariaDB 10.4 y lo aplica) y, siempre, `Dimension::errorDeTipo` en `guardarDimension`.
+  Constantes en `Dimension::DIMENSION|AREA|ASIGNATURA`.
+- `nivel_academico.tipo_unidad` (`DIMENSION` | `AREA` | `ASIGNATURA`, por defecto `DIMENSION`): qué
+  unidad usa el nivel. **Hoy solo se guarda**; nada lo lee todavía.
+- `nivel_academico.calificador` (`DIRECTOR_GRUPO` | `DOCENTE_ASIGNATURA`, por defecto
+  `DIRECTOR_GRUPO`): quién califica en el nivel. Política pura
+  `NotasService::calificadorPermite($calificador, $dirige, $tieneCarga)`: con `DOCENTE_ASIGNATURA`,
+  quien tenga carga en la unidad; con cualquier otro valor (también null), el director de grupo.
+  Test: `CalificadorUnidadTest`.
+- "Tiene carga" (`tieneCarga`): carga académica activa en el curso (`academico_carga_academica` +
+  `academico_docente_asignatura`, ambas activas) en la asignatura de la unidad (`ASIGNATURA`) o en
+  cualquier asignatura activa del área (`AREA`). Una `DIMENSION` nunca tiene carga.
+- `guardarPlanilla` aplica la política **por unidad**: si una de las unidades enviadas no le toca a
+  quien guarda, rechaza todo con "No te corresponde calificar «…» en este curso".
+
+**Ojo, todavía no funciona `DOCENTE_ASIGNATURA` de punta a punta**: `NotasController::guardarPlanilla`
+sigue exigiendo `dirige()` antes de llamar al service (403 "Solo el director de grupo del curso
+califica"), y la planilla (`planilla.editable`, `es_director`), `misCursos` y el rol del plan de
+logros siguen siendo del director. Pendiente para esa parte:
+
+- Sincronizar unidades desde `academico_area` / `academico_asignatura` (crear la unidad AREA o
+  ASIGNATURA de cada una) y usar `tipo_unidad` para elegir qué unidades ofrece cada nivel.
+- Abrir el controller y la planilla al docente con carga (lista de cursos, `editable` por unidad),
+  y una planilla por unidad.
+- Plan de logros por docente de asignatura (hoy: directores del grado + 150/151).
+- Editar `tipo_unidad` y `calificador` desde Configuración académica (hoy solo con SQL).
 
 ## Plan de logros (estado y seguimiento)
 
@@ -130,7 +169,8 @@ Al desplegar, migrar en cada base de colegio.
 
 `tests/Unit/GestionAcademica/PeriodoEditableNotasTest.php` (ventana para calificar) y
 `AccionesPlanLogrosTest.php` (quién puede editar, enviar, aprobar, devolver y reabrir los logros
-según estado, rol y plazo: `NotasService::acciones`).
+según estado, rol y plazo: `NotasService::acciones`), `CalificadorUnidadTest.php` (quién califica
+según `calificador` y la consistencia de tipo de una unidad) y `FechasPeriodoAcademicoTest.php`.
 
 ## Trampas
 
@@ -143,5 +183,6 @@ según estado, rol y plazo: `NotasService::acciones`).
 
 ## Pendiente
 
-Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`), boletín PDF y vista del
-acudiente / estudiante.
+Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`), boletín PDF, vista del
+acudiente / estudiante, y lo de "Unidad evaluable y quién califica" (sincronizar unidades desde
+áreas / asignaturas y abrir la calificación al docente de asignatura).
