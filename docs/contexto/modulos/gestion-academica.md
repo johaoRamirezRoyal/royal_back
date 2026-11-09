@@ -72,6 +72,27 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
 - `academico_asistencia_clase` y `academico_asistencia_estudiante` se usaban sin
   migración propia; ya la tienen.
 
+## Periodos académicos (`periodo_academico`)
+
+- **No confundir** con `periodos` (`Periodo`, `PeriodoServices`): ese es el catálogo
+  institucional/administrativo (opción 107, bandera manual `en_curso`, lo usan Inventario y
+  Evaluaciones). `periodo_academico` es el académico: actas, observaciones, llegadas tarde.
+- Columnas: `id_anio_escolar`, `nombre`, `fecha_inicio`, `fecha_fin` y `activo`.
+  MyISAM en algunas BD: sin FK hacia él, y un `rollBack()` no deshace cambios.
+- CRUD en `/compartido/anio-academico/periodo-academico` (escritura con la 99). El año escolar
+  **no se elige**: se resuelve por `fecha_inicio` (`obtenerAnioEscolarPorFecha`), al crear y al
+  editar (un periodo movido de año cambia de `id_anio_escolar`).
+- **Validación de fechas** (`PeriodoAcademicoServices::validarFechas` → `errorDeFechas`, pura,
+  test en `tests/Unit/GestionAcademica/FechasPeriodoAcademicoTest.php`), al crear y al editar
+  fechas: fin posterior al inicio, todo dentro del rango del año según el calendario
+  (`rangoDeAnioEscolar`: A 1 feb–30 nov, B 1 ago–30 jun) y **sin cruzarse** con los demás
+  periodos del año (los extremos cuentan: dos periodos no comparten día).
+  Antes se exigía `fecha_fin ≤ 30 de junio` fijo, lo que en calendario A rechazaba todo periodo
+  que terminara después de junio; editar no revalidaba nada ni recalculaba el año.
+- El cron diario `periodos:desactivar-vencidos` pone `activo = 0` cuando `fecha_fin` ya pasó (el
+  último día sigue activo). Lo que dependa de un plazo propio que pase de `fecha_fin` no debe
+  filtrar por `activo`, sino por fechas.
+
 ## Vinculación Estudiante - Padre (`/vinculacion-acudientes`, opción 131)
 
 No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
