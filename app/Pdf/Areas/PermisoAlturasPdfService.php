@@ -2,7 +2,7 @@
 
 namespace App\Pdf\Areas;
 
-use App\Services\Cloudinary\CloudinaryService;
+use App\Services\branding\MarcaDominioService;
 use TCPDF;
 
 /**
@@ -54,8 +54,7 @@ class PermisoAlturasPdfService
         $pdf->SetAutoPageBreak(true, 20);
         $pdf->AddPage();
 
-        // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
-        $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
+        $logoPath = app(MarcaDominioService::class)->rutaLocalLogo();
         $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="120">' : '';
 
         $filasVerificacion = '';

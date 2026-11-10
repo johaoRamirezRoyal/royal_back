@@ -201,12 +201,14 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 
 ## PDFs
 
-- Todo PDF institucional nuevo usa este logo fijo, no el de la marca por dominio:
-  `app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png')` (ejemplo:
-  `HojaVidaPdfService`).
-- Las imágenes fijas de documentos (logos, escudos, sellos) viven en Cloudinary bajo
-  `royal/royal-school/` (`logotipoMarca.png`, `paz-salvo/{logo,sello}.webp`,
-  `instituciones/logo.png`, `horario/logo.png`), no en el disco del servidor.
+- **Logo**: todo PDF/Excel usa `app(MarcaDominioService::class)->rutaLocalLogo($correo)`.
+  Devuelve el logo de la marca del dominio del correo, configurado en /marcas-dominio (sin
+  correo, usa el del usuario autenticado). Si no hay marca, devuelve el fijo
+  `royal/royal-school/logotipoBackground.png`, y un WEBP sale convertido a PNG. Un colegio
+  nuevo solo configura su marca: no hay logos por documento. Ejemplo: `HojaVidaPdfService`.
+- Las demás imágenes fijas de documentos (sellos, firmas) viven en Cloudinary bajo
+  `royal/royal-school/` (`paz-salvo/sello.webp`, `firma_administrativa.jpg`), no en el disco
+  del servidor.
   `rutaLocalRoyalSchool()` las descarga a un temporal porque TCPDF/PhpSpreadsheet necesitan
   ruta local; si falla devuelve null y el documento sale sin esa imagen (sin respaldo local).
   Una nueva se sube con `POST /api/migracion/cloudinary` (`directorio=royal-school/...`).

@@ -22,7 +22,7 @@ class BasesDatosService extends Service
     private const CONNECTIONS = [
         'mysql' => 'Base de datos (Royal School)',
         'sami_hebreo' => 'Base de datos de Sami (hebreo)',
-        'admin_management' => 'Administración (marcas por dominio, logs)'
+        'admin_management' => 'Administración (marcas por dominio, logs)',
     ];
 
     /** Formato de una carpeta de Cloudinary: segmentos de [A-Za-z0-9_-] separados por "/". */
@@ -66,7 +66,7 @@ class BasesDatosService extends Service
     public function renombrar(string $connection, string $nombre): array
     {
         try {
-            if (!array_key_exists($connection, self::CONNECTIONS)) {
+            if (! array_key_exists($connection, self::CONNECTIONS)) {
                 return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
             }
 
@@ -83,7 +83,7 @@ class BasesDatosService extends Service
     public function restablecerNombre(string $connection): array
     {
         try {
-            if (!array_key_exists($connection, self::CONNECTIONS)) {
+            if (! array_key_exists($connection, self::CONNECTIONS)) {
                 return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
             }
 
@@ -105,7 +105,7 @@ class BasesDatosService extends Service
      */
     public static function carpeta(string $connection): string
     {
-        if (!isset(self::$carpetas[$connection])) {
+        if (! isset(self::$carpetas[$connection])) {
             try {
                 $guardada = BaseDatosNombre::where('connection', $connection)->value('carpeta_cloudinary');
             } catch (Exception) {
@@ -127,7 +127,7 @@ class BasesDatosService extends Service
     public function cambiarCarpeta(string $connection, ?string $carpeta): array
     {
         try {
-            if (!array_key_exists($connection, self::CONNECTIONS)) {
+            if (! array_key_exists($connection, self::CONNECTIONS)) {
                 return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
             }
 
@@ -178,7 +178,13 @@ class BasesDatosService extends Service
      */
     public function conexionActiva(int $idUser): string
     {
-        $connection = ConexionActiva::find($idUser)?->connection;
+        try {
+            $connection = ConexionActiva::find($idUser)?->connection;
+        } catch (Exception $e) {
+            // admin_management caída: no tumbar toda la API (corre en cada petición vía SwitchActiveConnection).
+            $this->sendError($e, 'Error al leer la base de datos activa');
+            $connection = null;
+        }
 
         return $connection && self::esConnectionValida($connection) ? $connection : 'mysql';
     }
@@ -186,7 +192,7 @@ class BasesDatosService extends Service
     public function establecerConexionActiva(int $idUser, string $connection): array
     {
         try {
-            if (!self::esConnectionValida($connection)) {
+            if (! self::esConnectionValida($connection)) {
                 return ['error' => true, 'message' => 'Esa base de datos no existe.', 'data' => []];
             }
 

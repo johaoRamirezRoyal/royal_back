@@ -6,7 +6,6 @@ use App\Models\GestionAcademica\CargaAcademica;
 use App\Models\GestionAcademica\FranjaHoraria;
 use App\Models\Usuarios\Usuario;
 use App\Services\branding\MarcaDominioService;
-use App\Services\Cloudinary\CloudinaryService;
 use Carbon\Carbon;
 use Exception;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -72,7 +71,7 @@ class HorarioExcelService
             $spreadsheet->removeSheetByIndex(0);
 
             $nombre = trim("{$docente->nombre} {$docente->apellido}");
-            $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
+            $logoPath = $this->marcaDominioService->rutaLocalLogo($docente->correo);
 
             if (! $this->agregarHoja($spreadsheet, $idDocente, $nombre, 'Mi horario', $logoPath, $idsEsquema)) {
                 return ['error' => true, 'message' => 'Este docente no tiene ningún esquema de horario asignado.', 'data' => []];
@@ -130,7 +129,7 @@ class HorarioExcelService
             foreach ($docentes as $docente) {
                 $nombre = trim("{$docente->nombre} {$docente->apellido}");
                 $sheetName = $this->nombreHojaUnico($nombre, $usados);
-                $logoPath = $this->marcaDominioService->resolverRutaLocalPorCorreo($docente->correo);
+                $logoPath = $this->marcaDominioService->rutaLocalLogo($docente->correo);
 
                 if ($this->agregarHoja($spreadsheet, $docente->id_user, $nombre, $sheetName, $logoPath, $idsEsquema)) {
                     $count++;
@@ -402,7 +401,7 @@ class HorarioExcelService
      * que otro, las filas sobrantes quedan en blanco para ese día.
      *
      * @param  ?string  $logoPath  Logo resuelto por dominio de correo del docente (ver
-     *                             MarcaDominioService::resolverPorCorreo) — null cae al logo genérico de OMNIA.
+     *                             MarcaDominioService::rutaLocalLogo) — null cae al de la marca del usuario autenticado.
      * @param  ?array<int>  $idsEsquemaFiltro  null incluye todos los esquemas del docente.
      */
     private function agregarHoja(Spreadsheet $spreadsheet, int $idDocente, string $nombreDocente, string $sheetName, ?string $logoPath = null, ?array $idsEsquemaFiltro = null): bool
@@ -492,7 +491,7 @@ class HorarioExcelService
         // celda-a-celda como en el frontend (ExcelJS): se calcula el tamaño a partir de las
         // proporciones reales del archivo y se centra a mano con offsets en píxeles, ya que
         // PhpSpreadsheet no tiene un "fit dentro de este rango y centra" nativo.
-        $logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('horario/logo.png');
+        $logoPath ??= $this->marcaDominioService->rutaLocalLogo();
         if ($logoPath && is_file($logoPath)) {
             $logoInfo = getimagesize($logoPath);
             $ratio = $logoInfo ? $logoInfo[0] / $logoInfo[1] : 1;

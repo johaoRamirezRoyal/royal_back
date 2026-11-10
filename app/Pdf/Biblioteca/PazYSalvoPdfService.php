@@ -2,6 +2,7 @@
 
 namespace App\Pdf\Biblioteca;
 
+use App\Services\branding\MarcaDominioService;
 use App\Services\Cloudinary\CloudinaryService;
 use TCPDF;
 
@@ -216,7 +217,7 @@ class PazYSalvoPdfService
         $x = (self::PAGE_W - $width) / 2;
         $y = 28.4;
 
-        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('paz-salvo/logo.webp');
+        $this->logoPath ??= app(MarcaDominioService::class)->rutaLocalLogo();
         $logo = $this->resolveImage($this->logoPath);
         if ($logo) {
             $pdf->Image($logo, $x, $y, $width, $height, 'PNG');

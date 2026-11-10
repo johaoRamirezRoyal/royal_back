@@ -26,7 +26,6 @@ use App\Pdf\Inventario\ReporteOperativoPdfService;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\branding\MarcaDominioService;
 use App\Services\Cloudinary\ArchivosPrivados;
-use App\Services\Cloudinary\CloudinaryService;
 use App\Services\CursosAltura\CursosAlturaServices;
 use App\Services\MailService;
 use Carbon\Carbon;
@@ -1596,10 +1595,7 @@ class InventarioServices
             }
 
             $usuario = Usuario::find($idLog);
-            // Logo fijo del colegio (no el de MarcaDominioService, que resuelve por
-            // dominio de correo para el multi-tenant de otros PDFs de este módulo) —
-            // pedido explícito para este PDF puntual.
-            $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
+            $logoPath = app(MarcaDominioService::class)->rutaLocalLogo($usuario?->correo);
 
             $contenido = app(HistorialChecksPdfService::class)->generate([
                 'logo_path' => $logoPath,
@@ -2861,7 +2857,7 @@ class InventarioServices
 
             $responsable = Usuario::find($idLog);
             $responsableNombre = trim(($responsable->nombre ?? '').' '.($responsable->apellido ?? '')) ?: 'N/A';
-            $logoPath = app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($responsable?->correo);
+            $logoPath = app(MarcaDominioService::class)->rutaLocalLogo($responsable?->correo);
 
             $contenido = app(MantenimientoChecklistPdfService::class)->generate([
                 'logo_path' => $logoPath,
@@ -3371,8 +3367,7 @@ class InventarioServices
             $responsable = Usuario::find($idLog);
 
             $contenido = app(MantenimientoChecklistPdfService::class)->generate([
-                // Logo institucional fijo — ver AGENTS.md "Logo en PDFs".
-                'logo_path' => app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png'),
+                'logo_path' => app(MarcaDominioService::class)->rutaLocalLogo($responsable?->correo),
                 'tipo_categoria_label' => $categoria->tipo_categoria === 2 ? 'Operativos' : 'Sistemas',
                 'categoria_nombre' => $categoria->nombre,
                 'es_computadores' => str_contains(strtolower($categoria->nombre ?? ''), 'computador'),

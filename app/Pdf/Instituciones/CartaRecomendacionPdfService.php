@@ -3,7 +3,7 @@
 namespace App\Pdf\Instituciones;
 
 use App\Models\Instituciones\CartaRecomendacion;
-use App\Services\Cloudinary\CloudinaryService;
+use App\Services\branding\MarcaDominioService;
 use TCPDF;
 
 /**
@@ -176,11 +176,9 @@ class CartaRecomendacionPdfService
         $pdf->SetFillColorArray(self::GRAY_LIGHT);
         $pdf->Polygon([595.28, 0, 595.28, $headerH, 370, $headerH, 470, 0], 'F');
 
-        // Logotipo blanco (escudo + wordmark en una sola imagen, fondo ya recortado a
-        // transparente) — pensado para fondos oscuros como este encabezado navy.
-        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('instituciones/logo.png');
+        $this->logoPath ??= app(MarcaDominioService::class)->rutaLocalLogo();
         if ($this->logoPath && is_file($this->logoPath)) {
-            $pdf->Image($this->logoPath, self::MARGIN, 18, 164.6, 64, 'PNG');
+            $pdf->Image($this->logoPath, self::MARGIN, 18, 164.6, 64, '');
         }
 
         $pdf->SetFont('helvetica', '', 7.5);
