@@ -326,7 +326,7 @@ class SolicitudesServices
 
             // Todas las entradas de inventario ya generadas por estas compras, precargadas
             // en una sola query y agrupadas por id_compra (evita una query por solicitud).
-            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles', 'descripcion', 'estado', 'id_area', 'id_user')
+            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles', 'descripcion', 'marca', 'estado', 'id_area', 'id_user')
                 ->with(['area:id,nombre', 'usuario:id_user,nombre,apellido'])
                 ->whereIn('id_compra', $solicitudes->pluck('id'))
                 ->orderBy('id')
@@ -355,6 +355,7 @@ class SolicitudesServices
                 $solicitud->setAttribute('inventarios', $inventarios->map(fn ($i) => [
                     'id' => $i->id,
                     'descripcion' => $i->descripcion,
+                    'marca' => $i->marca,
                     'estado' => $i->estado,
                     'area' => $i->area?->nombre,
                     'usuario' => $i->usuario ? trim("{$i->usuario->nombre} {$i->usuario->apellido}") : null,
