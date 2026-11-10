@@ -610,3 +610,19 @@ alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operati
 alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operativos_id_operativo_foreign` foreign key (`id_operativo`) references `usuarios` (`id_user`);
 INSERT INTO trabajos_altura (id_reporte, fecha_trabajo) SELECT id, DATE(CASE WHEN tipo_reporte = 2 THEN COALESCE(fecha_respuesta, fechareg) ELSE fechareg END) FROM reportes WHERE id_operativo IS NOT NULL AND id_reporte IS NULL;
 INSERT INTO trabajos_altura_operativos (id_trabajo, id_operativo) SELECT ta.id, rp.id_operativo FROM trabajos_altura ta JOIN reportes rp ON rp.id = ta.id_reporte;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_10_090000_trabajos_altura_a_innodb.php
+-- trabajos_altura y trabajos_altura_operativos quedaron en MyISAM en producción (motor por
+-- defecto del servidor) y sus FKs nunca se crearon: borrar un reporte dejaba su trabajo en
+-- altura huérfano. Borra los huérfanos que la FK no dejaría crear, pasa ambas a InnoDB y
+-- crea las FKs. La migración se salta todo si las FKs ya existen.
+-- ---------------------------------------------------------------------------
+DELETE ta FROM trabajos_altura ta LEFT JOIN reportes rp ON rp.id = ta.id_reporte WHERE rp.id IS NULL;
+DELETE tao FROM trabajos_altura_operativos tao LEFT JOIN trabajos_altura ta ON ta.id = tao.id_trabajo WHERE ta.id IS NULL;
+DELETE tao FROM trabajos_altura_operativos tao LEFT JOIN usuarios u ON u.id_user = tao.id_operativo WHERE u.id_user IS NULL;
+ALTER TABLE trabajos_altura ENGINE = InnoDB;
+ALTER TABLE trabajos_altura_operativos ENGINE = InnoDB;
+ALTER TABLE trabajos_altura ADD CONSTRAINT trabajos_altura_id_reporte_foreign FOREIGN KEY (id_reporte) REFERENCES reportes (id) ON DELETE CASCADE;
+ALTER TABLE trabajos_altura_operativos ADD CONSTRAINT trabajos_altura_operativos_id_trabajo_foreign FOREIGN KEY (id_trabajo) REFERENCES trabajos_altura (id) ON DELETE CASCADE;
+ALTER TABLE trabajos_altura_operativos ADD CONSTRAINT trabajos_altura_operativos_id_operativo_foreign FOREIGN KEY (id_operativo) REFERENCES usuarios (id_user);
