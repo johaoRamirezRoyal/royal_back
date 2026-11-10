@@ -2,6 +2,8 @@
 
 namespace App\Services\Estudiantes;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\QueryException;
@@ -16,9 +18,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
  */
 class VinculacionAcudienteService
 {
-    private const PERFIL_ACUDIENTE = 6;
 
-    private const PERFIL_ESTUDIANTE = 16;
 
     private const MAX_FILAS_IMPORTACION = 3000;
 
@@ -94,11 +94,11 @@ class VinculacionAcudienteService
 
     public function vincular(int $idAcudiente, int $idEstudiante): array
     {
-        if (!Usuario::where('id_user', $idAcudiente)->where('perfil', self::PERFIL_ACUDIENTE)->exists()) {
+        if (!Usuario::where('id_user', $idAcudiente)->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE))->exists()) {
             return ['error' => true, 'message' => 'El usuario indicado no es un acudiente.', 'data' => []];
         }
 
-        if (!Usuario::where('id_user', $idEstudiante)->where('perfil', self::PERFIL_ESTUDIANTE)->exists()) {
+        if (!Usuario::where('id_user', $idEstudiante)->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))->exists()) {
             return ['error' => true, 'message' => 'El usuario indicado no es un estudiante.', 'data' => []];
         }
 
@@ -166,8 +166,8 @@ class VinculacionAcudienteService
         }
 
         try {
-            $acudientes = $this->usuariosPorDocumento(array_column($filas, 'acudiente'), self::PERFIL_ACUDIENTE);
-            $estudiantes = $this->usuariosPorDocumento(array_column($filas, 'estudiante'), self::PERFIL_ESTUDIANTE);
+            $acudientes = $this->usuariosPorDocumento(array_column($filas, 'acudiente'), TipoPerfil::ACUDIENTE);
+            $estudiantes = $this->usuariosPorDocumento(array_column($filas, 'estudiante'), TipoPerfil::ESTUDIANTE);
 
             $existentes = EstudiantesPadre::whereIn('id_acudiente', $acudientes->flatten()->unique())
                 ->whereIn('id_estudiante', $estudiantes->flatten()->unique())
@@ -233,11 +233,11 @@ class VinculacionAcudienteService
     }
 
     /** documento normalizado => [id_user, ...] (más de uno = documento duplicado en BD). */
-    private function usuariosPorDocumento(array $documentos, int $perfil)
+    private function usuariosPorDocumento(array $documentos, TipoPerfil $tipo)
     {
         $documentos = array_values(array_unique(array_filter($documentos)));
 
-        return Usuario::where('perfil', $perfil)
+        return Usuario::whereIn('perfil', Perfil::idsDeTipo($tipo))
             ->whereIn(DB::raw("REGEXP_REPLACE(documento, '[^0-9A-Za-z]', '')"), $documentos)
             ->get(['id_user', 'documento'])
             ->groupBy(fn ($u) => $this->normalizarDocumento($u->documento))

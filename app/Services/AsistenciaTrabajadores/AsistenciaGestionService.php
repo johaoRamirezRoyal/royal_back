@@ -2,6 +2,9 @@
 
 namespace App\Services\AsistenciaTrabajadores;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Enums\Mails;
 use Carbon\Carbon;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
@@ -24,22 +27,18 @@ class AsistenciaGestionService extends Service
     ) {}
 
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
-    public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
+    public const TIPOS_EXCLUIDOS_ASISTENCIA = [TipoPerfil::ESTUDIANTE, TipoPerfil::PROVEEDOR, TipoPerfil::EGRESADO, TipoPerfil::ACUDIENTE];
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
 
     private const OBSERVACION_SALIDA_AUTOMATICA = 'Salida marcada automáticamente';
 
-    // Perfiles fijos del aviso de llegada tarde (ver notificarLlegadaTarde) — Recursos
-    // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
-    // Usuario::correosPorPerfilesYNivel).
-    private const PERFIL_RECURSOS_HUMANOS = 8;
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
+    // Aviso de llegada tarde (ver notificarLlegadaTarde): los perfiles con la opción 163
+    // (todo el colegio) y los de Coordinación de nivel (155, acotado al nivel del trabajador).
 
     // Director administrativo: ve la asistencia y recibe el aviso de llegada tarde de estos
     // niveles (fijo, no depende de su propio id_nivel).
-    public const PERFIL_DIRECTOR_ADMINISTRATIVO = 7;
     public const NIVELES_DIRECTOR_ADMINISTRATIVO = [1, 6];
 
     // Tope de destinatarios del aviso de llegada tarde: un solo correo a un grupo enorme
@@ -87,7 +86,7 @@ class AsistenciaGestionService extends Service
                 return ['error' => true, 'message' => 'El usuario no existe.', 'data' => null];
             }
 
-            if (in_array((int) $usuario->perfil, self::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+            if (in_array((int) $usuario->perfil, Perfil::idsDeTipo(...self::TIPOS_EXCLUIDOS_ASISTENCIA), true)) {
                 return ['error' => true, 'message' => 'Este perfil no registra asistencia.', 'data' => null];
             }
 
@@ -498,7 +497,7 @@ class AsistenciaGestionService extends Service
 
         if ($config->notificar_recursos_humanos) {
             $correosRH = Usuario::where('estado', 'activo')
-                ->where('perfil', self::PERFIL_RECURSOS_HUMANOS)
+                ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::AVISO_LLEGADAS_TARDE_TRABAJADORES))
                 ->where('id_user', '!=', $usuario->id_user)
                 ->whereNotNull('correo')
                 ->pluck('correo')
@@ -512,7 +511,7 @@ class AsistenciaGestionService extends Service
 
         if ($config->notificar_coordinador_nivel) {
             $correosCoordinador = array_diff(
-                Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $usuario->id_nivel, soloActivos: true),
+                Usuario::correosPorPerfilesYNivel(PermisosPerfil::perfilesCon(Permiso::COORDINACION_NIVEL), $usuario->id_nivel, soloActivos: true),
                 [$usuario->correo],
             );
 
@@ -525,7 +524,7 @@ class AsistenciaGestionService extends Service
         if ($config->notificar_coordinador_nivel && in_array((int) $usuario->id_nivel, self::NIVELES_DIRECTOR_ADMINISTRATIVO, true)) {
             $correosDirector = array_diff(
                 Usuario::where('estado', 'activo')
-                    ->where('perfil', self::PERFIL_DIRECTOR_ADMINISTRATIVO)
+                    ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::DIRECCION_ADMINISTRATIVA))
                     ->whereNotNull('correo')
                     ->pluck('correo')
                     ->all(),
@@ -591,7 +590,7 @@ class AsistenciaGestionService extends Service
         $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
 
         $usuariosFaltantes = Usuario::where('estado', 'activo')
-            ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
+            ->whereNotIn('perfil', Perfil::idsDeTipo(...self::TIPOS_EXCLUIDOS_ASISTENCIA))
             ->whereNotIn('id_user', $idsConAsistencia)
             ->when($idNivel, fn ($q) => $q->whereIn('id_nivel', (array) $idNivel))
             ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))

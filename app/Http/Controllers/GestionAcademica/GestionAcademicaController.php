@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\GestionAcademica;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GestionAcademica\AsignaturaRequest;
 use App\Http\Requests\GestionAcademica\AreaAcademicaRequest;
@@ -29,7 +30,7 @@ class GestionAcademicaController extends Controller implements HasMiddleware
     private const OPCION_GESTION_ACADEMICA = Permiso::GESTION_ACADEMICA;
 
     // "Docente" (3) y "Docente ICT" (14): mismo autoservicio.
-    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
+    private const TIPOS_DOCENTE = [TipoPerfil::DOCENTE];
 
     // Autoservicio del docente sin la 99: SUS clases, SU horario y métricas (restringidas a
     // sus cursos en AsistenciaEstudianteService::metricasPorCurso). No incluye Configuración
@@ -49,10 +50,10 @@ class GestionAcademicaController extends Controller implements HasMiddleware
 
         return [
             new Middleware(Permiso::ruta([self::OPCION_GESTION_ACADEMICA]), except: self::METODOS_DOCENTE),
-            new Middleware(Permiso::ruta([self::OPCION_GESTION_ACADEMICA], self::PERFILES_DOCENTE), only: $soloDocente),
+            new Middleware(Permiso::ruta([self::OPCION_GESTION_ACADEMICA], self::TIPOS_DOCENTE), only: $soloDocente),
             // Vicerrector/Directivo Docente: solo lectura del dashboard de métricas (102).
             new Middleware(
-                Permiso::ruta([self::OPCION_GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], self::PERFILES_DOCENTE),
+                Permiso::ruta([self::OPCION_GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], self::TIPOS_DOCENTE),
                 only: ['verMetricasAsistencia'],
             ),
         ];
@@ -486,7 +487,7 @@ class GestionAcademicaController extends Controller implements HasMiddleware
         // ocultar el selector de curso en el frontend, cualquiera podría pedir otro
         // id_curso directo contra la API.
         $tieneAccesoCompleto = PermisosPerfil::tiene($request, self::OPCION_GESTION_ACADEMICA);
-        $idDocenteScope = (!$tieneAccesoCompleto && in_array($request->user()->perfil, self::PERFILES_DOCENTE, true))
+        $idDocenteScope = (!$tieneAccesoCompleto && $request->user()->esTipo(TipoPerfil::DOCENTE))
             ? $request->user()->id_user
             : null;
 

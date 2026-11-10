@@ -65,4 +65,40 @@ final class PermisosPerfil
 
         return false;
     }
+
+    /**
+     * ¿Ese perfil tiene alguna de las opciones? Para un usuario que no es el de la petición
+     * (servicios, avisos). Misma regla que de(): Super Admin tiene todas menos las restrictivas.
+     */
+    public static function perfilTiene(int|string|null $perfil, int ...$opciones): bool
+    {
+        if ($perfil === null || $perfil === '') {
+            return false;
+        }
+        if ((int) $perfil === Permiso::PERFIL_SUPER_ADMIN) {
+            return (bool) array_diff($opciones, Permiso::OPCIONES_RESTRICTIVAS);
+        }
+
+        return in_array((int) $perfil, self::perfilesCon(...$opciones), true);
+    }
+
+    /**
+     * Perfiles con alguna de las opciones otorgada en cron_permisos (no incluye al Super Admin,
+     * que las tiene sin otorgar): whereIn('perfil', PermisosPerfil::perfilesCon(...)) para
+     * "a quién se le avisa" o "quién puede ser elegido para X".
+     *
+     * @return array<int>
+     */
+    public static function perfilesCon(int ...$opciones): array
+    {
+        return DB::table('cron_permisos as p')
+            ->join('cron_opciones as o', 'o.id', '=', 'p.id_opcion')
+            ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+            ->whereIn('p.id_opcion', $opciones)
+            ->where('p.activo', 1)
+            ->distinct()
+            ->pluck('p.id_perfil')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
 }

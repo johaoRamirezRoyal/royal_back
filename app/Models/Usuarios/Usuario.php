@@ -2,6 +2,7 @@
 
 namespace App\Models\Usuarios;
 
+use App\Enums\TipoPerfil;
 use App\Models\Areas\Cursos;
 use App\Models\Admisiones\Inscripcion;
 use App\Models\GestionAcademica\DocenteAsignatura;
@@ -61,6 +62,12 @@ class Usuario extends Authenticatable implements JWTSubject
 
     public function perfilRelacion(){
         return $this->belongsTo(Perfil::class, 'perfil', 'id_perfil');
+    }
+
+    /** ¿Su perfil es de alguno de esos tipos (perfiles.tipo)? Decide por esto, no por el número de perfil. */
+    public function esTipo(TipoPerfil ...$tipos): bool
+    {
+        return in_array($this->perfilRelacion?->tipo, array_map(fn (TipoPerfil $t) => $t->value, $tipos), true);
     }
 
     public function nivelRelacion(){

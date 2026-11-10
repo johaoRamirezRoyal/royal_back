@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Estudiantes;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Controller;
 use App\Models\Areas\Cursos;
 use App\Models\Usuarios\Usuario;
@@ -26,7 +28,6 @@ class VinculacionAcudienteController extends Controller
     // asumir el literal en otra BD, ver drift documentado en AGENTS.md).
     private const OPCION_VINCULACION = Permiso::VINCULACION_ACUDIENTES;
 
-    private const PERFIL_ESTUDIANTE = 16;
 
     public function __construct(
         private UsuariosServices $usuariosService,
@@ -64,7 +65,7 @@ class VinculacionAcudienteController extends Controller
 
         $response = $this->usuariosService->mostrarUsuariosPaginados(
             (int) $request->input('per-page', 10),
-            [self::PERFIL_ESTUDIANTE],
+            Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE),
             null,
             $request->input('s'),
             'activo',
@@ -106,7 +107,7 @@ class VinculacionAcudienteController extends Controller
         }
 
         $esSuDirector = Usuario::where('id_user', $idEstudiante)
-            ->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->whereIn('id_curso', Cursos::where('id_director', $request->user()->id_user)->where('activo', 1)->select('id'))
             ->exists();
 

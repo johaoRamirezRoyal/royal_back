@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
@@ -127,7 +129,7 @@ class AuthController extends Controller
                     'asignatura' => null,
                     'user' => $googleUser->getEmail(),
                     'pass' => uniqid(), // Usuario::setPassAttribute la hashea
-                    'perfil' => 10,
+                    'perfil' => Perfil::idParaCrear(TipoPerfil::OPERATIVO),
                     'id_nivel' => 1,
                     'fechareg' => now(),
                     'estado' => 'activo',

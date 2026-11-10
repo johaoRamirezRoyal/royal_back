@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AsistenciaGestion;
 
+use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AsistenciaGestion\FiltroAsistenciaGestionRequest;
 use App\Http\Requests\AsistenciaGestion\GraficaAsistenciaRequest;
@@ -24,9 +25,6 @@ class AsistenciaGestionController extends Controller
     // Super Admin y Recursos humanos — únicos perfiles autorizados a revocar una llegada
     // tarde (a diferencia de OPCION_VER_TODAS, no es configurable desde "/permisos": el
     // alcance lo pidió explícitamente así, sin incluir Administrador).
-    private const PERFILES_REVOCAR_LLEGADA_TARDE = [1, 8];
-
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     public function __construct(
         private AsistenciaGestionService $asistenciaService,
@@ -112,7 +110,7 @@ class AsistenciaGestionController extends Controller
         }
 
         $usuario = $request->user();
-        if (in_array((int) $usuario->perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+        if (in_array((int) $usuario->perfil, Perfil::idsDeTipo(...AsistenciaGestionService::TIPOS_EXCLUIDOS_ASISTENCIA), true)) {
             return $this->error('Tu perfil no registra asistencia de trabajadores.', 403);
         }
 
@@ -178,9 +176,9 @@ class AsistenciaGestionController extends Controller
 
         // Coordinador: ve a todos los usuarios de SU nivel (asistencias y faltantes), y solo
         // ese nivel — se pisa cualquier id_nivel del cliente, incluso si tuviera OPCION_VER_TODAS.
-        if ((int) $request->user()->perfil === self::PERFIL_COORDINADOR) {
+        if (PermisosPerfil::tiene($request, Permiso::COORDINACION_NIVEL)) {
             $filtros['id_nivel'] = $request->user()->id_nivel;
-        } elseif ((int) $request->user()->perfil === AsistenciaGestionService::PERFIL_DIRECTOR_ADMINISTRATIVO) {
+        } elseif (PermisosPerfil::tiene($request, Permiso::DIRECCION_ADMINISTRATIVA)) {
             // Director administrativo: solo los niveles que le corresponden; si el cliente
             // pide uno de ellos se respeta, cualquier otro se ignora.
             $niveles = AsistenciaGestionService::NIVELES_DIRECTOR_ADMINISTRATIVO;
@@ -258,7 +256,7 @@ class AsistenciaGestionController extends Controller
 
     public function revocarLlegadaTarde(Request $request, int $id): JsonResponse
     {
-        if (!in_array((int) $request->user()->perfil, self::PERFILES_REVOCAR_LLEGADA_TARDE, true)) {
+        if (! PermisosPerfil::tiene($request, Permiso::REVOCAR_LLEGADAS_TARDE_TRABAJADORES)) {
             return $this->error('No tienes permiso para revocar llegadas tarde', 403);
         }
 

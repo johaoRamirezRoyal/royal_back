@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\GestionAcademica;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -33,7 +35,7 @@ class AsistenciaClaseLoteRequest extends FormRequest
                 'integer',
                 Rule::exists('usuarios', 'id_user')
                     ->where('estado', 'activo')
-                    ->where('perfil', 16),
+                    ->where(fn ($q) => $q->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))),
             ],
             'estudiantes.*.estado' => [
                 'required_with:estudiantes',

@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Cursos;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Models\Areas\Cursos;
 use App\Models\Usuarios\Nivel;
@@ -20,7 +22,7 @@ class CrearEstudianteRequest extends RegistrarUsuarioRequest
         $curso = Cursos::find((int) $this->route('id'));
 
         $this->merge([
-            'perfil' => CursosServices::PERFIL_ESTUDIANTE,
+            'perfil' => Perfil::idParaCrear(TipoPerfil::ESTUDIANTE),
             'id_curso' => $curso?->id,
             'id_nivel' => $curso ? self::nivelDeUsuario($curso->id_nivel) : null,
             // Los estudiantes legacy entran con el documento como usuario.

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\ProcesoCompra;
 
+use App\Services\Usuarios\PermisosPerfil;
 use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProcesoCompra\AgregarInventarioSolicitudRequest;
@@ -46,14 +47,9 @@ class SolicitudesController extends Controller
     // (ver/cancelar las propias) NO usa esta opción, sigue sin gate.
     private const OPCION_GENERAR_SOLICITUDES = Permiso::COMPRAS_GENERAR_SOLICITUDES;
 
-    // Mismo perfil Coordinador (26) que EvaluacionesServices — aprueba/rechaza las
-    // solicitudes de usuarios de su propio id_nivel. Super Admin(1)/Administrador(2)
-    // también pueden ver y decidir la bandeja de aprobaciones, sin recorte de nivel.
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
-
-    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
-
-    private const PERFIL_ADMIN = Permiso::PERFIL_ADMINISTRADOR;
+    // Bandeja de aprobaciones: con la 155 (Coordinación de nivel) aprueba/rechaza las
+    // solicitudes de usuarios de su propio id_nivel; con la 157 (Super Admin la tiene),
+    // las de todos los niveles.
 
     public function __construct(
         private SolicitudesServices $solicitudesServices,
@@ -62,12 +58,12 @@ class SolicitudesController extends Controller
 
     private function esAdminGeneral(Request $request): bool
     {
-        return in_array((int) $request->user()->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true);
+        return PermisosPerfil::tiene($request, Permiso::COMPRAS_TODOS_LOS_NIVELES);
     }
 
     private function noPuedeGestionarAprobaciones(Request $request): ?JsonResponse
     {
-        if ((int) $request->user()->perfil === self::PERFIL_COORDINADOR || $this->esAdminGeneral($request)) {
+        if (PermisosPerfil::tiene($request, Permiso::COORDINACION_NIVEL) || $this->esAdminGeneral($request)) {
             return null;
         }
 
@@ -120,7 +116,8 @@ class SolicitudesController extends Controller
             return $rechazo;
         }
 
-        $esAdmin = in_array((int) $request->user()->perfil, [1, 2], true);
+        // Filtros por nivel/perfil: solo con la 157 (todos los niveles), como en la pantalla.
+        $esAdmin = $this->esAdminGeneral($request);
 
         $filtros = [
             'id_user' => $request->integer('id_user') ?: null,

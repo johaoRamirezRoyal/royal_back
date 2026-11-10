@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Cursos\CursosController;
 use App\Support\Permiso;
 use Illuminate\Support\Facades\Route;
@@ -11,7 +12,7 @@ Route::get('/all', [CursosController::class, 'findAll']);
 Route::get('/avisos-cierre', [CursosController::class, 'avisosCierreAnio'])->middleware(Permiso::ruta([Permiso::CURSOS, Permiso::GESTION_ACADEMICA]));
 
 // "Mi curso": autoservicio del director de grupo (perfil docente; su curso lo resuelve el backend).
-Route::middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE))->group(function () {
+Route::middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]))->group(function () {
     Route::get('/mi-curso', [CursosController::class, 'miCurso']);
     Route::put('/mi-curso/repiten', [CursosController::class, 'sugerirRepiten']);
 });

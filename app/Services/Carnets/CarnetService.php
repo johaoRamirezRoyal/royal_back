@@ -2,6 +2,8 @@
 
 namespace App\Services\Carnets;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Carnets\Carnet;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -19,10 +21,18 @@ use Illuminate\Support\Facades\DB;
  */
 class CarnetService extends Service
 {
-    public const PERFIL_ESTUDIANTE = 16;
 
     /** Acudiente, Proveedor y Egresado no llevan carnet; todo otro perfil es "trabajador". */
-    public const PERFILES_SIN_CARNET = [6, 17, 28];
+    public const TIPOS_SIN_CARNET = [TipoPerfil::ACUDIENTE, TipoPerfil::PROVEEDOR, TipoPerfil::EGRESADO];
+
+    /** @var array<int>|null ids de perfil de estudiante, una vez por servicio (datosCarnet va en un ciclo). */
+    private ?array $idsEstudiante = null;
+
+    /** @return array<int> */
+    private function idsEstudiante(): array
+    {
+        return $this->idsEstudiante ??= Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE);
+    }
 
     /** Carpeta de las fotos subidas desde este módulo: solo estas se borran al reemplazarlas. */
     private const CARPETA_FOTOS = 'carnets';
@@ -82,9 +92,9 @@ class CarnetService extends Service
     {
         return Usuario::query()
             ->where('usuarios.estado', 'activo')
-            ->whereNotIn('usuarios.perfil', self::PERFILES_SIN_CARNET)
-            ->when($tipo === 'estudiantes', fn ($q) => $q->where('usuarios.perfil', self::PERFIL_ESTUDIANTE))
-            ->when($tipo === 'trabajadores', fn ($q) => $q->where('usuarios.perfil', '!=', self::PERFIL_ESTUDIANTE));
+            ->whereNotIn('usuarios.perfil', Perfil::idsDeTipo(...self::TIPOS_SIN_CARNET))
+            ->when($tipo === 'estudiantes', fn ($q) => $q->whereIn('usuarios.perfil', $this->idsEstudiante()))
+            ->when($tipo === 'trabajadores', fn ($q) => $q->whereNotIn('usuarios.perfil', $this->idsEstudiante()));
     }
 
     public function listar(array $filtros): array
@@ -155,7 +165,7 @@ class CarnetService extends Service
      */
     private function datosCarnet(Usuario $u, ?Carnet $carnet, ?string $vigencia, array $plantillas): array
     {
-        $tipo = $u->perfil === self::PERFIL_ESTUDIANTE ? 'estudiante' : 'trabajador';
+        $tipo = in_array((int) $u->perfil, $this->idsEstudiante(), true) ? 'estudiante' : 'trabajador';
 
         return [
             'id_user' => $u->id_user,

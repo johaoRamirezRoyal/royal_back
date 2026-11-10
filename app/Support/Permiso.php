@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Enums\TipoPerfil;
+
 /**
  * Única fuente de los ids de permisos: opciones (`cron_opciones.id`) y perfiles (`id_perfil`).
  * La usan las rutas (middleware `permiso`, vía ruta()) y los controllers (sus constantes
@@ -85,34 +87,54 @@ final class Permiso
     public const CARNETS_SOLICITAR = 147;               // "Solicitar carnet" (el propio o, como director, de su curso)
     public const ASISTENCIA_PANTALLA_QR = 148;          // "Asistencia — Pantalla del código QR" (solo la pantalla de portería)
     public const MIS_AREAS_COMUNES_CON_AREAS = 149;     // "Mis áreas comunes — Ver áreas del bloque" (complemento de la 119)
+    // 150–154 libres en producción (reservados para renumerar la rama de notas).
+    // Fase 3: lo que antes decidía un número de perfil (2026_11_10_110000_seed_opciones_roles).
+    public const COORDINACION_NIVEL = 155;              // "Coordinación de nivel — Gestiona solo su nivel" (antes perfil 26; restrictiva)
+    public const DIRECCION_ADMINISTRATIVA = 156;        // "Dirección administrativa — Gestiona los niveles administrativos" (antes perfil 7; restrictiva)
+    public const COMPRAS_TODOS_LOS_NIVELES = 157;       // "Compras — Ver y aprobar solicitudes de todos los niveles" (antes perfiles 1 y 2)
+    public const REVOCAR_LLEGADAS_TARDE_TRABAJADORES = 158; // "Gestión Humana — Revocar llegadas tarde de trabajadores" (antes 1 y 8)
+    public const RESPONSABLE_BLOQUES = 159;             // "Áreas comunes — Puede ser responsable de un bloque"
+    public const TIENE_ASIGNATURAS = 160;               // "Gestión Académica — Puede tener asignaturas" (docentes y psicólogas)
+    // Fase 3, segunda tanda (2026_11_10_120000_seed_opciones_roles_avisos).
+    public const EVALUACIONES_ADMIN_TOTAL = 161;        // "Evaluaciones — Administración total" (antes 1, 2 y 8)
+    public const EVALUACIONES_REALIZAR_TODAS = 162;     // "Evaluaciones — Realizar cualquier evaluación activa" (antes 1 y 8)
+    public const AVISO_LLEGADAS_TARDE_TRABAJADORES = 163; // "Gestión Humana — Recibe avisos de llegadas tarde de trabajadores" (antes 8)
+    public const AVISO_LIMITE_LLEGADAS_TARDE = 164;     // "Llegadas tarde — Recibe avisos de estudiantes en el límite" (antes 20 y 11)
+    public const ASISTENCIA_NIVEL = 165;                // "Asistencia de nivel — Avisos y responsable sugerido de su nivel" (antes 11)
+    public const AVISA_DIRECCION_ADMINISTRATIVA = 166;  // "Permisos y Licencias — Sus solicitudes avisan a la dirección administrativa" (antes 10, 23, 32, 33 y 11)
+    public const ADMISIONES_PSICOLOGA_PREESCOLAR = 167; // "Admisiones — Psicóloga de preescolar" (antes 21)
+    public const ADMISIONES_PSICOLOGA_PRIMARIA = 168;   // "Admisiones — Psicóloga de primaria" (antes 24)
+    public const ADMISIONES_PSICOLOGA_BACHILLERATO = 169; // "Admisiones — Psicóloga de bachillerato" (antes 25)
+    public const ADMISIONES_GESTION_PERSONAL = 170;     // "Admisiones — Gestionar inscripciones como personal" (antes nombres "administrador"/"admisiones")
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás
-     * (PermisosPerfil) pero no estas: con la 135, Observaciones lo dejaría en solo lectura.
+     * (PermisosPerfil) pero no estas: con la 135, Observaciones lo dejaría en solo lectura;
+     * con la 155/156 quedaría encerrado en un nivel.
      */
-    public const OPCIONES_RESTRICTIVAS = [self::OBSERVACIONES_SOLO_CONSULTA];
+    public const OPCIONES_RESTRICTIVAS = [self::OBSERVACIONES_SOLO_CONSULTA, self::COORDINACION_NIVEL, self::DIRECCION_ADMINISTRATIVA];
 
     // ─── Perfiles ───────────────────────────────────────────────
+    // Los números de perfil cambian de un colegio a otro: para "es docente / estudiante /
+    // operativo" usa App\Enums\TipoPerfil (perfiles.tipo); para "puede hacer X", una opción.
+    // Super Admin es 1 en todos y es el único número de perfil que el código conoce.
     public const PERFIL_SUPER_ADMIN = 1;
-    public const PERFIL_ADMINISTRADOR = 2;
-    public const PERFIL_DOCENTE = 3;
-    public const PERFIL_DOCENTE_ICT = 14;
-    public const PERFIL_COORDINADOR = 26;
-
-    /** Docente y Docente ICT: mismo autoservicio. */
-    public const PERFILES_DOCENTE = [self::PERFIL_DOCENTE, self::PERFIL_DOCENTE_ICT];
 
     /**
-     * Middleware de ruta: entra quien tenga CUALQUIERA de las opciones o sea de uno de los
-     * perfiles (ver App\Http\Middleware\RequirePermiso).
+     * Middleware de ruta: entra quien tenga CUALQUIERA de las opciones, sea de uno de los
+     * perfiles (id) o su perfil sea de uno de los tipos (ver App\Http\Middleware\RequirePermiso).
      *
      *   ->middleware(Permiso::ruta([Permiso::INVENTARIO], [Permiso::PERFIL_SUPER_ADMIN]))
+     *   ->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]))
      *
      * @param  array<int>  $opciones
-     * @param  array<int>  $perfiles
+     * @param  array<int|TipoPerfil>  $perfiles
      */
     public static function ruta(array $opciones, array $perfiles = []): string
     {
-        return 'permiso:' . implode(',', [...$opciones, ...array_map(fn (int $p) => "perfil:{$p}", $perfiles)]);
+        return 'permiso:' . implode(',', [...$opciones, ...array_map(
+            fn (int|TipoPerfil $p) => $p instanceof TipoPerfil ? "tipo:{$p->value}" : "perfil:{$p}",
+            $perfiles,
+        )]);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Services\Areas;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use App\Models\Areas\Bloque;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +16,8 @@ class BloquesServices extends Service
      * administrativa (7), Asistente de nivel (11), Coordinador (26), Supervisor
      * Operativo (27).
      */
-    private const PERFILES_RESPONSABLES = [1, 2, 7, 11, 26, 27];
+    // Ahora: Super Admin + los perfiles con la opción 159 (la migración 2026_11_10_110000 se la
+    // otorgó a esos mismos perfiles, por nombre).
 
     public function crearBloque(array $datos)
     {
@@ -155,7 +158,7 @@ class BloquesServices extends Service
     {
         try {
             $usuarios = Usuario::where('estado', 'activo')
-                ->whereIn('perfil', self::PERFILES_RESPONSABLES)
+                ->whereIn('perfil', [Permiso::PERFIL_SUPER_ADMIN, ...PermisosPerfil::perfilesCon(Permiso::RESPONSABLE_BLOQUES)])
                 ->select('id_user', DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"), 'perfil', 'id_nivel')
                 ->orderBy('nombre')
                 ->get();

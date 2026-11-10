@@ -2,6 +2,8 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -19,9 +21,7 @@ use App\Support\Permiso;
  */
 class ConsultaAsistenciaClaseService
 {
-    private const PERFIL_ESTUDIANTE = 16;
 
-    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     // Columnas por las que la tabla del frontend puede ordenar (sort=<clave>).
     private const ORDENES = [
@@ -76,7 +76,7 @@ class ConsultaAsistenciaClaseService
             ->selectSub(fn ($q) => $q
                 ->from('usuarios')
                 ->whereColumn('id_curso', 'ca.id_curso')
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->where('estado', 'activo')
                 ->selectRaw('count(*)'), 'total_estudiantes');
     }
@@ -153,7 +153,7 @@ class ConsultaAsistenciaClaseService
             // Estudiantes activos del curso + cualquiera con excepción registrada que ya no
             // esté en el curso (para no perder el registro histórico de la sesión).
             $estudiantes = DB::table('usuarios')
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->where(fn ($q) => $q
                     ->where(fn ($w) => $w->where('id_curso', $sesion->id_curso)->where('estado', 'activo'))
                     ->orWhereIn('id_user', $excepciones->keys()))
@@ -195,7 +195,7 @@ class ConsultaAsistenciaClaseService
                     'cursos' => DB::table('curso')->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']),
                     'asignaturas' => DB::table('academico_asignatura')->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre']),
                     'docentes' => DB::table('usuarios')
-                        ->whereIn('perfil', self::PERFILES_DOCENTE)
+                        ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
                         ->where('estado', 'activo')
                         ->orderBy('apellido')
                         ->orderBy('nombre')

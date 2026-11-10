@@ -2,6 +2,10 @@
 
 namespace App\Services\Usuarios;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Mail\NuevoUsuarioMail;
 use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\PerfilUsuario\InfoAdicionalUsuario;
@@ -73,7 +77,7 @@ class UsuariosServices
                 )
                 ->where('estado', 'activo')
                 ->groupBy('nombre')
-                ->whereNotIn('perfil', [17, 16, 6])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ESTUDIANTE, TipoPerfil::ACUDIENTE))
                 ->paginate($perPage);
 
             return ['error' => false, 'message' => 'Datos obtenidos correctamente', 'data' => $data];
@@ -179,7 +183,7 @@ class UsuariosServices
                 ->when($datos['id_grupo'] ?? null, function ($query, $grupo) {
                     $query->where('id_grupo', $grupo);
                 })
-                ->whereNotIn('perfil', [17, 16, 6]);
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ESTUDIANTE, TipoPerfil::ACUDIENTE));
 
             if (! empty($sort)) {
                 $usuarios
@@ -219,7 +223,7 @@ class UsuariosServices
                 'estado',
             ])
                 ->with([
-                    'perfilRelacion:id_perfil,nombre',
+                    'perfilRelacion:id_perfil,nombre,tipo',
                     'nivelRelacion:id,nombre',
                     'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
@@ -228,7 +232,7 @@ class UsuariosServices
                 ->when($primeroId, fn ($q, $id) => $q->orderByRaw('id_user = ? DESC', [$id]))
                 ->orderBy('nombre')
                 ->orderBy('documento')
-                ->whereNotIn('perfil', [17, 6])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ACUDIENTE))
                 ->where('estado', 'activo')
                 ->paginate((int) $perPage);
 
@@ -269,7 +273,7 @@ class UsuariosServices
                 'foto_carnet',
             ])
                 ->with([
-                    'perfilRelacion:id_perfil,nombre',
+                    'perfilRelacion:id_perfil,nombre,tipo',
                     'nivelRelacion:id,nombre',
                     'nivel2Relacion:id,nombre',
                     'cursoRelacion:id,nombre',
@@ -302,7 +306,7 @@ class UsuariosServices
                 // El usuario autenticado va en la primera posición del listado de /users.
                 ->when($primeroId, fn ($q, $id) => $q->orderByRaw('id_user = ? DESC', [$id]))
                 ->orderBy($sort, $dir)
-                ->whereNotIn('perfil', [17, 6])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ACUDIENTE))
                 ->paginate((int) $perPage);
 
             $this->adjuntarFotoYAcudientes($usuarios->getCollection());
@@ -351,7 +355,7 @@ class UsuariosServices
                 'origen_registro',
             ])
                 ->withCount('inscripciones')
-                ->where('perfil', 6)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE))
                 // Marca explícita que AdmissionsController::familyRegister setea al crear
                 // la cuenta — reemplaza la heurística anterior basada en user_log (quién
                 // creó el registro), que no era confiable: hay usuarios sin el id del
@@ -398,7 +402,8 @@ class UsuariosServices
      */
     private function adjuntarFotoYAcudientes($usuarios): void
     {
-        $idsEstudiantes = $usuarios->where('perfil', 16)->pluck('id_user');
+        $perfilesEstudiante = Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE);
+        $idsEstudiantes = $usuarios->whereIn('perfil', $perfilesEstudiante)->pluck('id_user');
 
         $acudientesPorEstudiante = EstudiantesPadre::whereIn('id_estudiante', $idsEstudiantes)
             ->where('activo', 1)
@@ -410,7 +415,7 @@ class UsuariosServices
         foreach ($usuarios as $usuario) {
             $usuario->foto = $usuario->foto_carnet;
 
-            if ($usuario->perfil != 16) {
+            if (! in_array((int) $usuario->perfil, $perfilesEstudiante, true)) {
                 $usuario->acudientes = null;
                 continue;
             }
@@ -444,7 +449,7 @@ class UsuariosServices
                 'estado',
             ])
                 ->with(['perfilRelacion', 'nivelRelacion:id,nombre', 'nivel2Relacion:id,nombre'])
-                ->whereNotIn('perfil', [17, 16, 6])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ESTUDIANTE, TipoPerfil::ACUDIENTE))
                 ->get();
 
             return [
@@ -467,7 +472,7 @@ class UsuariosServices
     {
         try {
             $usuarios = Usuario::where('estado', 'activo')
-                ->whereNotIn('perfil', [17, 6])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR, TipoPerfil::ACUDIENTE))
                 ->select(
                     'id_user',
                     DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"),
@@ -476,11 +481,14 @@ class UsuariosServices
                     'documento',
                     'perfil',
                     // Áreas Comunes: para preseleccionar como responsable a la
-                    // asistente de nivel (perfil 11) del mismo nivel del bloque.
+                    // asistencia de nivel (opción 165) del mismo nivel del bloque.
                     'id_nivel'
                 )
                 ->orderBy('nombre')
                 ->get();
+
+            $asistentes = PermisosPerfil::perfilesCon(Permiso::ASISTENCIA_NIVEL);
+            $usuarios->each(fn ($u) => $u->asistente_nivel = in_array((int) $u->perfil, $asistentes, true));
 
             return [
                 'error' => false,
@@ -596,7 +604,7 @@ class UsuariosServices
     }
 
     /**
-     * Igual que actualizarEstadoUsuarios pero con el `where('perfil', 6)` agregado — así
+     * Igual que actualizarEstadoUsuarios pero acotado a perfiles de tipo Acudiente — así
      * este endpoint (pensado solo para el módulo de gestión de acudientes) no se puede
      * usar para tocar el estado de usuarios de otro perfil aunque lleguen IDs ajenos.
      */
@@ -604,7 +612,7 @@ class UsuariosServices
     {
         try {
             Usuario::whereIn('id_user', $id_usuarios)
-                ->where('perfil', 6)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE))
                 // fecha_editado no se escribía en ningún lado del código hasta ahora —
                 // acá queda como "última vez que un staff cambió algo de esta cuenta
                 // desde este panel" (hoy la única acción de edición que existe es esta).

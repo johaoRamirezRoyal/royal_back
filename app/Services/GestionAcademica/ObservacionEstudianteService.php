@@ -2,6 +2,8 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -33,10 +35,8 @@ class ObservacionEstudianteService
 {
     public const TIPOS = ['POSITIVA', 'NEGATIVA'];
 
-    private const PERFIL_ESTUDIANTE = 16;
 
     /** Docente y Docente ICT: los que se pueden elegir como docente de una observación. */
-    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
 
     private const ORDENES = [
         'fecha' => 'o.fecha',
@@ -64,7 +64,7 @@ class ObservacionEstudianteService
     {
         return DB::table('usuarios as u')
             ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
-            ->where('u.perfil', self::PERFIL_ESTUDIANTE)
+            ->whereIn('u.perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->where('u.estado', 'activo')
             ->when($idsCursos !== null, fn ($q) => $q->whereIn('u.id_curso', $idsCursos));
     }
@@ -202,7 +202,7 @@ class ObservacionEstudianteService
             ->groupBy('id_docente');
 
         return DB::table('usuarios as d')
-            ->whereIn('d.perfil', self::PERFILES_DOCENTE)
+            ->whereIn('d.perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
             ->where('d.estado', 'activo')
             ->orderBy('d.apellido')
             ->orderBy('d.nombre')
@@ -231,7 +231,7 @@ class ObservacionEstudianteService
         $idDocente = $datos['id_docente'] ?? null;
         $valido = $idDocente !== null && DB::table('usuarios')
             ->where('id_user', $idDocente)
-            ->whereIn('perfil', self::PERFILES_DOCENTE)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
             ->where('estado', 'activo')
             ->exists();
 
