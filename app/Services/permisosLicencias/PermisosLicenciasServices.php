@@ -12,6 +12,7 @@ use App\Models\PermisosLicencias\PermisoTipo;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Support\Permiso as Opcion;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -478,7 +479,7 @@ class PermisosLicenciasServices
             ...$this->lineasDetalle($permiso),
         ];
 
-        $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Solicitud de permiso/licencia', implode("\n", $lineas));
+        $this->enviarConBotonAprobadores($permiso, 'Solicitud de permiso/licencia', implode("\n", $lineas));
     }
 
     private function notificarCambioEstado(Permiso $permiso): void
@@ -537,7 +538,57 @@ class PermisosLicenciasServices
             'Fecha de actualización: '.($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
         ]);
 
-        $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Permiso/licencia - Editada', implode("\n", $lineas));
+        $this->enviarConBotonAprobadores($permiso, 'Permiso/licencia - Editada', implode("\n", $lineas));
+    }
+
+    /**
+     * Mismo correo para todos los destinatarios, pero solo quienes pueden aprobar/rechazar
+     * (opción 83) reciben el botón a la página de detalle en el frontend.
+     */
+    private function enviarConBotonAprobadores(Permiso $permiso, string $asunto, string $contenido): void
+    {
+        $destinatarios = $this->destinatariosNotificacion($permiso);
+        // En minúsculas: MySQL compara el correo sin distinguir mayúsculas.
+        $correosAprobadores = array_map('strtolower', $this->correosQueAprueban($destinatarios));
+        $esAprobador = fn (string $correo) => in_array(strtolower($correo), $correosAprobadores, true);
+        $aprobadores = array_values(array_filter($destinatarios, $esAprobador));
+        $resto = array_values(array_filter($destinatarios, fn ($correo) => ! $esAprobador($correo)));
+        $url = rtrim((string) config('app.frontend_url'), '/')."/permisos-licencias/solicitud/{$permiso->id}?origen=correo";
+
+        if ($aprobadores) {
+            $this->mailService->sendGeneric($aprobadores, $asunto, $contenido, $url, 'Ver solicitud en OMNIA');
+        }
+
+        if ($resto) {
+            $this->mailService->sendGeneric($resto, $asunto, $contenido);
+        }
+    }
+
+    /**
+     * De `$correos`, los de usuarios cuyo perfil tiene la opción 83 (mismo criterio que PermisosPerfil).
+     *
+     * @param  array<int, string>  $correos
+     * @return array<int, string>
+     */
+    private function correosQueAprueban(array $correos): array
+    {
+        if (! $correos) {
+            return [];
+        }
+
+        return Usuario::whereIn('correo', $correos)
+            ->where(fn ($q) => $q->where('perfil', Opcion::PERFIL_SUPER_ADMIN)
+                ->orWhereExists(fn ($e) => $e->selectRaw('1')
+                    ->from('cron_permisos as p')
+                    ->join('cron_opciones as o', 'o.id', '=', 'p.id_opcion')
+                    ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+                    ->whereColumn('p.id_perfil', 'usuarios.perfil')
+                    ->where('p.id_opcion', Opcion::PERMISOS_LICENCIAS_APROBAR)
+                    ->where('p.activo', 1)))
+            ->pluck('correo')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function valorCorreo(mixed $valor): string

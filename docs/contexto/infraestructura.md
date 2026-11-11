@@ -225,6 +225,13 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 - `MailService`: `sendView`, `sendGeneric` (con BCC a `COPIA_GESTOR`) y `send($to,
   Mailable, copiaGestor?)`. Filtra correos inválidos antes de enviar. Si detecta el límite
   por hora del hosting (`452` + "too many recipients"), lanza `MailRateLimitException`.
+  `sendGeneric`/`GenericMail` aceptan `$urlBoton` (y `$textoBoton`, por defecto "Ver en
+  OMNIA"), que agrega un botón con enlace al final del correo. Hoy lo usan los correos de
+  creación y edición de Permisos y Licencias
+  (`PermisosLicenciasServices::enviarConBotonAprobadores`): el mismo correo se manda dos
+  veces, con botón a `FRONTEND_URL/permisos-licencias/solicitud/{id}?origen=correo` para
+  los destinatarios cuyo perfil tiene la opción 83 (o Super Admin), y sin botón para el
+  resto. Test: `tests/Unit/PermisosLicencias/CorreosQueApruebanTest.php`.
 - **Correos de Admisiones** (acudientes): todos extienden
   `resources/views/emails/layouts/admisiones.blade.php` (encabezado, línea dorada, pie) y
   solo definen `title` y `content`. Hoy: `sendRequestEmail` (código de verificación) y
