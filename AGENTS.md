@@ -112,7 +112,7 @@ esta tabla.
 |---|---|
 | [`permisos.md`](docs/contexto/permisos.md) | `cron_opciones`/`cron_permisos`, middleware `permiso`, `Permiso`, `/permisos` |
 | [`autenticacion.md`](docs/contexto/autenticacion.md) | JWT, cookies, middlewares de sistema, OTP de dispositivo, llave maestra |
-| [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, correo, config, Boost |
+| [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, documentos pdfmake (`DocumentoPdfService`, requiere Node), correo, config, Boost |
 | [`convenciones.md`](docs/contexto/convenciones.md) | plantillas de código y cómo crear un módulo nuevo |
 | [`modulos/asistencia-hikvision.md`](docs/contexto/modulos/asistencia-hikvision.md) | terminales Hikvision, webhook de marcaciones, asistencia de trabajadores, QR de portería, escaneo de carnets |
 | [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |

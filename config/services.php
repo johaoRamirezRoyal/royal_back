@@ -82,6 +82,12 @@ return [
         'template_limite' => env('WHATSAPP_TEMPLATE_LIMITE', 'llegada_tarde_limite'),
     ],
 
+    'documentos' => [
+        // Node que ejecuta resources/documentos/render.cjs (DocumentoPdfService). Ruta absoluta
+        // si el usuario del servidor web no tiene node en el PATH.
+        'node' => env('NODE_BINARY', 'node'),
+    ],
+
     'sami' => [
         'base_url' => env('SAMI_BASE_URL', 'https://sami.royalschool.edu.co'),
         'login_path' => env('SAMI_LOGIN_PATH', '/login'),

@@ -201,6 +201,27 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 
 ## PDFs
 
+### Documentos de src/documentos (pdfmake)
+
+- Los documentos nuevos se definen en el frontend (`src/documentos/`, ver su
+  `docs/contexto/documentos.md`) y el servidor los genera con
+  `app(DocumentoPdfService::class)->generar('<id>', $datos, $correoUsuario)`, que devuelve el
+  PDF en binario y lanza `RuntimeException` si falla.
+- Ejecuta `node resources/documentos/render.cjs` (JSON por stdin, PDF por stdout). Ese archivo
+  **se compila en el frontend** con `pnpm build:documentos`; no se edita aquí. Si se cambia
+  un documento en el frontend y no se recompila, el servidor sigue generando la versión vieja.
+- **El servidor necesita Node** (>= 20). `NODE_BINARY` en `.env` si `node` no está en el PATH
+  del usuario del servidor web.
+- **Windows**: Node aborta al arrancar sin la variable `SystemRoot` (`Assertion failed:
+  ncrypto::CSPRNG`), y el servidor web (`php artisan serve`, Apache) puede lanzar procesos
+  con un entorno que no la trae. `DocumentoPdfService::entornoNode()` la pasa explícita; no
+  la quites.
+- La institución (marca y carpeta de documentos) sale del dominio del correo. El logo se manda
+  como data URL; si es webp se pasa a PNG con GD, porque pdfmake no embebe webp.
+- Ya migrado: carta de entrega (`InventarioServices::generarCartaEntregaPdf`).
+
+### TCPDF (documentos aún no migrados)
+
 - Todo PDF institucional nuevo usa este logo fijo, no el de la marca por dominio:
   `app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png')` (ejemplo:
   `HojaVidaPdfService`).

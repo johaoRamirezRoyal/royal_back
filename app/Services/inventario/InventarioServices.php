@@ -19,7 +19,6 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudProducto;
 use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\HistorialChecksPdfService;
-use App\Pdf\Inventario\CartaEntregaPdfService;
 use App\Pdf\Inventario\HojaVidaPdfService;
 use App\Pdf\Inventario\MantenimientoChecklistPdfService;
 use App\Pdf\Inventario\ReporteOperativoPdfService;
@@ -28,6 +27,7 @@ use App\Services\branding\MarcaDominioService;
 use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\CursosAltura\CursosAlturaServices;
+use App\Services\Documentos\DocumentoPdfService;
 use App\Services\MailService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -2923,15 +2923,11 @@ class InventarioServices
                 return ['error' => true, 'message' => 'No hay inventario con los filtros actuales.', 'data' => []];
             }
 
-            // Mismo criterio que el logo fijo de PDFs: la institución es Royal School salvo que
-            // el dominio del usuario tenga marca propia.
-            $institucion = app(MarcaDominioService::class)->resolverPorCorreo($correoUsuario)['nombre'] ?: 'Royal School';
-
             return [
                 'error' => false,
                 'message' => 'PDF generado correctamente',
                 'data' => [
-                    'contenido' => app(CartaEntregaPdfService::class)->generate(['institucion' => $institucion, 'filas' => $filas]),
+                    'contenido' => app(DocumentoPdfService::class)->generar('cartaEntrega', ['filas' => $filas], $correoUsuario),
                     'nombre_archivo' => 'carta_entrega_'.now()->format('Y-m-d-His').'.pdf',
                 ],
             ];
