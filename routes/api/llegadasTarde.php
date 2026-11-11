@@ -90,7 +90,7 @@ Route::put('/{id}/revocar', [LlegadasTardeController::class, 'revocarLlegadaTard
 
 /**
  * Configuración estándar (hora límite y cantidad límite de llegadas tarde).
- * PUT body opcional: { "hora_limite": "07:15", "cantidad_limite": 5, "whatsapp_destino": "3001234567"|null, "notificar_coordinador": true }
+ * PUT body opcional: { "hora_limite": "07:15", "cantidad_limite": 5, "notificar_coordinador": true }
  * notificar_coordinador (perfil 26) solo aplica si hora_limite cambió; es opt-in, no se envía por defecto.
  */
 Route::get('/configuracion', [LlegadasTardeConfigController::class, 'index']);

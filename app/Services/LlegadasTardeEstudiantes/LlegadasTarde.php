@@ -685,8 +685,9 @@ class LlegadasTarde extends Service
     /**
      * Notifica por correo y WhatsApp, con el mismo contenido (formato oficial firmado
      * por Vicerrectoría) dirigido a "padre de familia y estudiante", enviado tanto al
-     * correo del alumno y de los acudientes; el WhatsApp va solo al número fijo de
-     * `configuracion_llegadas_tarde.whatsapp_destino` (sin número, no se envía). El texto varía según
+     * correo/celular del alumno... el correo va también al alumno, el WhatsApp solo a
+     * los acudientes activos (`estudiantes_padres.celular`) — un menor normalmente no
+     * tiene número propio de WhatsApp registrado para esto. El texto varía según
      * `cartaLlegadaTarde()`. Se llama en cada llegada tarde que se registra, incluidas
      * las que ocurren después de superado el límite (esas repiten la notificación de
      * incumplimiento cada vez). Devuelve si el envío de correo tuvo éxito (lo que
@@ -720,8 +721,12 @@ class LlegadasTarde extends Service
 
         $correosAcudientes = $this->correosAcudientes($llegadaTarde->id_alumno);
 
-        // El WhatsApp va al número fijo de la configuración del módulo, no a los acudientes.
-        $whatsappDestino = ConfiguracionLlegadasTarde::find(1)?->whatsapp_destino;
+        $telefonosAcudientes = EstudiantesPadre::where('id_estudiante', $llegadaTarde->id_alumno)
+            ->where('activo', 1)
+            ->whereNotNull('celular')
+            ->pluck('celular')
+            ->filter()
+            ->all();
 
         $destinatarios = array_values(array_unique(array_merge($correoEstudiante, $correosAcudientes)));
 
@@ -733,9 +738,9 @@ class LlegadasTarde extends Service
             $enviado = $this->mailService->send($destinatarios, $carta, copiaGestor: true);
         }
 
-        if ($whatsappDestino) {
-            $this->whatsAppService->sendTemplate(
-                $whatsappDestino,
+        if (!empty($telefonosAcudientes)) {
+            $this->whatsAppService->sendTemplateToMany(
+                $telefonosAcudientes,
                 $this->plantillaWhatsApp($carta),
                 $this->parametrosWhatsApp($carta)
             );

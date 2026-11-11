@@ -35,16 +35,13 @@ class LlegadasTardeConfigController extends Controller
             'hora_limite' => 'sometimes|date_format:H:i',
             'cantidad_limite' => 'sometimes|integer|min:1',
             'notificar_coordinador' => 'sometimes|boolean',
-            // Solo dígitos, con + y separadores opcionales; null/vacío desactiva el WhatsApp.
-            'whatsapp_destino' => ['sometimes', 'nullable', 'string', 'regex:/^\+?[\d\s-]{10,20}$/'],
         ], [
             'hora_limite.date_format' => 'La hora límite debe tener el formato HH:MM.',
             'cantidad_limite.integer' => 'La cantidad límite debe ser numérica.',
             'cantidad_limite.min' => 'La cantidad límite debe ser al menos 1.',
-            'whatsapp_destino.regex' => 'El número de WhatsApp debe tener al menos 10 dígitos (con indicativo opcional).',
         ]);
 
-        $datos = $request->only(['hora_limite', 'cantidad_limite', 'whatsapp_destino']);
+        $datos = $request->only(['hora_limite', 'cantidad_limite']);
         $notificarCoordinador = $request->boolean('notificar_coordinador');
 
         $resultado = $this->configService->actualizarConfiguracion($datos, $notificarCoordinador);
