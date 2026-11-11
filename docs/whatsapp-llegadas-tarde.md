@@ -1,6 +1,8 @@
 # WhatsApp para llegadas tarde — checklist de configuración
 
-Notificación por WhatsApp a los acudientes cuando se registra una llegada tarde,
+Notificación por WhatsApp al número configurado en el módulo (Llegadas tarde →
+Configuración → "WhatsApp de notificación", columna
+`configuracion_llegadas_tarde.whatsapp_destino`) cuando se registra una llegada tarde,
 paralela a la carta que ya se envía por correo (`LlegadasTarde::enviarNotificacionLlegadaTarde()`
 en `app/Services/LlegadasTardeEstudiantes/LlegadasTarde.php`). El código ya está
 implementado (`app/Services/WhatsAppService.php`); lo que falta es la parte que solo
@@ -99,8 +101,7 @@ WHATSAPP_TEMPLATE_LIMITE=llegada_tarde_limite
 
 ## 5. Probar
 
-Registra una llegada tarde de prueba (para un estudiante con un acudiente que tenga
-`celular` cargado en `estudiantes_padres`) y revisa `storage/logs/laravel.log` —
+Carga el número en la configuración del módulo, registra una llegada tarde de prueba y revisa `storage/logs/laravel.log` —
 `WhatsAppService` deja constancia de cada intento, exitoso o no, con la respuesta
 completa de la API en caso de error (motivo típico de rechazo: nombre de plantilla no
 coincide, número de teléfono sin WhatsApp, o cantidad de variables distinta a la
@@ -111,10 +112,9 @@ aprobada).
 - El envío es **síncrono** (no usa colas), igual que el correo — un fallo de WhatsApp
   nunca bloquea el registro de la llegada tarde, `WhatsAppService` atrapa sus propios
   errores.
-- Solo se notifica a los **acudientes activos** (`estudiantes_padres.celular` con
-  `activo = 1`), no al estudiante — un menor normalmente no tiene número propio
-  registrado para esto. Si se necesita cambiar, es un ajuste en
-  `LlegadasTarde::enviarNotificacionLlegadaTarde()`.
+- El WhatsApp va **solo al número de la configuración del módulo**
+  (`whatsapp_destino`), no a los acudientes (ellos reciben el correo). Sin número
+  configurado no se envía WhatsApp. Ver `LlegadasTarde::enviarNotificacionLlegadaTarde()`.
 - Los números de 10 dígitos (celular colombiano local) se normalizan anteponiendo el
   indicativo `57`; un número que ya traiga indicativo se deja tal cual
   (`WhatsAppService::normalizarNumero()`).

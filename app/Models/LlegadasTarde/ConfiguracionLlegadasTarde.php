@@ -13,6 +13,7 @@ class ConfiguracionLlegadasTarde extends Model
     protected $fillable = [
         'hora_limite',
         'cantidad_limite',
+        'whatsapp_destino',
     ];
 
     protected $casts = [

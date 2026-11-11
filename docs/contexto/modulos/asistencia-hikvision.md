@@ -99,7 +99,7 @@ solo deja pasar las IPs de las terminales y cambia `database.default` al colegio
     defecto); a tiempo no se guarda nada.
   - Es idempotente por alumno y día. Se asume que el estudiante marca una sola vez.
   - Corre en `app()->terminating()`, después de responder a la terminal: el correo y el
-    WhatsApp al acudiente la hacían esperar, y la terminal reenviaba el evento.
+    WhatsApp del aviso la hacían esperar, y la terminal reenviaba el evento.
 - **Trabajadores** (perfiles fuera de `PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6]`,
   `AsistenciaGestionService::registrarMarcacion`), con un debounce de 15 s por usuario
   medido con la hora del evento (ventanas fijas), para el doble reconocimiento:
