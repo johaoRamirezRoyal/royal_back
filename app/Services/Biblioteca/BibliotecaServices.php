@@ -13,10 +13,10 @@ use App\Models\Biblioteca\Subcategoria;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Mail\RecordatorioPrestamosEmail;
-use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\CloudinaryService;
 use App\Services\FileStorageService;
 use App\Services\MailService;
-use App\Pdf\Biblioteca\PazYSalvoPdfService;
+use App\Services\Documentos\DocumentoPdfService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Arr;
@@ -1613,16 +1613,17 @@ class BibliotecaServices extends Service
             }
             unset($fila);
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'paz_y_salvo',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $documentos = app(DocumentoPdfService::class);
+            $sinPendientes = $prestamosLibros->isEmpty() && $prestamosPaquetes->isEmpty();
+            $contenido = $documentos->generar('pazYSalvo', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'prestamos' => $filas,
-                'sin_pendientes' => $prestamosLibros->isEmpty() && $prestamosPaquetes->isEmpty(),
-            ]);
+                // El sello certifica que no debe nada: solo va sin préstamos pendientes.
+                'sello' => $sinPendientes
+                    ? $documentos->imagenComoDataUrl(app(CloudinaryService::class)->rutaLocalRoyalSchool('paz-salvo/sello.webp'))
+                    : null,
+            ], $usuario->correo);
 
             return [
                 'error' => false,
@@ -1671,15 +1672,11 @@ class BibliotecaServices extends Service
                 ->orderBy('fecha_prestamo', 'desc')
                 ->get();
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'listado',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $contenido = app(DocumentoPdfService::class)->generar('listadoPrestamos', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'prestamos' => $this->construirFilasPrestamosPdf($prestamos),
-            ]);
+            ], $usuario->correo);
 
             return [
                 'error' => false,
@@ -1700,7 +1697,7 @@ class BibliotecaServices extends Service
     }
 
     /**
-     * Estado de un préstamo (libro o paquete) para las tablas de PazYSalvoPdfService:
+     * Estado de un préstamo (libro o paquete) para las tablas de los PDF de préstamos:
      * ya devuelto -> a tiempo/antes/tarde comparando fecha_devuelto vs fecha_devolucion;
      * no devuelto -> vencido/por vencer comparando fecha_devolucion vs hoy.
      */
@@ -1724,7 +1721,8 @@ class BibliotecaServices extends Service
     }
 
     /**
-     * Mapea préstamos de ejemplar al formato de fila que espera PazYSalvoPdfService.
+     * Mapea préstamos de ejemplar al formato de fila de los PDF de préstamos (FilaPrestamoLibro en
+     * src/documentos/instituciones/comun/prestamosBiblioteca.ts del frontend).
      * @param \Illuminate\Support\Collection<int, PrestamosEjemplar> $prestamos
      */
     private function construirFilasPrestamosPdf($prestamos): array
@@ -1773,8 +1771,7 @@ class BibliotecaServices extends Service
     /**
      * Genera el PDF "Listado de Prestamos (Paquetes)" con todos los préstamos de
      * paquetes (devueltos o no) que ha realizado el usuario. Mismo estilo que
-     * generarListadoPrestamosPdf (libros), vía PazYSalvoPdfService::generate con
-     * tipo 'listado_paquetes'.
+     * generarListadoPrestamosPdf (libros), vía DocumentoPdfService ('listadoPrestamosPaquetes').
      * @param int $id_usuario
      * @return array{data: array, error: bool, message: string}
      */
@@ -1798,16 +1795,12 @@ class BibliotecaServices extends Service
                 ->orderBy('fecha_prestamo', 'desc')
                 ->get();
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'listado_paquetes',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $contenido = app(DocumentoPdfService::class)->generar('listadoPrestamosPaquetes', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'curso' => $usuario->cursoRelacion->nombre ?? '',
                 'prestamos' => $this->construirFilasPrestamosPaquetesPdf($prestamos),
-            ]);
+            ], $usuario->correo);
 
             return [
                 'error' => false,
@@ -1828,8 +1821,8 @@ class BibliotecaServices extends Service
     }
 
     /**
-     * Mapea préstamos de paquete al formato de fila que espera PazYSalvoPdfService
-     * (tipo 'listado_paquetes').
+     * Mapea préstamos de paquete al formato de fila de 'listadoPrestamosPaquetes'
+     * (FilaPrestamoPaquete en el frontend).
      * @param \Illuminate\Support\Collection<int, PaquetePrestamos> $prestamos
      */
     private function construirFilasPrestamosPaquetesPdf($prestamos): array

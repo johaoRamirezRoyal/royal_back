@@ -235,7 +235,7 @@ class MarcaDominioService extends Service
 
     /**
      * Descarga a un archivo temporal local el logo resuelto para este correo — is_file()
-     * (PazYSalvoPdfService::resolveImage, HorarioExcelService::agregarHoja) no verifica
+     * (DocumentoPdfService, HorarioExcelService::agregarHoja) no verifica
      * rutas http(s) de forma confiable, así que los consumidores que arman documentos
      * necesitan un path real en disco, no la URL de Cloudinary. Null si no hay marca
      * configurada para el dominio o si la descarga falla (el caller cae a su logo por

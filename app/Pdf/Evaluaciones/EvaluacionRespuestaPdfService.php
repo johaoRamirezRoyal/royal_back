@@ -15,8 +15,7 @@ use TCPDF;
  * desempeño (mismos umbrales/colores que `Ver.tsx` en el frontend, para consistencia
  * visual), y las respuestas de texto libre/observaciones como tarjetas aparte. Basado
  * en HTML (writeHTML), igual que `MantenimientoChecklistPdfService` — no hay un diseño
- * pixel-perfect que replicar acá, así que no vale la pena el posicionamiento absoluto
- * que sí usa `PazYSalvoPdfService`.
+ * pixel-perfect que replicar acá, así que no vale la pena el posicionamiento absoluto.
  */
 class EvaluacionRespuestaPdfService
 {

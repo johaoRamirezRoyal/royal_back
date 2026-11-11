@@ -218,7 +218,12 @@ Firmas en Cloudinary (todas privadas, ver arriba):
   la quites.
 - La institución (marca y carpeta de documentos) sale del dominio del correo. El logo se manda
   como data URL; si es webp se pasa a PNG con GD, porque pdfmake no embebe webp.
-- Ya migrado: carta de entrega (`InventarioServices::generarCartaEntregaPdf`).
+- Ya migrados: carta de entrega (`InventarioServices::generarCartaEntregaPdf`), paz y salvo y
+  listados de préstamos de Biblioteca (`BibliotecaServices`).
+- Imágenes extra (sello, firma) van dentro de `$datos` con
+  `DocumentoPdfService::imagenComoDataUrl($rutaLocal)`; el documento no puede descargarlas.
+- Cada documento lanza un proceso de Node (~0,3 s). En los envíos masivos (recordatorio de
+  préstamos) eso se suma por usuario; si llega a pesar, generar varios en un solo proceso.
 
 ### TCPDF (documentos aún no migrados)
 

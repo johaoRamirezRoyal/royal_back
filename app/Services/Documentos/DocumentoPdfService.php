@@ -69,25 +69,33 @@ class DocumentoPdfService
         return ['SystemRoot' => getenv('SystemRoot') ?: ($_SERVER['SystemRoot'] ?? 'C:\\Windows')];
     }
 
-    /**
-     * Logo de la marca del dominio (o el de Royal School si no tiene) como data URL PNG/JPEG:
-     * pdfmake no embebe webp, y el renderizador no descarga nada por su cuenta.
-     */
+    /** Logo de la marca del dominio (o el de Royal School si no tiene). */
     private function logoComoDataUrl(?string $correo): string
     {
         $ruta = $this->marcas->resolverRutaLocalPorCorreo($correo)
             ?? $this->cloudinary->rutaLocalRoyalSchool('logotipoBackground.png');
-        $contenido = $ruta && is_file($ruta) ? file_get_contents($ruta) : false;
 
+        return $this->imagenComoDataUrl($ruta)
+            ?? throw new RuntimeException('No se pudo cargar el logo de la institución.');
+    }
+
+    /**
+     * Imagen local (logo, sello, firma) como data URL PNG/JPEG, para pasarla dentro de los
+     * datos de un documento: pdfmake no embebe webp y el renderizador no lee archivos ni
+     * descarga nada. Null si no hay archivo o no es una imagen que GD pueda leer.
+     */
+    public function imagenComoDataUrl(?string $ruta): ?string
+    {
+        $contenido = $ruta && is_file($ruta) ? file_get_contents($ruta) : false;
         if ($contenido === false) {
-            throw new RuntimeException('No se pudo cargar el logo de la institución.');
+            return null;
         }
 
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($contenido);
         if (! in_array($mime, ['image/png', 'image/jpeg'], true)) {
             $imagen = @imagecreatefromstring($contenido);
             if ($imagen === false) {
-                throw new RuntimeException("El logo de la institución tiene un formato no soportado ({$mime}).");
+                return null;
             }
             imagesavealpha($imagen, true);
             ob_start();
