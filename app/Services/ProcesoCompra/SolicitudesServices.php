@@ -14,6 +14,7 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacionInicial;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Support\HtmlCorreoSanitizer;
 use App\Support\Permiso;
 use Exception;
 use Illuminate\Http\UploadedFile;
@@ -43,6 +44,9 @@ class SolicitudesServices
     public const ESTADO_DEVOLUCION = 3;
 
     public const ESTADO_DISPONIBLE_STOCK = 4;
+
+    /** Bloques de datos que se pueden incluir en el correo de la orden de compra. */
+    public const BLOQUES_ORDEN = ['productos', 'justificacion', 'datos_generales'];
 
     private const DECISIONES = [
         'aprobar' => self::ESTADO_APROBADA,
@@ -400,60 +404,24 @@ class SolicitudesServices
     }
 
     /**
-     * Envía la orden de compra (PDF generado por el frontend) al proveedor asignado.
-     * Los destinatarios salen del proveedor en BD (`correo` y `correo_comercial`), nunca
-     * del body. Solo formalizada o en devolución (reenvío), con todos los productos con
-     * cantidad y precio > 0. El correo lleva como contacto (y responder-a) el grupo
-     * COMPRAS_VENTAS. No guarda nada: el envío no deja registro en la solicitud.
+     * Envía al proveedor el correo redactado en el frontend (asunto, mensaje HTML, bloques
+     * de datos y PDF opcional de la orden). Ver armarOrdenCompraMail(). No guarda nada: el
+     * envío no deja registro en la solicitud.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
      */
-    public function enviarOrdenCompra(int $id, UploadedFile $pdf): array
+    public function enviarOrdenCompra(int $id, array $datos, ?UploadedFile $pdf): array
     {
         try {
-            $solicitud = Solicitud::with([
-                'proveedor:id_proveedor,nombre,correo,correo_comercial',
-                'productos:id,id_solicitud,cantidad,precio',
-            ])->find($id);
+            $armado = $this->armarOrdenCompraMail($id, $datos, $pdf?->get());
 
-            if (! $solicitud || $solicitud->anulada) {
-                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+            if ($armado['error']) {
+                return $armado;
             }
 
-            if (! in_array((int) $solicitud->estado, [self::ESTADO_FORMALIZADA, self::ESTADO_DEVOLUCION], true)) {
-                return ['error' => true, 'message' => 'Solo se puede enviar la orden de una solicitud formalizada o en devolución', 'status' => 422];
-            }
+            ['mail' => $mail, 'correos' => $correos] = $armado['data'];
 
-            if (! $solicitud->proveedor) {
-                return ['error' => true, 'message' => 'La solicitud no tiene proveedor asignado', 'status' => 422];
-            }
-
-            // En BD cantidad y precio son strings y el precio puede ser null.
-            $positivo = fn ($valor): bool => is_numeric($valor) && (float) $valor > 0;
-            $productosInvalidos = $solicitud->productos->contains(
-                fn (SolicitudProducto $p) => ! $positivo($p->cantidad) || ! $positivo($p->precio)
-            );
-
-            if ($solicitud->productos->isEmpty() || $productosInvalidos) {
-                return ['error' => true, 'message' => 'Todos los productos deben tener cantidad y precio mayores a 0 (revise el estudio)', 'status' => 422];
-            }
-
-            $correos = array_values(array_unique(array_filter(
-                [trim((string) $solicitud->proveedor->correo), trim((string) $solicitud->proveedor->correo_comercial)],
-                fn (string $correo) => filter_var($correo, FILTER_VALIDATE_EMAIL) !== false,
-            )));
-
-            if (empty($correos)) {
-                return ['error' => true, 'message' => 'El proveedor no tiene un correo válido registrado', 'status' => 422];
-            }
-
-            $numero = str_pad((string) $solicitud->id, 3, '0', STR_PAD_LEFT);
-            $enviado = $this->mailService->send($correos, new OrdenCompraMail(
-                $numero,
-                (string) $solicitud->proveedor->nombre,
-                $pdf->get(),
-                Mails::COMPRAS_VENTAS->recipients(),
-            ));
-
-            if (! $enviado) {
+            if (! $this->mailService->send($correos, $mail)) {
                 return ['error' => true, 'message' => 'No se pudo enviar el correo al proveedor', 'status' => 502];
             }
 
@@ -461,6 +429,155 @@ class SolicitudesServices
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * HTML del mismo correo que enviaría enviarOrdenCompra(), para la vista previa.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
+     */
+    public function vistaPreviaOrdenCompra(int $id, array $datos): array
+    {
+        try {
+            $armado = $this->armarOrdenCompraMail($id, $datos, null);
+
+            if ($armado['error']) {
+                return $armado;
+            }
+
+            return ['error' => false, 'message' => 'Vista previa generada', 'data' => ['html' => $armado['data']['mail']->render()]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Valida la solicitud y arma el OrdenCompraMail. Solo formalizada o en devolución
+     * (reenvío), con todos los productos con cantidad y precio > 0. Los destinatarios
+     * deben ser `correo`/`correo_comercial` del proveedor en BD (el body solo elige entre
+     * ellos); los CC son libres (máx. 5, ver request). Los bloques de datos se arman aquí
+     * desde la BD: el frontend solo dice cuáles incluir. Contacto y responder-a: el grupo
+     * COMPRAS_VENTAS.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
+     * @return array{error: bool, message?: string, status?: int, data?: array{mail: OrdenCompraMail, correos: array<int, string>}}
+     */
+    private function armarOrdenCompraMail(int $id, array $datos, ?string $pdfContenido): array
+    {
+        $solicitud = Solicitud::with([
+            'proveedor:id_proveedor,nombre,correo,correo_comercial',
+            'productos:id,id_solicitud,producto,cantidad,precio,iva',
+            'area:id,nombre',
+            'usuario:id_user,nombre,apellido',
+            'aprobador:id_user,nombre,apellido',
+        ])->find($id);
+
+        if (! $solicitud || $solicitud->anulada) {
+            return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+        }
+
+        if (! in_array((int) $solicitud->estado, [self::ESTADO_FORMALIZADA, self::ESTADO_DEVOLUCION], true)) {
+            return ['error' => true, 'message' => 'Solo se puede enviar la orden de una solicitud formalizada o en devolución', 'status' => 422];
+        }
+
+        if (! $solicitud->proveedor) {
+            return ['error' => true, 'message' => 'La solicitud no tiene proveedor asignado', 'status' => 422];
+        }
+
+        // En BD cantidad y precio son strings y el precio puede ser null.
+        $positivo = fn ($valor): bool => is_numeric($valor) && (float) $valor > 0;
+        $productosInvalidos = $solicitud->productos->contains(
+            fn (SolicitudProducto $p) => ! $positivo($p->cantidad) || ! $positivo($p->precio)
+        );
+
+        if ($solicitud->productos->isEmpty() || $productosInvalidos) {
+            return ['error' => true, 'message' => 'Todos los productos deben tener cantidad y precio mayores a 0 (revise el estudio)', 'status' => 422];
+        }
+
+        $normalizar = fn (array $correos): array => array_values(array_unique(array_filter(
+            array_map(fn ($correo) => mb_strtolower(trim((string) $correo)), $correos),
+            fn (string $correo) => filter_var($correo, FILTER_VALIDATE_EMAIL) !== false,
+        )));
+
+        $correosProveedor = $normalizar([$solicitud->proveedor->correo, $solicitud->proveedor->correo_comercial]);
+
+        if (empty($correosProveedor)) {
+            return ['error' => true, 'message' => 'El proveedor no tiene un correo válido registrado', 'status' => 422];
+        }
+
+        $correos = $normalizar($datos['destinatarios']);
+
+        if (empty($correos) || array_diff($correos, $correosProveedor)) {
+            return ['error' => true, 'message' => 'Los destinatarios deben ser correos registrados del proveedor', 'status' => 422];
+        }
+
+        $cc = array_values(array_diff($normalizar($datos['cc'] ?? []), $correos));
+        $incluir = $datos['incluir'] ?? [];
+        $numero = str_pad((string) $solicitud->id, 3, '0', STR_PAD_LEFT);
+
+        $mail = new OrdenCompraMail(
+            numeroOrden: $numero,
+            asunto: $datos['asunto'],
+            mensajeHtml: HtmlCorreoSanitizer::limpiar($datos['mensaje']),
+            bloques: $this->bloquesOrdenCompra($solicitud, $numero, $incluir),
+            correosContacto: Mails::COMPRAS_VENTAS->recipients(),
+            correosCc: $cc,
+            pdfContenido: $pdfContenido,
+        );
+
+        return ['error' => false, 'data' => ['mail' => $mail, 'correos' => $correos]];
+    }
+
+    /**
+     * Bloques de datos del correo, desde la BD. El cálculo de productos replica el PDF de
+     * la orden (frontend OrdenCompraPDF.ts): con IVA "incluido" el total se divide entre
+     * 1.19 y el IVA es el 19% de eso; si no, el IVA es el porcentaje guardado.
+     *
+     * @param  array<int, string>  $incluir
+     * @return array{productos?: array{filas: array<int, array{cantidad: string, producto: string, precio: float, total: float}>, subtotal: float, iva: float, total: float}, justificacion?: string, datos_generales?: array<string, string>}
+     */
+    private function bloquesOrdenCompra(Solicitud $solicitud, string $numero, array $incluir): array
+    {
+        $bloques = [];
+
+        if (in_array('datos_generales', $incluir, true)) {
+            $nombre = fn ($u) => $u ? trim("{$u->nombre} {$u->apellido}") : '—';
+            $bloques['datos_generales'] = [
+                'No. de orden' => $numero,
+                'Fecha de solicitud' => $solicitud->fecha_solicitud?->format('d/m/Y') ?? '—',
+                'Área' => $solicitud->area->nombre ?? '—',
+                'Solicitante' => $nombre($solicitud->usuario),
+                'Aprobado por' => $nombre($solicitud->aprobador),
+            ];
+        }
+
+        if (in_array('justificacion', $incluir, true) && trim((string) $solicitud->justificacion) !== '') {
+            $bloques['justificacion'] = trim((string) $solicitud->justificacion);
+        }
+
+        if (in_array('productos', $incluir, true)) {
+            $subtotal = 0.0;
+            $iva = 0.0;
+            $filas = $solicitud->productos->map(function (SolicitudProducto $p) use (&$subtotal, &$iva) {
+                $precio = (float) $p->precio;
+                $total = $precio * (float) $p->cantidad;
+
+                if ($p->iva === 'incluido') {
+                    $total /= 1.19;
+                    $iva += $total * 0.19;
+                } else {
+                    $iva += $total * ((float) $p->iva) / 100;
+                }
+
+                $subtotal += $total;
+
+                return ['cantidad' => (string) $p->cantidad, 'producto' => (string) $p->producto, 'precio' => $precio, 'total' => $total];
+            })->all();
+
+            $bloques['productos'] = ['filas' => $filas, 'subtotal' => $subtotal, 'iva' => $iva, 'total' => $subtotal + $iva];
+        }
+
+        return $bloques;
     }
 
     // El coordinador aprueba una solicitud de su nivel: recién acá se materializa la fila

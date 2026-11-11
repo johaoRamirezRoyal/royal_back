@@ -11,9 +11,10 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Orden de compra para el proveedor. El PDF lo arma el frontend (OrdenCompraPDF.ts) y llega
- * subido; aquí solo se adjunta. `$correosContacto` (grupo COMPRAS_VENTAS) se muestra en el
- * cuerpo y va como responder-a, para que la respuesta del proveedor llegue a Ventas.
+ * Orden de compra para el proveedor, redactada en el frontend. `$mensajeHtml` llega ya
+ * saneado (HtmlCorreoSanitizer); `$bloques` los arma SolicitudesServices desde la BD. El
+ * PDF lo arma el frontend (OrdenCompraPDF.ts) y es opcional. `$correosContacto` (grupo
+ * COMPRAS_VENTAS) se muestra en el cuerpo y va como responder-a.
  */
 class OrdenCompraMail extends Mailable
 {
@@ -21,16 +22,22 @@ class OrdenCompraMail extends Mailable
 
     public function __construct(
         public readonly string $numeroOrden,
-        public readonly string $nombreProveedor,
-        public readonly string $pdfContenido,
+        public readonly string $asunto,
+        public readonly string $mensajeHtml,
+        /** @var array<string, mixed> */
+        public readonly array $bloques = [],
         /** @var array<int, string> */
         public readonly array $correosContacto = [],
+        /** @var array<int, string> */
+        public readonly array $correosCc = [],
+        public readonly ?string $pdfContenido = null,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: "Orden de compra No. {$this->numeroOrden} — ".config('app.name'),
+            subject: $this->asunto,
+            cc: array_map(fn (string $correo) => new Address($correo), $this->correosCc),
             replyTo: array_map(fn (string $correo) => new Address($correo), $this->correosContacto),
         );
     }
@@ -41,7 +48,8 @@ class OrdenCompraMail extends Mailable
             view: 'emails.ordenCompra',
             with: [
                 'numeroOrden' => $this->numeroOrden,
-                'nombreProveedor' => $this->nombreProveedor,
+                'mensajeHtml' => $this->mensajeHtml,
+                'bloques' => $this->bloques,
                 'correosContacto' => $this->correosContacto,
             ],
         );
@@ -49,6 +57,10 @@ class OrdenCompraMail extends Mailable
 
     public function attachments(): array
     {
+        if ($this->pdfContenido === null) {
+            return [];
+        }
+
         return [
             Attachment::fromData(fn () => $this->pdfContenido, "Orden_compra_{$this->numeroOrden}.pdf")
                 ->withMime('application/pdf'),
