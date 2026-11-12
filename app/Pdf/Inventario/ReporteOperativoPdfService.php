@@ -6,6 +6,7 @@
 
 namespace App\Pdf\Inventario;
 
+use App\Services\branding\MarcaDominioService;
 use App\Services\Cloudinary\CloudinaryService;
 use TCPDF;
 
@@ -43,8 +44,7 @@ class ReporteOperativoPdfService
 
         $cloudinary = app(CloudinaryService::class);
 
-        // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
-        $logoPath = $cloudinary->rutaLocalRoyalSchool('logotipoBackground.png');
+        $logoPath = app(MarcaDominioService::class)->rutaLocalLogo();
         $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="120">' : '';
 
         // V°B°: firma fija de la directora administrativa, como en el legacy (img/firma_administrativa.jpg).

@@ -3,7 +3,6 @@
 namespace App\Services\Documentos;
 
 use App\Services\branding\MarcaDominioService;
-use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -17,7 +16,6 @@ class DocumentoPdfService
 {
     public function __construct(
         private MarcaDominioService $marcas,
-        private CloudinaryService $cloudinary,
     ) {}
 
     /**
@@ -90,13 +88,10 @@ class DocumentoPdfService
         return ['SystemRoot' => getenv('SystemRoot') ?: ($_SERVER['SystemRoot'] ?? 'C:\\Windows')];
     }
 
-    /** Logo de la marca del dominio (o el de Royal School si no tiene). */
+    /** Logo de la marca del dominio (o el de Royal School si no tiene), con `rutaLocalLogo`. */
     private function logoComoDataUrl(?string $correo): string
     {
-        $ruta = $this->marcas->resolverRutaLocalPorCorreo($correo)
-            ?? $this->cloudinary->rutaLocalRoyalSchool('logotipoBackground.png');
-
-        return $this->imagenComoDataUrl($ruta)
+        return $this->imagenComoDataUrl($this->marcas->rutaLocalLogo($correo))
             ?? throw new RuntimeException('No se pudo cargar el logo de la institución.');
     }
 

@@ -610,3 +610,35 @@ alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operati
 alter table `trabajos_altura_operativos` add constraint `trabajos_altura_operativos_id_operativo_foreign` foreign key (`id_operativo`) references `usuarios` (`id_user`);
 INSERT INTO trabajos_altura (id_reporte, fecha_trabajo) SELECT id, DATE(CASE WHEN tipo_reporte = 2 THEN COALESCE(fecha_respuesta, fechareg) ELSE fechareg END) FROM reportes WHERE id_operativo IS NOT NULL AND id_reporte IS NULL;
 INSERT INTO trabajos_altura_operativos (id_trabajo, id_operativo) SELECT ta.id, rp.id_operativo FROM trabajos_altura ta JOIN reportes rp ON rp.id = ta.id_reporte;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_11_100000_create_seguridad_social_tables.php
+-- Seguridad social (EPS/AFP/ARL) de trabajadores con curso de altura: catálogo único de
+-- entidades (columna tipo) y una fila por trabajador con entidad + documento opcional por tipo.
+-- ---------------------------------------------------------------------------
+create table `entidades_seguridad_social` (`id` int not null auto_increment, `tipo` enum('EPS', 'AFP', 'ARL') not null, `nombre` varchar(150) not null, `activo` tinyint not null default '1', `user_log` int null, `fechareg` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `entidades_seguridad_social` add unique `entidades_seguridad_social_tipo_nombre_unique`(`tipo`, `nombre`);
+create table `seguridad_social_trabajador` (`id` int not null auto_increment, `id_user` int not null, `id_eps` int null, `ruta_eps` varchar(255) null, `id_afp` int null, `ruta_afp` varchar(255) null, `id_arl` int null, `ruta_arl` varchar(255) null, `user_log` int null, `fechareg` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `seguridad_social_trabajador` add constraint `seguridad_social_trabajador_id_eps_foreign` foreign key (`id_eps`) references `entidades_seguridad_social` (`id`);
+alter table `seguridad_social_trabajador` add constraint `seguridad_social_trabajador_id_afp_foreign` foreign key (`id_afp`) references `entidades_seguridad_social` (`id`);
+alter table `seguridad_social_trabajador` add constraint `seguridad_social_trabajador_id_arl_foreign` foreign key (`id_arl`) references `entidades_seguridad_social` (`id`);
+alter table `seguridad_social_trabajador` add constraint `seguridad_social_trabajador_id_user_foreign` foreign key (`id_user`) references `usuarios` (`id_user`);
+alter table `seguridad_social_trabajador` add unique `seguridad_social_trabajador_id_user_unique`(`id_user`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_11_100100_seed_opcion_seguridad_social.php
+-- Opción 150 "Gestión Humana — Seguridad social de trabajadores" (módulo 3): EPS/AFP/ARL de
+-- trabajadores con curso de altura y su catálogo. Se otorga a los perfiles con la 143.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 150, 'Gestión Humana — Seguridad social de trabajadores', 3, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 150);
+INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
+    SELECT DISTINCT 150, id_perfil, 1, NOW() FROM cron_permisos
+    WHERE id_opcion = 143 AND activo = 1 AND id_perfil NOT IN (SELECT id_perfil FROM (SELECT id_perfil FROM cron_permisos WHERE id_opcion = 150) t);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_12_100000_add_id_responsable_to_salones_table.php
+-- Responsable del salón: si tiene uno, sus reservas quedan pendientes de autorización
+-- (confirmado = 3) hasta que él las apruebe o rechace. Se asigna desde Salones (ej. Maker Lab).
+-- ---------------------------------------------------------------------------
+alter table `salones` add `id_responsable` int unsigned null after `sonido`;

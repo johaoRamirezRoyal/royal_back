@@ -7,7 +7,7 @@
 namespace App\Pdf\Evaluaciones;
 
 use App\Models\Evaluaciones\EvaluacionRespuestaEvaluacion;
-use App\Services\Cloudinary\CloudinaryService;
+use App\Services\branding\MarcaDominioService;
 use App\Services\evaluaciones\EvaluacionesServices;
 use Illuminate\Support\Collection;
 use TCPDF;
@@ -27,14 +27,11 @@ class EvaluacionRespuestaPdfService
     // VITE_INSTITUTION en el .env del frontend.
     private const INSTITUCION_NOMBRE = 'Colegio Real Royal School';
 
-    /** Null = escudo por defecto de Cloudinary, resuelto al dibujar el header. */
+    /** Null = logo de la marca del dominio (MarcaDominioService::rutaLocalLogo), resuelto al dibujar el header. */
     private ?string $logoPath;
 
     public function __construct(private EvaluacionesServices $evaluacionesServices, ?string $logoPath = null)
     {
-        // Escudo circular (fondo blanco) — el que sí se distingue sobre la banda navy del
-        // header; `logotipoBackground-white.png`, en la misma carpeta, tiene fondo negro
-        // sólido y se vería como un bloque negro ahí.
         $this->logoPath = $logoPath;
     }
 
@@ -128,7 +125,7 @@ class EvaluacionRespuestaPdfService
 
     private function drawHeader(TCPDF $pdf, string $tituloEvaluacion): void
     {
-        $this->logoPath ??= app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoMarca.png');
+        $this->logoPath ??= app(MarcaDominioService::class)->rutaLocalLogo();
         $logoCell = $this->logoPath && is_file($this->logoPath) ? '<img src="@'.base64_encode(file_get_contents($this->logoPath)).'" width="32">' : '';
 
         $html = '

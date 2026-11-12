@@ -55,9 +55,11 @@ certificado de Royal School (ahora recibe un 422).
 - **Imágenes que faltaban en Cloudinary.** El sello del paz y salvo (`royal-school/paz-salvo/sello`)
   no existía: ni la versión TCPDF lo mostraba. Se subió el 2026-11-12 como privado desde
   `storage/app/public/images/paz&salvo/sello.webp` y se invalidó la caché del CDN, que tenía
-  guardado el 404. Siguen faltando `royal-school/instituciones/logo.png` (logo blanco de la carta
-  de recomendación, que sale sin logo; se decidió no subirlo por ahora) y
-  `royal-school/paz-salvo/logo.webp` (ya no lo usa nada).
+  guardado el 404. Faltan también `royal-school/instituciones/logo.png` (el logo blanco que usaba
+  la carta de recomendación) y `royal-school/paz-salvo/logo.webp`, pero ya no los usa nada: al
+  fusionar `produccion` (commit 44ab644, «Logo del colegio desde el branding») todos los logos
+  pasan por `MarcaDominioService::rutaLocalLogo()`, también en `DocumentoPdfService` y en la
+  banda azul de la carta.
 
 ## Cambios relacionados
 

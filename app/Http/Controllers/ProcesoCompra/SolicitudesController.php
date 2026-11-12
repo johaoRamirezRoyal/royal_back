@@ -14,6 +14,7 @@ use App\Http\Requests\ProcesoCompra\RechazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\SolicitudInicialRequest;
 use App\Http\Requests\ProcesoCompra\VerificarEntregaRequest;
 use App\Http\Requests\ProcesoCompra\VerificarSolicitudRequest;
+use App\Http\Requests\ProcesoCompra\VistaPreviaOrdenCompraRequest;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
 use App\Services\inventario\InventarioServices;
 use App\Services\ProcesoCompra\SolicitudesServices;
@@ -146,15 +147,29 @@ class SolicitudesController extends Controller
         return $this->apiResponse($this->solicitudesServices->anular($id, $request->user()->id_user));
     }
 
-    // POST /solicitudes/{id}/enviar-orden — opción 104 (Compras — Gestión de compras, multipart: orden_pdf)
-    // Envía al proveedor la orden de compra que generó el frontend.
+    // POST /solicitudes/{id}/enviar-orden — opción 104 (Compras — Gestión de compras). Multipart:
+    // asunto, mensaje (HTML), destinatarios[], cc[], incluir[], adjuntar_pdf y orden_pdf.
+    // Envía al proveedor el correo redactado con la orden de compra que generó el frontend.
     public function enviarOrden(EnviarOrdenCompraRequest $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_GESTION)) {
             return $rechazo;
         }
 
-        return $this->apiResponse($this->solicitudesServices->enviarOrdenCompra($id, $request->file('orden_pdf')));
+        $pdf = $request->boolean('adjuntar_pdf') ? $request->file('orden_pdf') : null;
+
+        return $this->apiResponse($this->solicitudesServices->enviarOrdenCompra($id, $request->validated(), $pdf));
+    }
+
+    // POST /solicitudes/{id}/vista-previa-orden — opción 104. Mismo body que enviar-orden sin
+    // el PDF; devuelve el HTML del correo tal como se enviaría.
+    public function vistaPreviaOrden(VistaPreviaOrdenCompraRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_GESTION)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->vistaPreviaOrdenCompra($id, $request->validated()));
     }
 
     // GET /solicitudes?per-page=&estado=&fecha_desde=&fecha_hasta=&s=&perfil=&id_nivel= —

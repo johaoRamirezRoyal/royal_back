@@ -459,19 +459,17 @@ class InstitucionController extends Controller
     /**
      * PDF de la carta (documento `cartaRecomendacion` de Royal School, en
      * src/documentos/instituciones/royal-school del frontend). Lo diligencia un jardín, no un
-     * usuario con correo: la institución es la del colegio de la sesión (su connection). El
-     * encabezado es azul, así que lleva el logo blanco de royal-school, no el de la marca.
+     * usuario con correo: la institución es la del colegio de la sesión (su connection), y el
+     * logo del encabezado, el de su marca.
      */
     private function pdfCartaRecomendacion(CartaRecomendacion $carta): string
     {
         $carta->loadMissing('institucion');
-        $documentos = app(DocumentoPdfService::class);
 
-        return $documentos->generar('cartaRecomendacion', [
+        return app(DocumentoPdfService::class)->generar('cartaRecomendacion', [
             'formato' => $carta->institucion?->tipo_documento === 'play_and_learn' ? 'play_and_learn' : 'coordinador_psicologo',
             'idioma' => $carta->idioma === 'en' ? 'en' : 'es',
             'institucion' => $carta->institucion?->nombre ?? '',
-            'logoEncabezado' => $documentos->imagenComoDataUrl($this->cloudinary_service->rutaLocalRoyalSchool('instituciones/logo.png')),
             'datos' => (object) ($carta->datos ?? []),
         ], DocumentoPdfService::dominioDelColegio());
     }

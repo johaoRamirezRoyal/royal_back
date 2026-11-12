@@ -49,9 +49,8 @@ diligencian cartas de recomendación de sus egresados aspirantes. Tiene dos cont
   - Es un documento de Royal School (`instituciones/royal-school/`). Lo diligencia un jardín,
     sin usuario con correo: la institución es la del colegio de la sesión
     (`DocumentoPdfService::dominioDelColegio()`). Otro colegio no lo tiene. El encabezado
-    azul lleva el logo **blanco** de Cloudinary `royal/royal-school/instituciones/logo.png`
-    (copia en `storage/app/public/images/instituciones/logo.png`); si no se puede descargar,
-    la banda sale sin logo.
+    azul lleva el logo de la marca del colegio (`rutaLocalLogo()`, desde el 2026-11-12; antes,
+    un logo blanco fijo que no estaba en Cloudinary).
   - "Información de los padres" fuerza un salto de página.
   - Un campo vacío se muestra como `"-"`.
   - La firma (data URL base64, solo PNG/JPEG) se dibuja como imagen.

@@ -29,3 +29,11 @@ Route::get('/', [CursosAlturaController::class, 'listar'])->middleware(Permiso::
 Route::post('/', [CursosAlturaController::class, 'crear'])->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
 Route::post('/{id}', [CursosAlturaController::class, 'actualizar'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
 Route::delete('/{id}', [CursosAlturaController::class, 'eliminar'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+
+// Seguridad social (EPS/AFP/ARL) de trabajadores con curso de altura
+Route::get('/entidades', [CursosAlturaController::class, 'entidades'])->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));
+Route::post('/entidades', [CursosAlturaController::class, 'crearEntidad'])->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));
+Route::put('/entidades/{id}', [CursosAlturaController::class, 'actualizarEntidad'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));
+Route::delete('/entidades/{id}', [CursosAlturaController::class, 'eliminarEntidad'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));
+Route::get('/seguridad-social/{idUser}', [CursosAlturaController::class, 'seguridadSocial'])->whereNumber('idUser')->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));
+Route::post('/seguridad-social/{idUser}', [CursosAlturaController::class, 'guardarSeguridadSocial'])->whereNumber('idUser')->middleware(Permiso::ruta([Permiso::SEGURIDAD_SOCIAL]));

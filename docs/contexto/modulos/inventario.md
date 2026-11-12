@@ -166,6 +166,22 @@ opcional). Para el CRUD se usa la opción **143**.
   cubre esa fecha (o el más reciente), lista de verificación SÍ/NO, observaciones y una firma
   por trabajador más coordinador y quien autoriza. Lo demás se llena a mano en sitio. Si el
   reporte no tiene trabajo en altura, el endpoint responde 404.
+- **Seguridad social (EPS/AFP/ARL)**, opción **150** (`Permiso::SEGURIDAD_SOCIAL`, que la
+  migración otorga a los perfiles que ya tienen la 143). Usa dos tablas:
+  `entidades_seguridad_social` (catálogo único, columna `tipo` EPS/AFP/ARL y
+  `unique(tipo, nombre)`) y `seguridad_social_trabajador` (una fila por `id_user` con
+  `id_eps|afp|arl` y `ruta_eps|afp|arl`). Solo se guarda para quien tiene algún curso con
+  `activo = 1`, vigente o no; si no, responde 422. Un documento nuevo reemplaza al anterior
+  y, sin archivo, se conserva el actual. Un id ausente queda en null. Los documentos van en
+  `gestion-humana/seguridad-social`, que es privada en Cloudinary.
+  - **Catálogo**: `PUT /entidades/{id}` renombra y `DELETE` es una baja lógica (`activo = 0`).
+    La unicidad del nombre solo cuenta entre las activas: crear una con el nombre de una
+    desactivada la reactiva (`updateOrCreate`). Una desactivada sigue siendo válida en
+    `id_eps|afp|arl` para no perderla al volver a guardar al trabajador.
+  - Con la 150, `GET /cursos-altura` agrega `seguridad_social` (con `eps|afp|arl`: id, nombre y
+    activo) a cada fila, para la columna del listado. Sin la 150 no la trae.
+  - **Tests**: en local `cursos_altura` es MyISAM, así que el `rollBack` no deshace sus filas.
+    `CursosAlturaTest` borra en `tearDown` los cursos con id mayor al máximo del `setUp`.
 
 ## Carta de entrega (`/inventario/listado`)
 

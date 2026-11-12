@@ -3,6 +3,8 @@
 namespace App\Services\CursosAltura;
 
 use App\Models\CursosAltura\CursoAltura;
+use App\Models\CursosAltura\EntidadSeguridadSocial;
+use App\Models\CursosAltura\SeguridadSocialTrabajador;
 use App\Models\CursosAltura\TrabajoAltura;
 use App\Models\Usuarios\Usuario;
 use App\Pdf\Areas\PermisoAlturasPdfService;
@@ -16,15 +18,27 @@ class CursosAlturaServices
 {
     private const CARPETA = 'gestion-humana/cursos-altura';
 
+    // Privada en Cloudinary, como todo gestion-humana/ (ver ArchivosPrivados).
+    private const CARPETA_SEGURIDAD_SOCIAL = 'gestion-humana/seguridad-social';
+
+    private const RELACIONES_SEGURIDAD_SOCIAL = [
+        'seguridadSocial:id,id_user,id_eps,id_afp,id_arl,ruta_eps,ruta_afp,ruta_arl',
+        'seguridadSocial.eps:id,nombre,activo',
+        'seguridadSocial.afp:id,nombre,activo',
+        'seguridadSocial.arl:id,nombre,activo',
+    ];
+
     public function __construct(
         private FileStorageService $fileStorage,
         private PermisoAlturasPdfService $permisoPdf,
     ) {}
 
-    public function listar(array $filtros, int $perPage): array
+    /** @param  bool  $conSeguridadSocial  agrega `seguridad_social` (entidades por tipo, sin documentos) a cada fila */
+    public function listar(array $filtros, int $perPage, bool $conSeguridadSocial = false): array
     {
         try {
             $query = CursoAltura::with('usuario:id_user,nombre,apellido,documento')
+                ->when($conSeguridadSocial, fn ($q) => $q->with(self::RELACIONES_SEGURIDAD_SOCIAL))
                 ->where('activo', 1)
                 ->orderByDesc('fecha_expedicion')
                 ->orderByDesc('id');
@@ -290,6 +304,121 @@ class CursosAlturaServices
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /** Catálogo activo de EPS, AFP y ARL. */
+    public function entidades(): array
+    {
+        try {
+            $entidades = EntidadSeguridadSocial::where('activo', 1)->orderBy('tipo')->orderBy('nombre')->get(['id', 'tipo', 'nombre']);
+
+            return ['error' => false, 'message' => 'Entidades obtenidas correctamente', 'data' => $entidades];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Crea la entidad o, si ya existía desactivada con ese nombre, la reactiva. */
+    public function crearEntidad(string $tipo, string $nombre, int $idLog): array
+    {
+        try {
+            $entidad = EntidadSeguridadSocial::updateOrCreate(['tipo' => $tipo, 'nombre' => $nombre], ['user_log' => $idLog, 'activo' => 1]);
+
+            return ['error' => false, 'message' => 'Entidad creada correctamente', 'data' => $entidad->only(['id', 'tipo', 'nombre'])];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizarEntidad(int $id, string $nombre, int $idLog): array
+    {
+        try {
+            $entidad = EntidadSeguridadSocial::where('activo', 1)->find($id);
+
+            if (! $entidad) {
+                return ['error' => true, 'message' => 'Entidad no encontrada', 'status' => 404];
+            }
+
+            $entidad->update(['nombre' => $nombre, 'user_log' => $idLog]);
+
+            return ['error' => false, 'message' => 'Entidad actualizada correctamente', 'data' => $entidad->only(['id', 'tipo', 'nombre'])];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Baja lógica: deja de ofrecerse, pero los trabajadores que ya la tienen la conservan. */
+    public function eliminarEntidad(int $id, int $idLog): array
+    {
+        try {
+            $entidad = EntidadSeguridadSocial::where('activo', 1)->find($id);
+
+            if (! $entidad) {
+                return ['error' => true, 'message' => 'Entidad no encontrada', 'status' => 404];
+            }
+
+            $entidad->update(['activo' => 0, 'user_log' => $idLog]);
+
+            return ['error' => false, 'message' => 'Entidad eliminada correctamente', 'data' => []];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** EPS/AFP/ARL de un trabajador con sus `url_*`; data null si aún no tiene. */
+    public function seguridadSocial(int $idUser): array
+    {
+        try {
+            // Con las entidades: una desactivada sigue asignada y el formulario necesita su nombre.
+            $registro = SeguridadSocialTrabajador::with(['eps:id,nombre,activo', 'afp:id,nombre,activo', 'arl:id,nombre,activo'])->where('id_user', $idUser)->first();
+
+            return ['error' => false, 'message' => 'Seguridad social obtenida correctamente', 'data' => $registro ? $this->adjuntarUrls($registro) : null];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Guarda la EPS/AFP/ARL del trabajador (solo si tiene algún curso de altura activo, vigente
+     * o no). Los ids ausentes quedan en null; un documento nuevo reemplaza al anterior y, sin
+     * documento, se conserva el actual.
+     *
+     * @param  array<string, mixed>  $data  id_eps|id_afp|id_arl y documento_* (UploadedFile) ya validados
+     */
+    public function guardarSeguridadSocial(int $idUser, array $data, int $idLog): array
+    {
+        try {
+            if (! CursoAltura::where('id_user', $idUser)->where('activo', 1)->exists()) {
+                return ['error' => true, 'message' => 'El trabajador no tiene curso de altura registrado', 'status' => 422];
+            }
+
+            $registro = SeguridadSocialTrabajador::firstOrNew(['id_user' => $idUser]);
+
+            foreach (['eps', 'afp', 'arl'] as $tipo) {
+                $registro->{"id_{$tipo}"} = $data["id_{$tipo}"] ?? null;
+
+                $documento = $data["documento_{$tipo}"] ?? null;
+                if ($documento instanceof UploadedFile) {
+                    $registro->{"ruta_{$tipo}"} = $this->fileStorage->reemplazar($documento, $registro->{"ruta_{$tipo}"}, self::CARPETA_SEGURIDAD_SOCIAL)['ruta'];
+                }
+            }
+
+            $registro->user_log = $idLog;
+            $registro->save();
+
+            return ['error' => false, 'message' => 'Seguridad social guardada correctamente', 'data' => $this->adjuntarUrls($registro)];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    private function adjuntarUrls(SeguridadSocialTrabajador $registro): SeguridadSocialTrabajador
+    {
+        foreach (['eps', 'afp', 'arl'] as $tipo) {
+            $registro->{"url_{$tipo}"} = $this->fileStorage->url($registro->{"ruta_{$tipo}"});
+        }
+
+        return $registro;
     }
 
     private function adjuntarDatos(CursoAltura $curso): CursoAltura

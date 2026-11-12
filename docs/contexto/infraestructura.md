@@ -219,8 +219,9 @@ Qué se cambió, el deploy y los pendientes:
   ncrypto::CSPRNG`), y el servidor web (`php artisan serve`, Apache) puede lanzar procesos
   con un entorno que no la trae. `DocumentoPdfService::entornoNode()` la pasa explícita; no
   la quites.
-- La institución (marca y carpeta de documentos) sale del dominio del correo. El logo se manda
-  como data URL; si es webp se pasa a PNG con GD, porque pdfmake no embebe webp.
+- La institución (marca y carpeta de documentos) sale del dominio del correo. El logo es el de
+  `MarcaDominioService::rutaLocalLogo()` (ver «Logo» abajo) y se manda como data URL; si es
+  webp se pasa a PNG con GD, porque pdfmake no embebe webp.
 - Ya migrados: carta de entrega (`InventarioServices::generarCartaEntregaPdf`), paz y salvo y
   listados de préstamos de Biblioteca (`BibliotecaServices`), carta de recomendación de
   Instituciones (`InstitucionController`) y certificado de capacitación
@@ -238,12 +239,14 @@ Qué se cambió, el deploy y los pendientes:
 
 ### TCPDF (documentos aún no migrados)
 
-- Todo PDF institucional nuevo usa este logo fijo, no el de la marca por dominio:
-  `app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png')` (ejemplo:
-  `HojaVidaPdfService`).
-- Las imágenes fijas de documentos (logos, escudos, sellos) viven en Cloudinary bajo
-  `royal/royal-school/` (`logotipoMarca.png`, `paz-salvo/{logo,sello}.webp`,
-  `instituciones/logo.png`, `horario/logo.png`), no en el disco del servidor.
+- **Logo**: todo PDF/Excel usa `app(MarcaDominioService::class)->rutaLocalLogo($correo)`.
+  Devuelve el logo de la marca del dominio del correo, configurado en /marcas-dominio (sin
+  correo, usa el del usuario autenticado). Si no hay marca, devuelve el fijo
+  `royal/royal-school/logotipoBackground.png`, y un WEBP sale convertido a PNG. Un colegio
+  nuevo solo configura su marca: no hay logos por documento. Ejemplo: `HojaVidaPdfService`.
+- Las demás imágenes fijas de documentos (sellos, firmas) viven en Cloudinary bajo
+  `royal/royal-school/` (`paz-salvo/sello.webp`, `firma_administrativa.jpg`), no en el disco
+  del servidor.
   `rutaLocalRoyalSchool()` las descarga a un temporal porque TCPDF/PhpSpreadsheet necesitan
   ruta local; si falla devuelve null y el documento sale sin esa imagen (sin respaldo local).
   Una nueva se sube con `POST /api/migracion/cloudinary` (`directorio=royal-school/...`).
@@ -260,6 +263,13 @@ Qué se cambió, el deploy y los pendientes:
 - `MailService`: `sendView`, `sendGeneric` (con BCC a `COPIA_GESTOR`) y `send($to,
   Mailable, copiaGestor?)`. Filtra correos inválidos antes de enviar. Si detecta el límite
   por hora del hosting (`452` + "too many recipients"), lanza `MailRateLimitException`.
+  `sendGeneric`/`GenericMail` aceptan `$urlBoton` (y `$textoBoton`, por defecto "Ver en
+  OMNIA"), que agrega un botón con enlace al final del correo. Hoy lo usan los correos de
+  creación y edición de Permisos y Licencias
+  (`PermisosLicenciasServices::enviarConBotonAprobadores`): el mismo correo se manda dos
+  veces, con botón a `FRONTEND_URL/permisos-licencias/solicitud/{id}?origen=correo` para
+  los destinatarios cuyo perfil tiene la opción 83 (o Super Admin), y sin botón para el
+  resto. Test: `tests/Unit/PermisosLicencias/CorreosQueApruebanTest.php`.
 - **Correos de Admisiones** (acudientes): todos extienden
   `resources/views/emails/layouts/admisiones.blade.php` (encabezado, línea dorada, pie) y
   solo definen `title` y `content`. Hoy: `sendRequestEmail` (código de verificación) y
