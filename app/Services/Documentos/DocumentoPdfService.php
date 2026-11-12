@@ -66,7 +66,10 @@ class DocumentoPdfService
             ->run([config('services.documentos.node', 'node'), resource_path('documentos/render.cjs')]);
 
         if ($proceso->failed()) {
-            throw new RuntimeException("No se pudo generar el documento {$documento}: ".trim($proceso->errorOutput()));
+            // El código de salida dice qué pasó cuando Node no escribe nada (127: no encontrado,
+            // 137: lo mató el sistema, p. ej. límite de memoria del hosting).
+            $error = trim($proceso->errorOutput()) ?: 'Node no escribió ningún error';
+            throw new RuntimeException("No se pudo generar el documento {$documento} (código de salida {$proceso->exitCode()}): {$error}");
         }
 
         return $proceso->output();
