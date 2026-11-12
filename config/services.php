@@ -47,7 +47,7 @@ return [
         'device_type' => 'DS-K1T321MFWX-B',
         // Contraseña de asistencia solo con dígitos del documento (ver construirPasswordAsistencia).
         'password_numerica' => env('HIKVISION_PASSWORD_NUMERICA', true),
-        // Override del mapa perfil→groupId ("16:8,3:9"; "16:" = no enviar groupId para ese perfil).
+        // Override del groupId que se manda a la terminal, por grupo ("9:2"; "8:" = no enviar el grupo 8).
         'group_ids' => env('HIKVISION_GROUP_IDS'),
 
         // ponytail: solo lo lee la migración 2026_10_26_100000_add_conexion_to_hikvision_dispositivos

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Hikvision;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\BasesDatosService;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
@@ -27,7 +28,6 @@ class HikvisionController extends Controller implements HasMiddleware
     }
 
     // Perfil de Estudiante en la tabla perfiles
-    const PERFIL_ESTUDIANTE = 16;
 
     // Ventana de debounce para descartar reintentos/rebotes del dispositivo (mismo
     // usuario marcando "de nuevo" a los pocos segundos de su marcación anterior).
@@ -813,7 +813,7 @@ class HikvisionController extends Controller implements HasMiddleware
             return;
         }
 
-        if ($usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+        if ($usuario['usuario']->estado !== 'activo' || ! $usuario['usuario']->esTipo(TipoPerfil::ESTUDIANTE)) {
             Log::info('[hikvision-notification] Llegada tarde omitida: no aplica (no es estudiante activo)', [
                 'idUsuario' => $idUsuario,
                 'estado' => $usuario['usuario']->estado,
@@ -871,7 +871,7 @@ class HikvisionController extends Controller implements HasMiddleware
 
         $perfil = (int) $usuario['usuario']->perfil;
 
-        if (in_array($perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+        if ($usuario['usuario']->esTipo(...AsistenciaGestionService::TIPOS_EXCLUIDOS_ASISTENCIA)) {
             Log::info('[hikvision-notification] Asistencia gestión omitida: perfil excluido', [
                 'idUsuario' => $idUsuario,
                 'perfil' => $perfil,

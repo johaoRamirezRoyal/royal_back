@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Permisos;
 
+use App\Enums\TipoPerfil;
+use App\Services\Perfiles\PerfilesServices;
 use App\Services\Permisos\PermisosService;
 use App\Http\Controllers\Controller;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
@@ -24,8 +27,30 @@ class PermisosController extends Controller
 
     public function __construct(
         PermisosService $services_permisos,
+        private PerfilesServices $perfiles,
     ) {
         $this->services_permisos = $services_permisos;
+    }
+
+    /**
+     * PUT /permisos/perfiles/{id}/tipo — el tipo del perfil (App\Enums\TipoPerfil). Misma
+     * opción que asignar permisos (28): decide quién cuenta como docente, operativo, etc.
+     */
+    public function actualizarTipoPerfil(Request $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_PERMISOS)) {
+            return $rechazo;
+        }
+
+        $request->merge(['id_perfil' => $id])->validate([
+            'id_perfil' => 'integer|exists:perfiles,id_perfil|not_in:' . Permiso::PERFIL_SUPER_ADMIN,
+            'tipo' => ['required', Rule::enum(TipoPerfil::class)],
+        ], [
+            'id_perfil.not_in' => 'Super Admin tiene acceso global: su tipo no se modifica.',
+            'tipo.enum' => 'El tipo de perfil no es válido.',
+        ]);
+
+        return $this->apiResponse($this->perfiles->actualizarTipo($id, TipoPerfil::from($request->input('tipo'))));
     }
 
     // Super Admin tiene acceso global (PermisosPerfil): sus permisos no se otorgan ni revocan.

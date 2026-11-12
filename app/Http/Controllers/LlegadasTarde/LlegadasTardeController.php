@@ -1,6 +1,8 @@
 <?php
 namespace App\Http\Controllers\LlegadasTarde;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LlegadasTarde\LlegadaTardeRequest;
 use App\Models\Estudiantes\EstudiantesPadre;
@@ -25,9 +27,7 @@ class LlegadasTardeController extends Controller
     // Autoservicio (sin pasar por /permisos, igual que el Docente en Gestión Académica —
     // ver las rutas de autoservicio en routes/api/gestionAcademica.php): un Acudiente ve sus propios hijos
     // ACTIVOS en `estudiantes_padres`, nunca de otro estudiante — ver obtenerLlegadasTarde.
-    private const PERFIL_ACUDIENTE = 6;
 
-    private const PERFIL_ESTUDIANTE = 16;
 
     // "Llegadas Tarde Academicas": acceso solo a este submódulo (ver OPCION_ACCESO_COMPLETO).
     private const OPCION_SOLO_LLEGADAS_TARDE = 101;
@@ -37,7 +37,6 @@ class LlegadasTardeController extends Controller
     // curso ajeno — mismo criterio de "resolver los cursos propios" que ya usa
     // AsistenciaEstudianteService::metricasPorCurso ($id_docente_scope). Un Docente CON
     // la opción 99 (ej. también Coordinador) cae en la rama general de abajo, sin scope.
-    private const PERFIL_DOCENTE = Permiso::PERFIL_DOCENTE;
 
     public function __construct(
         private LlegadasTarde $llegadas_tarde,
@@ -72,7 +71,7 @@ class LlegadasTardeController extends Controller
             return [];
         }
 
-        return Usuario::where('perfil', self::PERFIL_ESTUDIANTE)
+        return Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->where('estado', 'activo')
             ->whereIn('id_curso', $cursos)
             ->pluck('id_user')
@@ -92,11 +91,11 @@ class LlegadasTardeController extends Controller
     {
         $perfil = $request->user()->perfil;
 
-        if ($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request)) {
+        if ($request->user()->esTipo(TipoPerfil::DOCENTE) && !$this->tieneAccesoCompleto($request)) {
             return true;
         }
 
-        if ($perfil !== self::PERFIL_ACUDIENTE) {
+        if (! $request->user()->esTipo(TipoPerfil::ACUDIENTE)) {
             return false;
         }
 
@@ -147,7 +146,7 @@ class LlegadasTardeController extends Controller
         $alumno = Usuario::with('cursoRelacion:id,nombre')
             ->select('id_user', 'nombre', 'apellido', 'documento', 'estado', 'id_curso', 'foto_carnet')
             ->where('documento', $documento)
-            ->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->first();
 
         if (!$alumno) {
@@ -202,7 +201,7 @@ class LlegadasTardeController extends Controller
         // cliente — siempre se resuelve a SUS hijos. Respeta id_periodo_academico si lo
         // mandan (para revisar un período pasado); sin él, período vigente colapsado a
         // una fila por alumno, igual que ve el staff con acceso completo.
-        if ($perfil === self::PERFIL_ACUDIENTE) {
+        if ($request->user()->esTipo(TipoPerfil::ACUDIENTE)) {
             $idsHijos = $this->idsHijosDe($request);
 
             $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, null, null, $idsHijos);
@@ -210,7 +209,7 @@ class LlegadasTardeController extends Controller
             return $this->apiResponse($response);
         }
 
-        // Autoservicio del Docente (sin opción 99, ver PERFIL_DOCENTE arriba): mismo
+        // Autoservicio del Docente (sin opción 99, tipo DOCENTE): mismo
         // trato que el Acudiente en cuanto al scope (alumnos de SUS cursos en vez de sus
         // hijos), pero el listado general queda acotado al día actual — a diferencia del
         // Acudiente, a quien sí le sirve ver el historial completo de sus hijos de entrada.
@@ -218,7 +217,7 @@ class LlegadasTardeController extends Controller
         // se ignora la fecha que mande el cliente para el listado general. Un Docente que
         // además tenga la opción 99 (ej. también Coordinador) no entra acá, cae a la rama
         // general de abajo sin scope ni límite de fecha.
-        if ($perfil === self::PERFIL_DOCENTE && !$this->tieneAccesoCompleto($request)) {
+        if ($request->user()->esTipo(TipoPerfil::DOCENTE) && !$this->tieneAccesoCompleto($request)) {
             $idsAlumnos = $this->idsAlumnosDeCursosDocente($request);
 
             $idAlumnoSolicitado = $request->input('id_alumno');

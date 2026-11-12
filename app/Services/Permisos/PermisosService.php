@@ -182,6 +182,7 @@ class PermisosService extends Service
                     'perfil' => [
                         'id' => $perfil->id_perfil,
                         'nombre' => $perfil->nombre,
+                        'tipo' => $perfil->tipo,
                     ],
                     'opciones' => $opcionesData,
                 ];

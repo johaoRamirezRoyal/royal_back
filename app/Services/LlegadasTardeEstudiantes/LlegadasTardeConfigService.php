@@ -2,6 +2,7 @@
 
 namespace App\Services\LlegadasTardeEstudiantes;
 
+use App\Services\Usuarios\PermisosPerfil;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
 use App\Services\MailService;
@@ -14,8 +15,6 @@ class LlegadasTardeConfigService extends Service
     // Fila única de configuración (ver migración create_configuracion_llegadas_tarde_table).
     private const ID_CONFIG = 1;
 
-    // Perfil "Coordinador" en la tabla perfiles.
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     public function __construct(private MailService $mailService) {}
 
@@ -74,7 +73,7 @@ class LlegadasTardeConfigService extends Service
 
     private function notificarCambioHorarioACoordinador(string $horaLimite): void
     {
-        $correos = Usuario::where('perfil', self::PERFIL_COORDINADOR)
+        $correos = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::COORDINACION_NIVEL))
             ->where('estado', 'activo')
             ->whereNotNull('correo')
             ->pluck('correo')

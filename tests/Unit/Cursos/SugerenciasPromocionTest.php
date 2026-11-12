@@ -43,6 +43,12 @@ class SugerenciasPromocionTest extends TestCase
             $t->string('estado')->default('activo');
         });
         (require database_path('migrations/2026_11_04_100000_create_promocion_sugerencias_table.php'))->up();
+        // Quién es estudiante se decide por perfiles.tipo, no por el número de perfil.
+        Schema::create('perfiles', function (Blueprint $t) {
+            $t->integer('id_perfil');
+            $t->string('tipo');
+        });
+        DB::table('perfiles')->insert(['id_perfil' => 16, 'tipo' => 'ESTUDIANTE']);
 
         DB::table('curso')->insert([
             ['id' => 1, 'nombre' => 'Quinto A', 'curso_proximo' => null, 'id_director' => self::DIRECTOR, 'activo' => 1],

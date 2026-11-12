@@ -2,6 +2,8 @@
 
 namespace App\Services\LlegadasTardeEstudiantes;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use App\Enums\Mails;
 use App\Mail\LlegadaTardeAvisoInternoMail;
 use App\Mail\LlegadaTardeEstadoMail;
@@ -22,8 +24,6 @@ use Illuminate\Support\Facades\DB;
 
 class LlegadasTarde extends Service
 {
-    private const PERFIL_DIRECTIVO_DOCENTE = 20;
-    private const PERFIL_ASISTENTE_NIVEL = 11;
 
     // `periodo_academico.nombre` se guarda como texto ("Primer periodo", "Segundo
     // periodo"...) pero en los correos se muestra como número ("Periodo 1") — ver
@@ -747,7 +747,7 @@ class LlegadasTarde extends Service
         }
 
         if ($limiteAlcanzado && $avisarVicerrectoria) {
-            $correosInternos = Usuario::whereIn('perfil', [self::PERFIL_DIRECTIVO_DOCENTE, self::PERFIL_ASISTENTE_NIVEL])
+            $correosInternos = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::AVISO_LIMITE_LLEGADAS_TARDE))
                 ->where('estado', 'activo')
                 ->whereNotNull('correo')
                 ->pluck('correo')

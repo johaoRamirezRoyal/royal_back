@@ -32,8 +32,6 @@ class PermisosLicenciasController extends Controller
     // 2026_09_14_141000_seed_opcion_configuracion_permisos_licencias.
     private const OPCION_CONFIGURACION = Permiso::PERMISOS_LICENCIAS_CONFIGURACION;
 
-    /** Coordinador/Directivo: ve (y le notifican) solo las solicitudes de su propio nivel. */
-    private const PERFILES_COORDINACION_NIVEL = [26, 7];
 
     public function __construct(
         private PermisosLicenciasServices $service,
@@ -156,7 +154,8 @@ class PermisosLicenciasController extends Controller
 
     private function nivelViewer(Request $request): ?int
     {
-        return in_array($request->user()->perfil, self::PERFILES_COORDINACION_NIVEL, true)
+        // Coordinación de nivel (155) o Dirección administrativa (156): solo su propio nivel.
+        return PermisosPerfil::tiene($request, Permiso::COORDINACION_NIVEL, Permiso::DIRECCION_ADMINISTRATIVA)
             ? $request->user()->id_nivel
             : null;
     }

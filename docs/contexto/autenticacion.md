@@ -59,9 +59,10 @@ contraseña (para soporte).
 
 - La tabla vive en `admin_management`, transversal a los colegios, así que **no tiene FK**
   a `usuarios` y guarda `connection_objetivo`. Solo se guarda el hash.
-- `LlaveMaestraController` (`/api/admin-management/llaves-maestras`) exige solo
-  `perfil === 1`; **no** aplica la lista de correos `adminManagementEmails` que sí aplica
-  el frontend. Para exigirla, copia el patrón de `BasesDatosController`.
+- `LlaveMaestraController` (`/api/admin-management/llaves-maestras`) exige perfil 1 **y**
+  un correo de `ADMIN_MANAGEMENT_EMAILS` (middleware `admin.access`, `RestrictToAdminEmails`),
+  en la ruta (grupo `/admin-management`) y en el controller. Prueba:
+  `tests/Feature/AdminManagement/LlaveMaestraAccesoTest.php`.
 - `POST /api/auth/master-key/redeem` es público, con límite de 10 intentos en 10 minutos
   por IP. No lee ni escribe `device_token` y no hace SSO. El JWT resultante lleva
   `via_llave_maestra: true` y `generado_por`, que `AuthController::check()` devuelve para

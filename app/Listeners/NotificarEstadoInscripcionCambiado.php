@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Services\Usuarios\PermisosPerfil;
 use App\Enums\Mails;
 use App\Events\EstadoInscripcionCambiado;
 use App\Models\Usuarios\Usuario;
@@ -58,8 +59,8 @@ class NotificarEstadoInscripcionCambiado implements ShouldQueue
             return;
         }
 
-        $perfilPsicologa = AdmisionesServices::perfilPsicologaParaGrado($event->gradoAplica);
-        $correosPsicologas = $perfilPsicologa ? $this->correosDelPerfil($perfilPsicologa) : [];
+        $opcionPsicologa = AdmisionesServices::opcionPsicologaParaGrado($event->gradoAplica);
+        $correosPsicologas = $opcionPsicologa ? $this->correosDeLaOpcion($opcionPsicologa) : [];
 
         if ($correosPsicologas === []) {
             Log::warning('No se encontró psicóloga para notificar el cambio de estado', [
@@ -86,9 +87,10 @@ class NotificarEstadoInscripcionCambiado implements ShouldQueue
     }
 
     /** @return array<int, string> */
-    protected function correosDelPerfil(int $perfil): array
+    /** Correos de los usuarios cuyo perfil tiene esa opción de psicóloga (167–169). */
+    protected function correosDeLaOpcion(int $opcion): array
     {
-        return Usuario::where('perfil', $perfil)->pluck('correo')->filter()->values()->all();
+        return Usuario::whereIn('perfil', PermisosPerfil::perfilesCon($opcion))->pluck('correo')->filter()->values()->all();
     }
 
     public function failed(EstadoInscripcionCambiado $event, \Throwable $e): void

@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Usuarios;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
+use App\Models\Usuarios\Perfil;
 use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
@@ -76,6 +78,17 @@ class UsuariosController extends Controller
     {
         $per_page = $request->input('per-page', 10);
         $perfil_filtro = $request->input('perfiles');
+
+        // ?tipos[]=ESTUDIANTE: por tipo de perfil (perfiles.tipo), que no cambia de un colegio
+        // a otro. Con perfiles[] y tipos[] a la vez, solo los perfiles que cumplen ambos.
+        $tipos = array_filter(array_map(fn ($t) => TipoPerfil::tryFrom((string) $t), (array) $request->input('tipos', [])));
+        if ($tipos) {
+            $idsTipo = Perfil::idsDeTipo(...$tipos);
+            $perfil_filtro = $perfil_filtro ? array_values(array_intersect(array_map('intval', (array) $perfil_filtro), $idsTipo)) : $idsTipo;
+            // Ningún perfil de ese tipo: un filtro imposible, no "sin filtro" (hay usuarios
+            // legacy con perfil 0, por eso -1).
+            $perfil_filtro = $perfil_filtro ?: [-1];
+        }
         $nivel_filtro = $request->input('niveles');
         $curso_filtro = $request->input('cursos');
         $busqueda = $request->input('s', $request->input('busqueda'));

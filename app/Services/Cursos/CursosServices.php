@@ -2,6 +2,8 @@
 
 namespace App\Services\Cursos;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Areas\Cursos;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
@@ -12,7 +14,6 @@ use Throwable;
 
 class CursosServices
 {
-    public const PERFIL_ESTUDIANTE = 16;
 
     public function __construct(
         private AnioEscolarServices $anios,
@@ -68,7 +69,7 @@ class CursosServices
         try {
             $dirigidos = Cursos::whereNotNull('id_director')->get(['id', 'nombre', 'id_director'])->keyBy('id_director');
 
-            $docentes = Usuario::whereIn('perfil', Permiso::PERFILES_DOCENTE)
+            $docentes = Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
                 ->where('estado', 'activo')
                 ->orderByRaw('TRIM(nombre)') // legacy: hay nombres con espacios al inicio
                 ->get(['id_user', 'nombre', 'apellido'])
@@ -90,7 +91,7 @@ class CursosServices
     {
         return Cursos::with(['nivel:id,nombre', 'proximo:id,nombre,activo', 'director:id_user,nombre,apellido'])
             ->withCount(['usuarios as total_estudiantes' => fn ($q) => $q
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->where('estado', 'activo')]);
     }
 
@@ -206,7 +207,7 @@ class CursosServices
             }
 
             $total = Usuario::whereIn('id_user', $idsEstudiantes)
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->update(['id_curso' => $idCurso]);
 
             return ['error' => false, 'message' => "Se asignaron {$total} estudiante(s) a {$curso->nombre}", 'data' => ['total' => $total]];
@@ -263,7 +264,7 @@ class CursosServices
     {
         $anio = $this->anioQueSeCierra();
 
-        return $query->where('perfil', self::PERFIL_ESTUDIANTE)
+        return $query->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->where('estado', 'activo')
             ->select(['id_user', 'nombre', 'apellido', 'documento', 'id_curso'])
             ->selectRaw(
@@ -310,7 +311,7 @@ class CursosServices
         $idCurso = Cursos::where('id_director', $idDocente)->where('activo', 1)->value('id');
 
         return $idCurso
-            ? Usuario::where('id_curso', $idCurso)->where('perfil', self::PERFIL_ESTUDIANTE)->where('estado', 'activo')
+            ? Usuario::where('id_curso', $idCurso)->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))->where('estado', 'activo')
                 ->when($idsEstudiantes !== null, fn ($q) => $q->whereIn('id_user', $idsEstudiantes))->pluck('id_user')->all()
             : [];
     }
@@ -332,7 +333,7 @@ class CursosServices
                 return ['error' => true, 'message' => 'No hay un año escolar vigente'];
             }
 
-            $validos = Usuario::where('id_curso', $curso->id)->where('perfil', self::PERFIL_ESTUDIANTE)->where('estado', 'activo')
+            $validos = Usuario::where('id_curso', $curso->id)->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))->where('estado', 'activo')
                 ->whereIn('id_user', $idsEstudiantes)->pluck('id_user');
 
             DB::transaction(function () use ($curso, $anio, $validos, $idDocente) {
@@ -382,7 +383,7 @@ class CursosServices
                 ->whereIn('usuarios.id_curso', $idsCursos)
                 ->where('c.activo', 1)
                 ->where('p.activo', 1)
-                ->where('usuarios.perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('usuarios.perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->where('usuarios.estado', 'activo');
 
             $detalle = (clone $movimientos)->get(['usuarios.id_user', 'usuarios.id_curso as de', 'c.curso_proximo as a']);
@@ -432,7 +433,7 @@ class CursosServices
         try {
             $total = Usuario::where('id_user', $idEstudiante)
                 ->where('id_curso', $idCurso)
-                ->where('perfil', self::PERFIL_ESTUDIANTE)
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->update(['id_curso' => null]);
 
             return $total
