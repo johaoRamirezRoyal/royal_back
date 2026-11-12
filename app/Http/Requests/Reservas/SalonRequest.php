@@ -22,7 +22,7 @@ class SalonRequest extends FormRequest
                 'string',
                 'max:150',
                 Rule::unique('salones', 'nombre')
-                    ->where(fn($q) => $q->where('activo', 1))
+                    ->where(fn ($q) => $q->where('activo', 1))
                     ->ignore($this->route('id')),
             ],
             'portatil' => [
@@ -34,6 +34,13 @@ class SalonRequest extends FormRequest
                 $isRequired,
                 'string',
                 'in:si,no',
+            ],
+            // Si tiene responsable, las reservas del salón requieren su autorización.
+            'id_responsable' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('usuarios', 'id_user')->where('estado', 'activo'),
             ],
         ];
     }
@@ -51,6 +58,8 @@ class SalonRequest extends FormRequest
 
             'sonido.string' => 'El campo sonido debe ser una cadena de texto',
             'sonido.in' => 'El campo sonido debe ser "si" o "no"',
+
+            'id_responsable.exists' => 'El responsable no existe o no está activo',
         ];
     }
 }

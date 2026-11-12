@@ -112,6 +112,41 @@ class ReservaController extends Controller
         return $this->paginatedResponse($response);
     }
 
+    /**
+     * GET /api/reservas/pendientes — reservas esperando autorización en los salones donde el
+     * usuario es responsable. Sin opción de permisos: la autorización es por dato (ser el
+     * responsable del salón), así que a quien no lo es simplemente le llega vacío.
+     */
+    public function pendientes(Request $request)
+    {
+        return $this->apiResponse($this->reservasServices->reservasPendientes($request->user()));
+    }
+
+    /**
+     * PUT /api/reservas/decision — el responsable del salón aprueba o rechaza reservas
+     * pendientes (el service valida que lo sea).
+     */
+    public function decidir(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'aprobar' => ['required', 'boolean'],
+            'motivo' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error($validator->errors()->first(), 422);
+        }
+
+        return $this->apiResponse($this->reservasServices->decidirReservas(
+            array_map('intval', $request->input('ids')),
+            $request->boolean('aprobar'),
+            $request->user(),
+            $request->input('motivo'),
+        ));
+    }
+
     public function actualizarReserva(Request $request)
     {
         $reserva = Reservas::find($request->input('id'));

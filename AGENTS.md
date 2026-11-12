@@ -123,6 +123,7 @@ esta tabla.
 | [`modulos/evaluaciones.md`](docs/contexto/modulos/evaluaciones.md) | Evaluaciones (Gestor de Calidad) y Encuestas |
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
+| [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,

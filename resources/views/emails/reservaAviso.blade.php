@@ -16,8 +16,8 @@
         <div style="padding:28px 32px;color:#2c2c2c;font-size:14px;line-height:1.6;">
             @if($requiereAprobacion)
                 <p style="background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:14px;border-radius:8px;">
-                    <strong>⚠ Aviso importante:</strong> el salón <strong>{{ $salon }}</strong> requiere aprobación
-                    previa antes de poder confirmar y validar la reserva.
+                    <strong>⚠ Pendiente de autorización:</strong> el salón <strong>{{ $salon }}</strong> requiere
+                    autorización del responsable. La reserva queda pendiente hasta que la apruebe o la rechace.
                 </p>
             @endif
 

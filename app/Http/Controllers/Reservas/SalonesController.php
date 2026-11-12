@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Reservas;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Reservas\HoraRequest;
 use App\Http\Requests\Reservas\SalonRequest;
@@ -9,11 +10,9 @@ use App\Models\Reservas\ConfiguracionReservas;
 use App\Models\Reservas\Horas;
 use App\Models\Reservas\Salones;
 use App\Services\Reservas\ReservasServices;
-use Illuminate\Http\JsonResponse;
+use App\Support\Permiso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class SalonesController extends Controller
 {
@@ -41,9 +40,11 @@ class SalonesController extends Controller
     {
         $salones = Salones::where('salones.activo', 1)
             ->leftJoin('encuestas_salon as es', 'es.id_salon', '=', 'salones.id')
+            ->leftJoin('usuarios as r', 'r.id_user', '=', 'salones.id_responsable')
             ->leftJoin('encuestas as e', fn ($j) => $j->on('e.id', '=', 'es.id_encuesta')->where('e.activo', 1))
             ->get([
-                'salones.id', 'salones.nombre', 'salones.portatil', 'salones.sonido',
+                'salones.id', 'salones.nombre', 'salones.portatil', 'salones.sonido', 'salones.id_responsable',
+                DB::raw("TRIM(CONCAT(COALESCE(r.nombre, ''), ' ', COALESCE(r.apellido, ''))) AS responsable_nombre"),
                 DB::raw('CASE WHEN e.id IS NULL THEN NULL ELSE es.token_publico END AS token_encuesta'),
                 'e.titulo as encuesta_titulo',
             ]);
@@ -109,7 +110,7 @@ class SalonesController extends Controller
         return $this->apiResponse([
             'error' => false,
             'message' => 'Horas obtenidas correctamente.',
-            'data' => Horas::where('activo', 1)->get(['id', 'horas'])
+            'data' => Horas::where('activo', 1)->get(['id', 'horas']),
         ]);
     }
 
