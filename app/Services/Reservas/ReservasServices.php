@@ -17,6 +17,7 @@ use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -162,8 +163,12 @@ class ReservasServices extends Service
             }
         }
 
+        // Salón con responsable: la reserva queda pendiente y ocupa la franja, pero los
+        // portátiles se prestan recién al aprobarla (ver decidirReservas).
+        $requiereAutorizacion = (bool) $salon->id_responsable;
+
         try {
-            $reservas = DB::transaction(function () use ($data, $combos, $portatilSolicitado) {
+            $reservas = DB::transaction(function () use ($data, $combos, $portatilSolicitado, $requiereAutorizacion) {
                 $creadas = [];
 
                 foreach ($combos as $combo) {
@@ -171,30 +176,12 @@ class ReservasServices extends Service
                         ...$data,
                         'fecha_reserva' => $combo['fecha'],
                         'hora_reserva' => $combo['hora'],
-                        'confirmado' => 2,
+                        'confirmado' => $requiereAutorizacion ? Reservas::CONFIRMADO_PENDIENTE : Reservas::CONFIRMADO_RESERVADA,
                         'activo' => 1,
                     ]);
 
-                    if ($portatilSolicitado > 0) {
-                        // disponiblePrestamo excluye los equipos con un préstamo abierto aunque su
-                        // `estado` no sea 8: si no, registrarPrestamo lanza "ya se encuentra
-                        // prestado" y se revierte toda la reserva.
-                        $portatiles = Inventario::disponiblePrestamo('PORTATIL', null)
-                            ->whereNotIn('estado', [2, 5, 8])
-                            ->lockForUpdate()
-                            ->limit($portatilSolicitado)
-                            ->get();
-
-                        foreach ($portatiles as $portatil) {
-                            $this->prestamosService->registrarPrestamo([
-                                'id_inventario' => $portatil->id,
-                                'id_user_prestamo' => $data['id_user'],
-                                'fecha_prestamo' => $combo['fecha'],
-                                'id_user_entrega' => $portatil->id_user,
-                                'fecha_compromiso' => $combo['fecha'].' 23:59:59',
-                                'observacion' => 'Préstamo automático por reserva #'.$reserva->id,
-                            ]);
-                        }
+                    if (! $requiereAutorizacion) {
+                        $this->prestarPortatiles($reserva, (int) $portatilSolicitado);
                     }
 
                     $creadas[] = $reserva->fresh()->toArray();
@@ -204,12 +191,13 @@ class ReservasServices extends Service
             });
 
             $total = count($reservas);
+            $mensaje = $total === 1 ? 'Reserva creada correctamente.' : "$total reservas creadas correctamente.";
 
             return [
                 'error' => false,
-                'message' => $total === 1
-                    ? 'Reserva creada correctamente.'
-                    : "$total reservas creadas correctamente.",
+                'message' => $requiereAutorizacion
+                    ? $mensaje.' Este salón requiere autorización: la reserva queda pendiente hasta que el responsable la apruebe.'
+                    : $mensaje,
                 'data' => $reservas,
             ];
         } catch (Exception $e) {
@@ -223,6 +211,216 @@ class ReservasServices extends Service
         }
     }
 
+    /**
+     * Préstamo automático de `$cantidad` portátiles para la fecha de la reserva (marcador
+     * "reserva #{id}" en la observación, el mismo que usan finalizar/cancelar para
+     * devolverlos). Si no alcanzan, presta los que haya (sin validar, ver crearReserva).
+     */
+    private function prestarPortatiles(Reservas $reserva, int $cantidad): void
+    {
+        if ($cantidad <= 0) {
+            return;
+        }
+
+        // disponiblePrestamo excluye los equipos con un préstamo abierto aunque su
+        // `estado` no sea 8: si no, registrarPrestamo lanza "ya se encuentra
+        // prestado" y se revierte toda la reserva.
+        $portatiles = Inventario::disponiblePrestamo('PORTATIL', null)
+            ->whereNotIn('estado', [2, 5, 8])
+            ->lockForUpdate()
+            ->limit($cantidad)
+            ->get();
+
+        $fecha = Carbon::parse($reserva->fecha_reserva)->toDateString();
+
+        foreach ($portatiles as $portatil) {
+            $this->prestamosService->registrarPrestamo([
+                'id_inventario' => $portatil->id,
+                'id_user_prestamo' => $reserva->id_user,
+                'fecha_prestamo' => $fecha,
+                'id_user_entrega' => $portatil->id_user,
+                'fecha_compromiso' => $fecha.' 23:59:59',
+                'observacion' => 'Préstamo automático por reserva #'.$reserva->id,
+            ]);
+        }
+    }
+
+    /**
+     * Reservas pendientes de autorización de los salones donde `$usuario` es responsable
+     * (el Super Admin ve las de todos los salones con responsable).
+     */
+    public function reservasPendientes(Usuario $usuario): array
+    {
+        try {
+            $reservas = Reservas::with(['salon:id,nombre', 'hora:id,horas', 'usuario:id_user,nombre,apellido'])
+                ->where('confirmado', Reservas::CONFIRMADO_PENDIENTE)
+                ->where('activo', 1)
+                ->whereNull('fecha_cancelado')
+                ->whereHas('salon', fn ($q) => (int) $usuario->perfil === 1
+                    ? $q->whereNotNull('id_responsable')
+                    : $q->where('id_responsable', $usuario->id_user))
+                ->orderBy('fecha_reserva')
+                ->orderBy('id_salon')
+                ->orderBy('hora_reserva')
+                ->get();
+
+            return ['error' => false, 'message' => 'Reservas pendientes obtenidas correctamente.', 'data' => $reservas];
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las reservas pendientes');
+
+            return ['error' => true, 'message' => 'Error en el servidor al obtener las reservas pendientes.', 'data' => []];
+        }
+    }
+
+    /**
+     * Solo el responsable del salón (o el Super Admin) decide. Las reservas deben venir con
+     * la relación `salon` cargada.
+     *
+     * @param  iterable<Reservas>  $reservas
+     */
+    public function puedeDecidir(iterable $reservas, Usuario $usuario): bool
+    {
+        if ((int) $usuario->perfil === 1) {
+            return true;
+        }
+
+        foreach ($reservas as $reserva) {
+            if ((int) $reserva->salon?->id_responsable !== (int) $usuario->id_user) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Aprueba (confirmado=2, presta portátiles) o rechaza (confirmado=4, libera la franja)
+     * reservas pendientes, y avisa por correo a cada solicitante. Todo o nada: si alguna
+     * no está pendiente o no es de un salón del responsable, no se toca ninguna.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function decidirReservas(array $ids, bool $aprobar, Usuario $usuario, ?string $motivo = null): array
+    {
+        $reservas = Reservas::with(['salon:id,nombre,id_responsable', 'hora:id,horas', 'usuario:id_user,nombre,apellido,correo'])
+            ->whereIn('id', $ids)
+            ->where('confirmado', Reservas::CONFIRMADO_PENDIENTE)
+            ->where('activo', 1)
+            ->whereNull('fecha_cancelado')
+            ->get();
+
+        if ($reservas->isEmpty() || $reservas->count() !== count(array_unique($ids))) {
+            return ['error' => true, 'message' => 'Alguna de las reservas ya no está pendiente de autorización.', 'data' => []];
+        }
+
+        if (! $this->puedeDecidir($reservas, $usuario)) {
+            return ['error' => true, 'message' => 'Solo el responsable del salón puede autorizar o rechazar estas reservas.', 'data' => []];
+        }
+
+        try {
+            DB::transaction(function () use ($reservas, $aprobar, $usuario) {
+                foreach ($reservas as $reserva) {
+                    if ($aprobar) {
+                        $reserva->update(['confirmado' => Reservas::CONFIRMADO_RESERVADA, 'fecha_confirmado' => now()]);
+                        $this->prestarPortatiles($reserva, (int) $reserva->portatil);
+                    } else {
+                        $reserva->update([
+                            'confirmado' => Reservas::CONFIRMADO_RECHAZADA,
+                            'activo' => 0,
+                            'fecha_cancelado' => now(),
+                            'id_cancelado' => $usuario->id_user,
+                        ]);
+                    }
+                }
+            });
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al decidir la autorización de reservas');
+
+            return ['error' => true, 'message' => 'Error en el servidor al guardar la decisión.', 'data' => []];
+        }
+
+        // Fuera de la transacción: si el correo falla, la decisión ya quedó guardada.
+        $reservas->groupBy('id_user')->each(fn ($grupo) => $this->enviarCorreoDecision($grupo, $aprobar, $motivo));
+
+        $total = $reservas->count();
+
+        return [
+            'error' => false,
+            'message' => ($aprobar ? 'Reserva aprobada' : 'Reserva rechazada')." ($total franja(s)). Se notificó al solicitante.",
+            'data' => [],
+        ];
+    }
+
+    /**
+     * Correo al solicitante con la decisión del responsable (uno por solicitante).
+     *
+     * @param  Collection<int, Reservas>  $reservas
+     */
+    private function enviarCorreoDecision($reservas, bool $aprobar, ?string $motivo): void
+    {
+        try {
+            $primera = $reservas->first();
+            $correo = $primera->usuario?->correo;
+            if (! $correo) {
+                return;
+            }
+
+            $salon = $primera->salon?->nombre ?? '';
+            $lineas = [
+                $aprobar
+                    ? "Tu reserva del salón {$salon} fue APROBADA por el responsable del salón. Estado: Reservado."
+                    : "Tu reserva del salón {$salon} fue RECHAZADA por el responsable del salón.",
+                '',
+                ...$reservas->map(fn ($r) => '• '.Carbon::parse($r->fecha_reserva)->locale('es')->translatedFormat('l j \d\e F \d\e Y')
+                    .' — '.trim(str_replace("\n", ' ', $r->hora?->horas ?? '')))->all(),
+            ];
+
+            if (! $aprobar && $motivo) {
+                $lineas[] = '';
+                $lineas[] = "Motivo: {$motivo}";
+            }
+
+            app(MailService::class)->sendGeneric(
+                $correo,
+                'Reserva '.($aprobar ? 'aprobada' : 'rechazada')." ($salon)",
+                implode("\n", $lineas),
+                rtrim((string) config('app.frontend_url'), '/').'/reservas/mis-reservas',
+                'Ver mis reservas'
+            );
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al enviar el correo de decisión de la reserva');
+        }
+    }
+
+    /**
+     * Correo al responsable del salón con el enlace a la página de autorizaciones.
+     *
+     * @param  array<int, string>  $fechas
+     * @param  array<int, string>  $horas
+     */
+    private function enviarCorreoResponsable(Salones $salon, Usuario $solicitante, array $fechas, array $horas): void
+    {
+        $correo = $salon->responsable?->correo;
+        if (! $correo) {
+            return;
+        }
+
+        app(MailService::class)->sendGeneric(
+            $correo,
+            "Reserva pendiente de autorización ({$salon->nombre})",
+            implode("\n", [
+                trim($solicitante->nombre.' '.$solicitante->apellido)." solicitó reservar el salón {$salon->nombre}, que requiere tu autorización.",
+                '',
+                'Fechas: '.implode(', ', $fechas),
+                'Horas: '.implode(', ', array_map(fn ($h) => trim(str_replace("\n", ' ', $h)), $horas)),
+                '',
+                'Ingresa a OMNIA para aprobarla o rechazarla.',
+            ]),
+            rtrim((string) config('app.frontend_url'), '/').'/reservas/autorizaciones',
+            'Revisar solicitud en OMNIA'
+        );
+    }
+
     // Salones con destinatarios propios (ids heredados de la app legada).
     private const SALON_MAKER_LAB = 9;
 
@@ -233,8 +431,8 @@ class ReservasServices extends Service
     /**
      * Aviso interno de reserva (una sola vez por solicitud, aunque tenga varias franjas).
      * Siempre va a reservas.sistemas; según el salón se suman otros destinatarios (y, para
-     * Maker Lab y Biblioteca, el propio usuario). Maker Lab añade la alerta de aprobación
-     * previa. Es un extra: si falla solo se registra y no afecta la reserva.
+     * Maker Lab y Biblioteca, el propio usuario). Si el salón tiene responsable, añade la
+     * alerta de autorización y le envía aparte el enlace para aprobar/rechazar. Es un extra: si falla solo se registra y no afecta la reserva.
      * `$reservas` es el `data` de crearReserva().
      */
     public function enviarCorreoAvisoReserva(array $reservas, Usuario $usuario): bool
@@ -253,9 +451,16 @@ class ReservasServices extends Service
                 default => [],
             });
 
-            $nombreSalon = Salones::find($idSalon)?->nombre ?? '';
+            $salon = Salones::with('responsable:id_user,correo')->find($idSalon);
+            $nombreSalon = $salon?->nombre ?? '';
             $horas = Horas::whereIn('id', array_column($reservas, 'hora_reserva'))->orderBy('id')->pluck('horas')->all();
             $fechas = array_values(array_unique(array_column($reservas, 'fecha_reserva')));
+            $fechasTexto = array_map(fn ($f) => Carbon::parse($f)->locale('es')->translatedFormat('l j \d\e F \d\e Y'), $fechas);
+            $requiereAutorizacion = (bool) $salon?->id_responsable;
+
+            if ($requiereAutorizacion) {
+                $this->enviarCorreoResponsable($salon, $usuario, $fechasTexto, $horas);
+            }
 
             $resultado = app(MailService::class)->sendView(
                 array_values(array_filter($correos)),
@@ -266,10 +471,10 @@ class ReservasServices extends Service
                     'salon' => $nombreSalon,
                     'portatil' => ($primera['portatil'] ?? 0) > 0 ? 'Sí ('.$primera['portatil'].')' : 'No',
                     'sonido' => ! empty($primera['sonido']) && $primera['sonido'] !== 'no' ? 'Sí' : 'No',
-                    'fechas' => array_map(fn ($f) => Carbon::parse($f)->locale('es')->translatedFormat('l j \d\e F \d\e Y'), $fechas),
+                    'fechas' => $fechasTexto,
                     'horas' => $horas,
                     'detalle' => $primera['detalle_reserva'] ?? null,
-                    'requiereAprobacion' => $idSalon === self::SALON_MAKER_LAB,
+                    'requiereAprobacion' => $requiereAutorizacion,
                 ]
             );
 

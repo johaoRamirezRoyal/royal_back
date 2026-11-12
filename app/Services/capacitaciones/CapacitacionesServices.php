@@ -238,7 +238,7 @@ class CapacitacionesServices
 
             return ['error' => false, 'message' => 'ok', 'data' => [
                 'curso' => CapCurso::find($idCurso),
-                'usuario' => Usuario::find($idUser, ['id_user', 'nombre', 'apellido', 'documento']),
+                'usuario' => Usuario::find($idUser, ['id_user', 'nombre', 'apellido', 'documento', 'correo']),
                 'fecha' => $completado['fecha'],
             ]];
         } catch (Exception $e) {

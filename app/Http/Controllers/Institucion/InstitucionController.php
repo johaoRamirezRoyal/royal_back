@@ -13,14 +13,17 @@ use App\Mail\Instituciones\CartaRecomendacionMail;
 use App\Models\Instituciones\CartaRecomendacion;
 use App\Models\Instituciones\ConfiguracionInstituciones;
 use App\Models\Instituciones\Institucion;
-use App\Pdf\Instituciones\CartaRecomendacionPdfService;
+use App\Services\Documentos\DocumentoPdfService;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class InstitucionController extends Controller
@@ -421,18 +424,62 @@ class InstitucionController extends Controller
     }
 
     /**
+     * PDF de una carta propia con la sesión de la institución: `documento_url` en local es
+     * /api/public (auth:api, de usuarios) y una institución no tiene esa sesión. Las cartas son
+     * privadas (ArchivosPrivados): el PDF pasa por Laravel, sin caché, para que la URL firmada
+     * de Cloudinary (que no vence) nunca llegue al navegador.
+     */
+    public function verCartaPdf(Request $request, int $id)
+    {
+        $carta = CartaRecomendacion::where('id_institucion', $request->attributes->get('institucion_id'))->findOrFail($id);
+        abort_unless($carta->documento_public_id && $carta->documento_url, 404);
+
+        if (! CloudinaryService::usaCloudinary()) {
+            return Storage::disk('public')->response("{$carta->documento_public_id}.pdf", "carta-recomendacion-{$carta->id}.pdf");
+        }
+
+        $origen = Http::timeout(30)->get(ArchivosPrivados::firmar($carta->documento_url));
+        abort_unless($origen->successful(), $origen->status() === 404 ? 404 : 502);
+
+        return response($origen->body(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "inline; filename=\"carta-recomendacion-{$carta->id}.pdf\"",
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /**
      * Genera el PDF, lo sube a Cloudinary y envía copia al correo configurado
      * (ConfiguracionInstituciones::actual()->correosNotificacion(), editable desde el
      * admin) — se llama después de guardar la carta, no dentro de una transacción: un
      * fallo acá no debe impedir que la carta ya enviada quede registrada, solo se deja
      * constancia en el log (mismo patrón que EvaluacionesServices::enviarCorreoRespuesta).
      */
+    /**
+     * PDF de la carta (documento `cartaRecomendacion` de Royal School, en
+     * src/documentos/instituciones/royal-school del frontend). Lo diligencia un jardín, no un
+     * usuario con correo: la institución es la del colegio de la sesión (su connection), y el
+     * logo del encabezado, el de su marca.
+     */
+    private function pdfCartaRecomendacion(CartaRecomendacion $carta): string
+    {
+        $carta->loadMissing('institucion');
+
+        return app(DocumentoPdfService::class)->generar('cartaRecomendacion', [
+            'formato' => $carta->institucion?->tipo_documento === 'play_and_learn' ? 'play_and_learn' : 'coordinador_psicologo',
+            'idioma' => $carta->idioma === 'en' ? 'en' : 'es',
+            'institucion' => $carta->institucion?->nombre ?? '',
+            'datos' => (object) ($carta->datos ?? []),
+        ], DocumentoPdfService::dominioDelColegio());
+    }
+
     private function generarSubirYNotificar(CartaRecomendacion $carta): void
     {
         $tmpPath = null;
 
         try {
-            $pdfBinario = app(CartaRecomendacionPdfService::class)->generate($carta);
+            $pdfBinario = $this->pdfCartaRecomendacion($carta);
             $nombrePdf = 'carta-recomendacion-' . $carta->id . '.pdf';
 
             $tmpPath = tempnam(sys_get_temp_dir(), 'carta_') . '.pdf';

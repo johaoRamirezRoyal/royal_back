@@ -3,6 +3,9 @@
 namespace Tests\Unit\Reservas;
 
 use App\Models\Reservas\ConfiguracionReservas;
+use App\Models\Reservas\Reservas;
+use App\Models\Reservas\Salones;
+use App\Models\Usuarios\Usuario;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Reservas\ReservasServices;
 use Carbon\Carbon;
@@ -142,5 +145,35 @@ class ReservasServicesTest extends TestCase
         $lunesSiguiente = $viernes->copy()->next(Carbon::MONDAY);
 
         $this->assertNull($this->validar($lunesSiguiente, $viernes, $viernes->copy()->setTime(9, 0), $this->config(1, 10)));
+    }
+
+    private function reservaEnSalonDe(?int $idResponsable): Reservas
+    {
+        return (new Reservas)->setRelation('salon', new Salones(['id_responsable' => $idResponsable]));
+    }
+
+    private function usuario(int $idUser, int $perfil = 5): Usuario
+    {
+        $usuario = new Usuario;
+        $usuario->id_user = $idUser;
+        $usuario->perfil = $perfil;
+
+        return $usuario;
+    }
+
+    public function test_solo_el_responsable_de_todos_los_salones_puede_decidir(): void
+    {
+        $service = new ReservasServices($this->createMock(PrestamosService::class));
+
+        $this->assertTrue($service->puedeDecidir([$this->reservaEnSalonDe(7), $this->reservaEnSalonDe(7)], $this->usuario(7)));
+        $this->assertFalse($service->puedeDecidir([$this->reservaEnSalonDe(7), $this->reservaEnSalonDe(8)], $this->usuario(7)));
+        $this->assertFalse($service->puedeDecidir([$this->reservaEnSalonDe(null)], $this->usuario(7)));
+    }
+
+    public function test_el_super_admin_puede_decidir_cualquier_reserva(): void
+    {
+        $service = new ReservasServices($this->createMock(PrestamosService::class));
+
+        $this->assertTrue($service->puedeDecidir([$this->reservaEnSalonDe(8)], $this->usuario(1, perfil: 1)));
     }
 }

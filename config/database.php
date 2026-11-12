@@ -64,8 +64,9 @@ return [
             ]) : [],
         ],
 
-        // Base "admin_management": administra las distintas bases de datos vinculadas a la
-        // app (marcas por dominio, logs de actividad, y lo que se vaya sumando) — separada
+        // Connection "admin_management". La BASE se llama `admin_managements` en producción
+        // (DB_ADMIN_DATABASE); la clave de la connection no cambia, la usan los modelos.
+        // Administra las distintas bases de datos vinculadas a la app (marcas por dominio, logs de actividad, y lo que se vaya sumando) — separada
         // de la base operativa (`mysql`) porque es transversal a los dominios/tenants, no
         // datos de un dominio en particular. Mismo servidor/credenciales que `mysql` por
         // ahora (DB_ADMIN_HOST/PORT/USERNAME/PASSWORD solo si algún día vive en otro server).
@@ -74,7 +75,7 @@ return [
             'url' => env('DB_ADMIN_URL'),
             'host' => env('DB_ADMIN_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => env('DB_ADMIN_PORT', env('DB_PORT', '3306')),
-            'database' => env('DB_ADMIN_DATABASE', 'admin_management'),
+            'database' => env('DB_ADMIN_DATABASE', 'admin_managements'),
             'username' => env('DB_ADMIN_USERNAME', env('DB_USERNAME', 'root')),
             'password' => env('DB_ADMIN_PASSWORD', env('DB_PASSWORD', '')),
             'unix_socket' => env('DB_SOCKET', ''),

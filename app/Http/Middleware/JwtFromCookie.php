@@ -15,7 +15,12 @@ class JwtFromCookie
     {
         $token = null;
 
-        if ($request->is('api/compartido/*') || $request->is('api/auth/logout')) {
+        // api/privado: el token cifrado de la URL solo lo entrega el backend en un JSON que esa
+        // sesión ya podía ver (ArchivosPrivados::paraCliente), así que sirve la de cualquiera
+        // de los dos sistemas: sin esto, el acudiente no abría sus propios documentos.
+        // api/public NO: recibe una ruta cualquiera, y con la sesión de un acudiente leería
+        // archivos privados ajenos.
+        if ($request->is('api/compartido/*') || $request->is('api/auth/logout') || $request->is('api/privado/*')) {
 
             // /api/auth/logout es compartido entre ambos sistemas (ver
             // AuthController::logout, que ya elige la cookie a invalidar según

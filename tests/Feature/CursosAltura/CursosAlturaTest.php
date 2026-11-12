@@ -17,13 +17,15 @@ use Tests\TestCase;
 
 /**
  * Contra la base real (ver InventarioFechaReporteTest). Todo corre dentro de una transacción
- * que se revierte al final: cursos_altura, reportes y usuarios son InnoDB.
+ * que se revierte al final; cursos_altura puede ser MyISAM, así que sus filas nuevas se borran en tearDown.
  */
 class CursosAlturaTest extends TestCase
 {
     private ?Usuario $operativo;
 
     private string $token;
+
+    private int $ultimoCurso = 0;
 
     protected function setUp(): void
     {
@@ -34,6 +36,8 @@ class CursosAlturaTest extends TestCase
         Config::set('database.default', 'mysql');
         Config::set('database.connections.mysql.database', trim($match[1] ?? 'laravel', " \t\n\r\0\x0B\"'"));
         DB::purge('mysql');
+        // cursos_altura puede ser MyISAM (lo es en local): el rollBack no la deshace.
+        $this->ultimoCurso = (int) DB::table('cursos_altura')->max('id');
         DB::beginTransaction();
 
         $this->operativo = Usuario::where('estado', 'activo')
@@ -52,6 +56,7 @@ class CursosAlturaTest extends TestCase
     protected function tearDown(): void
     {
         DB::rollBack();
+        DB::table('cursos_altura')->where('id', '>', $this->ultimoCurso)->delete();
         parent::tearDown();
     }
 
@@ -175,6 +180,80 @@ class CursosAlturaTest extends TestCase
         ], $this->auth())->assertOk()->json('data.ruta_certificado');
 
         Storage::disk('public')->assertExists($ruta);
+    }
+
+    public function test_seguridad_social_sin_la_opcion_150_da_403(): void
+    {
+        if (DB::table('cron_permisos')->where('id_perfil', $this->operativo->perfil)->where('id_opcion', Permiso::SEGURIDAD_SOCIAL)->where('activo', 1)->exists()) {
+            $this->markTestSkipped('El perfil operativo ya tiene la opción 150.');
+        }
+
+        $auth = ['Authorization' => 'Bearer '.app(JwtService::class)->generateToken($this->operativo), 'Accept' => 'application/json'];
+
+        $this->getJson('/api/cursos-altura/entidades', $auth)->assertForbidden();
+        $this->postJson("/api/cursos-altura/seguridad-social/{$this->operativo->id_user}", [], $auth)->assertForbidden();
+    }
+
+    public function test_entidad_repetida_en_el_mismo_tipo_da_422(): void
+    {
+        $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'EPS', 'nombre' => 'EPS Prueba Automática'], $this->auth())->assertOk();
+        $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'EPS', 'nombre' => 'EPS Prueba Automática'], $this->auth())
+            ->assertUnprocessable()->assertJsonValidationErrors('nombre');
+        // Mismo nombre en otro tipo sí se permite.
+        $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'ARL', 'nombre' => 'EPS Prueba Automática'], $this->auth())->assertOk();
+    }
+
+    public function test_entidad_desactivada_sigue_asignada_y_se_reactiva_al_crearla_de_nuevo(): void
+    {
+        $id = $this->operativo->id_user;
+        $this->curso($id, now()->subYear()->toDateString(), null);
+        $afp = $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'AFP', 'nombre' => 'AFP Prueba Automática'], $this->auth())->json('data.id');
+        $this->post("/api/cursos-altura/seguridad-social/{$id}", ['id_afp' => $afp], $this->auth())->assertOk();
+
+        $this->putJson("/api/cursos-altura/entidades/{$afp}", ['nombre' => 'AFP Prueba Renombrada'], $this->auth())->assertOk();
+        $this->deleteJson("/api/cursos-altura/entidades/{$afp}", [], $this->auth())->assertOk();
+
+        $this->assertNotContains($afp, array_column($this->getJson('/api/cursos-altura/entidades', $this->auth())->json('data'), 'id'));
+        $this->getJson("/api/cursos-altura/seguridad-social/{$id}", $this->auth())
+            ->assertJsonPath('data.afp.nombre', 'AFP Prueba Renombrada')->assertJsonPath('data.afp.activo', 0);
+        // Volver a guardar al trabajador con la desactivada no falla.
+        $this->post("/api/cursos-altura/seguridad-social/{$id}", ['id_afp' => $afp], $this->auth())->assertOk();
+
+        $fila = collect($this->getJson('/api/cursos-altura?per-page=500&s='.urlencode($this->operativo->documento ?? $this->operativo->nombre), $this->auth())->json('data.data'))->firstWhere('id_user', $id);
+        $this->assertSame($afp, $fila['seguridad_social']['id_afp']);
+
+        $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'AFP', 'nombre' => 'AFP Prueba Renombrada'], $this->auth())
+            ->assertOk()->assertJsonPath('data.id', $afp);
+    }
+
+    public function test_seguridad_social_solo_para_trabajadores_con_curso_y_conserva_el_documento(): void
+    {
+        Config::set('filesystems.uploads_disk', 'public');
+        Storage::fake('public');
+        $id = $this->operativo->id_user;
+        $eps = $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'EPS', 'nombre' => 'EPS Prueba Automática'], $this->auth())->json('data.id');
+        $arl = $this->postJson('/api/cursos-altura/entidades', ['tipo' => 'ARL', 'nombre' => 'ARL Prueba Automática'], $this->auth())->json('data.id');
+
+        $this->post("/api/cursos-altura/seguridad-social/{$id}", ['id_eps' => $eps], $this->auth())->assertUnprocessable();
+
+        // Un curso vencido basta.
+        $this->curso($id, '2020-01-01', '2021-01-01');
+
+        // Una EPS no sirve como ARL.
+        $this->post("/api/cursos-altura/seguridad-social/{$id}", ['id_arl' => $eps], $this->auth())
+            ->assertUnprocessable()->assertJsonValidationErrors('id_arl');
+
+        $ruta = $this->post("/api/cursos-altura/seguridad-social/{$id}", [
+            'id_eps' => $eps,
+            'documento_eps' => UploadedFile::fake()->create('eps.pdf', 100, 'application/pdf'),
+        ], $this->auth())->assertOk()->json('data.ruta_eps');
+        Storage::disk('public')->assertExists($ruta);
+
+        $data = $this->post("/api/cursos-altura/seguridad-social/{$id}", ['id_eps' => $eps, 'id_arl' => $arl], $this->auth())->assertOk()->json('data');
+        $this->assertSame($ruta, $data['ruta_eps']);
+        $this->assertSame($arl, $data['id_arl']);
+        $this->getJson("/api/cursos-altura/seguridad-social/{$id}", $this->auth())->assertOk()
+            ->assertJsonPath('data.id_eps', $eps)->assertJsonPath('data.ruta_eps', $ruta)->assertJsonPath('data.id_arl', $arl);
     }
 
     /** Dos operativos sin curso previo, ahora con uno vigente desde hace un año. @return array{0: int, 1: int} */

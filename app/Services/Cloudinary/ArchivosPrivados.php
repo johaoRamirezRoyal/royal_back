@@ -22,7 +22,9 @@ final class ArchivosPrivados
      * cambia, cambia también `esPrivado` en src/utils/fileUrl.ts (frontend).
      */
     private const PATRON = '#(^|/)(Admisiones|historia-clinica|usuarios/firmas|gestion-humana|certificados'
-        . '|produccion-intelectual|permisos-licencias|tramites/documentos|recursos/documentos|documentos-varios|proveedores/documentos)/'
+        . '|produccion-intelectual|permisos-licencias|tramites/documentos|recursos/documentos|documentos-varios|proveedores/documentos'
+        // Cartas de recomendación de los jardines: salud, terapias y disciplina de menores.
+        . '|Instituciones/CartasRecomendacion)/'
         . '|(^|/)carnets/[^/]+$'
         // Firmas y sellos fijos de royal-school (la firma de la directora en el V°B° de inventario,
         // el sello del paz y salvo de biblioteca); los logos siguen públicos.

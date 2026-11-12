@@ -33,6 +33,7 @@ class ArchivosPrivadosTest extends TestCase
             'royal/proveedores/documentos/uuid',
             'royal/royal-school/firma_administrativa',
             'royal/royal-school/paz-salvo/sello',
+            'royal/Instituciones/CartasRecomendacion/carta-recomendacion-15',
         ] as $id) {
             $this->assertTrue(ArchivosPrivados::esPrivado($id), $id);
         }
@@ -42,7 +43,7 @@ class ArchivosPrivadosTest extends TestCase
             'royal/Noticias/Revistas/revista_x',
             'banner/b',
             'colegios-admision/logo',
-            'royal/Instituciones/CartasRecomendacion/c',
+            'royal/Instituciones/otra-carpeta/c',
             'royal/inventario/programacion-mant/m',
             'royal/noticias/n',
             'royal/royal-school/logotipoBackground',

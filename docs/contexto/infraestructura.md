@@ -201,12 +201,52 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 
 ## PDFs
 
-- Todo PDF institucional nuevo usa este logo fijo, no el de la marca por dominio:
-  `app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png')` (ejemplo:
-  `HojaVidaPdfService`).
-- Las imágenes fijas de documentos (logos, escudos, sellos) viven en Cloudinary bajo
-  `royal/royal-school/` (`logotipoMarca.png`, `paz-salvo/{logo,sello}.webp`,
-  `instituciones/logo.png`, `horario/logo.png`), no en el disco del servidor.
+### Documentos de src/documentos (pdfmake)
+
+Qué se cambió, el deploy y los pendientes:
+[`DOCUMENTOS_PDFMAKE_2026_11_12.md`](../DOCUMENTOS_PDFMAKE_2026_11_12.md).
+
+- Los documentos nuevos se definen en el frontend (`src/documentos/`, ver su
+  `docs/contexto/documentos.md`) y el servidor los genera con
+  `app(DocumentoPdfService::class)->generar('<id>', $datos, $correoUsuario)`, que devuelve el
+  PDF en binario y lanza `RuntimeException` si falla.
+- Ejecuta `node resources/documentos/render.cjs` (JSON por stdin, PDF por stdout). Ese archivo
+  **se compila en el frontend** con `pnpm build:documentos`; no se edita aquí. Si se cambia
+  un documento en el frontend y no se recompila, el servidor sigue generando la versión vieja.
+- **El servidor necesita Node** (>= 20). `NODE_BINARY` en `.env` si `node` no está en el PATH
+  del usuario del servidor web.
+- **Windows**: Node aborta al arrancar sin la variable `SystemRoot` (`Assertion failed:
+  ncrypto::CSPRNG`), y el servidor web (`php artisan serve`, Apache) puede lanzar procesos
+  con un entorno que no la trae. `DocumentoPdfService::entornoNode()` la pasa explícita; no
+  la quites.
+- La institución (marca y carpeta de documentos) sale del dominio del correo. El logo es el de
+  `MarcaDominioService::rutaLocalLogo()` (ver «Logo» abajo) y se manda como data URL; si es
+  webp se pasa a PNG con GD, porque pdfmake no embebe webp.
+- Ya migrados: carta de entrega (`InventarioServices::generarCartaEntregaPdf`), paz y salvo y
+  listados de préstamos de Biblioteca (`BibliotecaServices`), carta de recomendación de
+  Instituciones (`InstitucionController`) y certificado de capacitación
+  (`CapacitacionesController::certificado`, fondo en `resources/pdf/capacitaciones/`).
+- La institución sale del correo del usuario o, sin usuario (la carta de recomendación de un
+  jardín), de `DocumentoPdfService::dominioDelColegio()`, que traduce la connection activa con
+  `DOMINIO_POR_CONNECTION`. Un documento propio de un colegio (carpeta
+  `instituciones/<colegio>/` del frontend) no se genera para otro: lanza `RuntimeException`. El
+  certificado de capacitación es solo de Royal School: a un usuario de Hebreo Unión el endpoint
+  le responde 422.
+- Imágenes extra (sello, firma) van dentro de `$datos` con
+  `DocumentoPdfService::imagenComoDataUrl($rutaLocal)`; el documento no puede descargarlas.
+- Cada documento lanza un proceso de Node (~0,3 s). En los envíos masivos (recordatorio de
+  préstamos) eso se suma por usuario; si llega a pesar, generar varios en un solo proceso.
+
+### TCPDF (documentos aún no migrados)
+
+- **Logo**: todo PDF/Excel usa `app(MarcaDominioService::class)->rutaLocalLogo($correo)`.
+  Devuelve el logo de la marca del dominio del correo, configurado en /marcas-dominio (sin
+  correo, usa el del usuario autenticado). Si no hay marca, devuelve el fijo
+  `royal/royal-school/logotipoBackground.png`, y un WEBP sale convertido a PNG. Un colegio
+  nuevo solo configura su marca: no hay logos por documento. Ejemplo: `HojaVidaPdfService`.
+- Las demás imágenes fijas de documentos (sellos, firmas) viven en Cloudinary bajo
+  `royal/royal-school/` (`paz-salvo/sello.webp`, `firma_administrativa.jpg`), no en el disco
+  del servidor.
   `rutaLocalRoyalSchool()` las descarga a un temporal porque TCPDF/PhpSpreadsheet necesitan
   ruta local; si falla devuelve null y el documento sale sin esa imagen (sin respaldo local).
   Una nueva se sube con `POST /api/migracion/cloudinary` (`directorio=royal-school/...`).
@@ -216,13 +256,20 @@ Firmas en Cloudinary (todas privadas, ver arriba):
   `royal/royal-school/<nombre>`. `firma_administrativa.jpg` es la firma fija del V°B° en
   el reporte operativo de inventario.
 - El `checkPageBreak` de TCPDF es `protected`; para salto de página con coordenadas
-  manuales, usa un wrapper propio (como `ensureSpacio()` en `CartaRecomendacionPdfService`).
+  manuales, usa un wrapper propio que compare `GetY()` con `getPageHeight() - getBreakMargin()`.
 
 ## Correo
 
 - `MailService`: `sendView`, `sendGeneric` (con BCC a `COPIA_GESTOR`) y `send($to,
   Mailable, copiaGestor?)`. Filtra correos inválidos antes de enviar. Si detecta el límite
   por hora del hosting (`452` + "too many recipients"), lanza `MailRateLimitException`.
+  `sendGeneric`/`GenericMail` aceptan `$urlBoton` (y `$textoBoton`, por defecto "Ver en
+  OMNIA"), que agrega un botón con enlace al final del correo. Hoy lo usan los correos de
+  creación y edición de Permisos y Licencias
+  (`PermisosLicenciasServices::enviarConBotonAprobadores`): el mismo correo se manda dos
+  veces, con botón a `FRONTEND_URL/permisos-licencias/solicitud/{id}?origen=correo` para
+  los destinatarios cuyo perfil tiene la opción 83 (o Super Admin), y sin botón para el
+  resto. Test: `tests/Unit/PermisosLicencias/CorreosQueApruebanTest.php`.
 - **Correos de Admisiones** (acudientes): todos extienden
   `resources/views/emails/layouts/admisiones.blade.php` (encabezado, línea dorada, pie) y
   solo definen `title` y `content`. Hoy: `sendRequestEmail` (código de verificación) y
@@ -273,6 +320,11 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 | `config/mail.php` | `log` por defecto |
 | `config/services.php` | Google OAuth, Hikvision, SAMI SSO, `asistencia_qr.redes` |
 
+- **Base de administración: connection `admin_management`, base `admin_managements`.** En
+  producción la base se llama `admin_managements` (con «s»), que es el valor por defecto de
+  `DB_ADMIN_DATABASE`. La connection sigue siendo `admin_management`: es la clave que usan los
+  modelos (`$connection`) y no se cambia. En local, `.env` puede apuntar a otra base. En los
+  scripts SQL para producción (`migraciones_sql.sql`) usa `admin_managements`.
 - **`MANTENIMIENTO`** (`.env`): bloquea la API con un 503.
 - **Scheduler**: en local no lo corre `composer run dev`; usa `php artisan
   schedule:work`. `schedule:run` solo dispara las tareas del minuto exacto en que se

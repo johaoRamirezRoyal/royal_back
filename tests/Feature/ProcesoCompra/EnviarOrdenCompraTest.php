@@ -37,28 +37,61 @@ class EnviarOrdenCompraTest extends TestCase
 
     public function test_envia_la_orden_al_proveedor_con_ventas_como_contacto(): void
     {
-        $positivo = fn ($v): bool => is_numeric($v) && (float) $v > 0;
-        $solicitud = Solicitud::with('productos', 'proveedor')
-            ->whereIn('estado', [SolicitudesServices::ESTADO_FORMALIZADA, SolicitudesServices::ESTADO_DEVOLUCION])
-            ->where('anulada', 0)
-            ->whereHas('proveedor', fn ($q) => $q->where('correo', 'like', '%@%'))
-            ->whereHas('productos')
-            ->orderByDesc('id')
-            ->limit(200)
-            ->get()
-            ->first(fn (Solicitud $s) => filter_var(trim((string) $s->proveedor->correo), FILTER_VALIDATE_EMAIL)
-                && $s->productos->every(fn ($p) => $positivo($p->cantidad) && $positivo($p->precio)));
-
-        if (! $solicitud) {
-            $this->markTestSkipped('No hay solicitud formalizada/en devolución con productos y correo de proveedor válidos.');
-        }
-
+        $solicitud = $this->solicitudEnviable();
         Mail::fake();
 
-        $this->enviar($solicitud->id)->assertOk();
+        $this->enviar($solicitud->id, $this->datos($solicitud))->assertOk();
 
-        Mail::assertSent(OrdenCompraMail::class, fn (OrdenCompraMail $mail) => $mail->hasTo(trim($solicitud->proveedor->correo))
-            && $mail->correosContacto === Mails::COMPRAS_VENTAS->recipients());
+        Mail::assertSent(OrdenCompraMail::class, fn (OrdenCompraMail $mail) => $mail->hasTo($this->correoProveedor($solicitud))
+            && $mail->correosContacto === Mails::COMPRAS_VENTAS->recipients()
+            && $mail->hasSubject('Asunto de prueba')
+            && $mail->hasCc('copia@example.com')
+            && $mail->pdfContenido !== null);
+    }
+
+    public function test_no_envia_a_un_correo_que_no_es_del_proveedor(): void
+    {
+        $solicitud = $this->solicitudEnviable();
+        Mail::fake();
+
+        $this->enviar($solicitud->id, [...$this->datos($solicitud), 'destinatarios' => ['otro@example.com']])
+            ->assertStatus(422);
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_sin_pdf_no_adjunta_nada_y_el_html_queda_saneado(): void
+    {
+        $solicitud = $this->solicitudEnviable();
+        Mail::fake();
+
+        $this->enviar($solicitud->id, [
+            ...$this->datos($solicitud),
+            'adjuntar_pdf' => '0',
+            'mensaje' => '<p onclick="x()">Hola <strong>proveedor</strong></p><script>alert(1)</script>',
+        ], conPdf: false)->assertOk();
+
+        Mail::assertSent(OrdenCompraMail::class, fn (OrdenCompraMail $mail) => $mail->pdfContenido === null
+            && $mail->attachments() === []
+            && str_contains($mail->mensajeHtml, '<strong>proveedor</strong>')
+            && ! str_contains($mail->mensajeHtml, 'script')
+            && ! str_contains($mail->mensajeHtml, 'onclick'));
+    }
+
+    public function test_vista_previa_devuelve_el_html_con_los_bloques_pedidos(): void
+    {
+        $solicitud = $this->solicitudEnviable();
+        Mail::fake();
+
+        $html = $this->post("/api/solicitudes/{$solicitud->id}/vista-previa-orden", [
+            ...$this->datos($solicitud),
+            'incluir' => ['productos'],
+        ], $this->headers())->assertOk()->json('data.html');
+
+        $this->assertStringContainsString('Mensaje de prueba', $html);
+        $this->assertStringContainsString(e($solicitud->productos->first()->producto), $html);
+        $this->assertStringNotContainsString('Datos de la orden', $html);
+        Mail::assertNothingSent();
     }
 
     public function test_no_envia_una_solicitud_cerrada(): void
@@ -98,14 +131,61 @@ class EnviarOrdenCompraTest extends TestCase
         Mail::assertNothingSent();
     }
 
-    private function enviar(int $id): TestResponse
+    private function solicitudEnviable(): Solicitud
     {
-        $usuario = Usuario::where('estado', 'activo')->where('perfil', Permiso::PERFIL_SUPER_ADMIN)->firstOrFail();
+        $positivo = fn ($v): bool => is_numeric($v) && (float) $v > 0;
+        $solicitud = Solicitud::with('productos', 'proveedor')
+            ->whereIn('estado', [SolicitudesServices::ESTADO_FORMALIZADA, SolicitudesServices::ESTADO_DEVOLUCION])
+            ->where('anulada', 0)
+            ->whereHas('proveedor', fn ($q) => $q->where('correo', 'like', '%@%'))
+            ->whereHas('productos')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get()
+            ->first(fn (Solicitud $s) => filter_var(trim((string) $s->proveedor->correo), FILTER_VALIDATE_EMAIL)
+                && $s->productos->every(fn ($p) => $positivo($p->cantidad) && $positivo($p->precio)));
+
+        if (! $solicitud) {
+            $this->markTestSkipped('No hay solicitud formalizada/en devolución con productos y correo de proveedor válidos.');
+        }
+
+        return $solicitud;
+    }
+
+    private function correoProveedor(Solicitud $solicitud): string
+    {
+        return mb_strtolower(trim((string) $solicitud->proveedor->correo));
+    }
+
+    /** @return array<string, mixed> */
+    private function datos(?Solicitud $solicitud = null): array
+    {
+        return [
+            'asunto' => 'Asunto de prueba',
+            'mensaje' => '<p>Mensaje de prueba</p>',
+            'destinatarios' => [$solicitud ? $this->correoProveedor($solicitud) : 'proveedor@example.com'],
+            'cc' => ['copia@example.com'],
+            'incluir' => SolicitudesServices::BLOQUES_ORDEN,
+            'adjuntar_pdf' => '1',
+        ];
+    }
+
+    /** @return array<string, string> */
+    private function headers(?Usuario $usuario = null): array
+    {
+        $usuario ??= Usuario::where('estado', 'activo')->where('perfil', Permiso::PERFIL_SUPER_ADMIN)->firstOrFail();
         $token = app(JwtService::class)->generateToken($usuario);
 
+        return ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json'];
+    }
+
+    /** @param  array<string, mixed>|null  $datos */
+    private function enviar(int $id, ?array $datos = null, bool $conPdf = true): TestResponse
+    {
         return $this->post("/api/solicitudes/{$id}/enviar-orden", [
-            'orden_pdf' => UploadedFile::fake()->create('orden.pdf', 20, 'application/pdf'),
-        ], ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json']);
+            ...($datos ?? $this->datos()),
+            ...($conPdf ? ['orden_pdf' => UploadedFile::fake()->create('orden.pdf', 20, 'application/pdf')] : []),
+        ], $this->headers());
     }
 
     public function test_sin_opcion_gestion_de_compras_no_puede_enviar(): void
@@ -123,11 +203,11 @@ class EnviarOrdenCompraTest extends TestCase
         }
 
         Mail::fake();
-        $token = app(JwtService::class)->generateToken($usuario);
 
         $this->post("/api/solicitudes/{$id}/enviar-orden", [
+            ...$this->datos(),
             'orden_pdf' => UploadedFile::fake()->create('orden.pdf', 20, 'application/pdf'),
-        ], ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json'])->assertForbidden();
+        ], $this->headers($usuario))->assertForbidden();
 
         Mail::assertNothingSent();
     }

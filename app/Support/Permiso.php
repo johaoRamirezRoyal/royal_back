@@ -87,7 +87,8 @@ final class Permiso
     public const CARNETS_SOLICITAR = 147;               // "Solicitar carnet" (el propio o, como director, de su curso)
     public const ASISTENCIA_PANTALLA_QR = 148;          // "Asistencia — Pantalla del código QR" (solo la pantalla de portería)
     public const MIS_AREAS_COMUNES_CON_AREAS = 149;     // "Mis áreas comunes — Ver áreas del bloque" (complemento de la 119)
-    // 150–154 libres en producción (reservados para renumerar la rama de notas).
+    public const SEGURIDAD_SOCIAL = 150;                // "Gestión Humana — Seguridad social de trabajadores" (EPS/AFP/ARL de quien tiene curso de altura)
+    // 151–154 libres en producción (reservados para renumerar la rama de notas).
     // Fase 3: lo que antes decidía un número de perfil (2026_11_10_110000_seed_opciones_roles).
     public const COORDINACION_NIVEL = 155;              // "Coordinación de nivel — Gestiona solo su nivel" (antes perfil 26; restrictiva)
     public const DIRECCION_ADMINISTRATIVA = 156;        // "Dirección administrativa — Gestiona los niveles administrativos" (antes perfil 7; restrictiva)

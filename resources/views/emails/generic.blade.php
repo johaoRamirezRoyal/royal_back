@@ -26,6 +26,15 @@
                             <div style="font-size:15px; line-height:1.6;">
                                 {!! nl2br(e($contenido)) !!}
                             </div>
+                            @if(!empty($urlBoton))
+                                <table cellpadding="0" cellspacing="0" style="margin:25px auto 0;">
+                                    <tr>
+                                        <td style="background:#2563eb; border-radius:6px;">
+                                            <a href="{{ $urlBoton }}" target="_blank" style="display:inline-block; padding:12px 24px; color:#ffffff; text-decoration:none; font-weight:bold; font-size:15px;">{{ $textoBoton }}</a>
+                                        </td>
+                                    </tr>
+                                </table>
+                            @endif
                         </td>
                     </tr>
 

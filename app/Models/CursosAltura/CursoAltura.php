@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CursoAltura extends Model
 {
@@ -40,6 +41,12 @@ class CursoAltura extends Model
     public function usuario(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
+    }
+
+    /** EPS/AFP/ARL del trabajador del curso (una fila por trabajador, no por curso). */
+    public function seguridadSocial(): HasOne
+    {
+        return $this->hasOne(SeguridadSocialTrabajador::class, 'id_user', 'id_user');
     }
 
     /** Activo y dentro de su vigencia en $fecha (hoy por defecto; sin finalización = no vence). */

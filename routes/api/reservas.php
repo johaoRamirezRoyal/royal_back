@@ -12,3 +12,10 @@ Route::put('/', [ReservaController::class, 'actualizarReserva']);
  * Portátiles disponibles (pool compartido del colegio, no por salón) para esa franja.
  */
 Route::get('/disponibilidad-portatil', [ReservaController::class, 'disponibilidadPortatil']);
+
+/**
+ * Autorización de reservas en salones con responsable (ej. Maker Lab): el responsable ve
+ * las pendientes de sus salones y las aprueba o rechaza. Ver ReservasServices::decidirReservas.
+ */
+Route::get('/pendientes', [ReservaController::class, 'pendientes']);
+Route::put('/decision', [ReservaController::class, 'decidir']);

@@ -42,13 +42,22 @@ diligencian cartas de recomendación de sus egresados aspirantes. Tiene dos cont
   and Learn solo en español). Solo `datos.nombre_estudiante` es obligatorio.
 - Primero se guarda; después `generarSubirYNotificar()` genera el PDF, lo sube a
   Cloudinary y avisa, fuera de la transacción.
-- `CartaRecomendacionPdfService` recrea fielmente los formatos originales (en
-  `src/assets/Admissions/LettersOfRecommendation` del frontend):
-  - Las coordenadas van en pt y el logo está en
-    `storage/app/public/images/instituciones/logo.png`.
+- El PDF es el documento `cartaRecomendacion` del frontend
+  (`src/documentos/instituciones/comun/cartaRecomendacion.ts`, pdfmake), generado con
+  `DocumentoPdfService` desde `InstitucionController::pdfCartaRecomendacion()`. Recrea los
+  formatos originales (en `src/assets/Admissions/LettersOfRecommendation` del frontend):
+  - Es un documento de Royal School (`instituciones/royal-school/`). Lo diligencia un jardín,
+    sin usuario con correo: la institución es la del colegio de la sesión
+    (`DocumentoPdfService::dominioDelColegio()`). Otro colegio no lo tiene. El encabezado
+    azul lleva el logo de la marca del colegio (`rutaLocalLogo()`, desde el 2026-11-12; antes,
+    un logo blanco fijo que no estaba en Cloudinary).
   - "Información de los padres" fuerza un salto de página.
   - Un campo vacío se muestra como `"-"`.
-  - La firma (data URL base64) se dibuja como imagen.
+  - La firma (data URL base64, solo PNG/JPEG) se dibuja como imagen.
+- El PDF se sube a `<colegio>/Instituciones/CartasRecomendacion/carta-recomendacion-{id}.pdf`
+  como **privado** (`ArchivosPrivados`): el admin lo abre por `/api/privado/...` y el jardín por
+  `GET /carta-recomendacion/{id}/pdf`, que lo transmite Laravel. Ver
+  `docs/ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md`, «Cartas de recomendación privadas».
 
 ## Endpoints
 

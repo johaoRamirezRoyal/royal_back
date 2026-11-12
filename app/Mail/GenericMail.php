@@ -3,7 +3,6 @@
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
@@ -15,17 +14,25 @@ class GenericMail extends Mailable
     use Queueable, SerializesModels;
 
     public string $titulo;
+
     public string $contenido;
 
-    public function __construct(string $titulo, string $contenido)
+    public ?string $urlBoton;
+
+    public string $textoBoton;
+
+    public function __construct(string $titulo, string $contenido, ?string $urlBoton = null, string $textoBoton = 'Ver en OMNIA')
     {
         $this->titulo = $titulo;
         $this->contenido = $contenido;
+        $this->urlBoton = $urlBoton;
+        $this->textoBoton = $textoBoton;
     }
 
-    public function build(){
+    public function build()
+    {
         return $this->subject($this->titulo)
-                    ->view('emails.generic');
+            ->view('emails.generic');
     }
 
     // public function envelope(): Envelope

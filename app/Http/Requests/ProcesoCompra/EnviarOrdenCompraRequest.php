@@ -2,26 +2,23 @@
 
 namespace App\Http\Requests\ProcesoCompra;
 
-use Illuminate\Foundation\Http\FormRequest;
-
-class EnviarOrdenCompraRequest extends FormRequest
+/** Correo redactado (ver VistaPreviaOrdenCompraRequest) más el PDF opcional de la orden. */
+class EnviarOrdenCompraRequest extends VistaPreviaOrdenCompraRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [
-            'orden_pdf' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+            ...parent::rules(),
+            'adjuntar_pdf' => ['required', 'boolean'],
+            'orden_pdf' => ['required_if_accepted:adjuntar_pdf', 'nullable', 'file', 'mimes:pdf', 'max:10240'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'orden_pdf.required' => 'Debe adjuntar la orden de compra',
+            ...parent::messages(),
+            'orden_pdf.required_if_accepted' => 'Debe adjuntar la orden de compra',
             'orden_pdf.mimes' => 'La orden de compra debe ser un PDF',
             'orden_pdf.max' => 'La orden de compra no puede superar los 10MB',
         ];

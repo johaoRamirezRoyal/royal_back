@@ -18,6 +18,7 @@ Route::post('/{id}/disponible-stock', [SolicitudesController::class, 'disponible
 Route::put('/{id}/aplazar', [SolicitudesController::class, 'aplazar'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_LISTADO_SOLICITUDES]));
 Route::put('/{id}/rechazar', [SolicitudesController::class, 'rechazar'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_LISTADO_SOLICITUDES]));
 Route::post('/{id}/enviar-orden', [SolicitudesController::class, 'enviarOrden'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_GESTION]));
+Route::post('/{id}/vista-previa-orden', [SolicitudesController::class, 'vistaPreviaOrden'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_GESTION]));
 Route::post('/{id}/anular', [SolicitudesController::class, 'anular'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_GESTION]));
 Route::post('/{id}/verificar-entrega', [SolicitudesController::class, 'verificarEntrega'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_VENTAS]));
 Route::post('/{id}/agregar-inventario', [SolicitudesController::class, 'agregarInventario'])->where('id', '[0-9]+')->middleware(Permiso::ruta([Permiso::COMPRAS_LISTADO_SOLICITUDES]));
