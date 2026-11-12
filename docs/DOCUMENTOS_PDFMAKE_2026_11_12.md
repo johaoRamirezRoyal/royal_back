@@ -34,8 +34,11 @@ Compras). Ninguno permitía que un colegio tuviera documentos propios.
 | Paz y salvo y listados de préstamos (`pazYSalvo`, `listadoPrestamos`, `listadoPrestamosPaquetes`) | `comun` | servidor (`BibliotecaServices`; el paz y salvo también va adjunto en los recordatorios) | `PazYSalvoPdfService` |
 | Carta de recomendación (`cartaRecomendacion`) | `royal-school` | servidor (`InstitucionController`) | `CartaRecomendacionPdfService` |
 | Certificado de capacitación (`certificadoCapacitacion`) | `royal-school` | servidor (`CapacitacionesController::certificado`) | `CertificadoCapacitacionPdfService` |
+| Permiso de trabajo en alturas (`permisoAlturas`) | `comun` | servidor (`CursosAlturaServices::permisoAlturasPdf`) | `PermisoAlturasPdfService` |
 
-Se compararon contra la versión TCPDF con los mismos datos. Mantienen la estructura y los textos;
+El permiso de alturas no es una copia del TCPDF: se migró junto con el formato nuevo de Gestión
+Humana (agrega EPS/AFP/ARL, ATS y cierre; quita el N.° y la fecha de emisión). Los demás se
+compararon contra la versión TCPDF con los mismos datos. Mantienen la estructura y los textos;
 cambia la letra (Roboto en vez de Helvetica/Times) y algún espaciado. Se corrigieron de paso: la
 carta de entrega de Inventario usaba un logo fijo (ahora el de la marca), el paz y salvo decía
 `,,` después del nombre y no llevaba tildes, y a un usuario de Hebreo Unión se le daba el
@@ -86,8 +89,7 @@ certificado de Royal School (ahora recibe un 422).
 
 ## Pendientes
 
-- **Faltan por migrar** 12 documentos: en el backend, Historial de checks y Permiso de alturas
-  (Áreas), Respuesta de evaluación, Hoja de vida, Checklist de mantenimiento y Reporte operativo
+- **Faltan por migrar** 11 documentos: en el backend, Historial de checks (Áreas), Respuesta de evaluación, Hoja de vida, Checklist de mantenimiento y Reporte operativo
   (Inventario); en el frontend, Acta, Orden de compra y Reserva (pdfmake suelto) e Inscripción,
   Historia clínica y Recibo de enfermería (pdf-lib).
 - **Cada cambio de un documento que genera el servidor exige `pnpm build:documentos`** y

@@ -7,11 +7,13 @@ use App\Models\CursosAltura\EntidadSeguridadSocial;
 use App\Models\CursosAltura\SeguridadSocialTrabajador;
 use App\Models\CursosAltura\TrabajoAltura;
 use App\Models\Usuarios\Usuario;
-use App\Pdf\Areas\PermisoAlturasPdfService;
+use App\Services\Documentos\DocumentoPdfService;
 use App\Services\FileStorageService;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 class CursosAlturaServices
@@ -20,6 +22,18 @@ class CursosAlturaServices
 
     // Privada en Cloudinary, como todo gestion-humana/ (ver ArchivosPrivados).
     private const CARPETA_SEGURIDAD_SOCIAL = 'gestion-humana/seguridad-social';
+
+    /**
+     * Nombre completo para buscar: hay nombres guardados con espacios de más ("Estefani ") y
+     * apellidos en NULL, que con CONCAT(nombre, ' ', apellido) impedían encontrar "nombre apellido".
+     */
+    private const NOMBRE_COMPLETO = "CONCAT_WS(' ', TRIM(nombre), TRIM(apellido))";
+
+    /** Datos propios de un trabajo en altura creado en Gestión Humana (en uno de reporte salen del reporte). */
+    private const CAMPOS_TRABAJO_MANUAL = ['tipo_trabajo', 'id_bloque', 'id_area', 'elemento', 'descripcion'];
+
+    /** Opcionales del permiso, para cualquier trabajo: si se llenan, salen impresos. */
+    private const CAMPOS_TRABAJO_OPCIONALES = ['altura_aproximada', 'hora_inicio', 'fecha_finalizacion'];
 
     private const RELACIONES_SEGURIDAD_SOCIAL = [
         'seguridadSocial:id,id_user,id_eps,id_afp,id_arl,ruta_eps,ruta_afp,ruta_arl',
@@ -30,7 +44,7 @@ class CursosAlturaServices
 
     public function __construct(
         private FileStorageService $fileStorage,
-        private PermisoAlturasPdfService $permisoPdf,
+        private DocumentoPdfService $documentos,
     ) {}
 
     /** @param  bool  $conSeguridadSocial  agrega `seguridad_social` (entidades por tipo, sin documentos) a cada fila */
@@ -44,8 +58,8 @@ class CursosAlturaServices
                 ->orderByDesc('id');
 
             if (! empty($filtros['s'])) {
-                $s = $filtros['s'];
-                $query->whereHas('usuario', fn ($q) => $q->where(DB::raw("CONCAT(nombre, ' ', apellido)"), 'like', "%{$s}%")
+                $s = preg_replace('/\s+/', ' ', trim($filtros['s']));
+                $query->whereHas('usuario', fn ($q) => $q->where(DB::raw(self::NOMBRE_COMPLETO), 'like', "%{$s}%")
                     ->orWhere('documento', 'like', "%{$s}%"));
             }
 
@@ -171,31 +185,51 @@ class CursosAlturaServices
         ])->operativos()->sync(array_map('intval', $idsOperativos));
     }
 
+    /**
+     * Trabajos en altura de los dos orígenes con sus datos en una sola forma: los de un
+     * reporte toman tipo, ubicación, elemento y descripción del reporte; los creados en
+     * Gestión Humana (`id_reporte` null), los propios. `solucionado`: en uno de reporte, si el
+     * reporte tiene respuesta solucionada; en uno manual, si se marcó finalizado.
+     */
+    private function consultaTrabajos(): Builder
+    {
+        return TrabajoAltura::query()
+            ->leftJoin('reportes as rp', 'rp.id', '=', 'trabajos_altura.id_reporte')
+            ->leftJoin('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
+            ->leftJoin('areas as ar', 'ar.id', '=', DB::raw('COALESCE(trabajos_altura.id_area, rp.id_area, iv.id_area)'))
+            ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(trabajos_altura.id_bloque, iv.id_bloque, ar.id_bloque)'))
+            ->with('operativos:id_user,nombre,apellido,documento')
+            ->select([
+                'trabajos_altura.id', 'trabajos_altura.id_reporte', 'trabajos_altura.fecha_trabajo',
+                'trabajos_altura.id_bloque', 'trabajos_altura.id_area',
+                'trabajos_altura.altura_aproximada', 'trabajos_altura.hora_inicio', 'trabajos_altura.fecha_finalizacion',
+                'trabajos_altura.finalizado_en',
+                'rp.tipo_reporte',
+                DB::raw("CASE WHEN trabajos_altura.id_reporte IS NULL THEN 'manual' ELSE 'reporte' END AS origen"),
+                DB::raw("COALESCE(trabajos_altura.tipo_trabajo, CASE WHEN rp.tipo_reporte = 2 THEN 'Mantenimiento preventivo' ELSE 'Mantenimiento correctivo' END) AS tipo_trabajo"),
+                DB::raw("COALESCE(trabajos_altura.descripcion, NULLIF(TRIM(rp.descripcion), ''), rp.observacion) AS descripcion"),
+                DB::raw('COALESCE(trabajos_altura.elemento, iv.descripcion) AS item'),
+                'ar.nombre as area', 'b.nombre as bloque',
+                DB::raw('CASE WHEN rp.id IS NULL THEN trabajos_altura.finalizado_en IS NOT NULL ELSE EXISTS(SELECT 1 FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3) END AS solucionado'),
+            ]);
+    }
+
     /** Trabajos en altura (Gestión Humana > Trabajos en altura). */
     public function listarTrabajos(array $filtros, int $perPage): array
     {
         try {
-            $query = TrabajoAltura::query()
-                ->join('reportes as rp', 'rp.id', '=', 'trabajos_altura.id_reporte')
-                ->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
-                ->leftJoin('areas as ar', 'ar.id', '=', DB::raw('COALESCE(rp.id_area, iv.id_area)'))
-                ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(iv.id_bloque, ar.id_bloque)'))
-                ->with('operativos:id_user,nombre,apellido,documento')
-                ->select([
-                    'trabajos_altura.id', 'trabajos_altura.id_reporte', 'trabajos_altura.fecha_trabajo',
-                    'rp.tipo_reporte',
-                    DB::raw('COALESCE(NULLIF(TRIM(rp.descripcion), \'\'), rp.observacion) AS descripcion'),
-                    'iv.descripcion as item', 'ar.nombre as area', 'b.nombre as bloque',
-                    DB::raw('EXISTS(SELECT 1 FROM reportes s WHERE s.id_reporte = rp.id AND s.estado = 3) AS solucionado'),
-                ])
+            $query = $this->consultaTrabajos()
                 ->orderByDesc('trabajos_altura.fecha_trabajo')
                 ->orderByDesc('trabajos_altura.id');
 
             if (! empty($filtros['s'])) {
-                $s = "%{$filtros['s']}%";
+                $s = '%'.preg_replace('/\s+/', ' ', trim($filtros['s'])).'%';
                 $query->where(fn ($q) => $q->where('iv.descripcion', 'like', $s)
+                    ->orWhere('trabajos_altura.elemento', 'like', $s)
+                    ->orWhere('trabajos_altura.descripcion', 'like', $s)
                     ->orWhere('ar.nombre', 'like', $s)
-                    ->orWhereHas('operativos', fn ($o) => $o->where(DB::raw("CONCAT(nombre, ' ', apellido)"), 'like', $s)));
+                    ->orWhere('b.nombre', 'like', $s)
+                    ->orWhereHas('operativos', fn ($o) => $o->where(DB::raw(self::NOMBRE_COMPLETO), 'like', $s)));
             }
 
             $paginator = $query->paginate($perPage);
@@ -207,13 +241,78 @@ class CursosAlturaServices
         }
     }
 
+    /** Bloques activos con sus áreas activas, para los selects del trabajo en altura manual. */
+    public function ubicaciones(): array
+    {
+        try {
+            $areas = DB::table('areas')->where('activo', 1)->whereNotNull('id_bloque')->orderBy('nombre')
+                ->get(['id', 'nombre', 'id_bloque'])->groupBy('id_bloque');
+
+            $bloques = DB::table('bloques')->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre'])
+                ->map(fn ($b) => [
+                    'id' => (int) $b->id,
+                    'nombre' => $b->nombre,
+                    'areas' => $areas->get($b->id, collect())->map(fn ($a) => ['id' => (int) $a->id, 'nombre' => $a->nombre])->values(),
+                ]);
+
+            return ['error' => false, 'message' => 'Ubicaciones obtenidas correctamente', 'data' => $bloques];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** El área, si viene, debe ser del bloque elegido. Devuelve el mensaje de error o null. */
+    private function errorUbicacion(?int $idBloque, ?int $idArea): ?string
+    {
+        if (! $idArea) {
+            return null;
+        }
+
+        $bloqueDelArea = DB::table('areas')->where('id', $idArea)->value('id_bloque');
+
+        return (int) $bloqueDelArea === (int) $idBloque ? null : 'El área seleccionada no pertenece al bloque';
+    }
+
     /**
-     * Cambia la fecha y los operativos de un trabajo en altura. Sin operativos, el trabajo
-     * deja de ser en altura y se borra.
+     * Crea un trabajo en altura sin reporte ni mantenimiento (Gestión Humana). `$datos` ya
+     * validados: tipo_trabajo, id_bloque, id_area?, elemento, descripcion, fecha_trabajo y
+     * los opcionales del permiso. Los operativos, con curso vigente en la fecha.
      *
      * @param  array<int, int>  $idsOperativos
      */
-    public function actualizarTrabajo(int $id, string $fecha, array $idsOperativos, int $idLog): array
+    public function crearTrabajo(array $datos, array $idsOperativos, int $idLog): array
+    {
+        try {
+            if ($error = $this->errorUbicacion($datos['id_bloque'] ?? null, $datos['id_area'] ?? null)) {
+                return ['error' => true, 'message' => $error, 'status' => 422];
+            }
+
+            $trabajo = DB::transaction(function () use ($datos, $idsOperativos, $idLog) {
+                $trabajo = TrabajoAltura::create([
+                    ...Arr::only($datos, [...self::CAMPOS_TRABAJO_MANUAL, ...self::CAMPOS_TRABAJO_OPCIONALES]),
+                    'fecha_trabajo' => $datos['fecha_trabajo'],
+                    'user_log' => $idLog,
+                ]);
+                $trabajo->operativos()->sync(array_map('intval', $idsOperativos));
+
+                return $trabajo;
+            });
+
+            return ['error' => false, 'message' => 'Trabajo en altura creado correctamente', 'data' => ['id' => $trabajo->id]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Edita un trabajo en altura. Uno manual cambia todos sus datos y necesita al menos un
+     * operativo (para quitarlo está eliminarTrabajo). Uno de reporte cambia solo la fecha,
+     * los operativos y los opcionales del permiso; sin operativos, deja de ser en altura y se
+     * borra. Solo se tocan los campos que vienen en `$datos`.
+     *
+     * @param  array<int, int>  $idsOperativos
+     */
+    public function actualizarTrabajo(int $id, array $datos, array $idsOperativos, int $idLog): array
     {
         try {
             $trabajo = TrabajoAltura::find($id);
@@ -223,13 +322,29 @@ class CursosAlturaServices
             }
 
             if (empty($idsOperativos)) {
+                if ($trabajo->esManual()) {
+                    return ['error' => true, 'message' => 'El trabajo necesita al menos un trabajador. Para quitarlo, elimínelo.', 'status' => 422];
+                }
+
                 $trabajo->delete();
 
                 return ['error' => false, 'message' => 'El trabajo ya no requiere personal en alturas', 'data' => []];
             }
 
-            DB::transaction(function () use ($trabajo, $fecha, $idsOperativos, $idLog) {
-                $trabajo->update(['fecha_trabajo' => $fecha, 'user_log' => $idLog]);
+            $campos = ['fecha_trabajo', ...self::CAMPOS_TRABAJO_OPCIONALES, ...($trabajo->esManual() ? self::CAMPOS_TRABAJO_MANUAL : [])];
+            $cambios = Arr::only($datos, $campos);
+
+            if ($trabajo->esManual()) {
+                $idBloque = array_key_exists('id_bloque', $cambios) ? $cambios['id_bloque'] : $trabajo->id_bloque;
+                $idArea = array_key_exists('id_area', $cambios) ? $cambios['id_area'] : $trabajo->id_area;
+
+                if ($error = $this->errorUbicacion($idBloque, $idArea)) {
+                    return ['error' => true, 'message' => $error, 'status' => 422];
+                }
+            }
+
+            DB::transaction(function () use ($trabajo, $cambios, $idsOperativos, $idLog) {
+                $trabajo->update([...$cambios, 'user_log' => $idLog]);
                 $trabajo->operativos()->sync(array_map('intval', $idsOperativos));
             });
 
@@ -240,28 +355,77 @@ class CursosAlturaServices
     }
 
     /**
-     * Permiso de Trabajo en Alturas (Res. 4272 de 2021) de un reporte/mantenimiento con
-     * trabajo en altura: todos sus operativos en un solo PDF.
+     * Marca finalizado (cuándo y quién) o reabre un trabajo creado en Gestión Humana. Los de un
+     * reporte toman el estado del reporte: se solucionan desde el reporte.
      */
-    public function permisoAlturasPdf(int $idReporte): array
+    public function cambiarEstadoTrabajo(int $id, bool $finalizado, int $idUser): array
     {
         try {
-            $trabajo = TrabajoAltura::with('operativos:id_user,nombre,apellido,documento')->where('id_reporte', $idReporte)->first();
+            $trabajo = TrabajoAltura::find($id);
 
-            $reporte = $trabajo ? DB::table('reportes as rp')
-                ->join('inventario as iv', 'iv.id', '=', 'rp.id_inventario')
-                ->leftJoin('areas as ar', 'ar.id', '=', DB::raw('COALESCE(rp.id_area, iv.id_area)'))
-                ->leftJoin('bloques as b', 'b.id', '=', DB::raw('COALESCE(iv.id_bloque, ar.id_bloque)'))
-                ->where('rp.id', $idReporte)
-                ->whereNull('rp.id_reporte')
-                ->first([
-                    'rp.id', 'rp.tipo_reporte',
-                    DB::raw('COALESCE(NULLIF(TRIM(rp.descripcion), \'\'), rp.observacion) AS descripcion'),
-                    'iv.descripcion as item', 'ar.nombre as area', 'b.nombre as bloque',
-                ]) : null;
+            if (! $trabajo) {
+                return ['error' => true, 'message' => 'Trabajo en altura no encontrado', 'status' => 404];
+            }
 
-            if (! $reporte || $trabajo->operativos->isEmpty()) {
-                return ['error' => true, 'message' => 'El reporte no existe o no tiene trabajadores de alturas asignados', 'status' => 404];
+            if (! $trabajo->esManual()) {
+                return ['error' => true, 'message' => 'El estado de este trabajo lo da su reporte o mantenimiento.', 'status' => 422];
+            }
+
+            $trabajo->update($finalizado
+                ? ['finalizado_en' => now(), 'finalizado_por' => $idUser]
+                : ['finalizado_en' => null, 'finalizado_por' => null]);
+
+            return ['error' => false, 'message' => $finalizado ? 'Trabajo marcado como finalizado' : 'Trabajo reabierto', 'data' => []];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Elimina un trabajo creado en Gestión Humana. Los de un reporte se quitan sin trabajadores. */
+    public function eliminarTrabajo(int $id): array
+    {
+        try {
+            $trabajo = TrabajoAltura::find($id);
+
+            if (! $trabajo) {
+                return ['error' => true, 'message' => 'Trabajo en altura no encontrado', 'status' => 404];
+            }
+
+            if (! $trabajo->esManual()) {
+                return ['error' => true, 'message' => 'Este trabajo viene de un reporte o mantenimiento: para quitarlo, déjelo sin trabajadores.', 'status' => 422];
+            }
+
+            $trabajo->delete();
+
+            return ['error' => false, 'message' => 'Trabajo en altura eliminado', 'data' => []];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Permiso de alturas por el reporte/mantenimiento (Reportes de Áreas Comunes). */
+    public function permisoAlturasPdf(int $idReporte): array
+    {
+        $idTrabajo = TrabajoAltura::where('id_reporte', $idReporte)->value('id');
+
+        return $idTrabajo
+            ? $this->permisoTrabajoPdf($idTrabajo)
+            : ['error' => true, 'message' => 'El reporte no existe o no tiene trabajadores de alturas asignados', 'status' => 404];
+    }
+
+    /**
+     * Permiso de Trabajo en Alturas (Res. 4272 de 2021) de un trabajo en altura, de reporte o
+     * manual: todos sus operativos en un solo PDF (documento `permisoAlturas` de
+     * src/documentos del frontend, formato SG-SST de Gestión Humana). Por trabajador: EPS,
+     * AFP y ARL de `seguridad_social_trabajador` y la vigencia del curso que cubre la fecha.
+     */
+    public function permisoTrabajoPdf(int $idTrabajo): array
+    {
+        try {
+            $trabajo = $this->consultaTrabajos()->where('trabajos_altura.id', $idTrabajo)->first();
+
+            if (! $trabajo || $trabajo->operativos->isEmpty()) {
+                return ['error' => true, 'message' => 'El trabajo no existe o no tiene trabajadores de alturas asignados', 'status' => 404];
             }
 
             $fecha = $trabajo->fecha_trabajo->toDateString();
@@ -272,34 +436,50 @@ class CursosAlturaServices
                 ->get()
                 ->groupBy('id_user');
 
-            $operativos = $trabajo->operativos->map(function ($op) use ($cursos, $fecha) {
+            $seguridadSocial = SeguridadSocialTrabajador::with(['eps:id,nombre', 'afp:id,nombre', 'arl:id,nombre'])
+                ->whereIn('id_user', $trabajo->operativos->pluck('id_user'))
+                ->get()
+                ->keyBy('id_user');
+
+            $trabajadores = $trabajo->operativos->map(function ($op) use ($cursos, $fecha, $seguridadSocial) {
                 $delOperativo = $cursos->get($op->id_user, collect());
                 $curso = $delOperativo->first(fn ($c) => $c->fecha_expedicion->toDateString() <= $fecha
                     && ($c->fecha_finalizacion === null || $c->fecha_finalizacion->toDateString() >= $fecha)) ?? $delOperativo->first();
+                $ss = $seguridadSocial->get($op->id_user);
 
                 return [
                     'nombre' => trim("{$op->nombre} {$op->apellido}"),
-                    'documento' => $op->documento ?? '',
-                    'curso_expedicion' => $curso?->fecha_expedicion?->format('d/m/Y') ?? 'Sin registro',
-                    'curso_vigencia' => $curso ? ($curso->fecha_finalizacion?->format('d/m/Y') ?? 'Sin vencimiento') : 'Sin registro',
+                    'documento' => (string) ($op->documento ?? ''),
+                    'eps' => $ss?->eps?->nombre ?? 'Sin registro',
+                    'afp' => $ss?->afp?->nombre ?? 'Sin registro',
+                    'arl' => $ss?->arl?->nombre ?? 'Sin registro',
+                    'certificado' => match (true) {
+                        ! $curso => 'Sin registro',
+                        $curso->fecha_finalizacion === null => 'Sin vencimiento',
+                        default => 'Vig. '.$curso->fecha_finalizacion->format('d/m/Y'),
+                    },
                 ];
-            })->all();
+            })->values()->all();
 
-            $contenido = $this->permisoPdf->generate([
-                'consecutivo' => $reporte->id,
-                'tipo' => $reporte->tipo_reporte == 2 ? 'Mantenimiento preventivo' : 'Mantenimiento correctivo',
-                'fecha_emision' => Carbon::now()->format('d/m/Y'),
-                'fecha_trabajo' => $trabajo->fecha_trabajo->format('d/m/Y'),
-                'bloque' => $reporte->bloque ?? '',
-                'area' => $reporte->area ?? '',
-                'item' => $reporte->item ?? '',
-                'descripcion' => $reporte->descripcion ?? '',
-                'operativos' => $operativos,
-            ]);
+            $contenido = $this->documentos->generar('permisoAlturas', [
+                'tipo' => $trabajo->tipo_trabajo ?? '',
+                'fechaEjecucion' => $trabajo->fecha_trabajo->format('d/m/Y'),
+                'bloque' => $trabajo->bloque ?? '',
+                'area' => $trabajo->area ?: 'General',
+                'elemento' => $trabajo->item ?? '',
+                'descripcion' => $trabajo->descripcion ?? '',
+                // Opcionales: si vienen se imprimen; si no, quedan las rayas para llenar en sitio.
+                'alturaAproximada' => $trabajo->altura_aproximada !== null ? rtrim(rtrim((string) $trabajo->altura_aproximada, '0'), '.') : null,
+                'horaInicio' => $trabajo->hora_inicio ? substr($trabajo->hora_inicio, 0, 5) : null,
+                'fechaFinalizacion' => $trabajo->fecha_finalizacion?->format('d/m/Y'),
+                'trabajadores' => $trabajadores,
+            ], auth()->user()?->correo);
+
+            $sufijo = $trabajo->id_reporte ?? "trabajo_{$trabajo->id}";
 
             return ['error' => false, 'message' => 'PDF generado', 'data' => [
                 'contenido' => $contenido,
-                'nombre_archivo' => "permiso_alturas_{$reporte->id}.pdf",
+                'nombre_archivo' => "permiso_alturas_{$sufijo}.pdf",
             ]];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];

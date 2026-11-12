@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CursosAltura\CursoAlturaRequest;
 use App\Models\CursosAltura\CursoAltura;
 use App\Models\CursosAltura\EntidadSeguridadSocial;
+use App\Models\CursosAltura\TrabajoAltura;
 use App\Services\CursosAltura\CursosAlturaServices;
 use App\Services\Usuarios\PermisosPerfil;
 use App\Support\Permiso;
@@ -104,8 +105,48 @@ class CursosAlturaController extends Controller
     }
 
     /**
-     * PUT /api/cursos-altura/trabajos/{id} — fecha y trabajadores; sin trabajadores se borra.
-     * Cada trabajador debe tener curso vigente en la fecha del trabajo.
+     * GET /api/cursos-altura/trabajos/ubicaciones — bloques activos con sus áreas, para el
+     * formulario del trabajo manual (Gestión Humana no tiene las opciones de /api/bloques).
+     */
+    public function ubicaciones(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->cursosAltura->ubicaciones());
+    }
+
+    /**
+     * POST /api/cursos-altura/trabajos — trabajo en altura sin reporte ni mantenimiento: tipo,
+     * bloque, área?, elemento, descripción, fecha, al menos un trabajador con curso vigente
+     * en esa fecha y los opcionales del permiso (altura, hora de inicio, fecha de finalización).
+     */
+    public function crearTrabajo(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        // La fecha primero: la regla de vigencia la necesita válida.
+        $fecha = $request->validate(['fecha_trabajo' => ['required', 'date']])['fecha_trabajo'];
+        $datos = $request->validate([
+            ...$this->reglasTrabajo(manual: true),
+            ...CursoAltura::reglasOperativos($fecha),
+            'id_operativos' => ['required', 'array', 'min:1'],
+        ], ['id_operativos.required' => 'Seleccione al menos un trabajador.']);
+
+        return $this->apiResponse($this->cursosAltura->crearTrabajo(
+            [...$datos, 'fecha_trabajo' => $fecha],
+            array_map('intval', $datos['id_operativos']),
+            $request->user()->id_user
+        ));
+    }
+
+    /**
+     * PUT /api/cursos-altura/trabajos/{id} — fecha, trabajadores y opcionales del permiso; en
+     * uno manual también tipo, ubicación, elemento y descripción. Uno de reporte sin
+     * trabajadores se borra. Cada trabajador debe tener curso vigente en la fecha del trabajo.
      */
     public function actualizarTrabajo(Request $request, int $id): JsonResponse
     {
@@ -115,14 +156,84 @@ class CursosAlturaController extends Controller
 
         // La fecha primero: la regla de vigencia la necesita válida.
         $fecha = $request->validate(['fecha_trabajo' => ['required', 'date']])['fecha_trabajo'];
-        $data = $request->validate(CursoAltura::reglasOperativos($fecha));
+        $manual = TrabajoAltura::find($id)?->esManual() ?? false;
+        $datos = $request->validate([...$this->reglasTrabajo($manual), ...CursoAltura::reglasOperativos($fecha)]);
 
         return $this->apiResponse($this->cursosAltura->actualizarTrabajo(
             $id,
-            $fecha,
-            array_map('intval', $data['id_operativos'] ?? []),
+            [...$datos, 'fecha_trabajo' => $fecha],
+            array_map('intval', $datos['id_operativos'] ?? []),
             $request->user()->id_user
         ));
+    }
+
+    /**
+     * PUT /api/cursos-altura/trabajos/{id}/estado — `finalizado` true/false, solo en los creados
+     * en Gestión Humana (los de un reporte toman el estado del reporte).
+     */
+    public function cambiarEstadoTrabajo(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate(['finalizado' => ['required', 'boolean']]);
+
+        return $this->apiResponse($this->cursosAltura->cambiarEstadoTrabajo($id, (bool) $data['finalizado'], $request->user()->id_user));
+    }
+
+    /**
+     * DELETE /api/cursos-altura/trabajos/{id} — solo los creados en Gestión Humana.
+     */
+    public function eliminarTrabajo(Request $request, int $id): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->cursosAltura->eliminarTrabajo($id));
+    }
+
+    /**
+     * GET /api/cursos-altura/trabajos/{id}/permiso/pdf — permiso de alturas de un trabajo
+     * (de reporte o manual).
+     */
+    public function permisoTrabajoPdf(Request $request, int $id): JsonResponse|Response
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_GESTION)) {
+            return $rechazo;
+        }
+
+        return $this->respuestaPdf($this->cursosAltura->permisoTrabajoPdf($id));
+    }
+
+    /**
+     * Reglas del trabajo en altura. Los opcionales del permiso valen para cualquiera; tipo,
+     * bloque, área, elemento y descripción solo para uno manual (en uno de reporte salen del
+     * reporte), y ahí son obligatorios salvo el área (sin ella, el permiso dice "General").
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    private function reglasTrabajo(bool $manual): array
+    {
+        $opcionales = [
+            'altura_aproximada' => ['nullable', 'numeric', 'min:0', 'max:999'],
+            'hora_inicio' => ['nullable', 'date_format:H:i'],
+            'fecha_finalizacion' => ['nullable', 'date', 'after_or_equal:fecha_trabajo'],
+        ];
+
+        if (! $manual) {
+            return $opcionales;
+        }
+
+        return [
+            ...$opcionales,
+            'tipo_trabajo' => ['required', 'string', 'max:100'],
+            'id_bloque' => ['required', 'integer', Rule::exists('bloques', 'id')->where('activo', 1)],
+            'id_area' => ['nullable', 'integer', Rule::exists('areas', 'id')->where('activo', 1)],
+            'elemento' => ['required', 'string', 'max:190'],
+            'descripcion' => ['required', 'string', 'max:2000'],
+        ];
     }
 
     /**
@@ -281,8 +392,12 @@ class CursosAlturaController extends Controller
             return $rechazo;
         }
 
-        $resultado = $this->cursosAltura->permisoAlturasPdf($idReporte);
+        return $this->respuestaPdf($this->cursosAltura->permisoAlturasPdf($idReporte));
+    }
 
+    /** El PDF inline, o el error del service como JSON. */
+    private function respuestaPdf(array $resultado): JsonResponse|Response
+    {
         if ($resultado['error']) {
             return $this->apiResponse($resultado);
         }

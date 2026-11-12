@@ -739,3 +739,28 @@ INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
 -- (confirmado = 3) hasta que él las apruebe o rechace. Se asigna desde Salones (ej. Maker Lab).
 -- ---------------------------------------------------------------------------
 alter table `salones` add `id_responsable` int unsigned null after `sonido`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_12_120000_trabajos_altura_independientes.php
+-- Trabajos en altura creados desde Gestión Humana sin reporte ni mantenimiento: id_reporte
+-- opcional y datos propios del permiso (tipo, bloque, área, elemento, descripción), más
+-- altura aproximada, hora de inicio y fecha de finalización opcionales. bloques es MyISAM: sin FK.
+-- ---------------------------------------------------------------------------
+alter table `trabajos_altura` modify `id_reporte` int null;
+alter table `trabajos_altura` add `tipo_trabajo` varchar(100) null after `fecha_trabajo`;
+alter table `trabajos_altura` add `id_bloque` bigint unsigned null after `tipo_trabajo`;
+alter table `trabajos_altura` add `id_area` int null after `id_bloque`;
+alter table `trabajos_altura` add `elemento` varchar(190) null after `id_area`;
+alter table `trabajos_altura` add `descripcion` text null after `elemento`;
+alter table `trabajos_altura` add `altura_aproximada` decimal(5, 2) null after `descripcion`;
+alter table `trabajos_altura` add `hora_inicio` time null after `altura_aproximada`;
+alter table `trabajos_altura` add `fecha_finalizacion` date null after `hora_inicio`;
+alter table `trabajos_altura` add constraint `trabajos_altura_id_area_foreign` foreign key (`id_area`) references `areas` (`id`) on delete set null;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_12_130000_add_finalizado_to_trabajos_altura.php
+-- Estado de los trabajos en altura creados en Gestión Humana: pendientes hasta que se marcan
+-- finalizados (cuándo y quién); se pueden reabrir. Los de un reporte toman el estado del reporte.
+-- ---------------------------------------------------------------------------
+alter table `trabajos_altura` add `finalizado_en` datetime null after `fecha_finalizacion`;
+alter table `trabajos_altura` add `finalizado_por` int null after `finalizado_en`;

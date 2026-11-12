@@ -21,7 +21,12 @@ Route::get('/permiso/{idReporte}/pdf', [CursosAlturaController::class, 'permisoP
 
 // Trabajos en altura (Gestión Humana)
 Route::get('/trabajos', [CursosAlturaController::class, 'listarTrabajos'])->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+Route::get('/trabajos/ubicaciones', [CursosAlturaController::class, 'ubicaciones'])->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+Route::post('/trabajos', [CursosAlturaController::class, 'crearTrabajo'])->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
 Route::put('/trabajos/{id}', [CursosAlturaController::class, 'actualizarTrabajo'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+Route::put('/trabajos/{id}/estado', [CursosAlturaController::class, 'cambiarEstadoTrabajo'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+Route::delete('/trabajos/{id}', [CursosAlturaController::class, 'eliminarTrabajo'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
+Route::get('/trabajos/{id}/permiso/pdf', [CursosAlturaController::class, 'permisoTrabajoPdf'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));
 
 // CRUD (Gestión Humana)
 Route::get('/operativos', [CursosAlturaController::class, 'operativos'])->middleware(Permiso::ruta([Permiso::CURSOS_ALTURA]));

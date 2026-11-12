@@ -154,18 +154,39 @@ opcional). Para el CRUD se usa la opción **143**.
   `2026_11_09_120000_create_trabajos_altura_tables` copió sus datos. **Pendiente**: borrar la
   columna en otra migración cuando producción ya corra este código.
 - **Gestión Humana > Trabajos en altura** (opción 143): `GET /cursos-altura/trabajos` (paginado,
-  `s` busca por ítem, área o trabajador) y `PUT /cursos-altura/trabajos/{id}`
+  `s` busca por elemento, descripción, bloque, área o trabajador) y `PUT /cursos-altura/trabajos/{id}`
   (`fecha_trabajo` + `id_operativos`). Al editar, el curso debe cubrir la **fecha del
   trabajo**, no hoy. Con `id_operativos` vacío se borra el trabajo (deja de ser en altura).
   Cambiar `fecha_trabajo` no toca las fechas de `reportes`.
+- **Trabajos manuales** (migración `2026_11_12_120000_trabajos_altura_independientes`): con
+  `id_reporte` null, el trabajo lo crea Gestión Humana (`POST /cursos-altura/trabajos`) y guarda
+  sus propios `tipo_trabajo`, `id_bloque` (sin FK: `bloques` es MyISAM), `id_area` (opcional,
+  debe ser del bloque), `elemento` y `descripcion`; exige al menos un operativo. Se edita todo
+  por el mismo `PUT` (sin operativos responde 422, no se borra) y se elimina con
+  `DELETE /cursos-altura/trabajos/{id}` (uno de reporte responde 422). Los selects salen de
+  `GET /cursos-altura/trabajos/ubicaciones` (bloques activos con sus áreas activas), porque
+  `/api/bloques` pide 108/109. `listarTrabajos` y el PDF usan `consultaTrabajos()`, que une los
+  dos orígenes (`origen` = `reporte`|`manual`).
+- **Estado** (`solucionado` en el listado): en uno de reporte, si el reporte tiene respuesta
+  solucionada (`estado = 3`); en uno manual, si `finalizado_en` no es null. Los manuales nacen
+  pendientes y se marcan finalizados o se reabren con `PUT /cursos-altura/trabajos/{id}/estado`
+  (`finalizado` true/false; guarda `finalizado_en` y `finalizado_por`). Uno de reporte responde 422.
+- **Opcionales del permiso** (cualquier trabajo): `altura_aproximada`, `hora_inicio` y
+  `fecha_finalizacion`. Si se llenan, salen impresos en el permiso; si no, quedan las rayas.
+- `GET /cursos-altura/trabajos/{id}/permiso/pdf` (143) da el permiso por id del trabajo; la ruta
+  por `idReporte` sigue para Reportes de Áreas Comunes y delega en la misma.
 - `GET /cursos-altura/operativos-vigentes?fecha=` y `GET /cursos-altura/permiso/{idReporte}/pdf`
   aceptan las opciones de Inventario, Áreas Comunes y Cursos de altura (12, 108, 109, 119,
   141, 142, 143).
-- **El PDF** lo genera `PermisoAlturasPdfService` y sigue el formato de la Resolución
-  4272/2021: datos del trabajo (con `fecha_trabajo`), una fila por trabajador con el curso que
-  cubre esa fecha (o el más reciente), lista de verificación SÍ/NO, observaciones y una firma
-  por trabajador más coordinador y quien autoriza. Lo demás se llena a mano en sitio. Si el
-  reporte no tiene trabajo en altura, el endpoint responde 404.
+- **El PDF** es el documento pdfmake `permisoAlturas` (`src/documentos/instituciones/comun/`
+  del frontend; lo arma `CursosAlturaServices::permisoAlturasPdf` con `DocumentoPdfService`).
+  Sigue el formato SG-SST de Gestión Humana (versión 01, vigencia 1/08/2022; Res. 4272/2021),
+  en una hoja A4 horizontal: datos del trabajo (`fecha_trabajo`; sin área sale "General"), una
+  fila por trabajador con EPS, AFP y ARL (`seguridad_social_trabajador`) y "Vig. dd/mm/aaaa"
+  del curso que cubre esa fecha (o el más reciente), lista de chequeo SI/NO/N.A., ATS (la fila
+  3 lleva la descripción de la tarea), una firma por trabajador más coordinador y empleador, y
+  el cierre. Lo demás se llena a mano en sitio. Si el reporte no tiene trabajo en altura, el
+  endpoint responde 404.
 - **Seguridad social (EPS/AFP/ARL)**, opción **150** (`Permiso::SEGURIDAD_SOCIAL`, que la
   migración otorga a los perfiles que ya tienen la 143). Usa dos tablas:
   `entidades_seguridad_social` (catálogo único, columna `tipo` EPS/AFP/ARL y
