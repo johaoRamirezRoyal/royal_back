@@ -57,11 +57,54 @@ Historial, verificación y pendientes del cambio a middleware:
 - **Accidentes del código viejo en otros colegios.** El código comparaba los números del Royal
   en todas las bases: en el Hebreo "Compras" (26) actuaba como Coordinador y "Rectora" (24)
   como psicóloga de primaria. La migración `2026_11_12_110000_otorgar_opciones_roles_compras_rectora`
-  les da por nombre lo que sí deben tener (Compras 155 y 157; Rectora 157 y 161).- **Colegio nuevo o con opciones sin otorgar:** `php artisan permisos:copiar mysql sami_hebreo`
+  les da por nombre lo que sí deben tener (Compras 155 y 157; Rectora 157 y 161).
+- **Colegio nuevo o con opciones sin otorgar:** `php artisan permisos:copiar mysql sami_hebreo`
   lista las opciones que el perfil del mismo nombre tiene en el Royal y le faltan en el destino;
   con `--aplicar` las otorga. Solo agrega, nunca quita. Los perfiles sin pareja por nombre se
-  configuran a mano en `/permisos`. Para comparar quién entraba antes y quién entra ahora,
-  ver la auditoría del 2026-11-12 (en el Royal no cambió nadie).
+  configuran a mano en `/permisos`.
+- **Auditoría del 2026-11-12** (contra el `cron_permisos` de producción del Royal): los tipos
+  coinciden con las listas numéricas viejas (DOCENTE 3 y 14; OPERATIVO 10, 23, 27 y 32;
+  ESTUDIANTE 16; ACUDIENTE 6; PROVEEDOR 17; EGRESADO 28), los grupos de Hikvision con
+  `GROUP_ID_POR_PERFIL` (solo cambia el perfil 36 "Ventas", de sin grupo a 2) y las opciones
+  155–171 con los números que reemplazan. En el Royal nadie gana ni pierde acceso.
+- **Hebreo:** los nombres que la migración de tipos no reconoce quedaron ADMINISTRATIVO
+  (Seguridad, Recepción, Coordinador Mantenimiento, Cultura Judaico). Se decidió dejarlos así;
+  si el colegio quiere otro tipo, lo cambia en `/permisos`. Recepción (27) contaba como operativa
+  solo porque el código viejo usaba los números del Royal.
+
+### Dónde actúa el tipo
+
+El tipo no abre ni cierra pantallas (eso son las opciones): dice en qué listas sale una persona
+y qué autoservicio tiene.
+
+- **DOCENTE:** director de grupo de un curso (`CursoRequest`, `CursosServices`), docentes en
+  Actas, Observaciones y Consulta de asistencias; autoservicio (`tipo:DOCENTE` en las rutas de
+  gestión académica, convivencial, cursos y vinculación): Mi horario, Asistencia de clases,
+  Mi curso, sus llegadas tarde, observaciones y actas propias.
+- **ESTUDIANTE:** estudiantes de un curso, toma de asistencia (las requests solo aceptan
+  estudiantes), Llegadas tarde, Observaciones, Actas, Consulta de asistencias, Vinculación,
+  carnets de estudiante; perfil al crear un estudiante (`CrearEstudianteRequest`).
+- **ACUDIENTE:** selector de Vinculación, listas de acudientes en Usuarios, llegadas tarde de
+  sus hijos.
+- **OPERATIVO:** trabajadores de Permisos y Licencias (`PermisosLicenciasServices`), Cursos y
+  Trabajos de altura (`CursoAltura`), perfil del usuario creado en `AuthController`.
+- **PROVEEDOR:** selector al asignar proveedor a una compra, evaluaciones sin nivel, perfil al
+  crear un proveedor (`ProveedoresServices`).
+- **Fuera de las listas de personal** (Usuarios, responsables de Áreas, asistencia de
+  trabajadores, cumpleaños): ESTUDIANTE, ACUDIENTE, PROVEEDOR y EGRESADO
+  (`AsistenciaGestionService::TIPOS_EXCLUIDOS_ASISTENCIA`). Sin carnet: ACUDIENTE, PROVEEDOR y
+  EGRESADO (`CarnetService::TIPOS_SIN_CARNET`).
+- **Hikvision:** grupo de la terminal (ver arriba).
+
+### Desplegar la fase 3
+
+Las migraciones crean las opciones con id explícito (fallan si el id está ocupado; en
+producción el catálogo llega hasta la 150, así que 155–171 están libres) y otorgan por nombre.
+Orden en cada base: `2026_11_10_100000` (tipo), `2026_11_10_110000` y `2026_11_10_120000`
+(155–170), `2026_11_12_100000_seed_opcion_grupo_profesores_hikvision` (171) y
+`2026_11_12_110000` (Compras y Rectora; en el Royal no hace nada). Después, en cada colegio que
+no sea el Royal: `php artisan permisos:copiar mysql <connection>`, revisar la lista y repetir
+con `--aplicar`.
 - **El único número de perfil que queda en el código es el Super Admin (1).** Ventas en
   Compras usa la opción 105, la misma que ya exigía el backend.
 
