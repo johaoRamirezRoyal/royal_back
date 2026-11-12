@@ -148,7 +148,7 @@ No son datos de una terminal, sino del comportamiento de todas:
 
 - `HIKVISION_VERIFY_SSL`: verificar el certificado en `https`.
 - `HIKVISION_PASSWORD_NUMERICA`: la contraseña de asistencia solo con dígitos del documento.
-- `HIKVISION_GROUP_IDS`: override del mapa perfil → Person Group.
+- `HIKVISION_GROUP_IDS`: override del Person Group que se envía, por grupo (`"9:2"`, `"8:"`).
 
 ## 3. Migración desde el `.env`
 

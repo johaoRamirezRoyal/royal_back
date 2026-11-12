@@ -67,6 +67,24 @@ class MarcacionAtrasadaTest extends TestCase
             $t->time('hora');
         });
 
+        // El grupo de Hikvision (y con él el horario) sale del tipo de perfil y de la opción 171.
+        Schema::create('perfiles', function (Blueprint $t) {
+            $t->increments('id_perfil');
+            $t->string('tipo')->nullable();
+        });
+        Schema::create('cron_modulos', fn (Blueprint $t) => $t->increments('id'));
+        Schema::create('cron_opciones', function (Blueprint $t) {
+            $t->increments('id');
+            $t->integer('id_modulo');
+        });
+        Schema::create('cron_permisos', function (Blueprint $t) {
+            $t->integer('id_opcion');
+            $t->integer('id_perfil');
+            $t->boolean('activo')->default(true);
+        });
+        DB::table('perfiles')->insert(['id_perfil' => 3, 'tipo' => 'DOCENTE']);
+        (fn () => self::$gruposPorPerfil = [])->call(new \App\Services\Hikvisionattendance\hikvisionattendanceService());
+
         DB::table('usuarios')->insert(['id_user' => 2943, 'perfil' => 3]);
         DB::table('asistencia_horarios_estandar')->insert([
             'grupo_id' => null,

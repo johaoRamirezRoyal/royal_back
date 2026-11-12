@@ -49,6 +49,19 @@ Historial, verificación y pendientes del cambio a middleware:
   preescolar/primaria/bachillerato en Admisiones (antes 21, 24 y 25) y 170 Gestionar
   inscripciones como personal (antes los NOMBRES "administrador"/"admisiones" en
   `TokenExchangeController`, que ahora además usa la base del colegio del token).
+- **Grupo de Hikvision (migración `2026_11_12_100000_seed_opcion_grupo_profesores_hikvision`):**
+  `hikvisionattendanceService::grupoDePerfil()` lo saca del tipo (ADMINISTRATIVO 2, ESTUDIANTE
+  8, DOCENTE 9, OPERATIVO 10; el resto sin grupo). La 171 pone en Profesores (9) a un perfil
+  que no es docente (en el Royal, Deporte y Directivo Docente). Ese grupo elige el horario de
+  asistencia; antes salía del mapa fijo `GROUP_ID_POR_PERFIL`.
+- **Accidentes del código viejo en otros colegios.** El código comparaba los números del Royal
+  en todas las bases: en el Hebreo "Compras" (26) actuaba como Coordinador y "Rectora" (24)
+  como psicóloga de primaria. La migración `2026_11_12_110000_otorgar_opciones_roles_compras_rectora`
+  les da por nombre lo que sí deben tener (Compras 155 y 157; Rectora 157 y 161).- **Colegio nuevo o con opciones sin otorgar:** `php artisan permisos:copiar mysql sami_hebreo`
+  lista las opciones que el perfil del mismo nombre tiene en el Royal y le faltan en el destino;
+  con `--aplicar` las otorga. Solo agrega, nunca quita. Los perfiles sin pareja por nombre se
+  configuran a mano en `/permisos`. Para comparar quién entraba antes y quién entra ahora,
+  ver la auditoría del 2026-11-12 (en el Royal no cambió nadie).
 - **El único número de perfil que queda en el código es el Super Admin (1).** Ventas en
   Compras usa la opción 105, la misma que ya exigía el backend.
 
@@ -56,7 +69,7 @@ Historial, verificación y pendientes del cambio a middleware:
 
 - **Ids en un solo lugar: `App\Support\Permiso`**, con una constante por opción
   (`Permiso::INVENTARIO = 12`, con el nombre de `cron_opciones` al lado) y por perfil
-  (`PERFIL_SUPER_ADMIN`, `PERFILES_DOCENTE`, ...). Si un id cambia en la BD, se cambia
+  (solo `PERFIL_SUPER_ADMIN`). Si un id cambia en la BD, se cambia
   solo ahí. Las constantes `OPCION_*` de cada controller apuntan a esa clase.
 - **Ruta**: `->middleware(Permiso::ruta([Permiso::X, ...], [Permiso::PERFIL_Y, ...]))`.
   El middleware (`RequirePermiso`) deja pasar si el perfil tiene **cualquiera** de esas
@@ -83,7 +96,7 @@ Historial, verificación y pendientes del cambio a middleware:
   consumen. Un endpoint de lectura compartido (dropdowns, catálogos) acepta el OR de
   todas las opciones válidas.
 - **Super Admin (perfil 1)** recibe todas las opciones menos
-  `Permiso::OPCIONES_RESTRICTIVAS` (hoy, la 135). Una opción que *quite* capacidades se
+  `Permiso::OPCIONES_RESTRICTIVAS` (hoy, la 135, la 155 y la 156). Una opción que *quite* capacidades se
   agrega ahí. `crearPermiso`/`eliminarPermiso` rechazan el perfil 1 con 422.
 - **Para todo otro perfil es fail-closed**: una opción sin filas en `cron_permisos` no la
   tiene nadie. Le pasó a "Metricas Asistencias" (127).

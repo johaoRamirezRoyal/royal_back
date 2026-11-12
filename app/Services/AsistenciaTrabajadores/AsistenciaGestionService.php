@@ -50,7 +50,7 @@ class AsistenciaGestionService extends Service
     // tardanza (trabajadores aquí; estudiantes en HikvisionController). Ver notificarLlegadaTarde.
     public const MINUTOS_MAXIMOS_ATRASO_AVISO = 120;
 
-    // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
+    // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GRUPO_*).
     private const GRUPO_LABEL_POR_GROUP_ID = [
         2 => 'Admin. Dept.',
         8 => 'Estudiantes',
@@ -65,7 +65,7 @@ class AsistenciaGestionService extends Service
      */
     private function grupoLabel(int $perfil): string
     {
-        $groupId = hikvisionattendanceService::GROUP_ID_POR_PERFIL[$perfil] ?? null;
+        $groupId = hikvisionattendanceService::grupoDePerfil($perfil);
 
         return self::GRUPO_LABEL_POR_GROUP_ID[$groupId] ?? 'Sin departamento';
     }
@@ -153,7 +153,7 @@ class AsistenciaGestionService extends Service
     private function horaMinimaSalidaParaUsuario(int $idUsuario): string
     {
         $usuario = Usuario::find($idUsuario);
-        $grupoId = $usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $usuario->perfil] ?? null) : null;
+        $grupoId = $usuario ? hikvisionattendanceService::grupoDePerfil($usuario->perfil) : null;
         $horario = AsistenciaGestion::horarioAplicable($grupoId);
 
         return $horario->hora_minima_salida
@@ -974,7 +974,7 @@ class AsistenciaGestionService extends Service
 
             foreach ($abiertas as $asistencia) {
                 $perfil = $asistencia->usuario?->perfil;
-                $grupoId = $perfil !== null ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $perfil] ?? null) : null;
+                $grupoId = hikvisionattendanceService::grupoDePerfil($perfil);
                 $horario = AsistenciaGestion::horarioAplicable($grupoId);
 
                 // Sin hora_cierre_automatico configurada, el horario no tiene cierre

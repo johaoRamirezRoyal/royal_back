@@ -98,6 +98,35 @@ class OpcionesRolesTest extends TestCase
         $this->assertNull(\App\Services\Admisiones\AdmisionesServices::opcionPsicologaParaGrado('Grado inexistente'));
     }
 
+    public function test_grupo_de_hikvision_por_tipo_y_opcion_171(): void
+    {
+        $servicio = \App\Services\Hikvisionattendance\hikvisionattendanceService::class;
+        $olvidarGrupos = fn () => (new \ReflectionProperty($servicio, 'gruposPorPerfil'))->setValue(null, []);
+        $deTipo = fn (string $tipo) => (int) (DB::table('perfiles')->where('tipo', $tipo)->where('id_perfil', '<>', 1)
+            ->whereNotIn('id_perfil', PermisosPerfil::perfilesCon(Permiso::HIKVISION_GRUPO_PROFESORES))->value('id_perfil')
+            ?? $this->markTestSkipped("No hay un perfil {$tipo} sin la opción 171."));
+
+        $administrativo = $deTipo('ADMINISTRATIVO');
+        $olvidarGrupos();
+        $this->assertSame($servicio::GRUPO_ADMINISTRATIVOS, $servicio::grupoDePerfil(Permiso::PERFIL_SUPER_ADMIN));
+        $this->assertSame($servicio::GRUPO_ADMINISTRATIVOS, $servicio::grupoDePerfil($administrativo));
+        $this->assertSame($servicio::GRUPO_ESTUDIANTES, $servicio::grupoDePerfil($deTipo('ESTUDIANTE')));
+        $this->assertNull($servicio::grupoDePerfil($deTipo('ACUDIENTE')));
+
+        // Con la 171 pasa a Profesores sin dejar de ser administrativo.
+        DB::table('cron_permisos')->insert(['id_opcion' => Permiso::HIKVISION_GRUPO_PROFESORES, 'id_perfil' => $administrativo, 'activo' => 1]);
+        $olvidarGrupos();
+        $this->assertSame($servicio::GRUPO_PROFESORES, $servicio::grupoDePerfil($administrativo));
+
+        // El override de la terminal va por grupo: "9:2" manda 2 y "8:" no manda grupo.
+        Config::set('services.hikvision.group_ids', '9:2,8:');
+        $aTerminal = new \ReflectionMethod($servicio, 'obtenerGroupIdPorPerfil');
+        $instancia = (new \ReflectionClass($servicio))->newInstanceWithoutConstructor();
+        $this->assertSame($servicio::GRUPO_ADMINISTRATIVOS, $aTerminal->invoke($instancia, $administrativo));
+        $this->assertNull($aTerminal->invoke($instancia, $deTipo('ESTUDIANTE')));
+        $olvidarGrupos();
+    }
+
     private function auth(Usuario $usuario): array
     {
         return ['Authorization' => 'Bearer ' . app(JwtService::class)->generateToken($usuario), 'Accept' => 'application/json'];
