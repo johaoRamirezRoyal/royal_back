@@ -14,6 +14,7 @@ use App\Models\Instituciones\CartaRecomendacion;
 use App\Models\Instituciones\ConfiguracionInstituciones;
 use App\Models\Instituciones\Institucion;
 use App\Pdf\Instituciones\CartaRecomendacionPdfService;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class InstitucionController extends Controller
@@ -418,6 +420,22 @@ class InstitucionController extends Controller
             ->get(['id', 'idioma', 'datos', 'documento_url', 'created_at']);
 
         return $this->success('Cartas obtenidas', $cartas);
+    }
+
+    /**
+     * PDF de una carta propia con la sesión de la institución: `documento_url` en local es
+     * /api/public (auth:api, de usuarios) y una institución no tiene esa sesión.
+     */
+    public function verCartaPdf(Request $request, int $id)
+    {
+        $carta = CartaRecomendacion::where('id_institucion', $request->attributes->get('institucion_id'))->findOrFail($id);
+        abort_unless($carta->documento_public_id && $carta->documento_url, 404);
+
+        if (! CloudinaryService::usaCloudinary()) {
+            return Storage::disk('public')->response("{$carta->documento_public_id}.pdf", "carta-recomendacion-{$carta->id}.pdf");
+        }
+
+        return redirect()->away(ArchivosPrivados::firmar($carta->documento_url), 302, ['Cache-Control' => 'no-store']);
     }
 
     /**
