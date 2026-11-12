@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Encuestas;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Services\encuestas\EncuestasServices;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class EncuestasController extends Controller
 {
@@ -20,6 +20,7 @@ class EncuestasController extends Controller
     // — 2026_09_22_100000_fix_ids_opciones_encuestas renumera la BD local para que
     // coincida, así que estas constantes reflejan el id real en ambos entornos.
     private const OPCION_ADMIN = Permiso::ENCUESTAS_ADMIN;
+
     private const OPCION_VER = Permiso::ENCUESTAS_RESULTADOS;
 
     public function __construct(
@@ -314,13 +315,49 @@ class EncuestasController extends Controller
             return $rechazo;
         }
 
-        $idSalon = $request->query('id_salon');
-        $idReserva = $request->query('id_reserva');
-        return $this->apiResponse($this->encuestasServices->resultados(
-            $idEncuesta,
-            $idSalon !== null ? (int) $idSalon : null,
-            $idReserva !== null ? (int) $idReserva : null,
-        ));
+        return $this->apiResponse($this->encuestasServices->resultados($idEncuesta, $this->filtrosResultados($request)));
+    }
+
+    public function envios(Request $request, int $idEncuesta): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN, self::OPCION_VER)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->encuestasServices->envios($idEncuesta, $this->filtrosResultados($request)));
+    }
+
+    public function resultadosPdf(Request $request, int $idEncuesta)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_ADMIN, self::OPCION_VER)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->encuestasServices->generarPdfResultados($idEncuesta, $this->filtrosResultados($request));
+
+        if ($resultado['error']) {
+            return response()->json(['error' => true, 'message' => $resultado['message']], $resultado['status'] ?? 422);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$resultado['data']['nombre'].'"',
+        ]);
+    }
+
+    /**
+     * Query params comunes de Resultados (resumen, envíos y PDF).
+     *
+     * @return array{id_salon: ?int, id_reserva: ?int, id_pregunta: ?int, id_opcion: ?int}
+     */
+    private function filtrosResultados(Request $request): array
+    {
+        $filtros = [];
+        foreach (['id_salon', 'id_reserva', 'id_pregunta', 'id_opcion'] as $clave) {
+            $filtros[$clave] = $request->filled($clave) ? (int) $request->query($clave) : null;
+        }
+
+        return $filtros;
     }
 
     public function reservasConRespuestas(Request $request, int $idEncuesta): JsonResponse
@@ -330,6 +367,7 @@ class EncuestasController extends Controller
         }
 
         $idSalon = $request->query('id_salon');
+
         return $this->apiResponse($this->encuestasServices->reservasConRespuestas($idEncuesta, $idSalon !== null ? (int) $idSalon : null));
     }
 
@@ -369,6 +407,7 @@ class EncuestasController extends Controller
         }
 
         $datos = $validator->validated();
+
         return $this->apiResponse($this->encuestasServices->responderPublica($token, $datos['respuestas'] ?? [], $datos['id_reserva'] ?? null));
     }
 }
