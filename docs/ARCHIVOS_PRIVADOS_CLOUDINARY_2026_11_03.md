@@ -41,11 +41,11 @@ completo. Las carpetas cuentan en cualquier nivel, con o sin la carpeta del cole
 | `documentos-varios/` | documentos varios |
 | `proveedores/documentos/` | documentos de proveedores |
 | `royal-school/firma*`, `royal-school/paz-salvo/sello*` | firma de la directora (V°B° de inventario) y sello del paz y salvo de biblioteca |
+| `Instituciones/CartasRecomendacion/` | cartas de recomendación de los jardines (salud, terapias y disciplina de menores). Privadas desde el 2026-11-12, ver abajo |
 | **raíz del colegio** (solo el disco `cloudinary`) | fotos de perfil, cotizaciones y facturas de compras (`SolicitudesServices::CARPETA_*` están vacías) y lo que se migró de SAMI |
 
 Sigue público lo que no tiene datos personales: logos y branding, banners, noticias, revistas,
-cumpleaños, capacitaciones, biblioteca, plantillas de carnet, cartas de recomendación de
-Instituciones y evidencias de `inventario/programacion-mant`. Enfermería no sube archivos.
+cumpleaños, capacitaciones, biblioteca, plantillas de carnet y evidencias de `inventario/programacion-mant`. Enfermería no sube archivos.
 
 ### Cómo funciona
 
@@ -177,3 +177,18 @@ Frontend (`S.A.M.I_frontend`):
 |---|---|
 | `src/utils/fileUrl.ts` | `esPrivado`; los privados van por `/api/public` también en producción; `?descargar=1` |
 | `docs/contexto/componentes.md`, `docs/contexto/modulos/{carnets,gestion-humana,compras}.md` | reglas vigentes |
+
+## Cartas de recomendación privadas (2026-11-12)
+
+`Instituciones/CartasRecomendacion/` pasó a `ArchivosPrivados::PATRON` (y a `esPrivado` en
+`src/utils/fileUrl.ts` del frontend). Antes eran públicas: con la URL se abría la carta sin sesión.
+
+- Las nuevas se suben como `authenticated` (`uploadFile` usa la misma regla).
+- El admin las recibe por `/api/privado/...` (middleware `FirmarArchivosPrivados`); la descarga
+  del modal usa `fetchArchivo` para mandar la cookie.
+- El portal del jardín las abre por `GET /api/institucion/carta-recomendacion/{id}/pdf`, que
+  ahora transmite el PDF por Laravel en vez de redirigir a la URL firmada (que no vence).
+- **Deploy**: subir backend y frontend juntos y, en el mismo momento, correr
+  `php artisan cloudinary:privatizar --dry-run` y luego sin `--dry-run`, para pasar a privadas
+  las cartas subidas antes del deploy. El 2026-11-12 el `--dry-run` daba 0 archivos (no había
+  cartas en Cloudinary).
