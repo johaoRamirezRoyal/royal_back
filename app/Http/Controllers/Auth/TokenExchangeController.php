@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
+use App\Services\AdminManagement\BasesDatosService;
+use Illuminate\Support\Facades\Config;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -10,7 +14,8 @@ use App\Models\Usuarios\Usuario;
 
 class TokenExchangeController extends Controller
 {
-    private array $rolesPermitidos = ['super admin', 'administrador', "admisiones"];
+    // Quién entra a Admisiones como personal: la opción 170 (antes, los NOMBRES de perfil
+    // "super admin", "administrador" y "admisiones"), o un correo de esta lista.
     private array $correosPermitidos = ['rector@colegio.edu'];
 
     public function exchange(Request $request)
@@ -34,12 +39,18 @@ class TokenExchangeController extends Controller
             return response()->json(['error' => 'Token no corresponde al sistema admin'], 403);
         }
 
-        // 3. Verificar rol o correo permitido
+        // 3. Base del colegio del token (igual que JwtFromCookie) y verificar opción o correo
+        $connection = $adminPayload->get('db_connection') ?? 'mysql';
+        if (BasesDatosService::esConnectionValida($connection)) {
+            Config::set('database.default', $connection);
+        }
+
         $role  = $adminPayload->get('perfil');
         $email = $adminPayload->get('correo');
+        $admin = Usuario::find($adminPayload->get('user_id'));
 
         $tienePermiso =
-            in_array(strtolower($role), $this->rolesPermitidos) ||
+            ($admin && PermisosPerfil::perfilTiene($admin->perfil, Permiso::ADMISIONES_GESTION_PERSONAL)) ||
             in_array($email, $this->correosPermitidos);
 
         if (!$tienePermiso) {
@@ -66,6 +77,8 @@ class TokenExchangeController extends Controller
 
         $admisionesToken = JWTAuth::claims([
             'system'       => 'admissions',
+            // Las peticiones de admisiones de este token van a la base de su colegio.
+            'db_connection' => config('database.default'),
             'source'       => 'token_exchange',
             'role'         => 'admin',
             'acudiente_id' => $acudienteId,

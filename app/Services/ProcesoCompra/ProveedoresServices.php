@@ -2,6 +2,8 @@
 
 namespace App\Services\ProcesoCompra;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\ProcesoCompra\Proveedores\ProveedorBanco;
 use App\Models\ProcesoCompra\Proveedores\ProveedorContacto;
 use App\Models\ProcesoCompra\Proveedores\ProveedorDetalle;
@@ -16,7 +18,6 @@ use Illuminate\Support\Facades\DB;
 
 class ProveedoresServices
 {
-    private const PERFIL_PROVEEDOR = 17;
 
     public function __construct(
         private FileStorageService $fileStorage,
@@ -71,7 +72,7 @@ class ProveedoresServices
             $proveedor = DB::transaction(function () use ($usuarioData, $proveedorData, $idLog) {
                 $usuario = Usuario::create([
                     ...$usuarioData,
-                    'perfil' => self::PERFIL_PROVEEDOR,
+                    'perfil' => Perfil::idParaCrear(TipoPerfil::PROVEEDOR),
                     'estado' => 'activo',
                     'fechareg' => now(),
                 ]);

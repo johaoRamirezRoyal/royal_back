@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\GestionAcademica;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\ActaEstudiante;
@@ -59,7 +60,7 @@ class ActasEstudianteController extends Controller
 
         // Docente sin opciones: las que solicitó más las de los estudiantes del curso que dirige
         // ([] si no dirige ninguno = solo las solicitadas; ver ActasEstudianteService::limitarACursos).
-        if (in_array((int) $request->user()->perfil, ActaEstudiante::PERFILES_DOCENTE, true)) {
+        if ($request->user()->esTipo(TipoPerfil::DOCENTE)) {
             $dirigidos = Cursos::where('id_director', $request->user()->id_user)->where('activo', 1)->pluck('id')->all();
             $this->service->limitarACursos($dirigidos, $request->user()->id_user);
 

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\CursosAltura;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\CursosAltura\CursoAltura;
 use App\Models\Usuarios\Usuario;
 use App\Services\JwtService;
@@ -39,7 +41,7 @@ class CursosAlturaTest extends TestCase
         DB::beginTransaction();
 
         $this->operativo = Usuario::where('estado', 'activo')
-            ->whereIn('perfil', PermisosLicenciasServices::PERFILES_ASIGNABLES)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::OPERATIVO))
             ->whereNotIn('id_user', DB::table('cursos_altura')->select('id_user'))
             ->first();
         $admin = Usuario::where('estado', 'activo')->where('perfil', Permiso::PERFIL_SUPER_ADMIN)->first();
@@ -73,7 +75,7 @@ class CursosAlturaTest extends TestCase
         $this->assertContains($id, array_column($vigentes, 'id_user'));
 
         // Un no operativo con curso vigente no cuenta.
-        $noOperativo = Usuario::where('estado', 'activo')->whereNotIn('perfil', PermisosLicenciasServices::PERFILES_ASIGNABLES)->value('id_user');
+        $noOperativo = Usuario::where('estado', 'activo')->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::OPERATIVO))->value('id_user');
         $this->curso($noOperativo, now()->subYear()->toDateString(), null);
         $this->assertFalse(CursoAltura::operativoVigente($noOperativo));
     }
@@ -258,7 +260,7 @@ class CursosAlturaTest extends TestCase
     private function dosOperativosVigentes(): array
     {
         $ids = Usuario::where('estado', 'activo')
-            ->whereIn('perfil', PermisosLicenciasServices::PERFILES_ASIGNABLES)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::OPERATIVO))
             ->whereNotIn('id_user', DB::table('cursos_altura')->select('id_user'))
             ->limit(2)->pluck('id_user')->all();
 

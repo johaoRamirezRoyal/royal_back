@@ -2,6 +2,7 @@
 
 namespace App\Services\Noticias;
 
+use App\Models\Usuarios\Perfil;
 use App\Models\Noticias\ConfiguracionNoticias;
 use App\Models\Noticias\CumpleanosGenerado;
 use App\Models\Noticias\MensajeProgramado;
@@ -254,7 +255,7 @@ class CumpleanosService
             ->leftJoin('info_adicional_usuarios as ia', 'ia.id_user', '=', 'u.id_user')
             ->leftJoin('perfiles as p', 'p.id_perfil', '=', 'u.perfil')
             ->where('u.estado', 'activo')
-            ->whereNotIn('u.perfil', AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA)
+            ->whereNotIn('u.perfil', Perfil::idsDeTipo(...AsistenciaGestionService::TIPOS_EXCLUIDOS_ASISTENCIA))
             ->when($idUser, fn ($q) => $q->where('u.id_user', $idUser))
             ->select([
                 'u.id_user', 'u.nombre', 'u.apellido', 'u.foto_carnet', 'u.perfil',

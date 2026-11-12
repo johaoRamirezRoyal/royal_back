@@ -9,6 +9,7 @@ Route::get('/opciones', [PermisosController::class, 'verTodosLosPermisosOpciones
 Route::post('/opciones-perfil', [PermisosController::class, 'verOpcionesPorPerfil'])->middleware(Permiso::ruta([Permiso::PERMISOS_SISTEMA]));
 Route::post('/activar-permiso', [PermisosController::class, 'crearPermiso'])->middleware(Permiso::ruta([Permiso::PERMISOS_SISTEMA]));
 Route::delete('/eliminar-permiso', [PermisosController::class, 'eliminarPermiso'])->middleware(Permiso::ruta([Permiso::PERMISOS_SISTEMA]));
+Route::put('/perfiles/{id}/tipo', [PermisosController::class, 'actualizarTipoPerfil'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::PERMISOS_SISTEMA]));
 
 // CRUD de módulos/opciones — solo Super Admin (ver PermisosController::soloSuperAdmin),
 // distinto del resto de este archivo que solo exige la opción 28.

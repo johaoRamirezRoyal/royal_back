@@ -2,6 +2,8 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use App\Models\GestionAcademica\DocenteAsignatura as DocenteAsignaturaModel;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
@@ -15,13 +17,14 @@ class DocenteAsignatura extends Service
     // su propia entrada acá) + psicóloga por nivel (21 Preescolar, 24 Primaria, 25
     // Secundaria/Bachillerato — mismos ids que AdmisionesServices::NIVELES_PSICOLOGAS):
     // las psicólogas también dictan asignaturas y necesitan poder asignárselas desde este tab.
-    private const PERFILES_ASIGNABLES = [3, 14, 21, 24, 25];
+    // Ahora: los perfiles con la opción 160 (la migración 2026_11_10_110000 se la otorgó a
+    // esos mismos perfiles, por nombre).
 
     public function listarDocentesAsignaturas(?int $usuario, ?int $asignatura, ?string $search, int $perpage = 10): array
     {
         try {
             $docentes = Usuario::query()
-                ->whereIn('perfil', self::PERFILES_ASIGNABLES)
+                ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::TIENE_ASIGNATURAS))
                 ->where('estado', 'activo')
                 ->when($usuario, function ($query) use ($usuario) {
                     $query->where('id_user', $usuario);
@@ -92,7 +95,7 @@ class DocenteAsignatura extends Service
             }
 
             $docente = Usuario::where('id_user', $id_user)
-                ->whereIn('perfil', self::PERFILES_ASIGNABLES)
+                ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::TIENE_ASIGNATURAS))
                 ->first();
 
             if (!$docente) {

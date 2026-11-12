@@ -2,6 +2,8 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\GestionAcademica\AsistenciaEstudiante;
 use App\Services\Service;
 use Carbon\Carbon;
@@ -168,7 +170,7 @@ class AsistenciaEstudianteService extends Service
             }
 
             $totalEstudiantes = DB::table('usuarios')
-                ->where('perfil', 16) // Estudiante
+                ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                 ->where('estado', 'activo')
                 ->when(filled($id_curso), fn($q) => $q->where('id_curso', $id_curso))
                 ->when($cursosDocente !== null, fn($q) => $q->whereIn('id_curso', $cursosDocente))

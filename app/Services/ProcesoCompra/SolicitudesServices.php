@@ -2,6 +2,7 @@
 
 namespace App\Services\ProcesoCompra;
 
+use App\Services\Usuarios\PermisosPerfil;
 use App\Enums\Mails;
 use App\Mail\ProcesoCompra\OrdenCompraMail;
 use App\Models\Inventario\Inventario;
@@ -53,10 +54,6 @@ class SolicitudesServices
         'devolver' => self::ESTADO_DEVUELTA,
         'rechazar' => self::ESTADO_RECHAZADA,
     ];
-
-    // Mismo perfil Coordinador (26) que ya usa EvaluacionesServices::PERFIL_COORDINADOR —
-    // un coordinador queda a cargo de todas las solicitudes de usuarios de su id_nivel.
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     // Los archivos se guardan en la raíz del disco de uploads para que su URL
     // pública sea directa: /public/upload/<nombre_archivo>.
@@ -113,7 +110,7 @@ class SolicitudesServices
     /** Correos de los coordinadores activos a cargo del nivel dado (puede no haber ninguno). */
     private function coordinadoresDeNivel(?int $idNivel): array
     {
-        return Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $idNivel, soloActivos: true);
+        return Usuario::correosPorPerfilesYNivel(PermisosPerfil::perfilesCon(Permiso::COORDINACION_NIVEL), $idNivel, soloActivos: true);
     }
 
     /**

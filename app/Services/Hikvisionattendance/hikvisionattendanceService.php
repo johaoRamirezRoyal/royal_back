@@ -2,8 +2,12 @@
 
 namespace App\Services\Hikvisionattendance;
 
+use App\Enums\TipoPerfil;
 use App\Models\Hikvision\HikvisionDispositivo;
+use App\Models\Usuarios\Perfil;
 use App\Services\AdminManagement\BasesDatosService;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -17,6 +21,7 @@ use GuzzleHttp\Psr7\Request;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -51,60 +56,72 @@ class hikvisionattendanceService
         '1' => 'Salida',
     ];
 
-    // groupId del Person Group de Hikvision (ya creado en el dispositivo) asignado según el id_perfil del usuario
-    const GROUP_ID_POR_PERFIL = [
-        16 => 8, // Students
-        1 => 2, // Admin. Dept.
-        2 => 2,
-        4 => 2,
-        5 => 2,
-        7 => 2,
-        8 => 2,
-        9 => 2,
-        11 => 2,
-        12 => 2,
-        15 => 2,
-        18 => 2,
-        19 => 2,
-        21 => 2,
-        22 => 2,
-        24 => 2,
-        25 => 2,
-        26 => 2,
-        29 => 2,
-        30 => 2,
-        31 => 2,
-        33 => 2,
-        34 => 2,
-        3 => 9, // Teachers
-        13 => 9,
-        14 => 9,
-        20 => 9,
-        10 => 10, // Workers
-        23 => 10,
-        27 => 10,
-        32 => 10,
-    ];
+    // groupId de los Person Group de Hikvision (ya creados en las terminales).
+    public const GRUPO_ADMINISTRATIVOS = 2;
+    public const GRUPO_ESTUDIANTES = 8;
+    public const GRUPO_PROFESORES = 9;
+    public const GRUPO_TRABAJADORES = 10;
+
+    /** @var array<string, array<int, ?int>> conexión => [id_perfil => groupId] */
+    private static array $gruposPorPerfil = [];
 
     /**
-     * Obtiene el groupId del Person Group de Hikvision para un id_perfil dado.
+     * Grupo de Hikvision de un perfil: sale de su tipo (los números de perfil cambian de un
+     * colegio a otro), salvo que tenga la opción 171, que lo pone en Profesores sin ser docente.
+     * Acudientes, proveedores y egresados no tienen grupo. Con este grupo se elige el horario
+     * de asistencia; a la terminal se le manda obtenerGroupIdPorPerfil().
+     */
+    public static function grupoDePerfil(int|string|null $idPerfil): ?int
+    {
+        if ($idPerfil === null || $idPerfil === '') {
+            return null;
+        }
+
+        // Una consulta por colegio y proceso: la puntualidad lo pide por cada fila de un reporte.
+        // ponytail: un worker de larga vida no ve un cambio de tipo u opción hasta reiniciarse,
+        // igual que AsistenciaGestion::$horariosCache.
+        $grupos = self::$gruposPorPerfil[DB::getDefaultConnection()] ??= self::calcularGruposPorPerfil();
+
+        return $grupos[(int) $idPerfil] ?? null;
+    }
+
+    /** @return array<int, ?int> */
+    private static function calcularGruposPorPerfil(): array
+    {
+        $profesores = PermisosPerfil::perfilesCon(Permiso::HIKVISION_GRUPO_PROFESORES);
+
+        return Perfil::query()->pluck('tipo', 'id_perfil')
+            ->mapWithKeys(fn ($tipo, $id) => [(int) $id => in_array((int) $id, $profesores, true)
+                ? self::GRUPO_PROFESORES
+                : match (TipoPerfil::tryFrom((string) $tipo)) {
+                    TipoPerfil::ADMINISTRATIVO => self::GRUPO_ADMINISTRATIVOS,
+                    TipoPerfil::DOCENTE => self::GRUPO_PROFESORES,
+                    TipoPerfil::OPERATIVO => self::GRUPO_TRABAJADORES,
+                    TipoPerfil::ESTUDIANTE => self::GRUPO_ESTUDIANTES,
+                    default => null,
+                }])
+            ->all();
+    }
+
+    /**
+     * groupId que se le manda a la terminal: el de grupoDePerfil() con el override de
+     * HIKVISION_GROUP_IDS ("grupo:grupo,...", por groupId y no por perfil, porque la variable es
+     * la misma para todos los colegios). Un destino vacío ("8:") deja de enviar ese grupo, p. ej.
+     * si no existe en la terminal y esta responde badJsonContent.
+     * ponytail: no se valida contra el dispositivo — no hay endpoint ISAPI de Person Groups
+     * confirmado para este modelo; agregarlo si se confirma uno.
      */
     protected function obtenerGroupIdPorPerfil(int $idPerfil): ?int
     {
-        // HIKVISION_GROUP_IDS ("perfil:groupId,...") pisa el mapa fijo sin tocar código; un
-        // groupId vacío ("16:") deja de enviarlo para ese perfil (p. ej. si el grupo no
-        // existe en el dispositivo y este responde badJsonContent).
-        // ponytail: no se valida contra el dispositivo — no hay endpoint ISAPI de Person
-        // Groups confirmado para este modelo; agregarlo si se confirma uno.
+        $grupo = self::grupoDePerfil($idPerfil);
+
         $override = [];
         foreach (array_filter(explode(',', (string) config('services.hikvision.group_ids'))) as $par) {
-            [$perfil, $grupo] = array_pad(explode(':', trim($par), 2), 2, '');
-            $override[(int) $perfil] = $grupo === '' ? null : (int) $grupo;
+            [$de, $a] = array_pad(explode(':', trim($par), 2), 2, '');
+            $override[(int) $de] = $a === '' ? null : (int) $a;
         }
 
-        return array_key_exists($idPerfil, $override)
-            ? $override[$idPerfil]
-            : (self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null);
+        return $grupo !== null && array_key_exists($grupo, $override) ? $override[$grupo] : $grupo;
     }
 
     /**

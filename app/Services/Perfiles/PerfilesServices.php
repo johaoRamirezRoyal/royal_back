@@ -1,6 +1,7 @@
 <?php
 namespace App\Services\Perfiles;
 
+use App\Enums\TipoPerfil;
 use App\Models\Usuarios\Perfil;
 
 class PerfilesServices 
@@ -19,5 +20,23 @@ class PerfilesServices
                 'data' => $e->getMessage(),
             ];
         }
+    }
+
+    /** Cambia el tipo (App\Enums\TipoPerfil) de un perfil. Super Admin no se toca. */
+    public function actualizarTipo(int $idPerfil, TipoPerfil $tipo): array
+    {
+        $perfil = Perfil::find($idPerfil);
+
+        if (! $perfil) {
+            return ['error' => true, 'message' => 'El perfil no existe.', 'data' => null];
+        }
+
+        $perfil->update(['tipo' => $tipo->value]);
+
+        return [
+            'error' => false,
+            'message' => "Tipo de \"{$perfil->nombre}\" actualizado.",
+            'data' => ['id' => $perfil->id_perfil, 'tipo' => $perfil->tipo],
+        ];
     }
 }

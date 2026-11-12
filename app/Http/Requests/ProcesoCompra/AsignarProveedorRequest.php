@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\ProcesoCompra;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,7 +28,7 @@ class AsignarProveedorRequest extends FormRequest
             'id_proveedor' => [
                 'required',
                 'integer',
-                Rule::exists('usuarios', 'id_user')->where('perfil', 17)->where('estado', 'activo'),
+                Rule::exists('usuarios', 'id_user')->where(fn ($q) => $q->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::PROVEEDOR)))->where('estado', 'activo'),
             ],
             // Solicitud final que se edita (las del legacy no tienen solicitud inicial).
             'id_solicitud' => ['nullable', 'integer', Rule::exists('solicitudes', 'id')],

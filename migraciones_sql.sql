@@ -613,6 +613,102 @@ INSERT INTO trabajos_altura (id_reporte, fecha_trabajo) SELECT id, DATE(CASE WHE
 INSERT INTO trabajos_altura_operativos (id_trabajo, id_operativo) SELECT ta.id, rp.id_operativo FROM trabajos_altura ta JOIN reportes rp ON rp.id = ta.id_reporte;
 
 -- ---------------------------------------------------------------------------
+-- 2026_11_10_090000_trabajos_altura_a_innodb.php
+-- trabajos_altura y trabajos_altura_operativos quedaron en MyISAM en producción (motor por
+-- defecto del servidor) y sus FKs nunca se crearon: borrar un reporte dejaba su trabajo en
+-- altura huérfano. Borra los huérfanos que la FK no dejaría crear, pasa ambas a InnoDB y
+-- crea las FKs. La migración se salta todo si las FKs ya existen.
+-- ---------------------------------------------------------------------------
+DELETE ta FROM trabajos_altura ta LEFT JOIN reportes rp ON rp.id = ta.id_reporte WHERE rp.id IS NULL;
+DELETE tao FROM trabajos_altura_operativos tao LEFT JOIN trabajos_altura ta ON ta.id = tao.id_trabajo WHERE ta.id IS NULL;
+DELETE tao FROM trabajos_altura_operativos tao LEFT JOIN usuarios u ON u.id_user = tao.id_operativo WHERE u.id_user IS NULL;
+ALTER TABLE trabajos_altura ENGINE = InnoDB;
+ALTER TABLE trabajos_altura_operativos ENGINE = InnoDB;
+ALTER TABLE trabajos_altura ADD CONSTRAINT trabajos_altura_id_reporte_foreign FOREIGN KEY (id_reporte) REFERENCES reportes (id) ON DELETE CASCADE;
+ALTER TABLE trabajos_altura_operativos ADD CONSTRAINT trabajos_altura_operativos_id_trabajo_foreign FOREIGN KEY (id_trabajo) REFERENCES trabajos_altura (id) ON DELETE CASCADE;
+ALTER TABLE trabajos_altura_operativos ADD CONSTRAINT trabajos_altura_operativos_id_operativo_foreign FOREIGN KEY (id_operativo) REFERENCES usuarios (id_user);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_10_100000_add_tipo_to_perfiles_table.php
+-- perfiles.tipo (App\Enums\TipoPerfil): qué clase de persona agrupa cada perfil, para que el
+-- código deje de preguntar por números de perfil, que cambian de un colegio a otro. Se llena
+-- por nombre; lo que no reconoce queda ADMINISTRATIVO y se ajusta en /permisos.
+-- ---------------------------------------------------------------------------
+alter table `perfiles` add `tipo` varchar(20) not null default 'ADMINISTRATIVO' after `nombre`;
+UPDATE perfiles SET tipo = CASE LOWER(TRIM(REPLACE(REPLACE(nombre, '\r', ''), '\n', ' '))) WHEN 'docente' THEN 'DOCENTE' WHEN 'docente ict' THEN 'DOCENTE' WHEN 'trabajador' THEN 'OPERATIVO' WHEN 'operativo' THEN 'OPERATIVO' WHEN 'supervisor operativo' THEN 'OPERATIVO' WHEN 'mensajero' THEN 'OPERATIVO' WHEN 'estudiante' THEN 'ESTUDIANTE' WHEN 'acudiente' THEN 'ACUDIENTE' WHEN 'proveedor' THEN 'PROVEEDOR' WHEN 'egresado' THEN 'EGRESADO' ELSE 'ADMINISTRATIVO' END;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_10_110000_seed_opciones_roles.php
+-- Fase 3 de permisos por colegio: lo que decidía un número de perfil pasa a opciones que
+-- cada colegio otorga en /permisos. Ids 155–160 (150–154 libres para la rama de notas).
+-- Se otorgan por NOMBRE del perfil (Coordinador: 26 en el Royal, 22 en el Hebreo).
+-- 155 y 156 son restrictivas (Permiso::OPCIONES_RESTRICTIVAS). La migración falla si un id
+-- ya está ocupado por otra opción; este SQL solo inserta si está libre.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+SELECT * FROM (
+    SELECT 155 AS id, 'Coordinación de nivel — Gestiona solo su nivel' AS nombre, 1 AS id_modulo, 1 AS activo, NOW() AS fechareg UNION ALL
+    SELECT 156, 'Dirección administrativa — Gestiona los niveles administrativos', 1, 1, NOW() UNION ALL
+    SELECT 157, 'Compras — Ver y aprobar solicitudes de todos los niveles', 9, 1, NOW() UNION ALL
+    SELECT 158, 'Gestión Humana — Revocar llegadas tarde de trabajadores', 3, 1, NOW() UNION ALL
+    SELECT 159, 'Áreas comunes — Puede ser responsable de un bloque', 6, 1, NOW() UNION ALL
+    SELECT 160, 'Gestión Académica — Puede tener asignaturas', 14, 1, NOW()
+) n WHERE NOT EXISTS (SELECT 1 FROM cron_opciones o WHERE o.id = n.id);
+
+INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
+SELECT r.id_opcion, pf.id_perfil, 1, NOW()
+FROM perfiles pf
+JOIN (
+    SELECT 155 AS id_opcion, 'coordinador' AS nombre UNION ALL
+    SELECT 156, 'directora administrativa' UNION ALL
+    SELECT 157, 'administrador' UNION ALL
+    SELECT 158, 'recursos humanos' UNION ALL
+    SELECT 159, 'administrador' UNION ALL SELECT 159, 'directora administrativa' UNION ALL
+    SELECT 159, 'asistentes de nivel' UNION ALL SELECT 159, 'coordinador' UNION ALL SELECT 159, 'supervisor operativo' UNION ALL
+    SELECT 160, 'docente' UNION ALL SELECT 160, 'docente ict' UNION ALL SELECT 160, 'psicologa preescolar' UNION ALL
+    SELECT 160, 'psicologa primaria' UNION ALL SELECT 160, 'psicologa secundaria'
+) r ON r.nombre = LOWER(TRIM(REPLACE(REPLACE(REPLACE(pf.nombre, '\r', ''), '\n', ' '), '  ', ' ')))
+WHERE NOT EXISTS (SELECT 1 FROM cron_permisos p WHERE p.id_opcion = r.id_opcion AND p.id_perfil = pf.id_perfil);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_10_120000_seed_opciones_roles_avisos.php
+-- Fase 3, segunda tanda: avisos por correo, administración de Evaluaciones y psicólogas de
+-- Admisiones pasan de números (o nombres) de perfil a opciones 161–170, otorgadas por NOMBRE
+-- del perfil. Ninguna es restrictiva. Este SQL solo inserta si el id está libre.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+SELECT * FROM (
+    SELECT 161 AS id, 'Evaluaciones — Administración total (todas las evaluaciones y respuestas)' AS nombre, 3 AS id_modulo, 1 AS activo, NOW() AS fechareg UNION ALL
+    SELECT 162, 'Evaluaciones — Realizar cualquier evaluación activa', 3, 1, NOW() UNION ALL
+    SELECT 163, 'Gestión Humana — Recibe avisos de llegadas tarde de trabajadores', 3, 1, NOW() UNION ALL
+    SELECT 164, 'Llegadas tarde — Recibe avisos de estudiantes en el límite', 14, 1, NOW() UNION ALL
+    SELECT 165, 'Asistencia de nivel — Avisos y responsable sugerido de su nivel', 1, 1, NOW() UNION ALL
+    SELECT 166, 'Permisos y Licencias — Sus solicitudes avisan a la dirección administrativa', 3, 1, NOW() UNION ALL
+    SELECT 167, 'Admisiones — Psicóloga de preescolar', 1, 1, NOW() UNION ALL
+    SELECT 168, 'Admisiones — Psicóloga de primaria', 1, 1, NOW() UNION ALL
+    SELECT 169, 'Admisiones — Psicóloga de bachillerato', 1, 1, NOW() UNION ALL
+    SELECT 170, 'Admisiones — Gestionar inscripciones como personal', 1, 1, NOW()
+) n WHERE NOT EXISTS (SELECT 1 FROM cron_opciones o WHERE o.id = n.id);
+
+INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
+SELECT r.id_opcion, pf.id_perfil, 1, NOW()
+FROM perfiles pf
+JOIN (
+    SELECT 161 AS id_opcion, 'administrador' AS nombre UNION ALL SELECT 161, 'recursos humanos' UNION ALL
+    SELECT 162, 'recursos humanos' UNION ALL
+    SELECT 163, 'recursos humanos' UNION ALL
+    SELECT 164, 'directivo docente' UNION ALL SELECT 164, 'asistentes de nivel' UNION ALL
+    SELECT 165, 'asistentes de nivel' UNION ALL
+    SELECT 166, 'trabajador' UNION ALL SELECT 166, 'operativo' UNION ALL SELECT 166, 'mensajero' UNION ALL
+    SELECT 166, 'recepcion' UNION ALL SELECT 166, 'asistentes de nivel' UNION ALL
+    SELECT 167, 'psicologa preescolar' UNION ALL
+    SELECT 168, 'psicologa primaria' UNION ALL
+    SELECT 169, 'psicologa secundaria' UNION ALL
+    SELECT 170, 'administrador' UNION ALL SELECT 170, 'admisiones'
+) r ON r.nombre = LOWER(TRIM(REPLACE(REPLACE(REPLACE(pf.nombre, '\r', ''), '\n', ' '), '  ', ' ')))
+WHERE NOT EXISTS (SELECT 1 FROM cron_permisos p WHERE p.id_opcion = r.id_opcion AND p.id_perfil = pf.id_perfil);
+
+-- ---------------------------------------------------------------------------
 -- 2026_11_11_100000_create_seguridad_social_tables.php
 -- Seguridad social (EPS/AFP/ARL) de trabajadores con curso de altura: catálogo único de
 -- entidades (columna tipo) y una fila por trabajador con entidad + documento opcional por tipo.

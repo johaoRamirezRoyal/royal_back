@@ -2,6 +2,8 @@
 
 namespace App\Models\CursosAltura;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\permisosLicencias\PermisosLicenciasServices;
 use Carbon\Carbon;
@@ -69,7 +71,7 @@ class CursoAltura extends Model
     /** Usuarios activos con perfil operativo (los mismos asignables de Permisos y Licencias). */
     public static function filtrarOperativos(Builder $query): Builder
     {
-        return $query->where('estado', 'activo')->whereIn('perfil', PermisosLicenciasServices::PERFILES_ASIGNABLES);
+        return $query->where('estado', 'activo')->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::OPERATIVO));
     }
 
     /**

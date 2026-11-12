@@ -72,7 +72,9 @@ guardar y es el id que usan el frontend, el caché de empleados y los logs.
   - Cuando esté corrida en todos, borra el bloque `legado` y las variables
     `HIKVISION_HOST/PORT/PROTOCOL/USERNAME/PASSWORD/HOSTS`.
 - Siguen en el `.env`, porque no son datos de una terminal: `HIKVISION_VERIFY_SSL`,
-  `HIKVISION_PASSWORD_NUMERICA` y `HIKVISION_GROUP_IDS`.
+  `HIKVISION_PASSWORD_NUMERICA` y `HIKVISION_GROUP_IDS`. Esta última va **por grupo**, no por
+  perfil (`"9:2"` manda el 2 en vez del 9; `"8:"` no manda grupo), porque es la misma para
+  todos los colegios. Solo cambia lo que se le envía a la terminal, no el horario.
 - Test: `tests/Feature/Hikvision/DispositivosServiceTest.php`. Córrelo con `composer run
   test`: con la configuración en caché, `php artisan test` apunta a la BD real (el test
   ahora lo detecta y falla).
@@ -121,7 +123,8 @@ solo deja pasar las IPs de las terminales y cambia `database.default` al colegio
   `id_usuario`, `hora_desde`/`hora_hasta` y `per_page`.
 - **Solo con `fecha` exacta** devuelve `faltantes` (con `ultima_llegada`) y `resumen`.
 - Cada fila trae `estado`, `puntualidad`, `es_tardanza` y `usuario.grupo`
-  (`GROUP_ID_POR_PERFIL`).
+  (`hikvisionattendanceService::grupoDePerfil()`: tipo de perfil y opción 171; ver
+  `docs/contexto/permisos.md`).
 - Otros endpoints: `POST /manual`, `DELETE /`, `GET /grafica*`, `GET /qr/token` y
   `POST /qr/marcar`. `POST /`, `/resumen`, `/ultimos-registros` y
   `/grafica/promedio-por-usuario` se eliminaron el 2026-10-22 por no tener consumidor;

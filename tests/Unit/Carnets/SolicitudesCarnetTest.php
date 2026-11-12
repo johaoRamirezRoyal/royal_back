@@ -36,6 +36,15 @@ class SolicitudesCarnetTest extends TestCase
             $t->string('estado');
         });
         (require database_path('migrations/2026_11_04_120000_create_carnet_solicitudes_table.php'))->up();
+        // Quién lleva carnet se decide por perfiles.tipo, no por el número de perfil.
+        Schema::create('perfiles', function (Blueprint $t) {
+            $t->integer('id_perfil');
+            $t->string('tipo');
+        });
+        DB::table('perfiles')->insert([
+            ['id_perfil' => 16, 'tipo' => 'ESTUDIANTE'],
+            ['id_perfil' => 6, 'tipo' => 'ACUDIENTE'],
+        ]);
 
         DB::table('usuarios')->insert([
             ['id_user' => 1, 'nombre' => 'Ana', 'apellido' => null, 'perfil' => 16, 'estado' => 'activo'],

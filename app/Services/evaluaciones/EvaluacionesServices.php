@@ -2,6 +2,9 @@
 
 namespace App\Services\evaluaciones;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Evaluaciones\Evaluacion;
 use App\Models\Evaluaciones\EvaluacionNivel;
 use App\Models\Evaluaciones\EvaluacionOpcionPregunta;
@@ -37,20 +40,11 @@ class EvaluacionesServices
     // (usuarios.id_nivel); el resto de perfiles con acceso administrativo al
     // módulo (Super Admin, Gestión Humana, Administrador, etc.) no tiene esa
     // restricción — ver AGENTS.md, sección "Evaluaciones".
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
-    // Ve todas las evaluaciones sin restricción de nivel/creador — mismo id que
-    // App\Http\Middleware\SwitchActiveConnection::PERFIL_SUPER_ADMIN.
-    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
-
-    // Administrador general: mismo trato que Super Admin en el listado de
-    // configuración de evaluaciones (ve todos los niveles, sin restricción).
-    private const PERFIL_ADMIN = Permiso::PERFIL_ADMINISTRADOR;
-
-    // Gestión Humana (perfil "Recursos humanos" en BD, id_perfil 8) — a pedido,
-    // resuelve/ve/edita cualquier evaluación igual que Super Admin, sin restricción
-    // de nivel/propiedad.
-    private const PERFIL_GESTION_HUMANA = 8;
+    // Administración total del módulo (161, antes Super Admin, Administrador y Recursos
+    // Humanos): ve/edita cualquier evaluación y respuesta, sin restricción de nivel ni de
+    // creador. Realizar cualquier evaluación activa (162, antes Super Admin y Recursos
+    // Humanos). Super Admin tiene las dos.
 
     // Perfiles cuyos usuarios no tienen un nivel institucional real (usuarios.id_nivel
     // queda en NULL/0 para todos ellos) — Proveedor (17) son empresas externas, no
@@ -58,12 +52,12 @@ class EvaluacionesServices
     // de estos perfiles además tiene niveles configurados (ej. el usuario seleccionó un
     // nivel sin darse cuenta de que no aplica), el filtro de nivel se ignora para ellos
     // en vez de dejar la lista de evaluables vacía.
-    private const PERFILES_SIN_NIVEL = [17];
+    private const TIPOS_SIN_NIVEL = [TipoPerfil::PROVEEDOR];
 
     /** Acceso administrativo pleno al módulo: ve/edita cualquier respuesta sin restricción de nivel/propiedad. */
     private function esAdminEvaluaciones(Usuario $u): bool
     {
-        return in_array((int) $u->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN, self::PERFIL_GESTION_HUMANA], true);
+        return PermisosPerfil::perfilTiene($u->perfil, Permiso::EVALUACIONES_ADMIN_TOTAL);
     }
 
     /**
@@ -75,7 +69,7 @@ class EvaluacionesServices
     {
         if ($this->esAdminEvaluaciones($solicitante)) return true;
 
-        if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+        if (PermisosPerfil::perfilTiene($solicitante->perfil, Permiso::COORDINACION_NIVEL)) {
             return (int) $respuesta->id_nivel === (int) $solicitante->id_nivel;
         }
 
@@ -123,7 +117,7 @@ class EvaluacionesServices
         }
     }
 
-    /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de PERFILES_SIN_NIVEL) + activos. */
+    /** Query base de usuarios evaluables de una evaluación: perfil + nivel (con la excepción de TIPOS_SIN_NIVEL) + activos. */
     private function usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion)
     {
         $query = Usuario::whereIn('perfil', $perfilesEvaluables)->where('estado', 'activo');
@@ -131,7 +125,7 @@ class EvaluacionesServices
         if ($nivelesEvaluacion->isNotEmpty()) {
             $query->where(function ($q) use ($nivelesEvaluacion) {
                 $q->whereIn('id_nivel', $nivelesEvaluacion)
-                  ->orWhereIn('perfil', self::PERFILES_SIN_NIVEL);
+                  ->orWhereIn('perfil', Perfil::idsDeTipo(...self::TIPOS_SIN_NIVEL));
             });
         }
 
@@ -279,7 +273,7 @@ class EvaluacionesServices
             $query = Evaluacion::with(['servicio', 'niveles', 'perfiles', 'secciones'])
                 ->withCount('respuestas');
 
-            if ($solicitante && !in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN, self::PERFIL_GESTION_HUMANA], true)) {
+            if ($solicitante && ! $this->esAdminEvaluaciones($solicitante)) {
                 $idNivel = $solicitante->id_nivel;
                 $query->where(function ($q) use ($solicitante, $idNivel) {
                     $q->where('id_user', $solicitante->id_user)
@@ -334,7 +328,7 @@ class EvaluacionesServices
                 ->where('activo', 1)
                 ->where('es_satisfaccion', false);
 
-            if (!in_array((int) $solicitante->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_GESTION_HUMANA], true)) {
+            if (! PermisosPerfil::perfilTiene($solicitante->perfil, Permiso::EVALUACIONES_REALIZAR_TODAS)) {
                 $idNivel = $solicitante->id_nivel;
                 $query->where(function ($q) use ($solicitante, $idNivel) {
                     $q->where('id_user', $solicitante->id_user)
@@ -392,7 +386,7 @@ class EvaluacionesServices
 
                     $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
                     if ($nivelesEvaluacion->isEmpty()) return true;
-                    if (in_array((int) $solicitante->perfil, self::PERFILES_SIN_NIVEL, true)) return true;
+                    if (in_array((int) $solicitante->perfil, Perfil::idsDeTipo(...self::TIPOS_SIN_NIVEL), true)) return true;
 
                     return $nivelesEvaluacion->contains((int) $solicitante->id_nivel);
                 })
@@ -659,10 +653,10 @@ class EvaluacionesServices
             $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
             $query = $this->usuariosEvaluablesQuery($perfilesEvaluables, $nivelesEvaluacion);
 
-            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+            if (PermisosPerfil::perfilTiene($solicitante->perfil, Permiso::COORDINACION_NIVEL)) {
                 $query->where(function ($q) use ($solicitante) {
                     $q->where('id_nivel', $solicitante->id_nivel)
-                      ->orWhereIn('perfil', self::PERFILES_SIN_NIVEL);
+                      ->orWhereIn('perfil', Perfil::idsDeTipo(...self::TIPOS_SIN_NIVEL));
                 });
             }
 
@@ -997,14 +991,14 @@ class EvaluacionesServices
                         return ['error' => true, 'message' => 'El usuario seleccionado no tiene un perfil evaluable en esta evaluación', 'status' => 422];
                     }
 
-                    $evaluadoSinNivel = in_array((int) $evaluado->perfil, self::PERFILES_SIN_NIVEL, true);
+                    $evaluadoSinNivel = in_array((int) $evaluado->perfil, Perfil::idsDeTipo(...self::TIPOS_SIN_NIVEL), true);
 
                     $nivelesEvaluacion = $evaluacion->niveles->pluck('id');
                     if ($nivelesEvaluacion->isNotEmpty() && !$evaluadoSinNivel && !$nivelesEvaluacion->contains((int) $evaluado->id_nivel)) {
                         return ['error' => true, 'message' => 'El usuario seleccionado no pertenece a un nivel evaluable en esta evaluación', 'status' => 422];
                     }
 
-                    if (!$evaluacion->es_satisfaccion && (int) $solicitante->perfil === self::PERFIL_COORDINADOR && !$evaluadoSinNivel) {
+                    if (!$evaluacion->es_satisfaccion && PermisosPerfil::perfilTiene($solicitante->perfil, Permiso::COORDINACION_NIVEL) && !$evaluadoSinNivel) {
                         if ((int) $evaluado->id_nivel !== (int) $solicitante->id_nivel) {
                             return ['error' => true, 'message' => 'Solo puedes evaluar usuarios de tu propio nivel', 'status' => 422];
                         }
@@ -1139,7 +1133,7 @@ class EvaluacionesServices
             $query = EvaluacionRespuestaEvaluacion::with(['usuario', 'evaluado', 'nivel', 'periodo.anioEscolar', 'respuestasPreguntas.opcion'])
                 ->where('id_evaluacion', $idEvaluacion);
 
-            if ((int) $solicitante->perfil === self::PERFIL_COORDINADOR) {
+            if (PermisosPerfil::perfilTiene($solicitante->perfil, Permiso::COORDINACION_NIVEL)) {
                 $query->where('id_nivel', $solicitante->id_nivel);
             } elseif (!empty($filtros['id_nivel'])) {
                 $query->where('id_nivel', $filtros['id_nivel']);
