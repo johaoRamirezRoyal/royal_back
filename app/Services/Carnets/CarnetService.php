@@ -103,7 +103,7 @@ class CarnetService extends Service
                     'c.id as carnet_id', 'c.version as carnet_version', 'c.estado as carnet_estado',
                     'c.fecha_emision as carnet_fecha_emision', 'c.fecha_entrega as carnet_fecha_entrega',
                 ])
-                ->with('nivelRelacion:id,nombre')
+                ->with(['nivelRelacion:id,nombre', 'cursoRelacion:id,nombre'])
                 ->when($filtros['cursos'] ?? null, fn ($q, $cursos) => $q->whereIn('usuarios.id_curso', (array) $cursos))
                 ->when($filtros['estado_carnet'] ?? null, fn ($q, $estado) => $estado === 'SIN_CARNET'
                     ? $q->whereNull('c.id')
@@ -125,6 +125,7 @@ class CarnetService extends Service
                 'nombre' => $u->nombre,
                 'apellido' => $u->apellido,
                 'detalle' => $this->detalle($u),
+                'curso' => $u->cursoRelacion?->nombre,
                 'foto' => $u->foto_carnet ?: null,
                 'carnet' => $u->carnet_id ? [
                     'id' => $u->carnet_id,
