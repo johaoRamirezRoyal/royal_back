@@ -169,7 +169,7 @@ opcional). Para el CRUD se usa la opción **143**.
 
 ## Carta de entrega (`/inventario/listado`)
 
-Botón "Carta de entrega": `GET /api/inventario/listado-consolidado/carta-entrega/pdf` (permiso INVENTARIO) con los mismos filtros del listado (`buildConsolidadoParams`). Recreación de `cartaEntregaOficial.php` (no de `cartaEntrega.php`, que usaba tabla temporal): una fila por grupo (usuario, área, descripción) con cantidad; marca/observación del ítem más reciente del grupo. Backend: `InventarioServices::generarCartaEntregaPdf` + `CartaEntregaPdfService`. Nombre de institución: marca del dominio del usuario, si no "Royal School" (no se usa `super_empresa`).
+Botón "Carta de entrega": `GET /api/inventario/listado-consolidado/carta-entrega/pdf` (permiso INVENTARIO) con los mismos filtros del listado (`buildConsolidadoParams`). Recreación de `cartaEntregaOficial.php` (no de `cartaEntrega.php`, que usaba tabla temporal): una fila por grupo (usuario, área, descripción) con cantidad; marca/observación del ítem más reciente del grupo. Backend: `InventarioServices::generarCartaEntregaPdf` + `DocumentoPdfService` (documento `cartaEntrega` de `src/documentos` del frontend, el mismo que usa Compras en el navegador). Logo y nombre de institución: marca del dominio del usuario, si no "Royal School" (no se usa `super_empresa`).
 
 ## Indicadores de gestión (`/indicadores-gestion`)
 

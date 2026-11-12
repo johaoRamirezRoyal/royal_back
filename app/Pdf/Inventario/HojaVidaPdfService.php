@@ -1,5 +1,9 @@
 <?php
 
+// PENDIENTE DE MIGRAR a pdfmake (src/documentos del frontend + DocumentoPdfService). No crees
+// documentos nuevos con TCPDF; si vas a cambiar el contenido o el diseño de este, mígralo primero.
+// Guía: docs/contexto/documentos.md del frontend, «Migrar un documento existente».
+
 namespace App\Pdf\Inventario;
 
 use App\Services\Cloudinary\CloudinaryService;

@@ -21,15 +21,36 @@ class DocumentoPdfService
     ) {}
 
     /**
+     * Dominio de cada colegio por su connection: para los documentos que no salen de un usuario
+     * con correo (p. ej. la carta de recomendación, que llena un jardín). Colegio nuevo = su línea.
+     */
+    private const DOMINIO_POR_CONNECTION = [
+        'mysql' => 'royalschool.edu.co',
+        'sami_hebreo' => 'colegiohebreounion.edu.co',
+    ];
+
+    /** Dominio del colegio de la base activa en esta petición (`database.default`). */
+    public static function dominioDelColegio(): ?string
+    {
+        return self::DOMINIO_POR_CONNECTION[config('database.default')] ?? null;
+    }
+
+    /**
      * @param  string  $documento  id del documento en src/documentos/instituciones (ej. "cartaEntrega")
      * @param  array<string, mixed>  $datos  lo que espera ese documento
-     * @param  ?string  $correo  correo del usuario: define la institución (marca y carpeta de documentos)
+     * @param  ?string  $correo  correo del usuario, o el dominio del colegio sin "@": define la
+     *                           institución (marca y carpeta de documentos)
      * @return string el PDF en binario
      *
-     * @throws RuntimeException si Node no está o el documento falla
+     * @throws RuntimeException si Node no está, el documento falla o la institución no lo tiene
      */
     public function generar(string $documento, array $datos, ?string $correo): string
     {
+        // MarcaDominioService resuelve por correo: un dominio suelto se pasa como "@dominio".
+        if ($correo && ! str_contains($correo, '@')) {
+            $correo = "@{$correo}";
+        }
+
         $entrada = json_encode([
             'documento' => $documento,
             'dominio' => $this->marcas->dominioDeCorreo($correo),

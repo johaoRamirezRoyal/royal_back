@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Capacitaciones;
 
 use App\Http\Controllers\Controller;
-use App\Pdf\Capacitaciones\CertificadoCapacitacionPdfService;
+use App\Services\Documentos\DocumentoPdfService;
 use App\Services\capacitaciones\CapacitacionesServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 use App\Support\Permiso;
@@ -106,7 +107,7 @@ class CapacitacionesController extends Controller
      * El certificado propio no exige opción (se ve también desde /profile); el de otro
      * usuario exige la 93. En ambos casos la capacitación debe estar completada.
      */
-    public function certificado(Request $request, int $id, CertificadoCapacitacionPdfService $pdfService): Response
+    public function certificado(Request $request, int $id, DocumentoPdfService $documentos): Response
     {
         $idUser = (int) $request->input('id_user', $request->user()->id_user);
 
@@ -125,14 +126,24 @@ class CapacitacionesController extends Controller
         // Código estable por (usuario, curso) — el legado generaba un uniqid() distinto en cada descarga.
         $codigo = strtoupper(substr(hash_hmac('sha256', "{$idUser}|{$id}", config('app.key')), 0, 12));
 
-        $contenido = $pdfService->generate(
-            // Hay usuarios legacy con apellido "." o "," — el legado ya los limpiaba.
-            trim(preg_replace('/\s+/', ' ', $usuario->nombre . ' ' . $usuario->apellido), " ,."),
-            trim($curso->nombre),
-            trim($curso->descripcion),
-            substr($fecha, 0, 10),
-            $codigo
-        );
+        // Documento `certificadoCapacitacion` de Royal School (src/documentos/instituciones/
+        // royal-school del frontend). La institución es la del dominio de quien lo recibe: un
+        // colegio sin certificado propio recibe un 422, no el de Royal School.
+        try {
+            $contenido = $documentos->generar('certificadoCapacitacion', [
+                // Hay usuarios legacy con apellido "." o "," — el legado ya los limpiaba.
+                'nombre' => trim(preg_replace('/\s+/', ' ', $usuario->nombre . ' ' . $usuario->apellido), " ,."),
+                'curso' => trim($curso->nombre),
+                'descripcion' => trim((string) $curso->descripcion),
+                'fecha' => substr($fecha, 0, 10),
+                'codigo' => $codigo,
+                'fondo' => $documentos->imagenComoDataUrl(resource_path('pdf/capacitaciones/fondo_certificado.jpg')),
+            ], $usuario->correo ?? null);
+        } catch (\RuntimeException $e) {
+            Log::error('No se pudo generar el certificado de capacitación', ['id_curso' => $id, 'id_user' => $idUser, 'error' => $e->getMessage()]);
+
+            return response()->json(['error' => true, 'message' => 'No se pudo generar el certificado para esta institución.'], 422);
+        }
 
         return response($contenido, 200, [
             'Content-Type' => 'application/pdf',

@@ -53,6 +53,12 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
   `MailRateLimitException` (ver [`modulos/noticias.md`](docs/contexto/modulos/noticias.md)).
 - **Los correos y PDFs van fuera de la transacción de guardado**: si fallan, solo se
   registran en el log y nunca revierten lo guardado.
+- **PDFs: los documentos se están migrando de TCPDF a pdfmake.** No crees documentos nuevos
+  con TCPDF (`app/Pdf`): se definen en `src/documentos/` del frontend y aquí se generan con
+  `DocumentoPdfService`. Si vas a cambiar el contenido o el diseño de uno que sigue en TCPDF,
+  mígralo primero. Guía y pasos: `docs/contexto/documentos.md` del frontend; qué se migró,
+  deploy y pendientes: [`docs/DOCUMENTOS_PDFMAKE_2026_11_12.md`](docs/DOCUMENTOS_PDFMAKE_2026_11_12.md).
+  Tras tocar un documento, `pnpm build:documentos` en el frontend y commit de `render.cjs`.
 - **Fechas**: usa siempre la fecha de la app (`Carbon::today()`/`now()`, zona
   `America/Bogota`), no `CURDATE()`. "Quién hizo esto" sale de
   `$request->user()->id_user`, nunca del body.
@@ -125,6 +131,7 @@ esta tabla.
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
-en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
+en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con
+pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md` y `whatsapp-llegadas-tarde.md`.

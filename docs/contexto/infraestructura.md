@@ -203,6 +203,9 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 
 ### Documentos de src/documentos (pdfmake)
 
+Qué se cambió, el deploy y los pendientes:
+[`DOCUMENTOS_PDFMAKE_2026_11_12.md`](../DOCUMENTOS_PDFMAKE_2026_11_12.md).
+
 - Los documentos nuevos se definen en el frontend (`src/documentos/`, ver su
   `docs/contexto/documentos.md`) y el servidor los genera con
   `app(DocumentoPdfService::class)->generar('<id>', $datos, $correoUsuario)`, que devuelve el
@@ -219,7 +222,15 @@ Firmas en Cloudinary (todas privadas, ver arriba):
 - La institución (marca y carpeta de documentos) sale del dominio del correo. El logo se manda
   como data URL; si es webp se pasa a PNG con GD, porque pdfmake no embebe webp.
 - Ya migrados: carta de entrega (`InventarioServices::generarCartaEntregaPdf`), paz y salvo y
-  listados de préstamos de Biblioteca (`BibliotecaServices`).
+  listados de préstamos de Biblioteca (`BibliotecaServices`), carta de recomendación de
+  Instituciones (`InstitucionController`) y certificado de capacitación
+  (`CapacitacionesController::certificado`, fondo en `resources/pdf/capacitaciones/`).
+- La institución sale del correo del usuario o, sin usuario (la carta de recomendación de un
+  jardín), de `DocumentoPdfService::dominioDelColegio()`, que traduce la connection activa con
+  `DOMINIO_POR_CONNECTION`. Un documento propio de un colegio (carpeta
+  `instituciones/<colegio>/` del frontend) no se genera para otro: lanza `RuntimeException`. El
+  certificado de capacitación es solo de Royal School: a un usuario de Hebreo Unión el endpoint
+  le responde 422.
 - Imágenes extra (sello, firma) van dentro de `$datos` con
   `DocumentoPdfService::imagenComoDataUrl($rutaLocal)`; el documento no puede descargarlas.
 - Cada documento lanza un proceso de Node (~0,3 s). En los envíos masivos (recordatorio de
@@ -242,7 +253,7 @@ Firmas en Cloudinary (todas privadas, ver arriba):
   `royal/royal-school/<nombre>`. `firma_administrativa.jpg` es la firma fija del V°B° en
   el reporte operativo de inventario.
 - El `checkPageBreak` de TCPDF es `protected`; para salto de página con coordenadas
-  manuales, usa un wrapper propio (como `ensureSpacio()` en `CartaRecomendacionPdfService`).
+  manuales, usa un wrapper propio que compare `GetY()` con `getPageHeight() - getBreakMargin()`.
 
 ## Correo
 
