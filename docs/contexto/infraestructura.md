@@ -320,6 +320,11 @@ Qué se cambió, el deploy y los pendientes:
 | `config/mail.php` | `log` por defecto |
 | `config/services.php` | Google OAuth, Hikvision, SAMI SSO, `asistencia_qr.redes` |
 
+- **Base de administración: connection `admin_management`, base `admin_managements`.** En
+  producción la base se llama `admin_managements` (con «s»), que es el valor por defecto de
+  `DB_ADMIN_DATABASE`. La connection sigue siendo `admin_management`: es la clave que usan los
+  modelos (`$connection`) y no se cambia. En local, `.env` puede apuntar a otra base. En los
+  scripts SQL para producción (`migraciones_sql.sql`) usa `admin_managements`.
 - **`MANTENIMIENTO`** (`.env`): bloquea la API con un 503.
 - **Scheduler**: en local no lo corre `composer run dev`; usa `php artisan
   schedule:work`. `schedule:run` solo dispara las tareas del minuto exacto en que se

@@ -64,8 +64,9 @@ return [
             ]) : [],
         ],
 
-        // Base "admin_management": administra las distintas bases de datos vinculadas a la
-        // app (marcas por dominio, logs de actividad, y lo que se vaya sumando) — separada
+        // Connection "admin_management". La BASE se llama `admin_managements` en producción
+        // (DB_ADMIN_DATABASE); la clave de la connection no cambia, la usan los modelos.
+        // Administra las distintas bases de datos vinculadas a la app (marcas por dominio, logs de actividad, y lo que se vaya sumando) — separada
         // de la base operativa (`mysql`) porque es transversal a los dominios/tenants, no
         // datos de un dominio en particular. Mismo servidor/credenciales que `mysql` por
         // ahora (DB_ADMIN_HOST/PORT/USERNAME/PASSWORD solo si algún día vive en otro server).

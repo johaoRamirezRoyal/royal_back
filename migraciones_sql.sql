@@ -487,7 +487,8 @@ ALTER TABLE programacion_mant ADD fecha_fin DATE NULL AFTER fecha_registro;
 
 -- ---------------------------------------------------------------------------
 -- 2026_10_30_140000_add_carpeta_cloudinary_to_bases_datos_nombres_table.php
--- OJO: en la base de ADMINISTRACIÓN (connection admin_management), no en la del
+-- OJO: en la base de ADMINISTRACIÓN (`admin_managements` en producción; connection
+-- admin_management), no en la del
 -- colegio. Carpeta raíz de cada colegio en Cloudinary, editable en "Bases de
 -- datos"; NULL = la de fábrica (royal para mysql, la connection para los demás).
 -- ---------------------------------------------------------------------------
