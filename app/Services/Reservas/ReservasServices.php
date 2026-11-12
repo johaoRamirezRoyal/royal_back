@@ -12,6 +12,7 @@ use App\Models\Reservas\Horas;
 use App\Models\Reservas\Reservas;
 use App\Models\Reservas\Salones;
 use App\Models\Usuarios\Usuario;
+use App\Services\branding\MarcaDominioService;
 use App\Services\MailService;
 use App\Services\Prestamos\PrestamosService;
 use App\Services\Service;
@@ -475,6 +476,7 @@ class ReservasServices extends Service
                     'horas' => $horas,
                     'detalle' => $primera['detalle_reserva'] ?? null,
                     'requiereAprobacion' => $requiereAutorizacion,
+                    'nombreColegio' => app(MarcaDominioService::class)->nombreInstitucion($usuario->correo),
                 ]
             );
 

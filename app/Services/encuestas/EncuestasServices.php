@@ -945,6 +945,7 @@ class EncuestasServices
 
                 $enviado = app(MailService::class)->send($correo, new EncuestaConsolidadoMail([
                     'nombre' => trim($reserva->usuario->nombre.' '.$reserva->usuario->apellido),
+                    'correo' => $correo,
                     'reserva' => $reserva->titulo,
                     'salon' => $reserva->salon?->nombre ?? '',
                     'encuesta' => $pdf['data']['titulo'],

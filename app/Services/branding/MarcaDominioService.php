@@ -286,6 +286,16 @@ class MarcaDominioService extends Service
     }
 
     /**
+     * Nombre del colegio para firmar correos: el de la marca del dominio del correo (por
+     * defecto, el del usuario autenticado) o, sin marca o sin nombre, `app.name`. Un correo
+     * enviado sin sesión (comando programado) debe pasar un correo interno del colegio.
+     */
+    public function nombreInstitucion(?string $correo = null): string
+    {
+        return $this->resolverPorCorreo($correo ?? auth()->user()?->correo)['nombre'] ?: config('app.name');
+    }
+
+    /**
      * Dominio de correo normalizado (minúsculas), o null si no hay correo o no trae "@" —
      * mismo criterio que resolverPorCorreo, expuesto para consumidores que solo necesitan
      * el dominio en sí, no la marca asociada (ver LogDominioMiddleware).

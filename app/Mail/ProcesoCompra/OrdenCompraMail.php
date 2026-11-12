@@ -14,7 +14,8 @@ use Illuminate\Queue\SerializesModels;
  * Orden de compra para el proveedor, redactada en el frontend. `$mensajeHtml` llega ya
  * saneado (HtmlCorreoSanitizer); `$bloques` los arma SolicitudesServices desde la BD. El
  * PDF lo arma el frontend (OrdenCompraPDF.ts) y es opcional. `$correosContacto` (grupo
- * COMPRAS_VENTAS) se muestra en el cuerpo y va como responder-a.
+ * COMPRAS_VENTAS) se muestra en el cuerpo y va como responder-a. `$nombreColegio`
+ * (MarcaDominioService::nombreInstitucion) firma el pie.
  */
 class OrdenCompraMail extends Mailable
 {
@@ -31,6 +32,7 @@ class OrdenCompraMail extends Mailable
         /** @var array<int, string> */
         public readonly array $correosCc = [],
         public readonly ?string $pdfContenido = null,
+        public readonly string $nombreColegio = '',
     ) {}
 
     public function envelope(): Envelope
@@ -51,6 +53,7 @@ class OrdenCompraMail extends Mailable
                 'mensajeHtml' => $this->mensajeHtml,
                 'bloques' => $this->bloques,
                 'correosContacto' => $this->correosContacto,
+                'nombreColegio' => $this->nombreColegio,
             ],
         );
     }

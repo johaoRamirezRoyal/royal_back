@@ -12,6 +12,7 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudProductoInicial;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacion;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacionInicial;
 use App\Models\Usuarios\Usuario;
+use App\Services\branding\MarcaDominioService;
 use App\Services\FileStorageService;
 use App\Services\MailService;
 use App\Support\HtmlCorreoSanitizer;
@@ -67,6 +68,7 @@ class SolicitudesServices
     public function __construct(
         private FileStorageService $fileStorage,
         private MailService $mailService,
+        private MarcaDominioService $marcaDominioService,
     ) {}
 
     public function crear(array $datos, array $productos, int $idUser, int $idLog): array
@@ -523,6 +525,7 @@ class SolicitudesServices
             correosContacto: Mails::COMPRAS_VENTAS->recipients(),
             correosCc: $cc,
             pdfContenido: $pdfContenido,
+            nombreColegio: $this->marcaDominioService->nombreInstitucion(),
         );
 
         return ['error' => false, 'data' => ['mail' => $mail, 'correos' => $correos]];

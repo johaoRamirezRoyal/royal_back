@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\branding\MarcaDominioService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -18,7 +19,7 @@ class EncuestaConsolidadoMail extends Mailable
     use Queueable, SerializesModels;
 
     /**
-     * @param  array{nombre: string, reserva: ?string, salon: string, encuesta: string, fecha: string}  $datos
+     * @param  array{nombre: string, correo: string, reserva: ?string, salon: string, encuesta: string, fecha: string}  $datos
      */
     public function __construct(
         public readonly array $datos,
@@ -37,7 +38,7 @@ class EncuestaConsolidadoMail extends Mailable
     {
         return new Content(
             view: 'emails.encuestaConsolidado',
-            with: $this->datos,
+            with: [...$this->datos, 'nombreColegio' => app(MarcaDominioService::class)->nombreInstitucion($this->datos['correo'])],
         );
     }
 

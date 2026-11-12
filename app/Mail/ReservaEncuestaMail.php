@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\branding\MarcaDominioService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -21,13 +22,12 @@ class ReservaEncuestaMail extends Mailable
     public function __construct(
         public readonly array $reserva,
         public readonly string $jpg,
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Reserva ' . $this->reserva['salon'] . ' — QR de la encuesta',
+            subject: 'Reserva '.$this->reserva['salon'].' — QR de la encuesta',
         );
     }
 
@@ -35,7 +35,11 @@ class ReservaEncuestaMail extends Mailable
     {
         return new Content(
             view: 'emails.reservaEncuesta',
-            with: ['reserva' => $this->reserva, 'jpg' => $this->jpg],
+            with: [
+                'reserva' => $this->reserva,
+                'jpg' => $this->jpg,
+                'nombreColegio' => app(MarcaDominioService::class)->nombreInstitucion(),
+            ],
         );
     }
 

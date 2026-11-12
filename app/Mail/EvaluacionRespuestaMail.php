@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\Evaluaciones\EvaluacionRespuestaEvaluacion;
+use App\Services\branding\MarcaDominioService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -18,13 +19,12 @@ class EvaluacionRespuestaMail extends Mailable
         public readonly EvaluacionRespuestaEvaluacion $respuesta,
         public readonly string $pdfContenido,
         public readonly string $pdfNombre,
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Resumen de evaluación de desempeño — ' . ($this->respuesta->evaluacion?->titulo ?? ''),
+            subject: 'Resumen de evaluación de desempeño — '.($this->respuesta->evaluacion?->titulo ?? ''),
         );
     }
 
@@ -33,9 +33,10 @@ class EvaluacionRespuestaMail extends Mailable
         return new Content(
             view: 'emails.evaluacionRespuesta',
             with: [
-                'nombreEvaluado' => trim(($this->respuesta->evaluado?->nombre ?? '') . ' ' . ($this->respuesta->evaluado?->apellido ?? '')),
+                'nombreEvaluado' => trim(($this->respuesta->evaluado?->nombre ?? '').' '.($this->respuesta->evaluado?->apellido ?? '')),
                 'tituloEvaluacion' => $this->respuesta->evaluacion?->titulo ?? '',
                 'periodo' => $this->respuesta->periodo,
+                'nombreColegio' => app(MarcaDominioService::class)->nombreInstitucion($this->respuesta->evaluado?->correo),
             ],
         );
     }
