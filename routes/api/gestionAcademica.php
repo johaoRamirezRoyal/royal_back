@@ -564,4 +564,9 @@ Route::prefix('/notas')->group(function () {
     Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
     Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);
     Route::delete('/cierre', [NotasController::class, 'reabrirCierre'])->middleware($aprueba);
+
+    // Boletines (fotos guardadas al cerrar; el PDF lo arma el frontend): mismo acceso que /curso.
+    $veCurso = Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]);
+    Route::get('/boletines', [NotasController::class, 'boletinesCurso'])->middleware($veCurso);
+    Route::get('/boletines/estudiante', [NotasController::class, 'boletinesEstudiante'])->middleware($veCurso);
 });

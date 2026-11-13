@@ -5,10 +5,11 @@ Sistema de notas. Se está construyendo la **parte cualitativa**: desempeños (e
 flujo de aprobación antes de calificar y un **boletín trimestral** con historial. La parte
 cuantitativa (nota numérica) está pendiente. Frontend: `frontend/docs/contexto/modulos/notas.md`.
 
-> **Estado (2026-11-13, rama `feat/notas-cualitativas`).** Backend de las fases 1 y 2 hecho:
-> modelo, propósitos y referentes con su plan; planilla del docente, ajuste del coordinador, vista
-> del curso, observaciones del director y cierre del trimestre con la foto del boletín. El frontend
-> de la rama aún usa la API anterior hasta la fase 3; el PDF del boletín es la fase 4.
+> **Estado (2026-11-13, rama `feat/notas-cualitativas`).** Las 4 fases hechas (backend y
+> frontend): modelo, propósitos y referentes con su plan; planilla del docente, ajuste del
+> coordinador, vista del curso, observaciones del director y cierre del trimestre con la foto del
+> boletín; el PDF del boletín (documento `boletin` de `src/documentos`, lo arma el navegador) y su
+> historial. La rama tiene fusionado `main` (permisos por tipo de perfil: `[TipoPerfil::DOCENTE]`).
 
 ## Diseño acordado (2026-11-13)
 
@@ -152,12 +153,17 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
 | `PUT /referentes`, `POST /plan/estado` | docente con carga en el grado o 153/154 de su nivel; el service valida estado y asignaturas |
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
-| `GET /mis-cursos` | perfiles docente (3, 14): `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
+| `GET /mis-cursos` | tipo Docente: `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
 | `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
+| `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `[{ id_estudiante, datos }]` (las fotos del cierre, por apellido; vacío si no está cerrado) |
+| `GET /boletines/estudiante?id_estudiante` | ruta como `GET /curso`; su historial (`{ id_periodo, id_curso, periodo, curso, cerrado_at, datos }`, lo más reciente primero) solo de los cursos que quien pide puede ver |
+
+"Perfiles docente" en esta tabla = `[TipoPerfil::DOCENTE]` en la ruta (Docente y Docente ICT en el
+Royal; cada colegio lo define en `perfiles.tipo`).
 
 - `PUT /referentes`: `{ id_curso, id_periodo, referentes: [{ id?, id_proposito, id_asignatura,
   descripcion, subreferentes?: [{ id?, descripcion }] }] }` (hasta 100 referentes y 30
@@ -224,11 +230,8 @@ conservando el ajuste. El periodo de prueba no había empezado: se movieron `fec
 
 ## Pendiente
 
-- **Fase 3 (frontend)**: renombrar a propósitos y referentes; Configuración académica (propósitos,
-  método por nivel) y opciones 152–154; página de Referentes (por asignatura, con subreferentes);
-  planilla del docente (`mis-cursos` → curso → asignatura); vista del curso para el director
-  (observaciones) y el coordinador (ajuste, cierre, reabrir); consulta (152).
-- **Fase 4**: documento `boletin` en `src/documentos` (pdfmake), PDF en el servidor desde
-  `academico_boletin.datos` e historial de boletines por estudiante.
+- **PDF del boletín en el servidor** (para mandarlo por correo o dárselo al acudiente):
+  `DocumentoPdfService::generar('boletin', ['boletines' => [$datos]], $correo)` y `pnpm
+  build:documentos` para que `render.cjs` lo incluya. Hoy no hace falta: lo arma el navegador.
 - Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`) y vista del acudiente /
   estudiante.

@@ -39,7 +39,7 @@ class NotasController extends Controller implements HasMiddleware
             ]),
             new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesCurso', 'boletinesEstudiante']),
             new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'reabrirCierre']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
@@ -280,15 +280,44 @@ class NotasController extends Controller implements HasMiddleware
     {
         $q = $request->validate($this->reglasCursoPeriodo());
         $actor = $this->actor($request);
-        $ve = PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR)
-            || $this->service->gestionaCurso($actor, $q['id_curso'])
-            || $this->service->dirige($actor['id'], $q['id_curso']);
 
-        if (! $ve) {
+        if (! $this->veCursoCompleto($request, $actor, $q['id_curso'])) {
             return $this->error('No tienes acceso a las notas de este curso', 403);
         }
 
         return $this->apiResponse($this->service->vistaCurso($actor, $q['id_curso'], $q['id_periodo']));
+    }
+
+    /** ¿Ve todo lo calificado en el curso? 99/152, 153/154 de su nivel o su director de grupo. */
+    private function veCursoCompleto(Request $request, array $actor, int $idCurso): bool
+    {
+        return PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR)
+            || $this->service->gestionaCurso($actor, $idCurso)
+            || $this->service->dirige($actor['id'], $idCurso);
+    }
+
+    /** ?id_curso&id_periodo: las fotos de boletín guardadas al cerrar (el PDF lo arma el frontend). */
+    public function boletinesCurso(Request $request)
+    {
+        $q = $request->validate($this->reglasCursoPeriodo());
+
+        if (! $this->veCursoCompleto($request, $this->actor($request), $q['id_curso'])) {
+            return $this->error('No tienes acceso a las notas de este curso', 403);
+        }
+
+        return $this->apiResponse($this->service->boletinesDelCurso($q['id_curso'], $q['id_periodo']));
+    }
+
+    /** ?id_estudiante: su historial de boletines, solo de los cursos que quien pide puede ver. */
+    public function boletinesEstudiante(Request $request)
+    {
+        $q = $request->validate(['id_estudiante' => ['required', 'integer']]);
+        $actor = $this->actor($request);
+
+        return $this->apiResponse($this->service->boletinesDelEstudiante(
+            $q['id_estudiante'],
+            fn (int $idCurso) => $this->veCursoCompleto($request, $actor, $idCurso),
+        ));
     }
 
     /** { id_curso, id_periodo, observaciones: [{ id_estudiante, observacion|null }] } (director del curso). */

@@ -1290,4 +1290,55 @@ class NotasService extends Service
             return ['error' => true, 'message' => $e->getMessage()];
         }
     }
+
+    // ─── Boletines ──────────────────────────────────────────────
+    //
+    // El PDF lo arma el frontend (documento `boletin` de src/documentos) con la foto guardada al
+    // cerrar: aquí solo se entregan los datos. ponytail: si hace falta mandarlo por correo, el
+    // mismo documento sale en el servidor con DocumentoPdfService::generar('boletin', ...).
+
+    /** Orden de lista de una foto: apellido y nombre. */
+    private static function claveLista(array $datos): string
+    {
+        return mb_strtolower(trim(($datos['estudiante']['apellido'] ?? '') . ' ' . ($datos['estudiante']['nombre'] ?? '')));
+    }
+
+    /** Boletines guardados de un curso en un periodo (vacío si no está cerrado), por apellido. */
+    public function boletinesDelCurso(int $idCurso, int $idPeriodo): array
+    {
+        try {
+            $data = Boletin::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->get(['id_estudiante', 'datos'])
+                ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
+                ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
+                ->values();
+
+            return ['error' => false, 'message' => 'Boletines del curso', 'data' => $data];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Historial de boletines de un estudiante (uno por periodo cerrado), del más reciente al más
+     * antiguo, solo de los cursos que `$veCurso(idCurso)` deja ver a quien pide.
+     */
+    public function boletinesDelEstudiante(int $idEstudiante, callable $veCurso): array
+    {
+        try {
+            $data = Boletin::where('id_estudiante', $idEstudiante)->orderByDesc('id_periodo_academico')->get(['id_curso', 'id_periodo_academico', 'datos'])
+                ->filter(fn (Boletin $b) => $veCurso((int) $b->id_curso))
+                ->map(fn (Boletin $b) => [
+                    'id_periodo' => $b->id_periodo_academico,
+                    'id_curso' => $b->id_curso,
+                    'periodo' => $b->datos['periodo']['nombre'] ?? null,
+                    'curso' => $b->datos['curso'] ?? null,
+                    'cerrado_at' => $b->datos['cerrado_at'] ?? null,
+                    'datos' => $b->datos,
+                ])->values();
+
+            return ['error' => false, 'message' => 'Boletines del estudiante', 'data' => $data];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
 }
