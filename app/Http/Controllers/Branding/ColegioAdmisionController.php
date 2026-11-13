@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Administración de los colegios de admisión (slug de URL -> connection de BD + marca) —
- * gatea directo por perfil (Super Admin=1 únicamente), mismo criterio que
- * MarcaDominioController: no es una opción granular de `cron_opciones`, es un pedido
+ * gatea directo por perfil (Super Admin=1 únicamente), mismo criterio que MarcaController:
+ * no es una opción granular de `cron_opciones`, es un pedido
  * explícito de "solo este rol" (agregar/quitar un colegio cambia a qué base de datos
  * apunta tráfico público, no es un ajuste cosmético más).
  *
@@ -40,50 +40,28 @@ class ColegioAdmisionController extends Controller
         return $this->apiResponse($this->service->listar());
     }
 
+    private const REGLAS = [
+        'slug' => ['required', 'string', 'max:190'],
+        'connection' => ['required', 'string', 'max:100'],
+        // La identidad (nombre, lema, color, logos, imagen de fondo) es de la marca: /marcas.
+        'id_marca' => ['required', 'integer', 'exists:admin_management.marcas,id'],
+        'tipo_calendario' => ['nullable', 'in:A,B'],
+    ];
+
     public function crear(Request $request)
     {
         $this->ensureAdmin($request);
+        $request->validate(self::REGLAS);
 
-        $request->validate([
-            'slug' => ['required', 'string', 'max:190'],
-            'nombre' => ['required', 'string', 'max:190'],
-            'descripcion' => ['nullable', 'string', 'max:190'],
-            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'connection' => ['required', 'string', 'max:100'],
-            'tipo_calendario' => ['nullable', 'in:A,B'],
-            'logo' => ['nullable', 'file', 'image', 'max:5120'],
-            'logo_secundario' => ['nullable', 'file', 'image', 'max:5120'],
-        ]);
-
-        return $this->apiResponse($this->service->crear(
-            $request->only(['slug', 'nombre', 'descripcion', 'color', 'connection', 'tipo_calendario']),
-            $request->file('logo'),
-            $request->file('logo_secundario'),
-        ));
+        return $this->apiResponse($this->service->guardar(null, $request->only(['slug', 'connection', 'id_marca', 'tipo_calendario'])));
     }
 
     public function actualizar(Request $request)
     {
         $this->ensureAdmin($request);
+        $request->validate(['id' => ['required', 'integer']] + self::REGLAS);
 
-        $request->validate([
-            'id' => ['required', 'integer'],
-            'slug' => ['sometimes', 'string', 'max:190'],
-            'nombre' => ['sometimes', 'string', 'max:190'],
-            'descripcion' => ['nullable', 'string', 'max:190'],
-            'color' => ['nullable', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
-            'connection' => ['sometimes', 'string', 'max:100'],
-            'tipo_calendario' => ['sometimes', 'in:A,B'],
-            'logo' => ['nullable', 'file', 'image', 'max:5120'],
-            'logo_secundario' => ['nullable', 'file', 'image', 'max:5120'],
-        ]);
-
-        return $this->apiResponse($this->service->actualizar(
-            $request->integer('id'),
-            $request->only(['slug', 'nombre', 'descripcion', 'color', 'connection', 'tipo_calendario']),
-            $request->file('logo'),
-            $request->file('logo_secundario'),
-        ));
+        return $this->apiResponse($this->service->guardar($request->integer('id'), $request->only(['slug', 'connection', 'id_marca', 'tipo_calendario'])));
     }
 
     public function cambiarEstado(Request $request)
@@ -139,6 +117,7 @@ class ColegioAdmisionController extends Controller
                 'descripcion_marca' => $marca['descripcion'],
                 'color_marca' => $marca['color'],
                 'logo_marca' => $marca['logo'],
+                'imagen_marca' => $marca['imagen'],
                 'logo_secundario_marca' => $marca['logo_secundario'],
                 'tipo_calendario' => $marca['tipo_calendario'],
             ],

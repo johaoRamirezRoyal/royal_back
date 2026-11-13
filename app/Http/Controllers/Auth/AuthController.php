@@ -10,6 +10,7 @@ use App\Http\Traits\HasAuthCookie;
 use App\Models\Usuarios\Usuario;
 use App\Services\AdminManagement\LlaveMaestraService;
 use App\Services\Auth\AuthServices;
+use App\Services\branding\ColegioAdmisionService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\JwtService;
 use App\Services\MailService;
@@ -40,6 +41,7 @@ class AuthController extends Controller
         private JwtService $jwt,
         private SamiSsoService $samiSso,
         private MarcaDominioService $marcaDominioService,
+        private ColegioAdmisionService $colegioAdmision,
         private LlaveMaestraService $llaveMaestra,
         MailService $mail_service,
     ) {
@@ -214,6 +216,8 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'user' => 'required|string|email',
             'pass' => 'required|string',
+            // Slug del portal para padres (`/:colegio/padres`): fija la base del colegio.
+            'colegio' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -223,11 +227,25 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // El identificador es el correo — busca entre todas las bases con tabla `usuarios`
-        // (ver BasesDatosService::connectionsConUsuarios). El estado 'activo' ya se valida
-        // ahí mismo (no hay una comprobación aparte después). Login por username fue
+        // Portal para padres: los acudientes usan correos personales que pueden repetirse
+        // entre colegios, así que la base sale del slug de la URL (colegios_admision, el
+        // mismo de Admisiones) en vez de recorrerlas todas.
+        $connections = null;
+        if ($request->filled('colegio')) {
+            $colegio = $this->colegioAdmision->colegioConUsuarios($request->colegio);
+
+            if (! $colegio) {
+                return response()->json(['error' => true, 'message' => 'Colegio no encontrado o inactivo.'], 404);
+            }
+
+            $connections = [$colegio->connection];
+        }
+
+        // El identificador es el correo — sin slug, busca entre todas las bases con tabla
+        // `usuarios` (ver BasesDatosService::connectionsConUsuarios). El estado 'activo' ya se
+        // valida ahí mismo (no hay una comprobación aparte después). Login por username fue
         // deshabilitado a propósito, ver AuthServices::resolverUsuarioMultiTenant.
-        $resultado = $this->service_auth->resolverUsuarioMultiTenant($request->user, $request->pass);
+        $resultado = $this->service_auth->resolverUsuarioMultiTenant($request->user, $request->pass, $connections);
 
         if (! $resultado) {
             return response()->json([
@@ -241,6 +259,13 @@ class AuthController extends Controller
         // A partir de acá el resto de la petición (y el JWT que se genera) queda anclado a
         // la base del tenant al que pertenece este usuario.
         config(['database.default' => $connection]);
+
+        if ($connections && ! $usuario->esTipo(TipoPerfil::ACUDIENTE)) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Este acceso es solo para padres y acudientes. El personal del colegio ingresa por el inicio de sesión general.',
+            ], 403);
+        }
 
         // Equipo ya verificado antes (cookie `device_token` con match en
         // dispositivos_confiables) → sesión directa, mismo flujo de siempre. Sin cookie o

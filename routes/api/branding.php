@@ -1,29 +1,30 @@
 <?php
 
 use App\Http\Controllers\Branding\ColegioAdmisionController;
-use App\Http\Controllers\Branding\MarcaDominioController;
+use App\Http\Controllers\Branding\MarcaController;
 use Illuminate\Support\Facades\Route;
 
 /**
- * Administración del logo por dominio de correo (Super Admin únicamente — ver
- * MarcaDominioController::PERFILES_PERMITIDOS). El logo resuelto en sí se consume
- * indirectamente vía UsuarioResource (GET /api/auth/check) y en los documentos generados
- * server-side (DocumentoPdfService, HorarioExcelService) — no hace falta un endpoint de
- * "resolver" público separado.
+ * Marcas: identidad de cada institución (nombre, lema, color, logos, imagen de fondo) y sus
+ * dominios de correo. Super Admin únicamente (ver MarcaController). La marca resuelta se
+ * consume vía UsuarioResource (GET /api/auth/check), los documentos generados en el servidor
+ * (DocumentoPdfService, HorarioExcelService) y el branding por slug de /api/admissions.
  */
-Route::prefix('dominios')->group(function () {
-    Route::get('/', [MarcaDominioController::class, 'listar']);
-    Route::post('/', [MarcaDominioController::class, 'crear']);
-    Route::put('/', [MarcaDominioController::class, 'actualizar']);
-    Route::put('/estado', [MarcaDominioController::class, 'cambiarEstado']);
-    Route::delete('/', [MarcaDominioController::class, 'eliminar']);
+Route::prefix('marcas')->group(function () {
+    Route::get('/', [MarcaController::class, 'listar']);
+    Route::post('/', [MarcaController::class, 'crear']);
+    Route::put('/', [MarcaController::class, 'actualizar']);
+    Route::put('/estado', [MarcaController::class, 'cambiarEstado']);
+    Route::delete('/', [MarcaController::class, 'eliminar']);
 });
 
+// Solo lectura: dominio + nombre de su marca (alcance por colegio de los banners informativos).
+Route::get('dominios', [MarcaController::class, 'listarDominios']);
+
 /**
- * CRUD de colegios de admisión (slug de URL -> connection + marca, Super Admin únicamente
- * — ver ColegioAdmisionController::PERFILES_PERMITIDOS). La resolución pública por slug
- * (branding + selección de connection) vive aparte, bajo /api/admissions — ver
- * routes/api.php y ResolveColegioAdmision.
+ * Colegios por slug de URL (slug -> connection + marca, Super Admin únicamente — ver
+ * ColegioAdmisionController). La resolución pública por slug (branding + selección de
+ * connection) vive aparte, bajo /api/admissions — ver routes/api.php y ResolveColegioAdmision.
  */
 Route::prefix('colegios-admision')->group(function () {
     Route::get('/', [ColegioAdmisionController::class, 'listar']);

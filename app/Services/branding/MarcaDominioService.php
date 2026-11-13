@@ -2,202 +2,20 @@
 
 namespace App\Services\branding;
 
+use App\Models\Branding\ColegioAdmision;
+use App\Models\Branding\Marca;
 use App\Models\Branding\MarcaDominio;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\Service;
-use Exception;
-use Illuminate\Http\UploadedFile;
 
 /**
- * Logo de la app según el dominio de correo del usuario (multi-tenant) — el archivo se
- * sube a Cloudinary (mismo storage que ya usan firmas/documentos de admisiones, ver
- * CloudinaryService), no al disco local: son pocos logos institucionales, pero se
- * mantiene consistencia con el resto de uploads de imágenes del backend.
+ * Resuelve la marca (`marcas`) a mostrar para un correo: por su dominio (`marcas_dominio`) o,
+ * con sesión, por el colegio de la base de la sesión. La administración de marcas y dominios
+ * está en MarcaService.
  */
 class MarcaDominioService extends Service
 {
-    private const CARPETA = 'marcas';
-
-    /** Mismo set que CloudinaryService::validateFile acepta para imágenes — subir un svg
-     * pasaría esta validación pero luego fallaría dentro de uploadFile() con un mensaje
-     * menos claro, así que se corta acá. */
-    private const EXTENSIONES_PERMITIDAS = ['jpg', 'jpeg', 'png', 'webp'];
-
-    private const TAMANO_MAXIMO = 5 * 1024 * 1024;
-
     public function __construct(private CloudinaryService $cloudinaryService) {}
-
-    public function listar(): array
-    {
-        try {
-            return [
-                'error' => false,
-                'message' => 'Marcas obtenidas correctamente.',
-                'data' => MarcaDominio::orderBy('dominio')->get(),
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al listar las marcas por dominio');
-
-            return ['error' => true, 'message' => 'Error en el servidor al listar las marcas.', 'data' => []];
-        }
-    }
-
-    public function crear(array $datos, UploadedFile $logo, ?UploadedFile $imagen = null): array
-    {
-        try {
-            $errorValidacion = $this->validarLogo($logo) ?? ($imagen ? $this->validarLogo($imagen, 'La imagen') : null);
-            if ($errorValidacion) {
-                return ['error' => true, 'message' => $errorValidacion, 'data' => []];
-            }
-
-            $dominio = $this->normalizarDominio($datos['dominio']);
-
-            if (MarcaDominio::where('dominio', $dominio)->exists()) {
-                return ['error' => true, 'message' => 'Ya existe una marca configurada para ese dominio.', 'data' => []];
-            }
-
-            $subido = $this->subirLogo($logo);
-            if (! $subido) {
-                return ['error' => true, 'message' => 'Error al subir el logo a Cloudinary.', 'data' => []];
-            }
-
-            $subidaImagen = null;
-            if ($imagen) {
-                $subidaImagen = $this->subirLogo($imagen);
-                if (! $subidaImagen) {
-                    return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
-                }
-            }
-
-            $marca = MarcaDominio::create([
-                'dominio' => $dominio,
-                'nombre' => $datos['nombre'] ?? null,
-                'descripcion' => $datos['descripcion'] ?? null,
-                'color' => empty($datos['color']) ? null : $datos['color'],
-                'logo_path' => $subido['url'],
-                'logo_public_id' => $subido['public_id'],
-                'imagen_fondo_path' => $subidaImagen['url'] ?? null,
-                'imagen_fondo_public_id' => $subidaImagen['public_id'] ?? null,
-                'activo' => true,
-            ]);
-
-            return ['error' => false, 'message' => 'Marca creada correctamente.', 'data' => $marca];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al crear la marca por dominio');
-
-            return ['error' => true, 'message' => 'Error en el servidor al crear la marca.', 'data' => []];
-        }
-    }
-
-    public function actualizar(int $id, array $datos, ?UploadedFile $logo = null, ?UploadedFile $imagen = null, bool $quitarImagen = false): array
-    {
-        try {
-            $marca = MarcaDominio::find($id);
-
-            if (! $marca) {
-                return ['error' => true, 'message' => 'La marca no existe.', 'data' => []];
-            }
-
-            $errorValidacion = ($logo ? $this->validarLogo($logo) : null) ?? ($imagen ? $this->validarLogo($imagen, 'La imagen') : null);
-            if ($errorValidacion) {
-                return ['error' => true, 'message' => $errorValidacion, 'data' => []];
-            }
-
-            $dominio = isset($datos['dominio']) ? $this->normalizarDominio($datos['dominio']) : $marca->dominio;
-
-            if ($dominio !== $marca->dominio && MarcaDominio::where('dominio', $dominio)->exists()) {
-                return ['error' => true, 'message' => 'Ya existe una marca configurada para ese dominio.', 'data' => []];
-            }
-
-            $publicIdAnterior = $marca->logo_public_id;
-            $imagenIdAnterior = $marca->imagen_fondo_public_id;
-
-            $marca->dominio = $dominio;
-            $marca->nombre = $datos['nombre'] ?? $marca->nombre;
-            $marca->descripcion = $datos['descripcion'] ?? $marca->descripcion;
-            $marca->color = array_key_exists('color', $datos) ? (empty($datos['color']) ? null : $datos['color']) : $marca->color;
-
-            if ($logo) {
-                $subido = $this->subirLogo($logo);
-                if (! $subido) {
-                    return ['error' => true, 'message' => 'Error al subir el logo a Cloudinary.', 'data' => []];
-                }
-                $marca->logo_path = $subido['url'];
-                $marca->logo_public_id = $subido['public_id'];
-            }
-
-            if ($imagen) {
-                $subidaImagen = $this->subirLogo($imagen);
-                if (! $subidaImagen) {
-                    return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
-                }
-                $marca->imagen_fondo_path = $subidaImagen['url'];
-                $marca->imagen_fondo_public_id = $subidaImagen['public_id'];
-            } elseif ($quitarImagen) {
-                $marca->imagen_fondo_path = null;
-                $marca->imagen_fondo_public_id = null;
-            }
-
-            $marca->save();
-
-            if ($logo && $publicIdAnterior && $publicIdAnterior !== $marca->logo_public_id) {
-                $this->cloudinaryService->deleteFile($publicIdAnterior, 'image');
-            }
-
-            if ($imagenIdAnterior && $imagenIdAnterior !== $marca->imagen_fondo_public_id) {
-                $this->cloudinaryService->deleteFile($imagenIdAnterior, 'image');
-            }
-
-            return ['error' => false, 'message' => 'Marca actualizada correctamente.', 'data' => $marca];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al actualizar la marca por dominio');
-
-            return ['error' => true, 'message' => 'Error en el servidor al actualizar la marca.', 'data' => []];
-        }
-    }
-
-    public function cambiarEstado(array $ids, bool $estado): array
-    {
-        try {
-            $actualizados = MarcaDominio::whereIn('id', $ids)->update(['activo' => $estado]);
-
-            return [
-                'error' => false,
-                'message' => $estado ? 'Marca(s) habilitada(s) correctamente.' : 'Marca(s) deshabilitada(s) correctamente.',
-                'data' => $actualizados,
-            ];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al cambiar el estado de la marca por dominio');
-
-            return ['error' => true, 'message' => 'Error en el servidor al cambiar el estado.', 'data' => []];
-        }
-    }
-
-    public function eliminar(array $ids): array
-    {
-        try {
-            $marcas = MarcaDominio::whereIn('id', $ids)->get();
-
-            if ($marcas->isEmpty()) {
-                return ['error' => true, 'message' => 'No se encontraron marcas para eliminar.', 'data' => []];
-            }
-
-            foreach ($marcas as $marca) {
-                $this->cloudinaryService->deleteFile($marca->logo_public_id, 'image');
-                if ($marca->imagen_fondo_public_id) {
-                    $this->cloudinaryService->deleteFile($marca->imagen_fondo_public_id, 'image');
-                }
-            }
-
-            MarcaDominio::whereIn('id', $ids)->delete();
-
-            return ['error' => false, 'message' => 'Marca(s) eliminada(s) correctamente.', 'data' => []];
-        } catch (Exception $e) {
-            $this->sendError($e, 'Error al eliminar la marca por dominio');
-
-            return ['error' => true, 'message' => 'Error en el servidor al eliminar la marca.', 'data' => []];
-        }
-    }
 
     /**
      * Resuelve el logo a mostrar para un correo dado — null si no hay correo, no matchea
@@ -211,23 +29,54 @@ class MarcaDominioService extends Service
      *
      * `imagen` es la imagen de referencia (fondo del friso del Login), opcional.
      *
+     * Sin marca para el dominio (correos personales: gmail, hotmail... de los acudientes) y
+     * con sesión, se usa la del colegio de la base de la sesión ({@see marcaDelColegioDeLaSesion}).
+     * Sin sesión (vista previa del Login, comandos) no hay respaldo: el caller usa el suyo.
+     *
      * @return array{url: ?string, nombre: ?string, descripcion: ?string, color: ?string, imagen: ?string}
      */
     public function resolverPorCorreo(?string $correo): array
     {
-        $sinMatch = ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null, 'imagen' => null];
-
         $dominio = $this->dominioDeCorreo($correo);
-        if (! $dominio) {
-            return $sinMatch;
+        $marca = $dominio
+            ? MarcaDominio::with('marca')->where('dominio', $dominio)->where('activo', true)->first()?->marca
+            : null;
+
+        if (! $marca?->activo) {
+            return $this->marcaDelColegioDeLaSesion()
+                ?? ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null, 'imagen' => null];
         }
 
-        $marca = MarcaDominio::where('dominio', $dominio)->where('activo', true)->first();
+        return $this->formato($marca);
+    }
 
-        if (! $marca) {
-            return $sinMatch;
+    /** Ya resuelta por connection en esta petición: un listado o un PDF la pide varias veces. */
+    private static array $marcasColegio = [];
+
+    /**
+     * Marca del colegio cuya base atiende la petición (`colegios_admision.connection`, la misma
+     * tabla del slug de Admisiones y del portal para padres). Solo con sesión: sin ella,
+     * `database.default` es `mysql` por defecto y le pondría el logo de Royal a cualquiera.
+     */
+    private function marcaDelColegioDeLaSesion(): ?array
+    {
+        if (! auth()->check()) {
+            return null;
         }
 
+        $connection = config('database.default');
+
+        if (! array_key_exists($connection, self::$marcasColegio)) {
+            $marca = ColegioAdmision::with('marca')->where('connection', $connection)->where('activo', true)->orderBy('id')->first()?->marca;
+            self::$marcasColegio[$connection] = $marca?->activo ? $this->formato($marca) : null;
+        }
+
+        return self::$marcasColegio[$connection];
+    }
+
+    /** @return array{url: ?string, nombre: ?string, descripcion: ?string, color: ?string, imagen: ?string} */
+    private function formato(Marca $marca): array
+    {
         return ['url' => $marca->logo_path, 'nombre' => $marca->nombre, 'descripcion' => $marca->descripcion, 'color' => $marca->color, 'imagen' => $marca->imagen_fondo_path];
     }
 
@@ -262,7 +111,7 @@ class MarcaDominioService extends Service
      * Logo del colegio para incrustar en PDF/Excel: el de la marca del dominio del correo
      * (por defecto, el del usuario autenticado) o, sin marca, el fijo de Royal School. Es el
      * único punto de entrada para logos server-side: un colegio nuevo solo configura su
-     * marca en /marcas-dominio. Un WEBP se convierte a PNG porque TCPDF no lo soporta.
+     * marca en /marcas. Un WEBP se convierte a PNG porque TCPDF no lo soporta.
      */
     public function rutaLocalLogo(?string $correo = null): ?string
     {
@@ -296,41 +145,8 @@ class MarcaDominioService extends Service
             return null;
         }
 
-        return $this->normalizarDominio($correo);
-    }
-
-    /** Acepta tanto un correo completo ("user@dominio.com") como un dominio suelto. */
-    private function normalizarDominio(string $correoODominio): string
-    {
-        $partes = explode('@', trim($correoODominio));
+        $partes = explode('@', trim($correo));
 
         return mb_strtolower(end($partes));
-    }
-
-    private function validarLogo(UploadedFile $logo, string $etiqueta = 'El logo'): ?string
-    {
-        if ($logo->getSize() > self::TAMANO_MAXIMO) {
-            return "{$etiqueta} excede 5MB.";
-        }
-
-        $extension = strtolower($logo->getClientOriginalExtension());
-
-        if (! in_array($extension, self::EXTENSIONES_PERMITIDAS, true)) {
-            return 'Formato de imagen no permitido (usa jpg, png o webp).';
-        }
-
-        return null;
-    }
-
-    /** @return ?array{url: string, public_id: string} */
-    private function subirLogo(UploadedFile $logo): ?array
-    {
-        $resultado = $this->cloudinaryService->uploadFile($logo, self::CARPETA);
-
-        if ($resultado['error']) {
-            return null;
-        }
-
-        return ['url' => $resultado['data']['url'], 'public_id' => $resultado['data']['public_id']];
     }
 }

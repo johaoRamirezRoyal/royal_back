@@ -240,7 +240,7 @@ Qué se cambió, el deploy y los pendientes:
 ### TCPDF (documentos aún no migrados)
 
 - **Logo**: todo PDF/Excel usa `app(MarcaDominioService::class)->rutaLocalLogo($correo)`.
-  Devuelve el logo de la marca del dominio del correo, configurado en /marcas-dominio (sin
+  Devuelve el logo de la marca del dominio del correo, configurado en /marcas (sin
   correo, usa el del usuario autenticado). Si no hay marca, devuelve el fijo
   `royal/royal-school/logotipoBackground.png`, y un WEBP sale convertido a PNG. Un colegio
   nuevo solo configura su marca: no hay logos por documento. Ejemplo: `HojaVidaPdfService`.

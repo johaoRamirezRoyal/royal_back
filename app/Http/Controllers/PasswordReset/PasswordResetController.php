@@ -6,6 +6,7 @@ use App\Events\PasswordRestore;
 use App\Http\Controllers\Controller;
 use App\Models\PasswordResetTokens;
 use App\Models\Usuarios\Usuario;
+use App\Services\branding\ColegioAdmisionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -14,12 +15,46 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 
 use function Symfony\Component\Clock\now;
 
+/**
+ * Recuperar contraseña. Con `colegio` (slug de `colegios_admision`, el portal para padres
+ * `/:colegio/padres`) todo pasa en la base de ese colegio y se acepta cualquier correo: los
+ * acudientes usan gmail, hotmail... El slug viaja en el enlace del correo hasta el cambio de
+ * contraseña. Sin él, igual que siempre: base por defecto y correo institucional.
+ */
 class PasswordResetController extends Controller
 {
+    public function __construct(private ColegioAdmisionService $colegioAdmision)
+    {
+    }
+
+    /** Fija la base del colegio del slug, si viene. Devuelve el slug, un 404 si no existe o
+     * null sin slug. */
+    private function usarBaseDelColegio(Request $request): string|JsonResponse|null
+    {
+        if (! $request->filled('colegio')) {
+            return null;
+        }
+
+        $colegio = $this->colegioAdmision->colegioConUsuarios((string) $request->input('colegio'));
+
+        if (! $colegio) {
+            return response()->json(['error' => true, 'message' => 'Colegio no encontrado o inactivo.'], 404);
+        }
+
+        config(['database.default' => $colegio->connection]);
+
+        return $colegio->slug;
+    }
+
     public function createToken(Request $request): JsonResponse
     {
+        $slug = $this->usarBaseDelColegio($request);
+        if ($slug instanceof JsonResponse) {
+            return $slug;
+        }
+
         $request->validate([
-            'email' => 'required|email|exists:usuarios,correo|min:10|max:140|ends_with:@royalschool.edu.co',
+            'email' => 'required|email|exists:usuarios,correo|min:10|max:140' . ($slug ? '' : '|ends_with:@royalschool.edu.co'),
         ],
             [
                 'email.required' => 'El correo es un campo obligatorio.',
@@ -43,13 +78,17 @@ class PasswordResetController extends Controller
             ]
         );
 
-        event(new PasswordRestore($user, $token));
+        event(new PasswordRestore($user, $token, $slug));
 
         return $this->success('Te enviamos un enlace de recuperacion');
     }
 
     public function validateToken(Request $request): JsonResponse
     {
+        if (($rechazo = $this->usarBaseDelColegio($request)) instanceof JsonResponse) {
+            return $rechazo;
+        }
+
         $request->validate([
             'token' => 'required|string|size:64',
             'email' => 'required|email',
@@ -83,6 +122,10 @@ class PasswordResetController extends Controller
 
     public function resetPassword(Request $request): JsonResponse
     {
+        if (($rechazo = $this->usarBaseDelColegio($request)) instanceof JsonResponse) {
+            return $rechazo;
+        }
+
         $request->validate([
             'token' => 'required|string',
             'email' => 'required|email',

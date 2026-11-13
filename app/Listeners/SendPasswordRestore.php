@@ -22,7 +22,7 @@ class SendPasswordRestore
     {
         $this->mailService->send(
             $event->user->correo,
-            new PasswordRestoreEmail($event->user, $event->token)
+            new PasswordRestoreEmail($event->user, $event->token, $event->colegio)
         );
     }
 

@@ -20,16 +20,18 @@ class AuthServices
      * propósito para forzar correo institucional único; el documento tampoco es único a
      * través de tenants distintos (una misma persona con cuenta en dos colegios comparte
      * documento), así que buscar por documento sería ambiguo y silenciosamente entraría al
-     * tenant equivocado. Se asume que `correo` sí es único a través de TODAS las bases —
-     * apenas se encuentra una fila que matchea el identificador en una connection, esa es la
-     * única candidata: si la contraseña o el estado fallan ahí, no se sigue buscando en
-     * otras bases.
+     * tenant equivocado. El correo NO es único entre bases: los acudientes usan correos
+     * personales (gmail, hotmail...) y pueden tener cuenta en dos colegios. Si la contraseña
+     * o el estado no coinciden en una base, se sigue buscando en las demás. El portal para
+     * padres (`/:colegio/padres`) pasa `$connections` con la base de su colegio para no
+     * depender del orden.
      *
+     * @param  string[]|null  $connections  Bases donde buscar; null = todas.
      * @return array{usuario: Usuario, connection: string}|null
      */
-    public function resolverUsuarioMultiTenant(string $identificador, string $password): ?array
+    public function resolverUsuarioMultiTenant(string $identificador, string $password, ?array $connections = null): ?array
     {
-        foreach (BasesDatosService::connectionsConUsuarios() as $connection) {
+        foreach ($connections ?? BasesDatosService::connectionsConUsuarios() as $connection) {
             try {
                 $usuario = Usuario::on($connection)
                     ->where('correo', $identificador)
@@ -47,7 +49,7 @@ class AuthServices
             }
 
             if (!Hash::check($password, $usuario->pass) || $usuario->estado !== 'activo') {
-                return null;
+                continue;
             }
 
             return ['usuario' => $usuario, 'connection' => $connection];

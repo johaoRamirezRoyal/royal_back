@@ -43,6 +43,8 @@ class UsuarioResource extends JsonResource
             'logo_path' => $marca['url'],
             'nombre_marca' => $marca['nombre'],
             'color_marca' => $marca['color'],
+            // Imagen de fondo de la marca (friso del portal para padres); null si no tiene.
+            'imagen_marca' => $marca['imagen'],
             // Carpeta raíz del colegio en Cloudinary ("Bases de datos"): el frontend arma con
             // ella las URLs de los archivos (src/utils/fileUrl.ts).
             'carpeta_archivos' => BasesDatosService::carpeta(config('database.default')),

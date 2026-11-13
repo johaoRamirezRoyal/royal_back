@@ -739,3 +739,35 @@ INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
 -- (confirmado = 3) hasta que él las apruebe o rechace. Se asigna desde Salones (ej. Maker Lab).
 -- ---------------------------------------------------------------------------
 alter table `salones` add `id_responsable` int unsigned null after `sonido`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_13_100000_add_index_correo_to_usuarios_table.php
+-- Índice en usuarios.correo (no único: los correos personales de los acudientes pueden
+-- repetirse entre colegios). El login busca por correo en cada base y leía la tabla completa.
+-- Se aplica en CADA base de colegio (mysql, sami_hebreo), solo si no existe.
+-- ---------------------------------------------------------------------------
+alter table `usuarios` add index `usuarios_correo_index`(`correo`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_13_110000_create_marcas_table.php  (base admin_management)
+-- Identidad de cada institución en una sola tabla `marcas` (nombre, lema, color, logo, logo
+-- secundario, imagen de fondo). marcas_dominio queda como dominio -> marca y colegios_admision
+-- como slug -> marca. Las columnas viejas de identidad se conservan (el código anterior las
+-- lee durante el despliegue) pero ya no se escriben; se borran en una migración aparte.
+-- ---------------------------------------------------------------------------
+create table `marcas` (`id` int unsigned not null auto_increment primary key, `nombre` varchar(190) not null, `descripcion` varchar(190) null, `color` varchar(7) null, `logo_path` varchar(255) null, `logo_public_id` varchar(255) null, `logo_secundario_path` varchar(255) null, `logo_secundario_public_id` varchar(255) null, `imagen_fondo_path` varchar(255) null, `imagen_fondo_public_id` varchar(255) null, `activo` tinyint(1) not null default '1', `fechareg` timestamp not null default CURRENT_TIMESTAMP, `fecha_updated` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `marcas_dominio` add `id_marca` int unsigned null after `dominio`;
+alter table `marcas_dominio` add constraint `marcas_dominio_id_marca_foreign` foreign key (`id_marca`) references `marcas` (`id`) on delete cascade;
+alter table `marcas_dominio` modify `logo_path` varchar(255) null;
+alter table `marcas_dominio` modify `logo_public_id` varchar(255) null;
+alter table `colegios_admision` add `id_marca` int unsigned null after `connection`;
+alter table `colegios_admision` add constraint `colegios_admision_id_marca_foreign` foreign key (`id_marca`) references `marcas` (`id`) on delete set null;
+alter table `colegios_admision` modify `nombre` varchar(190) null;
+-- Datos (en la migración se hace fila por fila, en PHP):
+-- 1) Por cada fila de marcas_dominio: INSERT en marcas con sus nombre/descripcion/color/logo/
+--    imagen de fondo y UPDATE marcas_dominio.id_marca.
+-- 2) Por cada colegio: si hay una marca con el mismo nombre (sin mayúsculas ni espacios), se
+--    enlaza y solo se llenan en la marca los campos vacíos con los del colegio (gana Marcas por
+--    dominio). Si no, se crea una marca con los valores del colegio.
+-- Resultado local: Royal School (id 1) = logo y color de royalschool.edu.co + logo secundario
+-- del colegio; Hebreo Union (id 2). colegios_admision royalschool -> 1.
