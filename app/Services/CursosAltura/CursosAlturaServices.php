@@ -241,27 +241,40 @@ class CursosAlturaServices
         }
     }
 
-    /** Bloques activos con sus áreas activas, para los selects del trabajo en altura manual. */
+    /**
+     * Para los selects del trabajo en altura manual: los bloques activos con sus áreas activas y,
+     * aparte, las áreas activas que no tienen bloque asignado (`otras_areas`), que se pueden
+     * elegir con cualquier bloque.
+     *
+     * @return array{error: bool, message: string, data?: array{bloques: mixed, otras_areas: mixed}}
+     */
     public function ubicaciones(): array
     {
         try {
-            $areas = DB::table('areas')->where('activo', 1)->whereNotNull('id_bloque')->orderBy('nombre')
-                ->get(['id', 'nombre', 'id_bloque'])->groupBy('id_bloque');
+            $areas = DB::table('areas')->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre', 'id_bloque']);
+            $porBloque = $areas->whereNotNull('id_bloque')->groupBy('id_bloque');
+            $soloIdNombre = fn ($lista) => $lista->map(fn ($a) => ['id' => (int) $a->id, 'nombre' => $a->nombre])->values();
 
             $bloques = DB::table('bloques')->where('activo', 1)->orderBy('nombre')->get(['id', 'nombre'])
                 ->map(fn ($b) => [
                     'id' => (int) $b->id,
                     'nombre' => $b->nombre,
-                    'areas' => $areas->get($b->id, collect())->map(fn ($a) => ['id' => (int) $a->id, 'nombre' => $a->nombre])->values(),
+                    'areas' => $soloIdNombre($porBloque->get($b->id, collect())),
                 ]);
 
-            return ['error' => false, 'message' => 'Ubicaciones obtenidas correctamente', 'data' => $bloques];
+            return ['error' => false, 'message' => 'Ubicaciones obtenidas correctamente', 'data' => [
+                'bloques' => $bloques,
+                'otras_areas' => $soloIdNombre($areas->whereNull('id_bloque')),
+            ]];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
     }
 
-    /** El área, si viene, debe ser del bloque elegido. Devuelve el mensaje de error o null. */
+    /**
+     * El área, si viene, debe ser del bloque elegido o no tener bloque asignado ("Otras áreas").
+     * Devuelve el mensaje de error o null.
+     */
     private function errorUbicacion(?int $idBloque, ?int $idArea): ?string
     {
         if (! $idArea) {
@@ -270,7 +283,7 @@ class CursosAlturaServices
 
         $bloqueDelArea = DB::table('areas')->where('id', $idArea)->value('id_bloque');
 
-        return (int) $bloqueDelArea === (int) $idBloque ? null : 'El área seleccionada no pertenece al bloque';
+        return $bloqueDelArea === null || (int) $bloqueDelArea === (int) $idBloque ? null : 'El área seleccionada no pertenece al bloque';
     }
 
     /**

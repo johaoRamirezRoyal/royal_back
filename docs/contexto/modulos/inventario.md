@@ -160,11 +160,12 @@ opcional). Para el CRUD se usa la opción **143**.
   Cambiar `fecha_trabajo` no toca las fechas de `reportes`.
 - **Trabajos manuales** (migración `2026_11_12_120000_trabajos_altura_independientes`): con
   `id_reporte` null, el trabajo lo crea Gestión Humana (`POST /cursos-altura/trabajos`) y guarda
-  sus propios `tipo_trabajo`, `id_bloque` (sin FK: `bloques` es MyISAM), `id_area` (opcional,
-  debe ser del bloque), `elemento` y `descripcion`; exige al menos un operativo. Se edita todo
+  sus propios `tipo_trabajo`, `id_bloque` (sin FK: `bloques` es MyISAM), `id_area` (opcional;
+  del bloque o un área sin bloque asignado), `elemento` y `descripcion`; exige al menos un operativo. Se edita todo
   por el mismo `PUT` (sin operativos responde 422, no se borra) y se elimina con
   `DELETE /cursos-altura/trabajos/{id}` (uno de reporte responde 422). Los selects salen de
-  `GET /cursos-altura/trabajos/ubicaciones` (bloques activos con sus áreas activas), porque
+  `GET /cursos-altura/trabajos/ubicaciones` (`bloques` activos con sus áreas activas y
+  `otras_areas`: las activas sin bloque, que van con cualquier bloque), porque
   `/api/bloques` pide 108/109. `listarTrabajos` y el PDF usan `consultaTrabajos()`, que une los
   dos orígenes (`origen` = `reporte`|`manual`).
 - **Estado** (`solucionado` en el listado): en uno de reporte, si el reporte tiene respuesta
