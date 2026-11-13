@@ -2,6 +2,8 @@
 
 namespace App\Services\LlegadasTardeEstudiantes;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use App\Enums\Mails;
 use App\Mail\LlegadaTardeAvisoInternoMail;
 use App\Mail\LlegadaTardeEstadoMail;
@@ -22,8 +24,6 @@ use Illuminate\Support\Facades\DB;
 
 class LlegadasTarde extends Service
 {
-    private const PERFIL_DIRECTIVO_DOCENTE = 20;
-    private const PERFIL_ASISTENTE_NIVEL = 11;
 
     // `periodo_academico.nombre` se guarda como texto ("Primer periodo", "Segundo
     // periodo"...) pero en los correos se muestra como número ("Periodo 1") — ver
@@ -43,7 +43,11 @@ class LlegadasTarde extends Service
         private CloudinaryService $cloudinaryService
     ) {}
 
-    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null, ?UploadedFile $soporte = null, bool $avisarDespuesDeResponder = false): array
+    /**
+     * `$notificar` en false registra la llegada tarde sin avisar al acudiente: lo usa el
+     * webhook de Hikvision cuando la marcación llegó con horas de atraso (terminal sin red).
+     */
+    public function agregarLlegadaTarde(int $id_alumno, string $fecha, string $hora, bool $justificada = false, ?string $observacion = null, ?UploadedFile $soporte = null, bool $avisarDespuesDeResponder = false, bool $notificar = true): array
     {
         try {
             $yaRegistrada = ModelsLlegadasTarde::where('id_alumno', $id_alumno)
@@ -153,7 +157,9 @@ class LlegadasTarde extends Service
                 $llegadaTarde->update(['enviado' => $enviado]);
             };
             // La estación de escaneo no puede esperar los correos entre un carnet y el siguiente.
-            $avisarDespuesDeResponder ? app()->terminating($avisar) : $avisar();
+            if ($notificar) {
+                $avisarDespuesDeResponder ? app()->terminating($avisar) : $avisar();
+            }
 
             return [
                 'error' => false,
@@ -741,7 +747,7 @@ class LlegadasTarde extends Service
         }
 
         if ($limiteAlcanzado && $avisarVicerrectoria) {
-            $correosInternos = Usuario::whereIn('perfil', [self::PERFIL_DIRECTIVO_DOCENTE, self::PERFIL_ASISTENTE_NIVEL])
+            $correosInternos = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::AVISO_LIMITE_LLEGADAS_TARDE))
                 ->where('estado', 'activo')
                 ->whereNotNull('correo')
                 ->pluck('correo')

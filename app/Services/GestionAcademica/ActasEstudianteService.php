@@ -2,6 +2,8 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Mail\GenericMail;
 use App\Models\AnioEscolar\Anio;
 use App\Models\GestionAcademica\ActaEstudiante;
@@ -26,7 +28,6 @@ use Throwable;
  */
 class ActasEstudianteService extends Service
 {
-    private const PERFIL_ESTUDIANTE = 16;
 
     // Columnas por las que la tabla del frontend puede ordenar (sort=<clave>).
     private const ORDENES = [
@@ -303,7 +304,7 @@ class ActasEstudianteService extends Service
     {
         $estudiante = DB::table('usuarios')
             ->where('id_user', $datos['id_estudiante'])
-            ->where('perfil', self::PERFIL_ESTUDIANTE)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->first(['id_user', 'id_curso']);
 
         if (! $estudiante) {
@@ -324,7 +325,7 @@ class ActasEstudianteService extends Service
 
         if ($idDocente !== null && ! DB::table('usuarios')
             ->where('id_user', $idDocente)
-            ->whereIn('perfil', ActaEstudiante::PERFILES_DOCENTE)
+            ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
             ->where('estado', 'activo')
             ->exists()) {
             return ['error' => 'El docente que solicita el acta no es un docente activo.'];
@@ -520,7 +521,7 @@ class ActasEstudianteService extends Service
                 'estudiantes' => DB::table('usuarios as u')
                     ->leftJoin('curso as c', 'c.id', '=', 'u.id_curso')
                     ->leftJoin('nivel_academico as n', 'n.id', '=', 'c.id_nivel')
-                    ->where('u.perfil', self::PERFIL_ESTUDIANTE)
+                    ->whereIn('u.perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
                     ->where('u.estado', 'activo')
                     ->when($this->idsCursos !== null, fn ($q) => $q->where(fn ($w) => $w
                         ->whereIn('u.id_curso', $this->idsCursos)
@@ -541,7 +542,7 @@ class ActasEstudianteService extends Service
                 // Para "Docente que solicita" del formulario (foto y perfil, para su tarjeta).
                 'docentes' => DB::table('usuarios as d')
                     ->leftJoin('perfiles as pf', 'pf.id_perfil', '=', 'd.perfil')
-                    ->whereIn('d.perfil', ActaEstudiante::PERFILES_DOCENTE)
+                    ->whereIn('d.perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE))
                     ->where('d.estado', 'activo')
                     ->orderBy('d.apellido')
                     ->orderBy('d.nombre')

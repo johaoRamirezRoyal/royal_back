@@ -2,7 +2,9 @@
 
 namespace App\Services\ProcesoCompra;
 
+use App\Services\Usuarios\PermisosPerfil;
 use App\Enums\Mails;
+use App\Mail\ProcesoCompra\OrdenCompraMail;
 use App\Models\Inventario\Inventario;
 use App\Models\ProcesoCompra\Solicitudes\Solicitud;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
@@ -13,6 +15,7 @@ use App\Models\ProcesoCompra\Solicitudes\SolicitudVerificacionInicial;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Support\HtmlCorreoSanitizer;
 use App\Support\Permiso;
 use Exception;
 use Illuminate\Http\UploadedFile;
@@ -43,15 +46,14 @@ class SolicitudesServices
 
     public const ESTADO_DISPONIBLE_STOCK = 4;
 
+    /** Bloques de datos que se pueden incluir en el correo de la orden de compra. */
+    public const BLOQUES_ORDEN = ['productos', 'justificacion', 'datos_generales'];
+
     private const DECISIONES = [
         'aprobar' => self::ESTADO_APROBADA,
         'devolver' => self::ESTADO_DEVUELTA,
         'rechazar' => self::ESTADO_RECHAZADA,
     ];
-
-    // Mismo perfil Coordinador (26) que ya usa EvaluacionesServices::PERFIL_COORDINADOR —
-    // un coordinador queda a cargo de todas las solicitudes de usuarios de su id_nivel.
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
 
     // Los archivos se guardan en la raíz del disco de uploads para que su URL
     // pública sea directa: /public/upload/<nombre_archivo>.
@@ -108,7 +110,7 @@ class SolicitudesServices
     /** Correos de los coordinadores activos a cargo del nivel dado (puede no haber ninguno). */
     private function coordinadoresDeNivel(?int $idNivel): array
     {
-        return Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $idNivel, soloActivos: true);
+        return Usuario::correosPorPerfilesYNivel(PermisosPerfil::perfilesCon(Permiso::COORDINACION_NIVEL), $idNivel, soloActivos: true);
     }
 
     /**
@@ -277,7 +279,7 @@ class SolicitudesServices
                 // aprobador y datos de contacto del proveedor: los usa el PDF de orden de compra;
                 // detalle_producto, el buscador del seguimiento.
                 'aprobador:id_user,nombre,apellido',
-                'proveedor:id_proveedor,nombre,num_identificacion,comercial_nombre,telefono_comercial,ciudad,detalle_producto',
+                'proveedor:id_proveedor,nombre,num_identificacion,comercial_nombre,telefono_comercial,ciudad,detalle_producto,correo,correo_comercial',
                 'productos',
                 'verificacion:id_solicitud,factura_doc,id_log,fecha_verificacion,cantidad,observacion_cant,calidad,observacion_calidad,precios,observacion_precios,plazos,observacion_plazo',
                 'verificacion.usuario:id_user,nombre,apellido',
@@ -325,7 +327,7 @@ class SolicitudesServices
 
             // Todas las entradas de inventario ya generadas por estas compras, precargadas
             // en una sola query y agrupadas por id_compra (evita una query por solicitud).
-            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles', 'descripcion', 'estado', 'id_area', 'id_user')
+            $inventariosPorCompra = Inventario::select('id', 'id_compra', 'detalles', 'descripcion', 'marca', 'estado', 'id_area', 'id_user')
                 ->with(['area:id,nombre', 'usuario:id_user,nombre,apellido'])
                 ->whereIn('id_compra', $solicitudes->pluck('id'))
                 ->orderBy('id')
@@ -354,6 +356,7 @@ class SolicitudesServices
                 $solicitud->setAttribute('inventarios', $inventarios->map(fn ($i) => [
                     'id' => $i->id,
                     'descripcion' => $i->descripcion,
+                    'marca' => $i->marca,
                     'estado' => $i->estado,
                     'area' => $i->area?->nombre,
                     'usuario' => $i->usuario ? trim("{$i->usuario->nombre} {$i->usuario->apellido}") : null,
@@ -395,6 +398,183 @@ class SolicitudesServices
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Envía al proveedor el correo redactado en el frontend (asunto, mensaje HTML, bloques
+     * de datos y PDF opcional de la orden). Ver armarOrdenCompraMail(). No guarda nada: el
+     * envío no deja registro en la solicitud.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
+     */
+    public function enviarOrdenCompra(int $id, array $datos, ?UploadedFile $pdf): array
+    {
+        try {
+            $armado = $this->armarOrdenCompraMail($id, $datos, $pdf?->get());
+
+            if ($armado['error']) {
+                return $armado;
+            }
+
+            ['mail' => $mail, 'correos' => $correos] = $armado['data'];
+
+            if (! $this->mailService->send($correos, $mail)) {
+                return ['error' => true, 'message' => 'No se pudo enviar el correo al proveedor', 'status' => 502];
+            }
+
+            return ['error' => false, 'message' => 'Orden de compra enviada a '.implode(', ', $correos), 'data' => ['correos' => $correos]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * HTML del mismo correo que enviaría enviarOrdenCompra(), para la vista previa.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
+     */
+    public function vistaPreviaOrdenCompra(int $id, array $datos): array
+    {
+        try {
+            $armado = $this->armarOrdenCompraMail($id, $datos, null);
+
+            if ($armado['error']) {
+                return $armado;
+            }
+
+            return ['error' => false, 'message' => 'Vista previa generada', 'data' => ['html' => $armado['data']['mail']->render()]];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Valida la solicitud y arma el OrdenCompraMail. Solo formalizada o en devolución
+     * (reenvío), con todos los productos con cantidad y precio > 0. Los destinatarios
+     * deben ser `correo`/`correo_comercial` del proveedor en BD (el body solo elige entre
+     * ellos); los CC son libres (máx. 5, ver request). Los bloques de datos se arman aquí
+     * desde la BD: el frontend solo dice cuáles incluir. Contacto y responder-a: el grupo
+     * COMPRAS_VENTAS.
+     *
+     * @param  array{asunto: string, mensaje: string, destinatarios: array<int, string>, cc?: array<int, string>|null, incluir?: array<int, string>|null}  $datos
+     * @return array{error: bool, message?: string, status?: int, data?: array{mail: OrdenCompraMail, correos: array<int, string>}}
+     */
+    private function armarOrdenCompraMail(int $id, array $datos, ?string $pdfContenido): array
+    {
+        $solicitud = Solicitud::with([
+            'proveedor:id_proveedor,nombre,correo,correo_comercial',
+            'productos:id,id_solicitud,producto,cantidad,precio,iva',
+            'area:id,nombre',
+            'usuario:id_user,nombre,apellido',
+            'aprobador:id_user,nombre,apellido',
+        ])->find($id);
+
+        if (! $solicitud || $solicitud->anulada) {
+            return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
+        }
+
+        if (! in_array((int) $solicitud->estado, [self::ESTADO_FORMALIZADA, self::ESTADO_DEVOLUCION], true)) {
+            return ['error' => true, 'message' => 'Solo se puede enviar la orden de una solicitud formalizada o en devolución', 'status' => 422];
+        }
+
+        if (! $solicitud->proveedor) {
+            return ['error' => true, 'message' => 'La solicitud no tiene proveedor asignado', 'status' => 422];
+        }
+
+        // En BD cantidad y precio son strings y el precio puede ser null.
+        $positivo = fn ($valor): bool => is_numeric($valor) && (float) $valor > 0;
+        $productosInvalidos = $solicitud->productos->contains(
+            fn (SolicitudProducto $p) => ! $positivo($p->cantidad) || ! $positivo($p->precio)
+        );
+
+        if ($solicitud->productos->isEmpty() || $productosInvalidos) {
+            return ['error' => true, 'message' => 'Todos los productos deben tener cantidad y precio mayores a 0 (revise el estudio)', 'status' => 422];
+        }
+
+        $normalizar = fn (array $correos): array => array_values(array_unique(array_filter(
+            array_map(fn ($correo) => mb_strtolower(trim((string) $correo)), $correos),
+            fn (string $correo) => filter_var($correo, FILTER_VALIDATE_EMAIL) !== false,
+        )));
+
+        $correosProveedor = $normalizar([$solicitud->proveedor->correo, $solicitud->proveedor->correo_comercial]);
+
+        if (empty($correosProveedor)) {
+            return ['error' => true, 'message' => 'El proveedor no tiene un correo válido registrado', 'status' => 422];
+        }
+
+        $correos = $normalizar($datos['destinatarios']);
+
+        if (empty($correos) || array_diff($correos, $correosProveedor)) {
+            return ['error' => true, 'message' => 'Los destinatarios deben ser correos registrados del proveedor', 'status' => 422];
+        }
+
+        $cc = array_values(array_diff($normalizar($datos['cc'] ?? []), $correos));
+        $incluir = $datos['incluir'] ?? [];
+        $numero = str_pad((string) $solicitud->id, 3, '0', STR_PAD_LEFT);
+
+        $mail = new OrdenCompraMail(
+            numeroOrden: $numero,
+            asunto: $datos['asunto'],
+            mensajeHtml: HtmlCorreoSanitizer::limpiar($datos['mensaje']),
+            bloques: $this->bloquesOrdenCompra($solicitud, $numero, $incluir),
+            correosContacto: Mails::COMPRAS_VENTAS->recipients(),
+            correosCc: $cc,
+            pdfContenido: $pdfContenido,
+        );
+
+        return ['error' => false, 'data' => ['mail' => $mail, 'correos' => $correos]];
+    }
+
+    /**
+     * Bloques de datos del correo, desde la BD. El cálculo de productos replica el PDF de
+     * la orden (frontend OrdenCompraPDF.ts): con IVA "incluido" el total se divide entre
+     * 1.19 y el IVA es el 19% de eso; si no, el IVA es el porcentaje guardado.
+     *
+     * @param  array<int, string>  $incluir
+     * @return array{productos?: array{filas: array<int, array{cantidad: string, producto: string, precio: float, total: float}>, subtotal: float, iva: float, total: float}, justificacion?: string, datos_generales?: array<string, string>}
+     */
+    private function bloquesOrdenCompra(Solicitud $solicitud, string $numero, array $incluir): array
+    {
+        $bloques = [];
+
+        if (in_array('datos_generales', $incluir, true)) {
+            $nombre = fn ($u) => $u ? trim("{$u->nombre} {$u->apellido}") : '—';
+            $bloques['datos_generales'] = [
+                'No. de orden' => $numero,
+                'Fecha de solicitud' => $solicitud->fecha_solicitud?->format('d/m/Y') ?? '—',
+                'Área' => $solicitud->area->nombre ?? '—',
+                'Solicitante' => $nombre($solicitud->usuario),
+                'Aprobado por' => $nombre($solicitud->aprobador),
+            ];
+        }
+
+        if (in_array('justificacion', $incluir, true) && trim((string) $solicitud->justificacion) !== '') {
+            $bloques['justificacion'] = trim((string) $solicitud->justificacion);
+        }
+
+        if (in_array('productos', $incluir, true)) {
+            $subtotal = 0.0;
+            $iva = 0.0;
+            $filas = $solicitud->productos->map(function (SolicitudProducto $p) use (&$subtotal, &$iva) {
+                $precio = (float) $p->precio;
+                $total = $precio * (float) $p->cantidad;
+
+                if ($p->iva === 'incluido') {
+                    $total /= 1.19;
+                    $iva += $total * 0.19;
+                } else {
+                    $iva += $total * ((float) $p->iva) / 100;
+                }
+
+                $subtotal += $total;
+
+                return ['cantidad' => (string) $p->cantidad, 'producto' => (string) $p->producto, 'precio' => $precio, 'total' => $total];
+            })->all();
+
+            $bloques['productos'] = ['filas' => $filas, 'subtotal' => $subtotal, 'iva' => $iva, 'total' => $subtotal + $iva];
+        }
+
+        return $bloques;
     }
 
     // El coordinador aprueba una solicitud de su nivel: recién acá se materializa la fila
@@ -564,14 +744,18 @@ class SolicitudesServices
     public function asignarProveedor(int $idSolicitudInicial, array $datos, ?UploadedFile $cotizacion, int $idLog): array
     {
         try {
-            $inicial = SolicitudInicial::with('productos')->find($idSolicitudInicial);
+            // Con `id_solicitud` (la final) se edita esa misma: las solicitudes del legacy no
+            // tienen solicitud inicial, y tomar su id como el de una inicial apuntaba a otra.
+            $existente = ! empty($datos['id_solicitud']) ? Solicitud::find($datos['id_solicitud']) : null;
+            $inicial = $existente
+                ? ($existente->id_solicitud_inicial ? SolicitudInicial::with('productos')->find($existente->id_solicitud_inicial) : null)
+                : SolicitudInicial::with('productos')->find($idSolicitudInicial);
 
-            if (! $inicial) {
-                return ['error' => true, 'message' => 'Solicitud inicial no encontrada', 'status' => 404];
+            if (! $existente && ! $inicial) {
+                return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
-            $existente = Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
-
+            $existente ??= Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
             $subida = null;
             $nombreCotizacion = $existente?->cotizacion_doc;
             if ($cotizacion) {
@@ -585,16 +769,21 @@ class SolicitudesServices
             }
 
             try {
-                return DB::transaction(function () use ($inicial, $datos, $nombreCotizacion, $idLog) {
+                return DB::transaction(function () use ($inicial, $existente, $datos, $nombreCotizacion, $idLog) {
                     // La final ya fue creada al registrar la solicitud; se completa/edita aquí.
-                    $solicitud = Solicitud::where('id_solicitud_inicial', $inicial->id)->first();
+                    $solicitud = $existente;
+                    // Datos base: los de la inicial o, en las del legacy (sin inicial), los de la final.
+                    $base = $inicial ?? $solicitud;
 
-                    $observacion = $datos['observaciones'] ?? $inicial->observacion;
-                    $fechaSolicitud = $datos['fecha_solicitado'] ?? $inicial->fecha_solicitud;
+                    $observacion = $datos['observaciones'] ?? $base->observacion;
+                    $fechaSolicitud = $datos['fecha_solicitado'] ?? $base->fecha_solicitud;
 
                     // Estado decidido en el estudio: aprobada/pendiente -> activo 1,
-                    // aplazada -> activo 10 + fecha, rechazada -> activo 0 + motivo.
-                    $estadoFinal = self::ESTADO_FORMALIZADA;
+                    // aplazada -> activo 10 + fecha, rechazada -> activo 0 + motivo. Una ya
+                    // cerrada, en devolución o en stock (2, 3, 4) conserva su estado al editarla.
+                    $estadoFinal = $solicitud && in_array((int) $solicitud->estado, [2, 3, 4], true)
+                        ? (int) $solicitud->estado
+                        : self::ESTADO_FORMALIZADA;
                     $activo = 1;
                     $fechaAplazado = null;
                     $motivo = null;
@@ -607,10 +796,10 @@ class SolicitudesServices
                     }
 
                     $campos = [
-                        'id_user' => $inicial->id_user,
-                        'id_area' => $inicial->id_area,
+                        'id_user' => $base->id_user,
+                        'id_area' => $base->id_area,
                         'fecha_solicitud' => $fechaSolicitud,
-                        'justificacion' => $datos['justificacion'] ?? $inicial->justificacion,
+                        'justificacion' => $datos['justificacion'] ?? $base->justificacion,
                         'id_log' => $idLog,
                         'estado' => $estadoFinal,
                         'observacion' => $observacion,
@@ -630,17 +819,9 @@ class SolicitudesServices
                         $solicitud = $this->crearSolicitudFinalDesdeInicial($inicial, $campos, $idLog);
                     }
 
-                    // Precios e IVA decididos por producto en el estudio.
-                    foreach (($datos['productos'] ?? []) as $p) {
-                        SolicitudProducto::where('id_solicitud', $solicitud->id)
-                            ->where('id', $p['id'])
-                            ->update([
-                                'precio' => $p['precio'] ?? null,
-                                'iva' => $p['iva'] ?? null,
-                            ]);
-                    }
+                    $this->guardarProductosDelEstudio($solicitud, $datos['productos'] ?? [], $idLog);
 
-                    $inicial->update([
+                    $inicial?->update([
                         'estado' => self::ESTADO_CONVERTIDA,
                         'id_log' => $idLog,
                     ]);
@@ -663,6 +844,54 @@ class SolicitudesServices
             }
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Productos editados en el estudio: con `id` se actualizan (descripción, cantidad, precio,
+     * IVA); sin `id` se crean. Lo que no llega se conserva (el borrador de eliminados es solo
+     * del frontend). Un producto con unidades ya en el inventario no puede bajar de esa
+     * cantidad ni cambiar de descripción: rompería el restante y el vínculo de las compras
+     * legacy, que se asocian por descripción. Se llama dentro de la transacción: una excepción
+     * revierte todo.
+     *
+     * @param  array<int, array{id?: ?int, producto: string, cantidad: int|string, precio?: ?string, iva?: ?string}>  $productos
+     */
+    private function guardarProductosDelEstudio(Solicitud $solicitud, array $productos, int $idLog): void
+    {
+        foreach ($productos as $p) {
+            $campos = [
+                'producto' => trim($p['producto']),
+                'cantidad' => (string) (int) $p['cantidad'],
+                'precio' => $p['precio'] ?? null,
+                'iva' => $p['iva'] ?? null,
+            ];
+
+            if (empty($p['id'])) {
+                SolicitudProducto::create($campos + ['id_solicitud' => $solicitud->id, 'id_log' => $idLog]);
+
+                continue;
+            }
+
+            $producto = SolicitudProducto::where('id_solicitud', $solicitud->id)->find($p['id']);
+            if (! $producto) {
+                throw new Exception("El producto #{$p['id']} no pertenece a esta solicitud");
+            }
+
+            $ingresado = Inventario::unidadesIngresadas($solicitud->id, $producto->id);
+            $conInventarioLegacy = Inventario::where('id_compra', $solicitud->id)
+                ->where(fn ($q) => $q->whereNull('detalles')->orWhere('detalles', ''))
+                ->where('descripcion', mb_substr((string) $producto->producto, 0, 200))
+                ->exists();
+
+            if ((int) $campos['cantidad'] < $ingresado) {
+                throw new Exception("\"{$producto->producto}\" ya tiene {$ingresado} unidad(es) en el inventario: la cantidad no puede ser menor.");
+            }
+            if (($ingresado > 0 || $conInventarioLegacy) && $campos['producto'] !== trim((string) $producto->producto)) {
+                throw new Exception("\"{$producto->producto}\" ya tiene unidades en el inventario: no se puede cambiar su descripción.");
+            }
+
+            $producto->update($campos);
         }
     }
 

@@ -55,6 +55,18 @@ inicial 0 ─ aprobar (coordinador/admin) → 1 + crea `solicitudes` en 0
             └─ cancelar (dueño, solo en 0) → 5
 ```
 
+`asignar-proveedor` también guarda los productos del estudio
+(`SolicitudesServices::guardarProductosDelEstudio`):
+- Con `id` actualiza descripción, cantidad, precio e IVA. Sin `id` crea el producto.
+- Lo que no llega se conserva.
+- Un producto con unidades en el inventario (`Inventario::unidadesIngresadas`, o filas legacy
+  asociadas por descripción) no puede bajar de esa cantidad ni cambiar de descripción: la
+  excepción revierte todo.
+- `solicitud_productos_inicial` no se toca.
+- Se puede mandar `id_solicitud` (la final): las del legacy no tienen solicitud inicial, y
+  usar su id como el de una inicial editaba otra solicitud.
+- Una solicitud cerrada, en devolución o en stock (2, 3, 4) conserva su estado al editarla.
+
 `verificar-entrega`: la `decision` (`cerrar`/`devolucion`) la elige el usuario, no se
 deduce. `VerificarEntregaRequest::after()` rechaza `cerrar` si algún rubro es `No` y
 `devolucion` sin ninguna observación (test en `tests/Unit/ProcesoCompra`).
@@ -74,7 +86,7 @@ crea la fila final; `asignar-proveedor` la crea si falta
 | Sesión | `POST /solicitudes`, `GET /mias`, `POST /{id}/cancelar` |
 | Perfil (bandeja) | `GET /solicitudes`, `POST /{id}/aprobar`, `POST /{id}/rechazar-inicial` |
 | 60 | `GET /{id}`, `POST /{id}/verificar`, `PUT /{id}/aplazar`, `PUT /{id}/rechazar`, `POST /{id}/agregar-inventario` |
-| 104 | `GET /seguimiento` (filtros de nivel y perfil solo para 1/2), `POST /{id}/asignar-proveedor` (multipart con `cotizacion_doc`), `POST /{id}/disponible-stock`, `POST /{id}/anular` |
+| 104 | `GET /seguimiento` (filtros de nivel y perfil solo para 1/2), `POST /{id}/asignar-proveedor` (multipart con `cotizacion_doc`), `POST /{id}/disponible-stock`, `POST /{id}/anular`, `POST /{id}/enviar-orden` (multipart: `asunto`, `mensaje` HTML del editor Tiptap del frontend, `destinatarios[]`, `cc[]` (máx. 5, libres), `incluir[]` (`productos`, `justificacion`, `datos_generales`), `adjuntar_pdf` y `orden_pdf` (el PDF lo genera el frontend; obligatorio si `adjuntar_pdf`). Se envía con `OrdenCompraMail` sin guardar registro. Los destinatarios tienen que ser `correo`/`correo_comercial` del proveedor en BD (si no, 422); el `mensaje` se sanea con `App\Support\HtmlCorreoSanitizer` (lista blanca de formato básico) y los bloques de datos se arman en el service desde la BD, nunca del body (el cálculo de productos replica `OrdenCompraPDF.ts`). Solo en estado 1 o 3, con todos los productos con cantidad y precio > 0; si no, 422. El grupo `COMPRAS_VENTAS` va como contacto en el cuerpo y como responder-a), `POST /{id}/vista-previa-orden` (mismo body sin PDF; devuelve `data.html`, el render del mismo `OrdenCompraMail`) |
 | 105 | `POST /{id}/verificar-entrega` (multipart con `factura_doc`) |
 
 - Las cotizaciones y facturas van a la **raíz** del disco de uploads

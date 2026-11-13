@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\GestionAcademica;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Models\GestionAcademica\EscalaValoracion;
 use App\Models\GestionAcademica\Proposito;
@@ -36,10 +37,10 @@ class NotasController extends Controller implements HasMiddleware
                 'listarPropositos', 'crearProposito', 'actualizarProposito', 'ordenarPropositos',
                 'listarMetodosNivel', 'cambiarMetodoNivel',
             ]),
-            new Middleware(Permiso::ruta(self::REFERENTES, Permiso::PERFILES_DOCENTE), only: ['guardarReferentes', 'cambiarEstadoPlan']),
+            new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], Permiso::PERFILES_DOCENTE), only: ['verPlan', 'vistaCurso']),
-            new Middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso']),
+            new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'reabrirCierre']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
         ];

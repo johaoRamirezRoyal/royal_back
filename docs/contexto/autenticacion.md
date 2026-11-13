@@ -25,6 +25,16 @@
 - `AuthServices` es delgado: solo cubre el registro y los dispositivos confiables. El
   resto (login, check, tokens) sigue en `AuthController`/`JwtService`.
 
+## Intentos fallidos (`LimitarIntentosFallidos`, alias `intentos`)
+
+Middleware para rutas que piden contraseña: `->middleware('intentos:5,15')` = 5 fallos
+(respuestas 401 o 422) y 15 min de bloqueo (429 con mensaje en español y `Retry-After`). Un
+acierto reinicia la cuenta. La clave es ruta + IP + cuenta (el `user` del body o el usuario de
+la sesión): nadie bloquea la cuenta de otro desde su equipo. No tiene tope global por IP.
+Lo usan `POST /auth/login` y `POST /asistencia-gestion/qr/salir-pantalla`. Test:
+`tests/Feature/LimitarIntentosFallidosTest.php`. Para una ruta nueva de contraseña, úsalo en
+vez de `throttle` (que cuenta todas las peticiones, también las buenas).
+
 ## Verificación de equipo nuevo (`dispositivos_confiables`)
 
 Solo aplica al login del sistema general; admisiones e instituciones tienen su propio OTP.
@@ -49,14 +59,21 @@ contraseña (para soporte).
 
 - La tabla vive en `admin_management`, transversal a los colegios, así que **no tiene FK**
   a `usuarios` y guarda `connection_objetivo`. Solo se guarda el hash.
-- `LlaveMaestraController` (`/api/admin-management/llaves-maestras`) exige solo
-  `perfil === 1`; **no** aplica la lista de correos `adminManagementEmails` que sí aplica
-  el frontend. Para exigirla, copia el patrón de `BasesDatosController`.
+- `LlaveMaestraController` (`/api/admin-management/llaves-maestras`) exige perfil 1 **y**
+  un correo de `ADMIN_MANAGEMENT_EMAILS` (middleware `admin.access`, `RestrictToAdminEmails`),
+  en la ruta (grupo `/admin-management`) y en el controller. Prueba:
+  `tests/Feature/AdminManagement/LlaveMaestraAccesoTest.php`.
 - `POST /api/auth/master-key/redeem` es público, con límite de 10 intentos en 10 minutos
   por IP. No lee ni escribe `device_token` y no hace SSO. El JWT resultante lleva
   `via_llave_maestra: true` y `generado_por`, que `AuthController::check()` devuelve para
   que el frontend muestre su aviso.
 - `revocar()` no borra la fila: pone `expira_en = now()` para conservar la auditoría.
+- **Una sola sesión por llave a la vez por cuenta**: `redimir()` marca en caché
+  `llave_maestra_sesion:{connection}:{id_user}` (`Cache::add`, dura `jwt.ttl`). Si ya existe,
+  devuelve `SESION_ABIERTA`, no consume la llave y el canje responde 409. `logout` la libera
+  si el token tenía `via_llave_maestra`. Si la sesión se pierde sin logout (borrar cookies),
+  la cuenta queda bloqueada para otra llave hasta que venza el TTL; para liberarla a mano,
+  `Cache::forget` de esa clave.
 
 ## Página de acceso en el navegador (`PaginaAccesoNavegador`)
 

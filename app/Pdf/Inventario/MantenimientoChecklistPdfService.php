@@ -1,5 +1,9 @@
 <?php
 
+// PENDIENTE DE MIGRAR a pdfmake (src/documentos del frontend + DocumentoPdfService). No crees
+// documentos nuevos con TCPDF; si vas a cambiar el contenido o el diseño de este, mígralo primero.
+// Guía: docs/contexto/documentos.md del frontend, «Migrar un documento existente».
+
 namespace App\Pdf\Inventario;
 
 use TCPDF;
@@ -33,14 +37,16 @@ class MantenimientoChecklistPdfService
      */
     public function generate(array $data): string
     {
-        $pdf = new class('P', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF {
+        $pdf = new class('P', 'mm', 'A4', true, 'UTF-8', false) extends TCPDF
+        {
             public function Header() {}
+
             public function Footer()
             {
                 $this->SetY(-15);
                 $this->SetTextColor(127, 127, 127);
                 $this->SetFont($this->getFontFamily(), 'I', 10);
-                $this->Cell(0, 10, 'Pagina ' . $this->getAliasNumPage(), 0, 0, 'C');
+                $this->Cell(0, 10, 'Pagina '.$this->getAliasNumPage(), 0, 0, 'C');
             }
         };
 
@@ -54,7 +60,7 @@ class MantenimientoChecklistPdfService
 
         $logoPath = $data['logo_path'] ?? null;
         $logoCell = $logoPath && is_file($logoPath)
-            ? '<img src="' . $logoPath . '" width="120">'
+            ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="120">'
             : '';
 
         $tipoLabel = strtoupper($data['tipo_categoria_label']);
@@ -63,16 +69,16 @@ class MantenimientoChecklistPdfService
         $encabezado = '
         <table style="width:100%;" border="1" cellpadding="3">
             <tr style="text-align:center; font-size:9px; font-weight:bold;">
-                <td colspan="2" style="border:none; width:33%;">' . $logoCell . '</td>
+                <td colspan="2" style="border:none; width:33%;">'.$logoCell.'</td>
                 <td colspan="3" style="border:none; width:47%;">
                     <p>PROCESO DE MANTENIMIENTO</p>
-                    <p>REPORTE ' . $tipoLabel . '</p>
+                    <p>REPORTE '.$tipoLabel.'</p>
                     <br>
-                    <p>Seguimiento de equipos de ' . e($data['categoria_nombre']) . '</p>
-                    ' . (!empty($data['subtitulo']) ? '<p>' . e($data['subtitulo']) . '</p>' : '') . '
+                    <p>Seguimiento de equipos de '.e($data['categoria_nombre']).'</p>
+                    '.(! empty($data['subtitulo']) ? '<p>'.e($data['subtitulo']).'</p>' : '').'
                 </td>
                 <td colspan="1" style="border:none; width:20%;">
-                    <br>VERSIÓN 01<br>' . $fecha . '<br>1-1
+                    <br>VERSIÓN 01<br>'.$fecha.'<br>1-1
                 </td>
             </tr>
         </table>';
@@ -83,9 +89,9 @@ class MantenimientoChecklistPdfService
         $infoResponsable = '
         <table cellpadding="2" cellspacing="4" style="width:100%; font-size:9px;">
             <tr>
-                <td style="width:33%;"><strong>Responsable:</strong> ' . e($data['responsable_nombre']) . '</td>
-                <td style="width:33%;"><strong>Check Mantenimiento de ' . e($data['tipo_categoria_label']) . '</strong></td>
-                <td style="width:33%;"><strong>Fecha:</strong> ' . $fecha . '</td>
+                <td style="width:33%;"><strong>Responsable:</strong> '.e($data['responsable_nombre']).'</td>
+                <td style="width:33%;"><strong>Check Mantenimiento de '.e($data['tipo_categoria_label']).'</strong></td>
+                <td style="width:33%;"><strong>Fecha:</strong> '.$fecha.'</td>
             </tr>
         </table>';
 
@@ -101,7 +107,7 @@ class MantenimientoChecklistPdfService
         }
 
         // Guía de mantenimiento: si los equipos traen fecha programada se agrega esa columna.
-        $conFecha = collect($data['equipos'])->contains(fn ($e) => !empty($e['fecha']));
+        $conFecha = collect($data['equipos'])->contains(fn ($e) => ! empty($e['fecha']));
         $anchoFijo = 10 + 25 + 25 + ($conFecha ? 15 : 0); // ID + Descripción + Área (+ Fecha)
         $anchoChecklist = (100 - $anchoFijo) / count($columnas);
 
@@ -110,24 +116,24 @@ class MantenimientoChecklistPdfService
                 <th style="width:10%;">ID</th>
                 <th style="width:25%;">Descripción</th>
                 <th style="width:25%;">Área</th>'
-            . ($conFecha ? '<th style="width:15%;">Fecha programada</th>' : '');
+            .($conFecha ? '<th style="width:15%;">Fecha programada</th>' : '');
         foreach ($columnas as $col) {
-            $tabla .= '<th style="width:' . $anchoChecklist . '%;">' . e($col) . '</th>';
+            $tabla .= '<th style="width:'.$anchoChecklist.'%;">'.e($col).'</th>';
         }
         $tabla .= '</tr>';
 
         if (empty($data['equipos'])) {
-            $tabla .= '<tr><td colspan="' . (3 + ($conFecha ? 1 : 0) + count($columnas)) . '" style="text-align:center;">Sin equipos</td></tr>';
+            $tabla .= '<tr><td colspan="'.(3 + ($conFecha ? 1 : 0) + count($columnas)).'" style="text-align:center;">Sin equipos</td></tr>';
         }
 
         foreach ($data['equipos'] as $equipo) {
             $tabla .= '<tr style="text-align:center;">
-                <td>' . e((string) $equipo['id']) . '</td>
-                <td style="text-align:left;">' . e($equipo['descripcion']) . '</td>
-                <td>' . e($equipo['area']) . '</td>'
-                . ($conFecha ? '<td>' . e($equipo['fecha'] ?? '') . '</td>' : '');
+                <td>'.e((string) $equipo['id']).'</td>
+                <td style="text-align:left;">'.e($equipo['descripcion']).'</td>
+                <td>'.e($equipo['area']).'</td>'
+                .($conFecha ? '<td>'.e($equipo['fecha'] ?? '').'</td>' : '');
             foreach ($columnas as $col) {
-                $tabla .= '<td>' . $marca . '</td>';
+                $tabla .= '<td>'.$marca.'</td>';
             }
             $tabla .= '</tr>';
         }
@@ -145,7 +151,7 @@ class MantenimientoChecklistPdfService
                 </td>
                 <td style="width:35%; text-align:center; vertical-align:bottom;">
                     <b>Fecha</b><br><br>
-                    <span style="border-bottom:1px solid #000; display:inline-block; width:80%;">' . $fecha . '</span>
+                    <span style="border-bottom:1px solid #000; display:inline-block; width:80%;">'.$fecha.'</span>
                 </td>
             </tr>
         </table>';

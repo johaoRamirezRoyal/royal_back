@@ -2,23 +2,26 @@
 
 namespace App\Http\Controllers\ProcesoCompra;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ProcesoCompra\AgregarInventarioSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AplazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AprobarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\AsignarProveedorRequest;
+use App\Http\Requests\ProcesoCompra\EnviarOrdenCompraRequest;
 use App\Http\Requests\ProcesoCompra\RechazarSolicitudInicialRequest;
 use App\Http\Requests\ProcesoCompra\RechazarSolicitudRequest;
 use App\Http\Requests\ProcesoCompra\SolicitudInicialRequest;
 use App\Http\Requests\ProcesoCompra\VerificarEntregaRequest;
 use App\Http\Requests\ProcesoCompra\VerificarSolicitudRequest;
+use App\Http\Requests\ProcesoCompra\VistaPreviaOrdenCompraRequest;
 use App\Models\ProcesoCompra\Solicitudes\SolicitudInicial;
 use App\Services\inventario\InventarioServices;
 use App\Services\ProcesoCompra\SolicitudesServices;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class SolicitudesController extends Controller
 {
@@ -28,6 +31,7 @@ class SolicitudesController extends Controller
     // sigue gateando los endpoints que no forman parte del rediseño (ver/verificar/
     // aplazar/rechazar sobre la solicitud final, agregar a inventario).
     private const OPCION_SOLICITUDES = Permiso::COMPRAS_LISTADO_SOLICITUDES;
+
     // "Compras — Gestión de compras" (104): seguimiento, confirmar/asignar proveedor,
     // disponible en stock, anular. "Compras — Ventas" (105): cambiar estado tras la
     // entrega. Ventas tiene ambas (ver migración eliminar_perfil_compras...) — no existe
@@ -35,18 +39,18 @@ class SolicitudesController extends Controller
     // `cron_opciones` en BD (creadas 2026-08-31) — no confundir con 109/110, que
     // pertenecen a otro módulo ("Uso areas comunes") y no existen respectivamente.
     private const OPCION_COMPRAS_GESTION = Permiso::COMPRAS_GESTION;
+
     private const OPCION_COMPRAS_VENTAS = Permiso::COMPRAS_VENTAS;
+
     // "Compras — Generar solicitudes" (114): quién puede crear una solicitud de compra
     // (POST /solicitudes) — antes abierto a cualquier empleado autenticado. Ver migración
     // 2026_09_11_110000_seed_opcion_generar_solicitudes_compra. "Mis solicitudes"
     // (ver/cancelar las propias) NO usa esta opción, sigue sin gate.
     private const OPCION_GENERAR_SOLICITUDES = Permiso::COMPRAS_GENERAR_SOLICITUDES;
-    // Mismo perfil Coordinador (26) que EvaluacionesServices — aprueba/rechaza las
-    // solicitudes de usuarios de su propio id_nivel. Super Admin(1)/Administrador(2)
-    // también pueden ver y decidir la bandeja de aprobaciones, sin recorte de nivel.
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
-    private const PERFIL_SUPER_ADMIN = Permiso::PERFIL_SUPER_ADMIN;
-    private const PERFIL_ADMIN = Permiso::PERFIL_ADMINISTRADOR;
+
+    // Bandeja de aprobaciones: con la 155 (Coordinación de nivel) aprueba/rechaza las
+    // solicitudes de usuarios de su propio id_nivel; con la 157 (Super Admin la tiene),
+    // las de todos los niveles.
 
     public function __construct(
         private SolicitudesServices $solicitudesServices,
@@ -55,12 +59,12 @@ class SolicitudesController extends Controller
 
     private function esAdminGeneral(Request $request): bool
     {
-        return in_array((int) $request->user()->perfil, [self::PERFIL_SUPER_ADMIN, self::PERFIL_ADMIN], true);
+        return PermisosPerfil::tiene($request, Permiso::COMPRAS_TODOS_LOS_NIVELES);
     }
 
     private function noPuedeGestionarAprobaciones(Request $request): ?JsonResponse
     {
-        if ((int) $request->user()->perfil === self::PERFIL_COORDINADOR || $this->esAdminGeneral($request)) {
+        if (PermisosPerfil::tiene($request, Permiso::COORDINACION_NIVEL) || $this->esAdminGeneral($request)) {
             return null;
         }
 
@@ -113,7 +117,8 @@ class SolicitudesController extends Controller
             return $rechazo;
         }
 
-        $esAdmin = in_array((int) $request->user()->perfil, [1, 2], true);
+        // Filtros por nivel/perfil: solo con la 157 (todos los niveles), como en la pantalla.
+        $esAdmin = $this->esAdminGeneral($request);
 
         $filtros = [
             'id_user' => $request->integer('id_user') ?: null,
@@ -137,6 +142,31 @@ class SolicitudesController extends Controller
         }
 
         return $this->apiResponse($this->solicitudesServices->anular($id, $request->user()->id_user));
+    }
+
+    // POST /solicitudes/{id}/enviar-orden — opción 104 (Compras — Gestión de compras). Multipart:
+    // asunto, mensaje (HTML), destinatarios[], cc[], incluir[], adjuntar_pdf y orden_pdf.
+    // Envía al proveedor el correo redactado con la orden de compra que generó el frontend.
+    public function enviarOrden(EnviarOrdenCompraRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_GESTION)) {
+            return $rechazo;
+        }
+
+        $pdf = $request->boolean('adjuntar_pdf') ? $request->file('orden_pdf') : null;
+
+        return $this->apiResponse($this->solicitudesServices->enviarOrdenCompra($id, $request->validated(), $pdf));
+    }
+
+    // POST /solicitudes/{id}/vista-previa-orden — opción 104. Mismo body que enviar-orden sin
+    // el PDF; devuelve el HTML del correo tal como se enviaría.
+    public function vistaPreviaOrden(VistaPreviaOrdenCompraRequest $request, int $id)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_COMPRAS_GESTION)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->solicitudesServices->vistaPreviaOrdenCompra($id, $request->validated()));
     }
 
     // GET /solicitudes?per-page=&estado=&fecha_desde=&fecha_hasta=&s=&perfil=&id_nivel= —
@@ -179,11 +209,11 @@ class SolicitudesController extends Controller
 
         $inicial = SolicitudInicial::with('usuario:id_user,id_nivel')->find($id);
 
-        if (!$inicial) {
+        if (! $inicial) {
             return $this->error('Solicitud no encontrada', 404);
         }
 
-        if (!$this->esAdminGeneral($request) && (int) $inicial->usuario?->id_nivel !== (int) $request->user()->id_nivel) {
+        if (! $this->esAdminGeneral($request) && (int) $inicial->usuario?->id_nivel !== (int) $request->user()->id_nivel) {
             return $this->error('No puedes aprobar solicitudes de otro nivel', 403);
         }
 
@@ -206,11 +236,11 @@ class SolicitudesController extends Controller
 
         $inicial = SolicitudInicial::with('usuario:id_user,id_nivel')->find($id);
 
-        if (!$inicial) {
+        if (! $inicial) {
             return $this->error('Solicitud no encontrada', 404);
         }
 
-        if (!$this->esAdminGeneral($request) && (int) $inicial->usuario?->id_nivel !== (int) $request->user()->id_nivel) {
+        if (! $this->esAdminGeneral($request) && (int) $inicial->usuario?->id_nivel !== (int) $request->user()->id_nivel) {
             return $this->error('No puedes rechazar solicitudes de otro nivel', 403);
         }
 

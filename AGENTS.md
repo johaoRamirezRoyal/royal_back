@@ -53,6 +53,12 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
   `MailRateLimitException` (ver [`modulos/noticias.md`](docs/contexto/modulos/noticias.md)).
 - **Los correos y PDFs van fuera de la transacción de guardado**: si fallan, solo se
   registran en el log y nunca revierten lo guardado.
+- **PDFs: los documentos se están migrando de TCPDF a pdfmake.** No crees documentos nuevos
+  con TCPDF (`app/Pdf`): se definen en `src/documentos/` del frontend y aquí se generan con
+  `DocumentoPdfService`. Si vas a cambiar el contenido o el diseño de uno que sigue en TCPDF,
+  mígralo primero. Guía y pasos: `docs/contexto/documentos.md` del frontend; qué se migró,
+  deploy y pendientes: [`docs/DOCUMENTOS_PDFMAKE_2026_11_12.md`](docs/DOCUMENTOS_PDFMAKE_2026_11_12.md).
+  Tras tocar un documento, `pnpm build:documentos` en el frontend y commit de `render.cjs`.
 - **Fechas**: usa siempre la fecha de la app (`Carbon::today()`/`now()`, zona
   `America/Bogota`), no `CURDATE()`. "Quién hizo esto" sale de
   `$request->user()->id_user`, nunca del body.
@@ -98,7 +104,8 @@ php artisan cache:clear && php artisan route:clear && php artisan config:clear
   `boost:update`: no lo edites a mano. Si contradice una convención de este archivo, gana
   la de este archivo.
 - **Pendiente**: los comandos programados (`asistencia:cerrar-vencidas`,
-  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`) solo usan la conexión por
+  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`,
+  `periodos-administrativos:sincronizar-en-curso`) solo usan la conexión por
   defecto y no recorren todos los colegios (`mysql`, `sami_hebreo`).
 
 ## Contexto por tema (`docs/contexto/`)
@@ -111,7 +118,7 @@ esta tabla.
 |---|---|
 | [`permisos.md`](docs/contexto/permisos.md) | `cron_opciones`/`cron_permisos`, middleware `permiso`, `Permiso`, `/permisos` |
 | [`autenticacion.md`](docs/contexto/autenticacion.md) | JWT, cookies, middlewares de sistema, OTP de dispositivo, llave maestra |
-| [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, correo, config, Boost |
+| [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, documentos pdfmake (`DocumentoPdfService`, requiere Node), correo, config, Boost |
 | [`convenciones.md`](docs/contexto/convenciones.md) | plantillas de código y cómo crear un módulo nuevo |
 | [`modulos/asistencia-hikvision.md`](docs/contexto/modulos/asistencia-hikvision.md) | terminales Hikvision, webhook de marcaciones, asistencia de trabajadores, QR de portería, escaneo de carnets |
 | [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos y catálogo de grados (`curso.id_grado`), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
@@ -123,8 +130,10 @@ esta tabla.
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 | [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, escala de desempeños, propósitos, referentes por grado y asignatura (con subreferentes) y su aprobación (opciones 152–154), planilla, boletín, plazo de corrección, migraciones |
+| [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
-en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
+en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con
+pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md` y `whatsapp-llegadas-tarde.md`.

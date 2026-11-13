@@ -17,10 +17,16 @@ use Illuminate\Routing\Controllers\Middleware;
  */
 class LlaveMaestraController extends Controller implements HasMiddleware
 {
-    /** Solo Super Admin. Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
+    /**
+     * Solo Super Admin con correo en la allowlist de administración (RestrictToAdminEmails),
+     * igual que su ruta: el controller no depende de que la ruta lo tenga.
+     */
     public static function middleware(): array
     {
-        return [new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))];
+        return [
+            new Middleware('admin.access'),
+            new Middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN])),
+        ];
     }
 
     public function __construct(

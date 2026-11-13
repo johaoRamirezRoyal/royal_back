@@ -14,16 +14,15 @@ use Illuminate\Support\Facades\Validator;
 
 class ReservaController extends Controller
 {
-    // cron_opciones bajo id_modulo=7 (Reservas) — ver migración
-    // 2026_09_14_130000_seed_opcion_editar_reservas.
-    private const OPCION_EDITAR_RESERVAS = Permiso::RESERVAS_EDITAR;
-
-    // Opción "/reservas" (41) — quien la tiene gestiona cancelar/finalizar de
-    // cualquier reserva, sin la restricción de autoservicio de abajo.
-    private const OPCION_GESTIONAR_RESERVAS = Permiso::RESERVAS_GESTIONAR;
+    // Opción 120 "Reservas — Editar y cancelar reservas" (id_modulo=7): editar, cancelar
+    // y finalizar cualquier reserva, sin la restricción de autoservicio de abajo. La 41
+    // ("Reserva de salones") ya no da esto: solo deja crear, y la tienen casi todos los
+    // perfiles; la 42 solo deja ver todas. Ver migraciones
+    // 2026_09_14_130000_seed_opcion_editar_reservas y 2026_11_05_120000_renombrar_opcion_editar_reservas.
+    private const OPCION_GESTIONAR_RESERVAS = Permiso::RESERVAS_EDITAR;
 
     // Días mínimos de anticipación que "Mis reservas" exige para que el propio dueño
-    // edite/cancele su reserva sin pasar por OPCION_EDITAR_RESERVAS/OPCION_GESTIONAR_RESERVAS.
+    // edite/cancele su reserva sin pasar por OPCION_GESTIONAR_RESERVAS.
     private const DIAS_MIN_AUTOSERVICIO = 2;
 
     // Campos de edición completa (a diferencia de `cancelar`/`finalizar`, que son
@@ -34,7 +33,7 @@ class ReservaController extends Controller
      * El propio dueño de la reserva puede editarla/cancelarla sin permiso especial,
      * pero solo mientras falten más de DIAS_MIN_AUTOSERVICIO días para la fecha
      * reservada — evita cambios de último momento que ya no le da tiempo de re-planear
-     * a quien gestiona el salón. Quien tiene el permiso correspondiente (120/41) no
+     * a quien gestiona el salón. Quien tiene la opción 120 no
      * pasa por esta restricción, como ya no pasaba antes de este cambio.
      */
     private function puedeAutogestionar(Reservas $reserva, Request $request): bool
@@ -102,6 +101,8 @@ class ReservaController extends Controller
             fechaHasta: $request->input('fecha_hasta'),
             cancelado: $request->boolean('cancelado') ?: null,
             perpage: $request->input('per_page', 10),
+            // "Mis reservas" pide desc para ver primero lo más reciente.
+            orden: $request->input('orden') === 'desc' ? 'desc' : 'asc',
         );
 
         if ($response['error']) {
@@ -109,6 +110,41 @@ class ReservaController extends Controller
         }
 
         return $this->paginatedResponse($response);
+    }
+
+    /**
+     * GET /api/reservas/pendientes — reservas esperando autorización en los salones donde el
+     * usuario es responsable. Sin opción de permisos: la autorización es por dato (ser el
+     * responsable del salón), así que a quien no lo es simplemente le llega vacío.
+     */
+    public function pendientes(Request $request)
+    {
+        return $this->apiResponse($this->reservasServices->reservasPendientes($request->user()));
+    }
+
+    /**
+     * PUT /api/reservas/decision — el responsable del salón aprueba o rechaza reservas
+     * pendientes (el service valida que lo sea).
+     */
+    public function decidir(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'aprobar' => ['required', 'boolean'],
+            'motivo' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($validator->fails()) {
+            return $this->error($validator->errors()->first(), 422);
+        }
+
+        return $this->apiResponse($this->reservasServices->decidirReservas(
+            array_map('intval', $request->input('ids')),
+            $request->boolean('aprobar'),
+            $request->user(),
+            $request->input('motivo'),
+        ));
     }
 
     public function actualizarReserva(Request $request)
@@ -119,15 +155,15 @@ class ReservaController extends Controller
             return $this->error('No se encontró la reserva.', 404);
         }
 
-        // Cancelar/finalizar y edición completa admiten dos rutas: quien tiene el
-        // permiso del módulo (120 para editar, 41 para cancelar/finalizar) gestiona
+        // Cancelar/finalizar y edición completa admiten dos rutas: quien tiene la
+        // opción 120 (editar, cancelar y finalizar) gestiona
         // cualquier reserva sin restricción; el propio dueño puede autogestionar la
         // suya (ver "Mis reservas") solo si faltan más de DIAS_MIN_AUTOSERVICIO días.
         $cancelarOFinalizar = $request->boolean('cancelar') || $request->boolean('finalizar');
         $esEdicionCompleta = ! $cancelarOFinalizar && $request->hasAny(self::CAMPOS_EDICION);
 
         if ($esEdicionCompleta) {
-            $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_EDITAR_RESERVAS);
+            $tienePermiso = PermisosPerfil::tiene($request, self::OPCION_GESTIONAR_RESERVAS);
 
             if (! $tienePermiso && ! $this->puedeAutogestionar($reserva, $request)) {
                 return $this->error('No tienes permiso para editar esta reserva, o ya no tiene la anticipación mínima de '.self::DIAS_MIN_AUTOSERVICIO.' días para autogestionarla.', 403);

@@ -69,6 +69,19 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
   habilitar varios seleccionados a la vez.
 - Endpoints con la 99: `GET|PUT /configuracion-calendario`, `POST /anios-escolares` y
   `PUT /anios-escolares/estado`.
+- **Transición de año/periodo administrativo (opción 107)**. Los periodos de la tabla
+  `periodos` (administrativos, con `en_curso` global único) no son los de
+  `periodo_academico`.
+  - El cron diario `periodos-administrativos:sincronizar-en-curso` (00:05, después de
+    `anio-escolar:cerrar-abrir`) marca en curso el periodo activo cuyas fechas cubren
+    hoy. Si ninguno cubre hoy, no toca nada. Pisa un "Marcar en curso" manual al día
+    siguiente si las fechas dicen otra cosa: las fechas son la fuente de verdad.
+  - `PUT /administrativo/periodos/avanzar` (`PeriodoServices::avanzar`): pasa al
+    siguiente periodo del mismo año; error si es el último.
+  - `POST /administrativo/anios-escolares/siguiente` `{ copiar_periodos }`
+    (`AnioEscolarServices::iniciarSiguienteAnio`): crea/activa el año siguiente al
+    habilitado, copia sus periodos con las fechas +1 año si el año nuevo no tiene, y deja
+    en curso el primero. Test: `tests/Feature/AnioEscolar/TransicionAnioPeriodoTest.php`.
 - `academico_asistencia_clase` y `academico_asistencia_estudiante` se usaban sin
   migración propia; ya la tienen.
 

@@ -1,14 +1,18 @@
 <?php
 
+// PENDIENTE DE MIGRAR a pdfmake (src/documentos del frontend + DocumentoPdfService). No crees
+// documentos nuevos con TCPDF; si vas a cambiar el contenido o el diseño de este, mígralo primero.
+// Guía: docs/contexto/documentos.md del frontend, «Migrar un documento existente».
+
 namespace App\Pdf\Areas;
 
-use App\Services\Cloudinary\CloudinaryService;
+use App\Services\branding\MarcaDominioService;
 use TCPDF;
 
 /**
  * Permiso de Trabajo en Alturas (Resolución 4272 de 2021, MinTrabajo — trabajos desde 2 m)
- * para un mantenimiento de Áreas Comunes con operativo asignado. Los datos del trabajo y del
- * trabajador salen del sistema; la lista de verificación, la altura y las firmas se llenan en
+ * para un mantenimiento de Áreas Comunes con trabajadores asignados. Los datos del trabajo y de
+ * los trabajadores salen del sistema; la lista de verificación, la altura y las firmas se llenan en
  * sitio antes de empezar. Misma técnica (TCPDF + HTML) que ReporteOperativoPdfService.
  */
 class PermisoAlturasPdfService
@@ -30,7 +34,7 @@ class PermisoAlturasPdfService
     ];
 
     /**
-     * @param  array{consecutivo: int|string, tipo: string, fecha_emision: string, fecha_trabajo: string, bloque: string, area: string, item: string, descripcion: string, operativo: string, documento: string, curso_expedicion: string, curso_vigencia: string}  $data
+     * @param  array{consecutivo: int|string, tipo: string, fecha_emision: string, fecha_trabajo: string, bloque: string, area: string, item: string, descripcion: string, operativos: array<int, array{nombre: string, documento: string, curso_expedicion: string, curso_vigencia: string}>}  $data
      */
     public function generate(array $data): string
     {
@@ -54,13 +58,27 @@ class PermisoAlturasPdfService
         $pdf->SetAutoPageBreak(true, 20);
         $pdf->AddPage();
 
-        // Logo institucional fijo (no el de la marca por dominio) — ver AGENTS.md "Logo en PDFs".
-        $logoPath = app(CloudinaryService::class)->rutaLocalRoyalSchool('logotipoBackground.png');
-        $logoCell = $logoPath && is_file($logoPath) ? '<img src="'.$logoPath.'" width="120">' : '';
+        $logoPath = app(MarcaDominioService::class)->rutaLocalLogo();
+        $logoCell = $logoPath && is_file($logoPath) ? '<img src="@'.base64_encode(file_get_contents($logoPath)).'" width="120">' : '';
 
         $filasVerificacion = '';
         foreach (self::VERIFICACIONES as $i => $texto) {
             $filasVerificacion .= '<tr><td style="width:6%;">'.($i + 1).'</td><td style="width:70%; text-align:left;">'.e($texto).'</td><td style="width:12%;"></td><td style="width:12%;"></td></tr>';
+        }
+
+        $filasTrabajadores = '';
+        foreach ($data['operativos'] as $op) {
+            $filasTrabajadores .= '<tr><td>'.e($op['nombre']).'</td><td>'.e($op['documento']).'</td><td>'.e($op['curso_expedicion']).'</td><td>'.e($op['curso_vigencia']).'</td></tr>';
+        }
+
+        // Firmas de 3 en 3: una por trabajador, más el coordinador y quien autoriza.
+        $firmas = array_map(fn ($op) => [$op['nombre'], 'Trabajador autorizado'], $data['operativos']);
+        $firmas[] = ['', 'Coordinador de trabajo en alturas'];
+        $firmas[] = ['', 'Autoriza (SST / Gestión Humana)'];
+        $filasFirmas = '';
+        foreach (array_chunk($firmas, 3) as $fila) {
+            $fila = array_pad($fila, 3, null);
+            $filasFirmas .= '<tr>'.implode('', array_map(fn ($f) => '<td style="width:33%;">'.($f ? '<br><br><br>__________________________<br>'.e($f[0]).'<br><b>'.e($f[1]).'</b>' : '').'</td>', $fila)).'</tr>';
         }
 
         $html = '
@@ -94,15 +112,12 @@ class PermisoAlturasPdfService
         </table>
         <br><br>
         <table border="1" cellpadding="3" style="width:100%; font-size:9px;">
-            <tr style="background-color:#e6e6e6; font-weight:bold;"><td colspan="4">2. TRABAJADOR AUTORIZADO</td></tr>
-            <tr>
-                <td style="width:20%;"><b>Nombre</b></td><td style="width:30%;">'.e($data['operativo']).'</td>
-                <td style="width:20%;"><b>Documento</b></td><td style="width:30%;">'.e($data['documento']).'</td>
+            <tr style="background-color:#e6e6e6; font-weight:bold;"><td colspan="4">2. TRABAJADORES AUTORIZADOS</td></tr>
+            <tr style="font-weight:bold;">
+                <td style="width:36%;">Nombre</td><td style="width:20%;">Documento</td>
+                <td style="width:22%;">Curso de alturas expedido</td><td style="width:22%;">Vigente hasta</td>
             </tr>
-            <tr>
-                <td><b>Curso de alturas expedido</b></td><td>'.e($data['curso_expedicion']).'</td>
-                <td><b>Vigente hasta</b></td><td>'.e($data['curso_vigencia']).'</td>
-            </tr>
+            '.$filasTrabajadores.'
         </table>
         <br><br>
         <table border="1" cellpadding="3" style="width:100%; font-size:9px; text-align:center;">
@@ -115,16 +130,8 @@ class PermisoAlturasPdfService
             <tr style="background-color:#e6e6e6; font-weight:bold;"><td>4. OBSERVACIONES</td></tr>
             <tr><td><br><br><br></td></tr>
         </table>
-        <br><br><br><br>
         <table style="width:100%; font-size:8px; text-align:center;">
-            <tr>
-                <td style="width:33%;">__________________________<br>'.e($data['operativo']).'</td>
-                <td style="width:34%;">__________________________<br><br></td>
-                <td style="width:33%;">__________________________<br><br></td>
-            </tr>
-            <tr style="font-weight:bold;">
-                <td>Trabajador autorizado</td><td>Coordinador de trabajo en alturas</td><td>Autoriza (SST / Gestión Humana)</td>
-            </tr>
+            '.$filasFirmas.'
         </table>';
 
         $pdf->writeHTML($html, true, false, true, false, '');

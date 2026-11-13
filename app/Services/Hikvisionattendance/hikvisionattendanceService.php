@@ -2,8 +2,12 @@
 
 namespace App\Services\Hikvisionattendance;
 
+use App\Enums\TipoPerfil;
 use App\Models\Hikvision\HikvisionDispositivo;
+use App\Models\Usuarios\Perfil;
 use App\Services\AdminManagement\BasesDatosService;
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -17,6 +21,7 @@ use GuzzleHttp\Psr7\Request;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -51,60 +56,72 @@ class hikvisionattendanceService
         '1' => 'Salida',
     ];
 
-    // groupId del Person Group de Hikvision (ya creado en el dispositivo) asignado según el id_perfil del usuario
-    const GROUP_ID_POR_PERFIL = [
-        16 => 8, // Students
-        1 => 2, // Admin. Dept.
-        2 => 2,
-        4 => 2,
-        5 => 2,
-        7 => 2,
-        8 => 2,
-        9 => 2,
-        11 => 2,
-        12 => 2,
-        15 => 2,
-        18 => 2,
-        19 => 2,
-        21 => 2,
-        22 => 2,
-        24 => 2,
-        25 => 2,
-        26 => 2,
-        29 => 2,
-        30 => 2,
-        31 => 2,
-        33 => 2,
-        34 => 2,
-        3 => 9, // Teachers
-        13 => 9,
-        14 => 9,
-        20 => 9,
-        10 => 10, // Workers
-        23 => 10,
-        27 => 10,
-        32 => 10,
-    ];
+    // groupId de los Person Group de Hikvision (ya creados en las terminales).
+    public const GRUPO_ADMINISTRATIVOS = 2;
+    public const GRUPO_ESTUDIANTES = 8;
+    public const GRUPO_PROFESORES = 9;
+    public const GRUPO_TRABAJADORES = 10;
+
+    /** @var array<string, array<int, ?int>> conexión => [id_perfil => groupId] */
+    private static array $gruposPorPerfil = [];
 
     /**
-     * Obtiene el groupId del Person Group de Hikvision para un id_perfil dado.
+     * Grupo de Hikvision de un perfil: sale de su tipo (los números de perfil cambian de un
+     * colegio a otro), salvo que tenga la opción 171, que lo pone en Profesores sin ser docente.
+     * Acudientes, proveedores y egresados no tienen grupo. Con este grupo se elige el horario
+     * de asistencia; a la terminal se le manda obtenerGroupIdPorPerfil().
+     */
+    public static function grupoDePerfil(int|string|null $idPerfil): ?int
+    {
+        if ($idPerfil === null || $idPerfil === '') {
+            return null;
+        }
+
+        // Una consulta por colegio y proceso: la puntualidad lo pide por cada fila de un reporte.
+        // ponytail: un worker de larga vida no ve un cambio de tipo u opción hasta reiniciarse,
+        // igual que AsistenciaGestion::$horariosCache.
+        $grupos = self::$gruposPorPerfil[DB::getDefaultConnection()] ??= self::calcularGruposPorPerfil();
+
+        return $grupos[(int) $idPerfil] ?? null;
+    }
+
+    /** @return array<int, ?int> */
+    private static function calcularGruposPorPerfil(): array
+    {
+        $profesores = PermisosPerfil::perfilesCon(Permiso::HIKVISION_GRUPO_PROFESORES);
+
+        return Perfil::query()->pluck('tipo', 'id_perfil')
+            ->mapWithKeys(fn ($tipo, $id) => [(int) $id => in_array((int) $id, $profesores, true)
+                ? self::GRUPO_PROFESORES
+                : match (TipoPerfil::tryFrom((string) $tipo)) {
+                    TipoPerfil::ADMINISTRATIVO => self::GRUPO_ADMINISTRATIVOS,
+                    TipoPerfil::DOCENTE => self::GRUPO_PROFESORES,
+                    TipoPerfil::OPERATIVO => self::GRUPO_TRABAJADORES,
+                    TipoPerfil::ESTUDIANTE => self::GRUPO_ESTUDIANTES,
+                    default => null,
+                }])
+            ->all();
+    }
+
+    /**
+     * groupId que se le manda a la terminal: el de grupoDePerfil() con el override de
+     * HIKVISION_GROUP_IDS ("grupo:grupo,...", por groupId y no por perfil, porque la variable es
+     * la misma para todos los colegios). Un destino vacío ("8:") deja de enviar ese grupo, p. ej.
+     * si no existe en la terminal y esta responde badJsonContent.
+     * ponytail: no se valida contra el dispositivo — no hay endpoint ISAPI de Person Groups
+     * confirmado para este modelo; agregarlo si se confirma uno.
      */
     protected function obtenerGroupIdPorPerfil(int $idPerfil): ?int
     {
-        // HIKVISION_GROUP_IDS ("perfil:groupId,...") pisa el mapa fijo sin tocar código; un
-        // groupId vacío ("16:") deja de enviarlo para ese perfil (p. ej. si el grupo no
-        // existe en el dispositivo y este responde badJsonContent).
-        // ponytail: no se valida contra el dispositivo — no hay endpoint ISAPI de Person
-        // Groups confirmado para este modelo; agregarlo si se confirma uno.
+        $grupo = self::grupoDePerfil($idPerfil);
+
         $override = [];
         foreach (array_filter(explode(',', (string) config('services.hikvision.group_ids'))) as $par) {
-            [$perfil, $grupo] = array_pad(explode(':', trim($par), 2), 2, '');
-            $override[(int) $perfil] = $grupo === '' ? null : (int) $grupo;
+            [$de, $a] = array_pad(explode(':', trim($par), 2), 2, '');
+            $override[(int) $de] = $a === '' ? null : (int) $a;
         }
 
-        return array_key_exists($idPerfil, $override)
-            ? $override[$idPerfil]
-            : (self::GROUP_ID_POR_PERFIL[$idPerfil] ?? null);
+        return $grupo !== null && array_key_exists($grupo, $override) ? $override[$grupo] : $grupo;
     }
 
     /**
@@ -303,8 +320,83 @@ class hikvisionattendanceService
                 'host' => $d->host,
                 'port' => $d->puerto,
                 'isConnected' => $conexion[$d->device_id]['isConnected'] ?? false,
+                // Última revisión del reloj (hikvision:sincronizar-reloj); null si aún no hay.
+                'reloj' => Cache::get($this->cacheKeyReloj($d->device_id)),
             ])
             ->all();
+    }
+
+    /** Desfase tolerado entre el reloj de una terminal y el del servidor antes de corregirlo. */
+    public const SEGUNDOS_TOLERANCIA_RELOJ = 10;
+
+    private function cacheKeyReloj(string $deviceId): string
+    {
+        return 'hikvision:reloj:' . config('database.default') . ':' . $deviceId;
+    }
+
+    /**
+     * Revisa el reloj de cada terminal activa del colegio vigente contra el del servidor y,
+     * si se desfasa más de SEGUNDOS_TOLERANCIA_RELOJ (y `$corregir`), le pone la hora del
+     * servidor. La hora del reloj importa: es la que manda cada evento y la que se registra
+     * como marcación (HikvisionController::momentoDelEvento).
+     *
+     * Se corrige poniendo la hora a mano (`timeMode` manual) y no configurando NTP: las
+     * terminales están en la red interna y no hay garantía de que alcancen un servidor NTP;
+     * el servidor sí es una fuente confiable y esto corre cada hora. Si la terminal estaba en
+     * NTP y aun así se desfasó, su NTP no funcionaba.
+     *
+     * El resultado de cada terminal queda en caché (1 día) para la pantalla de Terminales.
+     *
+     * @return array<string, array{desfase_segundos: int|null, corregido: bool, error: string|null, revisado_at: string}>
+     */
+    public function sincronizarRelojes(bool $corregir = true): array
+    {
+        $resultados = [];
+
+        foreach ($this->devices() as $device) {
+            $id = $device['id'];
+            $resultado = ['desfase_segundos' => null, 'corregido' => false, 'error' => null, 'revisado_at' => now()->toIso8601String()];
+
+            try {
+                $client = $this->client($id);
+                $hora = $this->parseXmlResponse($client->get('/ISAPI/System/time')->getBody()->getContents()) ?? [];
+                $localTime = $hora['localTime'] ?? null;
+
+                if (!is_string($localTime) || $localTime === '') {
+                    throw new \RuntimeException('La terminal no devolvió su hora (localTime).');
+                }
+
+                $desfase = Carbon::parse($localTime)->getTimestamp() - now()->getTimestamp();
+                $resultado['desfase_segundos'] = $desfase;
+
+                if ($corregir && abs($desfase) > self::SEGUNDOS_TOLERANCIA_RELOJ) {
+                    $zona = is_string($hora['timeZone'] ?? null) ? $hora['timeZone'] : null;
+                    $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+                        . '<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">'
+                        . '<timeMode>manual</timeMode>'
+                        . '<localTime>' . now()->format('Y-m-d\TH:i:sP') . '</localTime>'
+                        . ($zona ? '<timeZone>' . htmlspecialchars($zona, ENT_XML1) . '</timeZone>' : '')
+                        . '</Time>';
+
+                    $client->put('/ISAPI/System/time', ['body' => $xml, 'headers' => ['Content-Type' => 'application/xml']]);
+                    $resultado['corregido'] = true;
+
+                    Log::warning('[hikvision] Reloj de la terminal desfasado: se le puso la hora del servidor', [
+                        'device' => $id,
+                        'desfase_segundos' => $desfase,
+                        'modo_anterior' => $hora['timeMode'] ?? null,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                $resultado['error'] = $this->extraerMensajeError($e);
+                Log::warning('[hikvision] No se pudo revisar el reloj de la terminal', ['device' => $id, 'error' => $resultado['error']]);
+            }
+
+            Cache::put($this->cacheKeyReloj($id), $resultado, now()->addDay());
+            $resultados[$id] = $resultado;
+        }
+
+        return $resultados;
     }
 
     /**

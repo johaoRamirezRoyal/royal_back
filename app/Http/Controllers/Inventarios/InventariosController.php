@@ -13,9 +13,11 @@ use App\Http\Requests\Inventario\MostrarReportesInventarioRequest;
 use App\Http\Requests\Inventario\RegistrarInventarioRequest;
 use App\Http\Requests\Inventario\ReportarInventarioRequest;
 use App\Http\Requests\Inventario\SolucionarReporteInventarioRequest;
+use App\Models\Areas\Areas;
 use App\Models\Areas\Bloque;
 use App\Models\CursosAltura\CursoAltura;
 use App\Services\inventario\InventarioServices;
+use App\Services\Usuarios\PermisosPerfil;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -59,6 +61,9 @@ class InventariosController extends Controller
     private const OPCION_MIS_AREAS_NIVEL = Permiso::MIS_AREAS_NIVEL;
 
     private const OPCION_MIS_AREAS_RESPONSABLE = Permiso::MIS_AREAS_RESPONSABLE;
+
+    // Gestión Humana > Trabajos en altura: solo descarga el PDF del reporte/mantenimiento.
+    private const OPCION_CURSOS_ALTURA = Permiso::CURSOS_ALTURA;
 
     protected $inventario_services;
 
@@ -132,6 +137,11 @@ class InventariosController extends Controller
         }
 
         $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's', 'descripcion', 'individual', 'sort', 'dir']);
+
+        if (! PermisosPerfil::tiene($request, self::OPCION_INVENTARIO, self::OPCION_PRESTAMOS, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
+            $filtros = $this->limitarAMisBloques($request, $filtros);
+        }
+
         // `per-page` es el que manda el DataTable remoto de /inventario/listado.
         $per_page = $request->input('per-page', $request->input('per_page', 15));
 
@@ -150,6 +160,40 @@ class InventariosController extends Controller
             'message' => $listado['message'],
             'data' => $listado['data'],
         ]);
+    }
+
+    /**
+     * Alcance de quien entra solo con la 119 "Mis areas comunes": los bloques donde es
+     * responsable (bloque_usuario) y, únicamente con la 149, las áreas de esos bloques.
+     * Sin la 149 ve solo lo asignado directo al bloque. Sin bloques a cargo, nada.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function limitarAMisBloques(Request $request, array $filtros): array
+    {
+        $misBloques = Bloque::where('activo', 1)
+            ->whereHas('responsables', fn ($q) => $q->where('usuarios.id_user', $request->user()->id_user))
+            ->pluck('id')
+            ->all();
+
+        $pedidos = array_map('intval', $filtros['id_bloque'] ?? []);
+        $bloques = $pedidos ? array_values(array_intersect($pedidos, $misBloques)) : $misBloques;
+
+        $areas = [];
+        if ($bloques && PermisosPerfil::tiene($request, Permiso::MIS_AREAS_COMUNES_CON_AREAS)) {
+            $permitidas = Areas::whereIn('id_bloque', $bloques)->pluck('id')->all();
+            $areas = array_values(array_intersect(array_map('intval', $filtros['id_area'] ?? []), $permitidas));
+        }
+
+        unset($filtros['id_area'], $filtros['id_bloque_area']);
+        // [0]: ningún bloque tiene id 0 — lista vacía con la misma forma paginada.
+        $filtros['id_bloque'] = $bloques ?: [0];
+        if ($areas) {
+            $filtros['id_area'] = $areas;
+        }
+
+        return $filtros;
     }
 
     // GET /inventario/listado-consolidado/conteo — Total / Liberados / Reportados / Mant. preventivo
@@ -252,6 +296,27 @@ class InventariosController extends Controller
 
     // GET /inventario/{id}/hoja-vida/pdf — mismos permisos que historialInventario (ambos
     // alimentan la misma "hoja de vida" del frontend).
+    // GET /inventario/listado-consolidado/carta-entrega/pdf — "Carta de entrega" en
+    // /inventario/listado, con los mismos filtros de la tabla.
+    public function cartaEntregaPdf(ListadoInventarioRequest $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+            return $rechazo;
+        }
+
+        $filtros = $request->only(['id_usuario', 'id_area', 'id_bloque', 'id_bloque_area', 'id_categoria', 'tipo_categoria', 'estado', 's']);
+        $resultado = $this->inventario_services->generarCartaEntregaPdf($filtros, $request->user()->correo);
+
+        if ($resultado['error']) {
+            return response()->json($resultado, 422);
+        }
+
+        return response($resultado['data']['contenido'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$resultado['data']['nombre_archivo'].'"',
+        ]);
+    }
+
     public function hojaVidaPdf(Request $request, int $id)
     {
         if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
@@ -270,10 +335,11 @@ class InventariosController extends Controller
         ]);
     }
 
-    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado.
+    // GET /inventario/reportes/{id}/pdf — "Descargar Reporte" en /inventario/reportado, en
+    // Reporte de Áreas Comunes (todas las pestañas) y en Trabajos en altura.
     public function reportePdf(Request $request, int $id)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES, self::OPCION_CURSOS_ALTURA)) {
             return $rechazo;
         }
 
@@ -393,7 +459,7 @@ class InventariosController extends Controller
             $data['id_anio'],
             $data['id_periodo'],
             $data['fechareg'],
-            $data['id_operativo'] ? (int) $data['id_operativo'] : null
+            array_map('intval', $data['id_operativos'] ?? [])
         );
 
         return $this->apiResponse($resultado);
@@ -412,7 +478,7 @@ class InventariosController extends Controller
             $request->input('id_user'),
             $request->input('id_anio'),
             $request->input('id_periodo'),
-            $request->input('search'),
+            $request->input('search', $request->input('s')),
             $request->input('estado'),
             $request->input('tipo_categoria'),
             $request->input('per_page'),
@@ -529,7 +595,7 @@ class InventariosController extends Controller
             'id_log' => 'required|integer|exists:usuarios,id_user',
             'con_solucion' => 'boolean',
             'id_tecnico' => 'nullable|integer|exists:usuarios,id_user',
-            'id_operativo' => CursoAltura::reglaOperativo(),
+            ...CursoAltura::reglasOperativos(),
         ]);
 
         if ($validator->fails()) {
@@ -549,7 +615,7 @@ class InventariosController extends Controller
             $data['periodo'],
             $data['con_solucion'] ?? false,
             $data['id_tecnico'] ?? null,
-            isset($data['id_operativo']) ? (int) $data['id_operativo'] : null
+            array_map('intval', $data['id_operativos'] ?? [])
         );
 
         return $this->apiResponse($resultado);
@@ -559,7 +625,7 @@ class InventariosController extends Controller
     // equipos recién programados), sirve para Sistemas y Operativos por igual.
     public function generarMantenimientoPdf(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO)) {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_INVENTARIO, self::OPCION_ADMIN_AREAS_COMUNES, self::OPCION_USO_AREAS_COMUNES)) {
             return $rechazo;
         }
 

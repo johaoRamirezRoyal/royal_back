@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers\Administrativo;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\AnioEscolar\PeriodoServices;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 /**
  * Módulo administrativo "Año Escolar y Periodos" (opción propia, ver migración
@@ -32,8 +32,7 @@ class AnioEscolarPeriodoController extends Controller
     public function __construct(
         private AnioEscolarServices $anioEscolarServices,
         private PeriodoServices $periodoServices,
-    ) {
-    }
+    ) {}
 
     // ── Años escolares ──────────────────────────────────────────────────────
 
@@ -90,7 +89,45 @@ class AnioEscolarPeriodoController extends Controller
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
     }
 
+    /** POST /administrativo/anios-escolares/siguiente — ver AnioEscolarServices::iniciarSiguienteAnio. */
+    public function iniciarSiguienteAnio(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
+            return $rechazo;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'copiar_periodos' => 'sometimes|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'error' => true,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $resultado = $this->anioEscolarServices->iniciarSiguienteAnio(
+            $request->boolean('copiar_periodos', true),
+            $this->periodoServices,
+        );
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
+
     // ── Periodos ────────────────────────────────────────────────────────────
+
+    /** PUT /administrativo/periodos/avanzar — ver PeriodoServices::avanzar. */
+    public function avanzarPeriodo(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION)) {
+            return $rechazo;
+        }
+
+        $resultado = $this->periodoServices->avanzar();
+
+        return response()->json($resultado, $resultado['error'] ? 400 : 200);
+    }
 
     public function listarPeriodos(Request $request): JsonResponse
     {

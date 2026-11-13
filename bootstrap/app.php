@@ -4,6 +4,7 @@ use App\Http\Middleware\Authenticate;
 use App\Http\Middleware\EnsureInstitucionSession;
 use App\Http\Middleware\FirmarArchivosPrivados;
 use App\Http\Middleware\JwtFromCookie;
+use App\Http\Middleware\LimitarIntentosFallidos;
 use App\Http\Middleware\LogActividadMiddleware;
 use App\Http\Middleware\LogDominioMiddleware;
 use App\Http\Middleware\ModoMantenimiento;
@@ -54,6 +55,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.access' => RestrictToAdminEmails::class,
             'colegio.admision' => ResolveColegioAdmision::class,
             'permiso' => RequirePermiso::class,
+            // Bloqueo tras intentos fallidos de contraseña: `intentos:5,15` (ver el middleware).
+            'intentos' => LimitarIntentosFallidos::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

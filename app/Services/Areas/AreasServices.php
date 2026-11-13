@@ -2,6 +2,8 @@
 
 namespace App\Services\Areas;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Models\Areas\Areas;
 use App\Models\Inventario\Inventario;
 use App\Models\Usuarios\Usuario;
@@ -217,7 +219,7 @@ class AreasServices extends Service
     {
         try {
             $usuarios = Usuario::where('estado', 'activo')
-                ->whereNotIn('perfil', [6, 16, 17, 28])
+                ->whereNotIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE, TipoPerfil::ESTUDIANTE, TipoPerfil::PROVEEDOR, TipoPerfil::EGRESADO))
                 ->select('id_user', DB::raw("CONCAT(nombre, ' ', apellido) AS nom_user"), 'perfil')
                 ->orderBy('nombre')
                 ->get();

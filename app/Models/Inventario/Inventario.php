@@ -1,17 +1,19 @@
 <?php
+
 namespace App\Models\Inventario;
 
 use App\Models\Areas\Areas;
 use App\Models\Areas\Bloque;
 use App\Models\Prestamos\PrestamosInventario;
 use App\Models\Usuarios\Usuario;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 class Inventario extends Model
 {
-    protected $table = "inventario";
+    protected $table = 'inventario';
 
     protected $primaryKey = 'id';
 
@@ -33,7 +35,7 @@ class Inventario extends Model
         'codigo',
         'id_compra',
         'detalles',
-        'fechareg'
+        'fechareg',
     ];
 
     protected $casts = [
@@ -51,7 +53,8 @@ class Inventario extends Model
     // (fecha de registro), igual que COALESCE en el listado de InventarioServices.
     protected function fechaCompra(): Attribute
     {
-        $fecha = fn ($v) => $v && !str_starts_with($v, '0000-00-00') ? substr($v, 0, 10) : null;
+        $fecha = fn ($v) => $v && ! str_starts_with($v, '0000-00-00') ? substr($v, 0, 10) : null;
+
         return Attribute::get(fn ($valor, $attrs) => $fecha($valor) ?? $fecha($attrs['fechareg'] ?? null));
     }
 
@@ -70,7 +73,8 @@ class Inventario extends Model
     {
         // Se recorta la descripción (no el final) para no perder el id de compra en varchar(300).
         $resto = 300 - mb_strlen("{$idProducto}--{$idCompra}");
-        return "{$idProducto}-" . mb_substr($descripcion, 0, $resto) . "-{$idCompra}";
+
+        return "{$idProducto}-".mb_substr($descripcion, 0, $resto)."-{$idCompra}";
     }
 
     // Acepta ambos formatos: "123" (filas anteriores) y "123-..." (detalleCompra).
@@ -79,27 +83,49 @@ class Inventario extends Model
         return $detalles === (string) $idProducto || str_starts_with((string) $detalles, "{$idProducto}-");
     }
 
-    public function usuario(){
+    /**
+     * Unidades de un producto de compra que ya entraron al inventario: filas con `detalles` del
+     * producto (ver detalleEsDeProducto) más lo registrado por el legacy en agregar_inv_product.
+     */
+    public static function unidadesIngresadas(int $idCompra, int $idProducto): int
+    {
+        return self::where('id_compra', $idCompra)
+            ->where(fn ($q) => $q->where('detalles', (string) $idProducto)
+                ->orWhere('detalles', 'like', "{$idProducto}-%"))
+            ->count()
+            + (int) DB::table('agregar_inv_product')
+                ->where('id_compra', $idCompra)
+                ->where('id_producto', $idProducto)
+                ->sum('consumo');
+    }
+
+    public function usuario()
+    {
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
     }
 
-    public function area(){
+    public function area()
+    {
         return $this->belongsTo(Areas::class, 'id_area', 'id');
     }
 
-    public function bloque(){
+    public function bloque()
+    {
         return $this->belongsTo(Bloque::class, 'id_bloque', 'id');
     }
 
-    public function categoria(){
+    public function categoria()
+    {
         return $this->belongsTo(Categoria::class, 'id_categoria', 'id');
     }
 
-    public function estado(){
+    public function estado()
+    {
         return $this->belongsTo(Estado::class, 'estado', 'id');
     }
 
-    public function reportes(){
+    public function reportes()
+    {
         return $this->hasMany(Reportes::class, 'id_inventario');
     }
 

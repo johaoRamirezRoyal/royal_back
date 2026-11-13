@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\GestionAcademica;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Models\Areas\Cursos;
 use App\Services\GestionAcademica\AccesoObservaciones;
@@ -35,7 +36,7 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
     /** Entra quien registra o consulta; qué puede hacer adentro lo decide acceso(). Mismo permiso que su ruta: el controller no depende de que la ruta lo tenga. */
     public static function middleware(): array
     {
-        return [new Middleware(Permiso::ruta([self::OPCION_OBSERVACIONES, self::OPCION_VER_TODAS, self::OPCION_SOLO_CONSULTA, self::OPCION_GESTION_ACADEMICA], self::PERFILES_DOCENTE))];
+        return [new Middleware(Permiso::ruta([self::OPCION_OBSERVACIONES, self::OPCION_VER_TODAS, self::OPCION_SOLO_CONSULTA, self::OPCION_GESTION_ACADEMICA], self::TIPOS_DOCENTE))];
     }
 
     private const OPCION_OBSERVACIONES = Permiso::OBSERVACIONES;
@@ -50,7 +51,7 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
     // ella queda a nombre de quien la registra, aunque tenga la 133/99.
     private const OPCION_ELEGIR_DOCENTE = Permiso::OBSERVACIONES_ELEGIR_DOCENTE;
 
-    private const PERFILES_DOCENTE = [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT];
+    private const TIPOS_DOCENTE = [TipoPerfil::DOCENTE];
 
     private ?AccesoObservaciones $acceso = null;
 
@@ -77,7 +78,7 @@ class ObservacionEstudianteController extends Controller implements HasMiddlewar
 
         $soloConsulta = $tiene(self::OPCION_SOLO_CONSULTA);
         $registraTodos = ! $soloConsulta && ($tiene(self::OPCION_OBSERVACIONES) || $tiene(self::OPCION_GESTION_ACADEMICA));
-        $esDocente = ! $soloConsulta && in_array((int) $usuario->perfil, self::PERFILES_DOCENTE, true);
+        $esDocente = ! $soloConsulta && $usuario->esTipo(TipoPerfil::DOCENTE);
 
         return $this->acceso = new AccesoObservaciones(
             idUsuario: $usuario->id_user,

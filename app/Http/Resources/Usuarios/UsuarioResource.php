@@ -22,6 +22,8 @@ class UsuarioResource extends JsonResource
             'id' => $this->id_user,
             'perfil' => $this->perfil,
             'nombre_perfil' => $this->whenLoaded('perfilRelacion', fn () => $this->perfilRelacion->nombre),
+            // App\Enums\TipoPerfil: el frontend decide por el tipo, no por el número de perfil.
+            'perfil_tipo' => $this->whenLoaded('perfilRelacion', fn () => $this->perfilRelacion?->tipo),
             'nombre' => $this->nombre,
             'apellido' => $this->apellido,
             'estado' => $this->estado,

@@ -2,7 +2,11 @@
 
 namespace App\Services\AsistenciaTrabajadores;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Enums\Mails;
+use Carbon\Carbon;
 use App\Models\AsistenciaGestion\AsistenciaGestion;
 use App\Models\AsistenciaGestion\AsistenciaGestionMarcacion;
 use App\Models\AsistenciaGestion\ConfiguracionAsistencia;
@@ -23,22 +27,18 @@ class AsistenciaGestionService extends Service
     ) {}
 
     // Perfiles que NO se guardan en asistencia_gestion (excluidos del registro automático y del cálculo de faltantes)
-    public const PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6];
+    public const TIPOS_EXCLUIDOS_ASISTENCIA = [TipoPerfil::ESTUDIANTE, TipoPerfil::PROVEEDOR, TipoPerfil::EGRESADO, TipoPerfil::ACUDIENTE];
 
     // Fila única de configuración global (ver migración create_configuracion_asistencia_table).
     private const ID_CONFIG = 1;
 
     private const OBSERVACION_SALIDA_AUTOMATICA = 'Salida marcada automáticamente';
 
-    // Perfiles fijos del aviso de llegada tarde (ver notificarLlegadaTarde) — Recursos
-    // Humanos (todo el colegio) y Coordinador (acotado al nivel del trabajador, vía
-    // Usuario::correosPorPerfilesYNivel).
-    private const PERFIL_RECURSOS_HUMANOS = 8;
-    private const PERFIL_COORDINADOR = Permiso::PERFIL_COORDINADOR;
+    // Aviso de llegada tarde (ver notificarLlegadaTarde): los perfiles con la opción 163
+    // (todo el colegio) y los de Coordinación de nivel (155, acotado al nivel del trabajador).
 
     // Director administrativo: ve la asistencia y recibe el aviso de llegada tarde de estos
     // niveles (fijo, no depende de su propio id_nivel).
-    public const PERFIL_DIRECTOR_ADMINISTRATIVO = 7;
     public const NIVELES_DIRECTOR_ADMINISTRATIVO = [1, 6];
 
     // Tope de destinatarios del aviso de llegada tarde: un solo correo a un grupo enorme
@@ -46,7 +46,11 @@ class AsistenciaGestionService extends Service
     // encima de esto se omite ese correo y se registra en logs.
     private const MAX_DESTINATARIOS_LLEGADA_TARDE = 30;
 
-    // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GROUP_ID_POR_PERFIL).
+    // Una marcación de la terminal que llega con más atraso que esto no dispara avisos de
+    // tardanza (trabajadores aquí; estudiantes en HikvisionController). Ver notificarLlegadaTarde.
+    public const MINUTOS_MAXIMOS_ATRASO_AVISO = 120;
+
+    // Nombres de los Person Group de Hikvision (mismos groupId que hikvisionattendanceService::GRUPO_*).
     private const GRUPO_LABEL_POR_GROUP_ID = [
         2 => 'Admin. Dept.',
         8 => 'Estudiantes',
@@ -61,7 +65,7 @@ class AsistenciaGestionService extends Service
      */
     private function grupoLabel(int $perfil): string
     {
-        $groupId = hikvisionattendanceService::GROUP_ID_POR_PERFIL[$perfil] ?? null;
+        $groupId = hikvisionattendanceService::grupoDePerfil($perfil);
 
         return self::GRUPO_LABEL_POR_GROUP_ID[$groupId] ?? 'Sin departamento';
     }
@@ -82,7 +86,7 @@ class AsistenciaGestionService extends Service
                 return ['error' => true, 'message' => 'El usuario no existe.', 'data' => null];
             }
 
-            if (in_array((int) $usuario->perfil, self::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+            if (in_array((int) $usuario->perfil, Perfil::idsDeTipo(...self::TIPOS_EXCLUIDOS_ASISTENCIA), true)) {
                 return ['error' => true, 'message' => 'Este perfil no registra asistencia.', 'data' => null];
             }
 
@@ -149,7 +153,7 @@ class AsistenciaGestionService extends Service
     private function horaMinimaSalidaParaUsuario(int $idUsuario): string
     {
         $usuario = Usuario::find($idUsuario);
-        $grupoId = $usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $usuario->perfil] ?? null) : null;
+        $grupoId = $usuario ? hikvisionattendanceService::grupoDePerfil($usuario->perfil) : null;
         $horario = AsistenciaGestion::horarioAplicable($grupoId);
 
         return $horario->hora_minima_salida
@@ -265,6 +269,26 @@ class AsistenciaGestionService extends Service
                     'message' => 'Entrada registrada correctamente',
                     'data' => array_merge($asistencia->toArray(), ['tipo' => 'Entry']),
                 ];
+            }
+
+            // La entrada es la marcación MÁS TEMPRANA del día, no la primera en llegar: una
+            // terminal sin red envía sus eventos después, y uno atrasado puede ser anterior a
+            // la entrada ya guardada. Esta pasa a ser la entrada y la anterior sigue como una
+            // marcación más (puede ser la salida). Atómico, igual que la salida.
+            $entradaGuardada = $asistencia->hora_asistencia?->format('H:i:s');
+            if ($entradaGuardada !== null && $hora < $entradaGuardada) {
+                $adelantada = AsistenciaGestion::where('id', $asistencia->id)
+                    ->where('hora_asistencia', '>', $hora)
+                    ->update(['hora_asistencia' => $hora]);
+
+                if ($adelantada > 0) {
+                    Log::info('Entrada adelantada por una marcación anterior que llegó después', [
+                        'id_asistencia' => $asistencia->id,
+                        'entrada_anterior' => $entradaGuardada,
+                        'entrada_nueva' => $hora,
+                    ]);
+                    $hora = $entradaGuardada;
+                }
             }
 
             AsistenciaGestionMarcacion::create(['id_asistencia' => $asistencia->id, 'hora' => $hora]);
@@ -452,12 +476,28 @@ class AsistenciaGestionService extends Service
         $hora = substr((string) $asistencia->hora_asistencia->format('H:i:s'), 0, 5);
         $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
 
+        // Marcación de la terminal que llegó con mucho atraso (la terminal estuvo sin red y
+        // mandó sus eventos después): la tardanza queda registrada, pero un "llegaste tarde"
+        // horas después confunde más de lo que ayuda. `fechareg` es cuándo llegó el evento.
+        // Solo terminal: un registro manual o por QR se crea en el momento.
+        $atrasoMinutos = $asistencia->fechareg
+            ? (int) Carbon::parse("{$fecha} {$asistencia->hora_asistencia->format('H:i:s')}")->diffInMinutes($asistencia->fechareg, false)
+            : 0;
+        if ((int) $asistencia->QR === self::METODO_TERMINAL && $atrasoMinutos > self::MINUTOS_MAXIMOS_ATRASO_AVISO) {
+            Log::info('Aviso de llegada tarde omitido: la marcación llegó con atraso', [
+                'id_asistencia' => $asistencia->id,
+                'atrasoMinutos' => $atrasoMinutos,
+            ]);
+            $asistencia->update(['correo_llegada_tarde' => 'atrasado', 'correo_llegada_tarde_at' => now()]);
+            return;
+        }
+
         $correosDestino = [];
         $nombresDestino = [];
 
         if ($config->notificar_recursos_humanos) {
             $correosRH = Usuario::where('estado', 'activo')
-                ->where('perfil', self::PERFIL_RECURSOS_HUMANOS)
+                ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::AVISO_LLEGADAS_TARDE_TRABAJADORES))
                 ->where('id_user', '!=', $usuario->id_user)
                 ->whereNotNull('correo')
                 ->pluck('correo')
@@ -471,7 +511,7 @@ class AsistenciaGestionService extends Service
 
         if ($config->notificar_coordinador_nivel) {
             $correosCoordinador = array_diff(
-                Usuario::correosPorPerfilesYNivel([self::PERFIL_COORDINADOR], $usuario->id_nivel, soloActivos: true),
+                Usuario::correosPorPerfilesYNivel(PermisosPerfil::perfilesCon(Permiso::COORDINACION_NIVEL), $usuario->id_nivel, soloActivos: true),
                 [$usuario->correo],
             );
 
@@ -484,7 +524,7 @@ class AsistenciaGestionService extends Service
         if ($config->notificar_coordinador_nivel && in_array((int) $usuario->id_nivel, self::NIVELES_DIRECTOR_ADMINISTRATIVO, true)) {
             $correosDirector = array_diff(
                 Usuario::where('estado', 'activo')
-                    ->where('perfil', self::PERFIL_DIRECTOR_ADMINISTRATIVO)
+                    ->whereIn('perfil', PermisosPerfil::perfilesCon(Permiso::DIRECCION_ADMINISTRATIVA))
                     ->whereNotNull('correo')
                     ->pluck('correo')
                     ->all(),
@@ -550,7 +590,7 @@ class AsistenciaGestionService extends Service
         $idsConAsistencia = AsistenciaGestion::whereDate('fecha_asistencia', $fecha)->pluck('id_user');
 
         $usuariosFaltantes = Usuario::where('estado', 'activo')
-            ->whereNotIn('perfil', self::PERFILES_EXCLUIDOS_ASISTENCIA)
+            ->whereNotIn('perfil', Perfil::idsDeTipo(...self::TIPOS_EXCLUIDOS_ASISTENCIA))
             ->whereNotIn('id_user', $idsConAsistencia)
             ->when($idNivel, fn ($q) => $q->whereIn('id_nivel', (array) $idNivel))
             ->when($idUsuario, fn ($q) => $q->where('id_user', $idUsuario))
@@ -824,6 +864,29 @@ class AsistenciaGestionService extends Service
      * observación es opcional y, si se manda, reemplaza la existente (para dejar el motivo
      * de la revocación); si no, se conserva la que ya tenía el registro.
      */
+    /** Correo al trabajador: su llegada tarde fue revocada y ya no cuenta. */
+    private function avisarRevocacion(AsistenciaGestion $asistencia, ?string $observacion): void
+    {
+        $usuario = $asistencia->usuario;
+
+        if (!$usuario?->correo) {
+            Log::info('Aviso de revocación omitido: el trabajador no tiene correo', ['id_asistencia' => $asistencia->id]);
+            return;
+        }
+
+        $nombre = trim("{$usuario->nombre} {$usuario->apellido}");
+        $fecha = $asistencia->fecha_asistencia->toDateString();
+        $hora = substr((string) $asistencia->hora_asistencia?->format('H:i:s'), 0, 5);
+        $motivo = trim((string) $observacion) !== '' ? "\n\nMotivo: " . trim((string) $observacion) : '';
+
+        // Si falla, MailService::sendGeneric ya lo deja en el log.
+        $this->mailService->sendGeneric(
+            $usuario->correo,
+            'Llegada tarde revocada',
+            "Hola {$nombre},\n\nTe informamos que la llegada tarde registrada el {$fecha} a las {$hora} fue revocada. Ya no cuenta como llegada tarde en tu historial.{$motivo}"
+        );
+    }
+
     public function revocarLlegadaTarde(int $id, ?string $observacion = null): array
     {
         try {
@@ -846,10 +909,32 @@ class AsistenciaGestionService extends Service
                 ];
             }
 
+            // Solo se revoca una tardanza real (el frontend ya oculta la acción en las demás).
+            if (!$asistencia->esTardanza()) {
+                return [
+                    'error' => true,
+                    'message' => 'Este registro no es una llegada tarde',
+                    'data' => null,
+                    'status' => 422,
+                ];
+            }
+
             $asistencia->update(array_merge(
                 ['revocado' => true],
                 $observacion !== null ? ['observacion' => $observacion] : []
             ));
+
+            // Después de responder y fuera del guardado: si el correo falla, la revocación ya quedó.
+            app()->terminating(function () use ($asistencia, $observacion) {
+                try {
+                    $this->avisarRevocacion($asistencia, $observacion);
+                } catch (\Throwable $e) {
+                    Log::error('Error al avisar la revocación de llegada tarde', [
+                        'id_asistencia' => $asistencia->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            });
 
             return [
                 'error' => false,
@@ -889,7 +974,7 @@ class AsistenciaGestionService extends Service
 
             foreach ($abiertas as $asistencia) {
                 $perfil = $asistencia->usuario?->perfil;
-                $grupoId = $perfil !== null ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $perfil] ?? null) : null;
+                $grupoId = hikvisionattendanceService::grupoDePerfil($perfil);
                 $horario = AsistenciaGestion::horarioAplicable($grupoId);
 
                 // Sin hora_cierre_automatico configurada, el horario no tiene cierre

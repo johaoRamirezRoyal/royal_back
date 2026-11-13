@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\GestionAcademica\GestionAcademicaController;
 use App\Http\Controllers\GestionAcademica\ConsultaAsistenciaClaseController;
 use App\Http\Controllers\GestionAcademica\ActasEstudianteController;
@@ -123,7 +124,7 @@ resuelve el esquema a partir del nivel de ese curso (usado por la pestaña "Hora
 el autoservicio de horario del docente, que solo conocen el curso, no el esquema):
 http://localhost:8000/api/gestion-academica/franjas-horarias?id_curso=1&id_anio_escolar=2&disponible=1&id_docente=7
  */
-Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/franjas-horarias', [GestionAcademicaController::class, 'verFranjasHorarias'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
 http://localhost:8000/api/gestion-academica/franjas-horarias
@@ -289,7 +290,7 @@ Route::get('/horario/exportar-todos', [GestionAcademicaController::class, 'expor
  * fecha_fin requiere fecha_inicio. Ejemplo:
  * ?id_horario_clase[]=1&id_horario_clase[]=2&fecha_inicio=2026-07-01&fecha_fin=2026-07-31
  */
-Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsistenciasClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase
@@ -300,7 +301,7 @@ Route::get('/asistencias-clase', [GestionAcademicaController::class, 'verAsisten
     "observacion": "Clase normal"
 }
  */
-Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase
@@ -310,7 +311,7 @@ Route::post('/asistencias-clase', [GestionAcademicaController::class, 'crearAsis
     "observacion": "Feriado"
 }
  */
-Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizarAsistenciaClase'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-clase/lote
@@ -330,14 +331,14 @@ Route::put('/asistencias-clase', [GestionAcademicaController::class, 'actualizar
     ]
 }
  */
-Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::post('/asistencias-clase/lote', [GestionAcademicaController::class, 'guardarAsistenciaClaseLote'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
  * Todos los parámetros son opcionales, pero si ninguno se envía se exige id_horario_clase.
  * ?id_estudiante=1&id_curso=1&fecha=2026-07-02&id_clase=1&id_horario_clase=1
  */
-Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAsistenciasEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAsistenciasEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
@@ -349,7 +350,7 @@ Route::get('/asistencias-estudiante', [GestionAcademicaController::class, 'verAs
     ]
 }
  */
-Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crearAsistenciaEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crearAsistenciaEstudiantes'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-estudiante
@@ -357,7 +358,7 @@ Route::post('/asistencias-estudiante', [GestionAcademicaController::class, 'crea
     "ids": [1, 2, 3]
 }
  */
-Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'eliminarAsistenciaEstudiante'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'eliminarAsistenciaEstudiante'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/asistencias-metricas?fecha_inicio=2026-08-01&fecha_fin=2026-08-31&id_curso=1
@@ -365,7 +366,7 @@ Route::delete('/asistencias-estudiante', [GestionAcademicaController::class, 'el
  * curso (clases dictadas, ausencias/tardanzas/permisos, % de asistencia) y el top 10
  * de estudiantes con más ausencias en el rango. Todos los parámetros son opcionales.
  */
-Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetricasAsistencia'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::METRICAS_ASISTENCIA_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * http://localhost:8000/api/gestion-academica/mis-cursos
@@ -373,7 +374,7 @@ Route::get('/asistencias-metricas', [GestionAcademicaController::class, 'verMetr
  * $request->user()->id_user) — usado para poblar el filtro de curso del dashboard de
  * métricas en vez de listar todos los cursos del colegio.
  */
-Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/mis-cursos', [GestionAcademicaController::class, 'obtenerMisCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Esquemas de horario: plantilla de franjas horarias por (nivel × año escolar) —
@@ -422,20 +423,20 @@ Route::delete('/esquemas-horario', [GestionAcademicaController::class, 'eliminar
  * tienen horario reservado en el año escolar dado.
  * http://localhost:8000/api/gestion-academica/mi-horario/menu?id_anio_escolar=2
  */
-Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/mi-horario/menu', [GestionAcademicaController::class, 'verMiMenuHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Horario propio ya reservado (mismo formato que GET /horario filtrado por el docente
  * autenticado).
  * http://localhost:8000/api/gestion-academica/mi-horario
  */
-Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/mi-horario', [GestionAcademicaController::class, 'verMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Descarga el .xlsx del horario propio (mismo docente autenticado que GET /mi-horario).
  * http://localhost:8000/api/gestion-academica/mi-horario/exportar
  */
-Route::get('/mi-horario/exportar', [GestionAcademicaController::class, 'exportarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::get('/mi-horario/exportar', [GestionAcademicaController::class, 'exportarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Aparta una franja para una asignatura propia en un curso. Solo se pueden elegir
@@ -449,7 +450,7 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "id_anio_escolar": 2
 }
  */
-Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::post('/mi-horario', [GestionAcademicaController::class, 'reservarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Actualiza la descripción de un bloque propio ya reservado (falla si el id no
@@ -460,7 +461,7 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "descripcion": "Clase de refuerzo"
 }
  */
-Route::put('/mi-horario', [GestionAcademicaController::class, 'actualizarDescripcionMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::put('/mi-horario', [GestionAcademicaController::class, 'actualizarDescripcionMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Elimina bloques del horario propio (falla si alguno de los ids no pertenece al
@@ -470,7 +471,7 @@ http://localhost:8000/api/gestion-academica/mi-horario
     "ids": [10, 11]
 }
  */
-Route::delete('/mi-horario', [GestionAcademicaController::class, 'eliminarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [Permiso::PERFIL_DOCENTE, Permiso::PERFIL_DOCENTE_ICT]));
+Route::delete('/mi-horario', [GestionAcademicaController::class, 'eliminarMiHorario'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA], [TipoPerfil::DOCENTE]));
 
 /**
  * Configuración del calendario académico (A o B — ver AnioEscolarServices) y gestión de
@@ -546,19 +547,19 @@ Route::prefix('/notas')->group(function () {
     Route::get('/metodos-nivel', [NotasController::class, 'listarMetodosNivel'])->middleware($escala);
     Route::put('/metodos-nivel/{id}', [NotasController::class, 'cambiarMetodoNivel'])->whereNumber('id')->middleware($escala);
 
-    Route::put('/referentes', [NotasController::class, 'guardarReferentes'])->middleware(Permiso::ruta($referentes, Permiso::PERFILES_DOCENTE));
+    Route::put('/referentes', [NotasController::class, 'guardarReferentes'])->middleware(Permiso::ruta($referentes, [TipoPerfil::DOCENTE]));
     Route::get('/referentes/grados', [NotasController::class, 'gradosReferentes'])->middleware(Permiso::ruta($referentes));
-    Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], Permiso::PERFILES_DOCENTE));
-    Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($referentes, Permiso::PERFILES_DOCENTE));
+    Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
+    Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($referentes, [TipoPerfil::DOCENTE]));
 
     // Calificación: el docente en sus asignaturas; el director de grupo y el coordinador ven el curso.
-    $docente = Permiso::ruta([], Permiso::PERFILES_DOCENTE);
+    $docente = Permiso::ruta([], [TipoPerfil::DOCENTE]);
     $aprueba = Permiso::ruta([Permiso::REFERENTES_APROBAR]);
     Route::get('/mis-cursos', [NotasController::class, 'misCursos'])->middleware($docente);
     Route::get('/planilla', [NotasController::class, 'planilla'])->middleware($docente);
     Route::put('/planilla', [NotasController::class, 'guardarPlanilla'])->middleware($docente);
     Route::get('/cursos', [NotasController::class, 'filtrosCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
-    Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], Permiso::PERFILES_DOCENTE));
+    Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
     Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);
     Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
     Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);

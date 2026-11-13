@@ -22,11 +22,43 @@ class IndicadoresGestionServices
             ->when($idCategoria, fn ($q, $v) => $q->where('ig.categoria', $v));
     }
 
-    public function listar(int $tipoCategoria, ?int $idAnio, ?int $periodo, ?int $idCategoria): array
+    /** Meta de cumplimiento del legacy: ≥ 70 % cumple. */
+    private const META = 70;
+
+    /** Columnas ordenables desde el DataTable remoto (sort/dir). */
+    private const ORDEN = [
+        'anio' => 'ae.anio_inicio',
+        'periodo' => 'ig.periodo',
+        'nom_categoria' => 'c.nombre',
+        'cantidad_mantenimientos' => 'ig.cantidad_mantenimientos',
+        'cantidad_equipos' => 'ig.cantidad_equipos',
+        'porcentaje_cumplimiento' => 'ig.porcentaje_cumplimiento',
+        'fechareg' => 'ig.fechareg',
+    ];
+
+    /**
+     * Histórico completo paginado en el servidor, con `resumen` (total, promedio, bajo la
+     * meta) de TODOS los registros filtrados, no solo de la página.
+     */
+    public function listar(int $tipoCategoria, ?int $idAnio, ?int $periodo, ?int $idCategoria, ?string $s, ?string $sort, string $dir, int $perPage): array
     {
         try {
-            $data = $this->base($tipoCategoria, $idAnio, $periodo, $idCategoria)
+            $query = $this->base($tipoCategoria, $idAnio, $periodo, $idCategoria)
                 ->leftJoin('usuarios as u', 'u.id_user', '=', 'ig.id_log')
+                ->when($s, function ($q, $s) {
+                    $like = '%'.$s.'%';
+                    $q->where(fn ($w) => $w->where('c.nombre', 'like', $like)
+                        ->orWhere('ig.gestion', 'like', $like)
+                        ->orWhere('ig.analisis_gestion', 'like', $like)
+                        ->orWhereRaw("CONCAT(u.nombre, ' ', u.apellido) LIKE ?", [$like])
+                        ->orWhereRaw("CONCAT(ae.anio_inicio, '-', ae.anio_fin) LIKE ?", [$like]));
+                });
+
+            $resumen = (clone $query)
+                ->selectRaw('COUNT(*) as total, ROUND(AVG(ig.porcentaje_cumplimiento), 1) as promedio, COALESCE(SUM(ig.porcentaje_cumplimiento < ?), 0) as bajo_meta', [self::META])
+                ->first();
+
+            $data = $query
                 ->select(
                     'ig.id',
                     'ig.categoria as id_categoria',
@@ -42,11 +74,20 @@ class IndicadoresGestionServices
                     DB::raw("CONCAT(ae.anio_inicio, '-', ae.anio_fin) as anio"),
                     DB::raw("TRIM(CONCAT(u.nombre, ' ', u.apellido)) as responsable")
                 )
-                ->orderByDesc('ig.fechareg')
-                ->limit(200)
-                ->get();
+                ->orderBy(self::ORDEN[$sort] ?? 'ig.fechareg', isset(self::ORDEN[$sort]) ? $dir : 'desc')
+                ->orderByDesc('ig.id')
+                ->paginate($perPage);
 
-            return ['error' => false, 'message' => 'Indicadores de gestión obtenidos', 'data' => $data];
+            return [
+                'error' => false,
+                'message' => 'Indicadores de gestión obtenidos',
+                'data' => $data,
+                'resumen' => [
+                    'total' => (int) $resumen->total,
+                    'promedio' => $resumen->promedio !== null ? (float) $resumen->promedio : null,
+                    'bajo_meta' => (int) $resumen->bajo_meta,
+                ],
+            ];
         } catch (\Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage(), 'data' => null];
         }
@@ -93,7 +134,7 @@ class IndicadoresGestionServices
         try {
             $indicador = IndicadorGestion::find($id);
 
-            if (!$indicador) {
+            if (! $indicador) {
                 return ['error' => true, 'status' => 404, 'message' => 'El indicador no existe', 'data' => null];
             }
 

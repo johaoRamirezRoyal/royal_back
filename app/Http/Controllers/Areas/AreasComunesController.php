@@ -180,11 +180,16 @@ class AreasComunesController extends Controller
         $idsBloque = [];
         $idsArea = [];
 
+        // 141: lo asignado directo a los bloques de su nivel; las áreas de esos bloques solo
+        // con la 149 (igual que la 119 en InventariosController::limitarAMisBloques).
         if (PermisosPerfil::tiene($request, self::OPCION_MIS_AREAS_NIVEL) && $usuario->id_nivel) {
             $idsBloque = Bloque::where('id_nivel', $usuario->id_nivel)->where('activo', 1)->pluck('id')->all();
-            $idsArea = Areas::whereIn('id_bloque', $idsBloque)->where('activo', 1)->pluck('id')->all();
+            if (PermisosPerfil::tiene($request, Permiso::MIS_AREAS_COMUNES_CON_AREAS)) {
+                $idsArea = Areas::whereIn('id_bloque', $idsBloque)->where('activo', 1)->pluck('id')->all();
+            }
         }
 
+        // 142: sus áreas a cargo — por definición son áreas, no depende de la 149.
         if (PermisosPerfil::tiene($request, self::OPCION_MIS_AREAS_RESPONSABLE)) {
             $idsArea = array_merge($idsArea, Inventario::where('id_user', $usuario->id_user)
                 ->whereIn('id_area', Areas::where('activo', 1)->select('id'))
@@ -193,8 +198,20 @@ class AreasComunesController extends Controller
                 ->all());
         }
 
+        // Catálogo del filtro "Bloque": los del nivel + los de sus áreas a cargo.
+        $bloques = Bloque::where('activo', 1)
+            ->where(fn ($q) => $q->whereIn('id', $idsBloque)
+                ->orWhereIn('id', Areas::whereIn('id', $idsArea)->select('id_bloque')))
+            ->orderBy('nombre')
+            ->get(['id', 'nombre']);
+
+        if ($idBloque = (int) $request->input('id_bloque')) {
+            $idsBloque = array_values(array_intersect($idsBloque, [$idBloque]));
+            $idsArea = Areas::whereIn('id', $idsArea)->where('id_bloque', $idBloque)->pluck('id')->all();
+        }
+
         if (empty($idsBloque) && empty($idsArea)) {
-            return response()->json(['error' => false, 'message' => '', 'data' => ['data' => []]]);
+            return response()->json(['error' => false, 'message' => '', 'data' => ['data' => []], 'bloques' => $bloques]);
         }
 
         $filtros = array_filter([
@@ -208,6 +225,7 @@ class AreasComunesController extends Controller
         ]);
 
         $resultado = $this->inventarioService->obtenerListadoConsolidado($filtros, 10000);
+        $resultado['bloques'] = $bloques;
 
         return response()->json($resultado, $resultado['error'] ? 400 : 200);
     }

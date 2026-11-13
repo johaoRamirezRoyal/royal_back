@@ -2,6 +2,8 @@
 
 namespace App\Services\Biblioteca;
 
+use App\Mail\RecordatorioPrestamosEmail;
+use App\Models\Areas\Cursos;
 use App\Models\Biblioteca\Categoria;
 use App\Models\Biblioteca\Ejemplares;
 use App\Models\Biblioteca\Libro;
@@ -12,16 +14,16 @@ use App\Models\Biblioteca\PrestamosEjemplar;
 use App\Models\Biblioteca\Subcategoria;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
-use App\Mail\RecordatorioPrestamosEmail;
-use App\Services\branding\MarcaDominioService;
+use App\Services\Cloudinary\CloudinaryService;
+use App\Services\Documentos\DocumentoPdfService;
 use App\Services\FileStorageService;
 use App\Services\MailService;
-use App\Pdf\Biblioteca\PazYSalvoPdfService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 class BibliotecaServices extends Service
@@ -29,13 +31,14 @@ class BibliotecaServices extends Service
     /*
     -------------------------------------------------
     |
-    |             CATEGORIAS 
+    |             CATEGORIAS
     |
     -------------------------------------------------
     */
 
     /**
      * Función para obtener todas las categorias de biblioteca
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function mostrarCategoriasBiblioteca(): array
@@ -46,21 +49,22 @@ class BibliotecaServices extends Service
             if ($categorias->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No hay categorias para mostrar",
+                    'message' => 'No hay categorias para mostrar',
                     'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Obtenidas las categorias",
-                'data' => $categorias->toArray()
+                'message' => 'Obtenidas las categorias',
+                'data' => $categorias->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al obtener las categorias");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las categorias');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor para obtener las categorias",
+                'message' => 'Error en el servidor para obtener las categorias',
                 'data' => [],
             ];
         }
@@ -68,7 +72,7 @@ class BibliotecaServices extends Service
 
     /**
      * Agregar categoria de biblioteca
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function agregarCategoriaBiblioteca(array $data): array
@@ -78,39 +82,39 @@ class BibliotecaServices extends Service
             if (empty($data)) {
                 return [
                     'error' => true,
-                    'message' => "No llegaron datos al servidor",
+                    'message' => 'No llegaron datos al servidor',
                     'data' => [],
                 ];
             }
 
             $nueva_categoria = Categoria::create($data);
-            if (!$nueva_categoria) {
+            if (! $nueva_categoria) {
                 return [
-                    "error" => true,
-                    "message" => "No se pudo crear la nueva categoria",
-                    "data" => [],
+                    'error' => true,
+                    'message' => 'No se pudo crear la nueva categoria',
+                    'data' => [],
                 ];
             }
 
             return [
-                "error" => false,
-                'message' => "Categoria creada",
-                "data" => $nueva_categoria->toArray(),
+                'error' => false,
+                'message' => 'Categoria creada',
+                'data' => $nueva_categoria->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error en el servidor al tratar de crear una categoria");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error en el servidor al tratar de crear una categoria');
+
             return [
                 'error' => true,
-                "message" => "No se pudo agregar la categoria, error en el servicio",
-                "data" => []
+                'message' => 'No se pudo agregar la categoria, error en el servicio',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Metodo para actualizar el estado de una categoria
-     * @param int $id_categoria
-     * @param int $estado
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function cambiarEstadoCategoriaBiblioteca(int $id_categoria, int $estado)
@@ -118,50 +122,52 @@ class BibliotecaServices extends Service
         try {
             $categoria = Categoria::find($id_categoria);
 
-            if (!$categoria) {
+            if (! $categoria) {
                 return [
-                    "error" => true,
-                    "message" => "No se ha encontrado la categoria con ID: " . $id_categoria,
-                    "data" => []
+                    'error' => true,
+                    'message' => 'No se ha encontrado la categoria con ID: '.$id_categoria,
+                    'data' => [],
                 ];
             }
 
-            if (!in_array($estado, [0, 1])) {
+            if (! in_array($estado, [0, 1])) {
                 return [
-                    "error" => true,
-                    "message" => "Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo",
-                    "data" => $categoria->toArray()
+                    'error' => true,
+                    'message' => 'Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo',
+                    'data' => $categoria->toArray(),
                 ];
             }
 
-            $categoriaUpdate = $categoria->update(["activo" => $estado]);
+            $categoriaUpdate = $categoria->update(['activo' => $estado]);
 
-            if (!$categoriaUpdate) {
+            if (! $categoriaUpdate) {
                 return [
-                    "error" => true,
-                    "message" => "Error al tratar de actualizar la categoria",
-                    "data" => $categoria->toArray(),
+                    'error' => true,
+                    'message' => 'Error al tratar de actualizar la categoria',
+                    'data' => $categoria->toArray(),
                 ];
             }
 
             return [
-                "error" => false,
-                "message" => "Se cambió el estado de la categoria correctamente",
-                "data" => $categoria->refresh()->toArray(),
+                'error' => false,
+                'message' => 'Se cambió el estado de la categoria correctamente',
+                'data' => $categoria->refresh()->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al cambiar el estado de la categoria.");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al cambiar el estado de la categoria.');
+
             return [
-                "error" => true,
-                "message" => "Error en el servidor al cambiar el estado de la categoria.",
-                "data" => [],
+                'error' => true,
+                'message' => 'Error en el servidor al cambiar el estado de la categoria.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Mostrar subcategoria de biblioteca
-     * @param mixed $id_categoria
+     *
+     * @param  mixed  $id_categoria
      * @return array{data: array, error: bool, message: string}
      */
     public function mostrarSubcategoriasBiblioteca(?int $id_categoria = null): array
@@ -175,21 +181,22 @@ class BibliotecaServices extends Service
             if ($subcategorias->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontraron subcategorias",
+                    'message' => 'No se encontraron subcategorias',
                     'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Subcategorias encontradas",
+                'message' => 'Subcategorias encontradas',
                 'data' => $subcategorias->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al obtener las subcategorias");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al obtener las subcategorias');
+
             return [
                 'error' => true,
-                'message' => "No se pudieron obtener las categorias, error de servidor",
+                'message' => 'No se pudieron obtener las categorias, error de servidor',
                 'data' => [],
             ];
         }
@@ -197,7 +204,7 @@ class BibliotecaServices extends Service
 
     /**
      * Agregar subcategoria biblioteca
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function agregarSubcategoriaBiblioteca(array $data)
@@ -205,33 +212,34 @@ class BibliotecaServices extends Service
         try {
             if (empty($data)) {
                 return [
-                    "error" => true,
-                    "message" => "No llegaron los datos al servicio",
-                    "data" => [],
+                    'error' => true,
+                    'message' => 'No llegaron los datos al servicio',
+                    'data' => [],
                 ];
             }
 
             $subcategoriaNueva = Subcategoria::create($data);
 
-            if (!$subcategoriaNueva) {
+            if (! $subcategoriaNueva) {
                 return [
-                    "error" => true,
-                    "message" => "No se ha podido crear la nueva subcategoria",
-                    "data" => $data
+                    'error' => true,
+                    'message' => 'No se ha podido crear la nueva subcategoria',
+                    'data' => $data,
                 ];
             }
 
             return [
-                "error" => false,
-                "message" => "Subcategoria creada con éxito",
+                'error' => false,
+                'message' => 'Subcategoria creada con éxito',
                 'data' => $subcategoriaNueva->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al crear la subcategoria: ");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear la subcategoria: ');
+
             return [
-                "error" => true,
-                "message" => "Error en el servidor al crear la subcategoria",
-                "data" => [],
+                'error' => true,
+                'message' => 'Error en el servidor al crear la subcategoria',
+                'data' => [],
             ];
         }
     }
@@ -241,43 +249,44 @@ class BibliotecaServices extends Service
         try {
             $subcategoria = Subcategoria::find($id_subcategoria);
 
-            if (!$subcategoria) {
+            if (! $subcategoria) {
                 return [
-                    "error" => true,
-                    "message" => "No se ha encontrado la categoria con ID: " . $id_subcategoria,
-                    "data" => []
+                    'error' => true,
+                    'message' => 'No se ha encontrado la categoria con ID: '.$id_subcategoria,
+                    'data' => [],
                 ];
             }
 
-            if (!in_array($estado, [0, 1])) {
+            if (! in_array($estado, [0, 1])) {
                 return [
-                    "error" => true,
-                    "message" => "Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo",
-                    "data" => $subcategoria->toArray()
+                    'error' => true,
+                    'message' => 'Solo hay 2 estados, activos e inactivos: 0 inactivos, 1 activo',
+                    'data' => $subcategoria->toArray(),
                 ];
             }
 
-            $categoriaUpdate = $subcategoria->update(["activo" => $estado]);
+            $categoriaUpdate = $subcategoria->update(['activo' => $estado]);
 
-            if (!$categoriaUpdate) {
+            if (! $categoriaUpdate) {
                 return [
-                    "error" => true,
-                    "message" => "Error al tratar de actualizar la categoria",
-                    "data" => $subcategoria->toArray(),
+                    'error' => true,
+                    'message' => 'Error al tratar de actualizar la categoria',
+                    'data' => $subcategoria->toArray(),
                 ];
             }
 
             return [
-                "error" => false,
-                "message" => "Se cambió el estado de la categoria correctamente",
-                "data" => $subcategoria->refresh()->toArray(),
+                'error' => false,
+                'message' => 'Se cambió el estado de la categoria correctamente',
+                'data' => $subcategoria->refresh()->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al cambiar el estado de la categoria.");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al cambiar el estado de la categoria.');
+
             return [
-                "error" => true,
-                "message" => "Error en el servidor al cambiar el estado de la categoria.",
-                "data" => [],
+                'error' => true,
+                'message' => 'Error en el servidor al cambiar el estado de la categoria.',
+                'data' => [],
             ];
         }
     }
@@ -285,56 +294,56 @@ class BibliotecaServices extends Service
     /*
     -------------------------------------------------
     |
-    |                   LIBROS 
+    |                   LIBROS
     |
     -------------------------------------------------
     */
 
     /**
      * Método para obtener todos los libros de forma filtrada y páginada
-     * @param mixed $categoria
-     * @param mixed $subcategoria
-     * @param mixed $estado
-     * @param int $perpage
+     *
+     * @param  mixed  $categoria
+     * @param  mixed  $subcategoria
+     * @param  mixed  $estado
      * @return array{data: array, error: bool, message: string}
      */
-    public function obtenerTodosLosLibrosBiblioteca(?string $search = null, ?array $categoria = null, ?array $subcategoria = null, ?int $estado = 1, int $perpage): array
+    public function obtenerTodosLosLibrosBiblioteca(?string $search, ?array $categoria, ?array $subcategoria, ?int $estado, int $perpage): array
     {
         try {
 
             $libros = Libro::query()
                 ->where('activo', $estado)
 
-                ->withCount(['ejemplares as cantidad_ejemplares' => fn($q) => $q->activo()])
+                ->withCount(['ejemplares as cantidad_ejemplares' => fn ($q) => $q->activo()])
 
                 ->with([
                     'categoria:id,nombre',
-                    'subcategoria:id,nombre'
+                    'subcategoria:id,nombre',
                 ])
 
                 ->when(
-                    !empty($categoria),
-                    fn($q) => $q->whereIn(
+                    ! empty($categoria),
+                    fn ($q) => $q->whereIn(
                         'id_categoria',
                         $categoria
                     )
                 )
 
                 ->when(
-                    !empty($subcategoria),
-                    fn($q) => $q->whereIn(
+                    ! empty($subcategoria),
+                    fn ($q) => $q->whereIn(
                         'id_subcategoria',
                         $subcategoria
                     )
                 )
 
                 ->when(
-                    !empty($search),
-                    fn($q) => $q->where(function ($sub) use ($search) {
+                    ! empty($search),
+                    fn ($q) => $q->where(function ($sub) use ($search) {
                         $sub->where('titulo', 'LIKE', "%$search%")
                             ->orWhere('autor', 'LIKE', "%$search%")
                             ->orWhere('editorial', 'LIKE', "%$search%")
-                            ->orWhereHas('ejemplares', fn($eq) => $eq->where('codigo', 'LIKE', "%$search%"));
+                            ->orWhereHas('ejemplares', fn ($eq) => $eq->where('codigo', 'LIKE', "%$search%"));
 
                         if (is_numeric($search)) {
                             $sub->orWhere('id', (int) $search);
@@ -348,14 +357,14 @@ class BibliotecaServices extends Service
                 return [
                     'error' => true,
                     'message' => 'No se encontraron libros',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
                 'message' => 'Libros listados',
-                'data' => $libros->toArray()
+                'data' => $libros->toArray(),
             ];
         } catch (Exception $e) {
 
@@ -367,14 +376,14 @@ class BibliotecaServices extends Service
             return [
                 'error' => true,
                 'message' => 'Error del servidor',
-                'data' => []
+                'data' => [],
             ];
         }
     }
 
     /**
      * Método para añadir un nuevo libro
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function agregarNuevoLibroBiblioteca(array $data)
@@ -382,58 +391,58 @@ class BibliotecaServices extends Service
         try {
             if (empty($data)) {
                 return [
-                    "error" => true,
-                    "message" => "No ha llegado datos al servidor",
-                    "data" => [],
+                    'error' => true,
+                    'message' => 'No ha llegado datos al servidor',
+                    'data' => [],
                 ];
             }
 
             $libro = Libro::create($data);
 
-            if (!$libro) {
+            if (! $libro) {
                 return [
                     'error' => true,
-                    "message" => "No se pudo crear el libro",
-                    "data" => $data,
+                    'message' => 'No se pudo crear el libro',
+                    'data' => $data,
                 ];
             }
 
             return [
-                "error" => false,
-                "message" => "Libro creado exitosamente",
-                "data" => $libro->load([
+                'error' => false,
+                'message' => 'Libro creado exitosamente',
+                'data' => $libro->load([
                     'categoria:id,nombre',
-                    'subcategoria:id,nombre'
+                    'subcategoria:id,nombre',
                 ])->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al crear el libro");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al crear el libro');
+
             return [
-                "error" => true,
-                "message" => "Error en el servidor al tratar de crear el libro",
-                "data" => []
+                'error' => true,
+                'message' => 'Error en el servidor al tratar de crear el libro',
+                'data' => [],
             ];
         }
     }
-
 
     public function editarLibro(array $data, int $id_libro)
     {
         try {
             $libro = Libro::find($id_libro);
 
-            if (!$libro) {
+            if (! $libro) {
                 return [
                     'error' => true,
-                    'message' => "No se ha encontrado el libro con el ID: " . $id_libro,
-                    'data' => []
+                    'message' => 'No se ha encontrado el libro con el ID: '.$id_libro,
+                    'data' => [],
                 ];
             }
 
             if (isset($data['foto'])) {
 
                 if ($libro->foto) {
-                    $rutaAbsoluta = storage_path('app/public/' . $libro->foto);
+                    $rutaAbsoluta = storage_path('app/public/'.$libro->foto);
                     File::delete($rutaAbsoluta);
                 }
 
@@ -444,11 +453,11 @@ class BibliotecaServices extends Service
                     'biblioteca'
                 );
 
-                if (!$nuevaFoto || !isset($nuevaFoto['ruta'])) {
+                if (! $nuevaFoto || ! isset($nuevaFoto['ruta'])) {
                     return [
                         'error' => true,
                         'message' => 'No fue posible actualizar la imagen',
-                        'data' => []
+                        'data' => [],
                     ];
                 }
 
@@ -457,25 +466,26 @@ class BibliotecaServices extends Service
 
             $libroUpdate = $libro->update($data);
 
-            if (!$libroUpdate) {
+            if (! $libroUpdate) {
                 return [
                     'error' => true,
-                    'message' => "Error al actualizar el libro",
-                    'data' => $libro->toArray()
+                    'message' => 'Error al actualizar el libro',
+                    'data' => $libro->toArray(),
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Libro actualizado correctamente",
-                'data' => $libro->refresh()->toArray()
+                'message' => 'Libro actualizado correctamente',
+                'data' => $libro->refresh()->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al actualizar la información del libro");
+            $this->sendError($e, 'Error al actualizar la información del libro');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al actualizar la información del libro",
-                'data' => []
+                'message' => 'Error en el servidor al actualizar la información del libro',
+                'data' => [],
             ];
         }
     }
@@ -485,25 +495,25 @@ class BibliotecaServices extends Service
         try {
             $libros = Libro::whereIn('id', $id_libros);
 
-            if (!$libros->exists()) {
+            if (! $libros->exists()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el libro para hacer el cambio de estado",
-                    'data' => []
+                    'message' => 'No se encontró el libro para hacer el cambio de estado',
+                    'data' => [],
                 ];
             }
 
             $libroUpdate = $libros->update(
                 [
-                    'activo' => $estado
+                    'activo' => $estado,
                 ]
             );
 
-            if (!$libroUpdate) {
+            if (! $libroUpdate) {
                 return [
                     'error' => true,
-                    'message' => "Error al cambiar el estado del libro",
-                    'data' => $libros->toArray()
+                    'message' => 'Error al cambiar el estado del libro',
+                    'data' => $libros->toArray(),
                 ];
             }
 
@@ -511,15 +521,16 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Libro actualizado correctamente",
-                'data' => $librosActualizados->toArray()
+                'message' => 'Libro actualizado correctamente',
+                'data' => $librosActualizados->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al actualizar la información del libro");
+            $this->sendError($e, 'Error al actualizar la información del libro');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al tratar de actualizar el estado del libro",
-                'data' => []
+                'message' => 'Error en el servidor al tratar de actualizar el estado del libro',
+                'data' => [],
             ];
         }
     }
@@ -538,15 +549,15 @@ class BibliotecaServices extends Service
             $counts = Ejemplares::selectRaw('estado, count(*) as total')
                 ->whereIn('estado', [1, 2])
                 ->when(
-                    !empty($id_libro),
-                    fn($q) => $q->where('id_libro', $id_libro)
+                    ! empty($id_libro),
+                    fn ($q) => $q->where('id_libro', $id_libro)
                 )
                 ->groupBy('estado')
                 ->pluck('total', 'estado');
 
             $data = [
                 'disponibles' => (int) ($counts[1] ?? 0),
-                'prestados'   => (int) ($counts[2] ?? 0),
+                'prestados' => (int) ($counts[2] ?? 0),
             ];
 
             if (empty($id_libro)) {
@@ -556,16 +567,17 @@ class BibliotecaServices extends Service
             }
 
             return [
-                'error'   => false,
+                'error' => false,
                 'message' => 'Estadísticas obtenidas',
-                'data'    => $data
+                'data' => $data,
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener estadísticas de ejemplares');
+
             return [
-                'error'   => true,
+                'error' => true,
                 'message' => 'Error en el servidor al obtener estadísticas',
-                'data'    => []
+                'data' => [],
             ];
         }
     }
@@ -589,10 +601,10 @@ class BibliotecaServices extends Service
             for ($i = 1; $i <= $cantidad; $i++) {
                 $ultimo++;
                 $ejemplares[] = [
-                    "id_libro" => $data['id_libro'],
-                    "codigo" => 'EJEM-' . str_pad($ultimo, 4, '0', STR_PAD_LEFT),
-                    "estado" => $data['estado'] ?? 1,
-                    "id_log" => $data['id_log'],
+                    'id_libro' => $data['id_libro'],
+                    'codigo' => 'EJEM-'.str_pad($ultimo, 4, '0', STR_PAD_LEFT),
+                    'estado' => $data['estado'] ?? 1,
+                    'id_log' => $data['id_log'],
                 ];
             }
 
@@ -600,24 +612,26 @@ class BibliotecaServices extends Service
             DB::commit();
 
             return [
-                "error" => false,
-                "message" => "{$cantidad} ejemplares creados correctamente",
-                "data" => []
+                'error' => false,
+                'message' => "{$cantidad} ejemplares creados correctamente",
+                'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
 
-            $this->sendError($e, "Error al tratar de crear un ejemplar");
+            $this->sendError($e, 'Error al tratar de crear un ejemplar');
+
             return [
-                "error" => true,
-                "message" => "Error en el servidor al crear el ejemplar",
-                "data" => []
+                'error' => true,
+                'message' => 'Error en el servidor al crear el ejemplar',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Verifica si un ejemplar existe (por su código) y si está disponible para préstamo.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function verificarEjemplarBiblioteca(string $codigo): array
@@ -630,12 +644,12 @@ class BibliotecaServices extends Service
             $ejemplar = Ejemplares::where('codigo', $codigo)
                 ->with([
                     'libro:id,titulo,autor,editorial,foto',
-                    'prestamos' => fn($q) => $q->whereNull('fecha_devuelto')
+                    'prestamos' => fn ($q) => $q->whereNull('fecha_devuelto')
                         ->with('usuario:id_user,nombre,apellido,documento,correo'),
                 ])
                 ->first();
 
-            if (!$ejemplar) {
+            if (! $ejemplar) {
                 return [
                     'error' => true,
                     'message' => 'El ejemplar no existe',
@@ -657,11 +671,12 @@ class BibliotecaServices extends Service
                     'ejemplar' => $ejemplar,
                 ],
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al tratar de verificar el ejemplar");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al tratar de verificar el ejemplar');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al verificar el ejemplar",
+                'message' => 'Error en el servidor al verificar el ejemplar',
                 'data' => [],
             ];
         }
@@ -669,9 +684,10 @@ class BibliotecaServices extends Service
 
     /**
      * Metodo para ver los ejemplares de un libro, puede ser filtrado
-     * @param mixed $id_libro
-     * @param mixed $autor
-     * @param mixed $perpage
+     *
+     * @param  mixed  $id_libro
+     * @param  mixed  $autor
+     * @param  mixed  $perpage
      * @return array{data: array, error: bool, message: string}
      */
     public function verEjemplaresLibroBiblioteca(?int $id_libro = null, ?string $autor = null, ?string $search = null, ?int $perpage = 10)
@@ -682,21 +698,20 @@ class BibliotecaServices extends Service
                 ->with([
                     'libro:id,titulo,autor,editorial,foto',
                     'prestamos:id,id_ejemplar,id_usuario,fecha_prestamo,fecha_devolucion,observacion,id_devuelto,fecha_devuelto',
-                    'prestamos.usuario:id_user,nombre,apellido,correo'
+                    'prestamos.usuario:id_user,nombre,apellido,correo',
                 ])
-                ->when(!empty($search), fn($q) => 
-                                $q->where('titulo', 'LIKE', "%$search%")
-                                ->orWhere('id', 'LIKE', "%$search%")
-                            )
-                ->when(
-                    !empty($id_libro),
-                    fn($q) => $q->where('id_libro', $id_libro)
+                ->when(! empty($search), fn ($q) => $q->where('titulo', 'LIKE', "%$search%")
+                    ->orWhere('id', 'LIKE', "%$search%")
                 )
                 ->when(
-                    !empty($autor),
-                    fn($q) => $q->whereHas(
+                    ! empty($id_libro),
+                    fn ($q) => $q->where('id_libro', $id_libro)
+                )
+                ->when(
+                    ! empty($autor),
+                    fn ($q) => $q->whereHas(
                         'libro',
-                        fn($sub) => $sub->where(
+                        fn ($sub) => $sub->where(
                             'autor',
                             'LIKE',
                             "%$autor%"
@@ -708,30 +723,32 @@ class BibliotecaServices extends Service
             if ($ejemplares->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontraron ejemplares",
-                    'data' => []
+                    'message' => 'No se encontraron ejemplares',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Ejemplares listados correctamente",
+                'message' => 'Ejemplares listados correctamente',
                 'data' => $ejemplares->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error en el servidor al tratar de listar los ejemplares");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error en el servidor al tratar de listar los ejemplares');
+
             return [
                 'error' => true,
-                "message" => "Error en el servidor al listar ejemplares",
-                'data' => []
+                'message' => 'Error en el servidor al listar ejemplares',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Metodo para ver los ejemplares deshabilitados de un libro
-     * @param mixed $id_libro
-     * @param mixed $perpage
+     *
+     * @param  mixed  $id_libro
+     * @param  mixed  $perpage
      * @return array{data: array, error: bool, message: string}
      */
     public function verEjemplaresDeshabilitadosLibroBiblioteca(?int $id_libro = null, ?int $perpage = 10)
@@ -741,30 +758,31 @@ class BibliotecaServices extends Service
                 ->where('estado', 4)
                 ->with(['libro:id,titulo,autor,editorial,foto'])
                 ->when(
-                    !empty($id_libro),
-                    fn($q) => $q->where('id_libro', $id_libro)
+                    ! empty($id_libro),
+                    fn ($q) => $q->where('id_libro', $id_libro)
                 )
                 ->paginate($perpage);
 
             if ($ejemplares->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontraron ejemplares deshabilitados",
-                    'data' => []
+                    'message' => 'No se encontraron ejemplares deshabilitados',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Ejemplares deshabilitados listados correctamente",
+                'message' => 'Ejemplares deshabilitados listados correctamente',
                 'data' => $ejemplares->toArray(),
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error en el servidor al tratar de listar los ejemplares deshabilitados");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error en el servidor al tratar de listar los ejemplares deshabilitados');
+
             return [
                 'error' => true,
-                "message" => "Error en el servidor al listar ejemplares deshabilitados",
-                'data' => []
+                'message' => 'Error en el servidor al listar ejemplares deshabilitados',
+                'data' => [],
             ];
         }
     }
@@ -774,8 +792,8 @@ class BibliotecaServices extends Service
         if (empty($ids_ejemplares)) {
             return [
                 'error' => true,
-                'message' => "No han llegado los ids de los ejemplares a cambiar estado",
-                'data' => []
+                'message' => 'No han llegado los ids de los ejemplares a cambiar estado',
+                'data' => [],
             ];
         }
 
@@ -784,37 +802,37 @@ class BibliotecaServices extends Service
 
             $cantidadActualizados = Ejemplares::whereIn('id', $ids_ejemplares)
                 ->update([
-                    'estado'         => $estado,
-                    'fecha_inactivo' => $estado == 1 ? null : now()->toDateTimeString()
+                    'estado' => $estado,
+                    'fecha_inactivo' => $estado == 1 ? null : now()->toDateTimeString(),
                 ]);
 
             return [
                 'error' => false,
                 'message' => "Se han actualizado los {$cantidadActualizados} ejemplar(es)",
-                'data' => []
+                'data' => [],
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error en el servidor al actualizar el estado de los ejemplares");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error en el servidor al actualizar el estado de los ejemplares');
+
             return [
                 'error' => true,
-                'message' => "Ha ocurrido un error en el servidor al momento de actualizar el estado de los ejemplares",
-                'data' => []
+                'message' => 'Ha ocurrido un error en el servidor al momento de actualizar el estado de los ejemplares',
+                'data' => [],
             ];
         }
     }
 
-
     /*
     -------------------------------------------------
     |
-    |             BIBLIOTECA PRESTAMOS 
+    |             BIBLIOTECA PRESTAMOS
     |
     -------------------------------------------------
     */
 
     /**
      * Método para ver los prestamos de un ejemplar
-     * @param int $id_ejemplar
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function verPrestamosDeEjemplar(int $id_ejemplar): array
@@ -822,71 +840,71 @@ class BibliotecaServices extends Service
         try {
 
             $prestamos = PrestamosEjemplar::query()
-                ->where("id_ejemplar", $id_ejemplar)
+                ->where('id_ejemplar', $id_ejemplar)
 
-                ->with("ejemplar:id,id_libro,codigo,estado")
+                ->with('ejemplar:id,id_libro,codigo,estado')
 
                 ->with(
-                    "ejemplar.libro:id,
+                    'ejemplar.libro:id,
                 titulo,
                 autor,
                 editorial,
                 edicion,
                 foto,
                 id_categoria,
-                id_subcategoria"
+                id_subcategoria'
                 )
 
-                ->with("ejemplar.libro.categoria:id,nombre")
+                ->with('ejemplar.libro.categoria:id,nombre')
 
-                ->with("ejemplar.libro.subcategoria:id,nombre")
+                ->with('ejemplar.libro.subcategoria:id,nombre')
 
-                ->with("usuario:id_user,nombre,apellido,correo")
+                ->with('usuario:id_user,nombre,apellido,correo')
 
-                ->orderByDesc("fecha_prestamo")
+                ->orderByDesc('fecha_prestamo')
 
                 ->get();
 
             if ($prestamos->isEmpty()) {
                 return [
                     'error' => false,
-                    'message' => "No se encontraron prestamos para el ejemplar",
-                    'data' => []
+                    'message' => 'No se encontraron prestamos para el ejemplar',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Prestamos obtenidos",
-                'data' => $prestamos
+                'message' => 'Prestamos obtenidos',
+                'data' => $prestamos,
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
 
             $this->sendError(
                 $e,
-                "Error en el servidor al tratar de listar los prestamos del ejemplar"
+                'Error en el servidor al tratar de listar los prestamos del ejemplar'
             );
 
             return [
                 'error' => true,
-                'message' => "Ha ocurrido un error inesperado al listar los prestamos del ejemplar",
-                'data' => []
+                'message' => 'Ha ocurrido un error inesperado al listar los prestamos del ejemplar',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Ver prestamos de un libro y los respectivos ejemplares
-     * @param int $id_libro
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function verPrestamosLibro(int $id_libro): array
     {
-        if (!$id_libro) {
+        if (! $id_libro) {
             return [
                 'error' => true,
                 'message' => 'No se envió el ID del libro',
-                'data' => []
+                'data' => [],
             ];
         }
 
@@ -908,23 +926,23 @@ class BibliotecaServices extends Service
 
                     'ejemplares.prestamos.usuario:id_user,nombre,apellido,correo',
 
-                    'ejemplares.prestamos.ejemplar:id,id_libro,codigo,estado'
+                    'ejemplares.prestamos.ejemplar:id,id_libro,codigo,estado',
 
                 ])
 
                 ->first();
 
-            if (!$libro) {
+            if (! $libro) {
                 return [
                     'error' => true,
                     'message' => 'Libro no encontrado',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             $prestamos = $libro
                 ->ejemplares
-                ->flatMap(fn($e) => $e->prestamos)
+                ->flatMap(fn ($e) => $e->prestamos)
                 ->values();
 
             return [
@@ -943,42 +961,41 @@ class BibliotecaServices extends Service
                         'subcategoria' => $libro->subcategoria,
                     ],
 
-                    'prestamos' => $prestamos
-                ]
+                    'prestamos' => $prestamos,
+                ],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
 
             $this->sendError(
                 $e,
-                "Error al listar préstamos"
+                'Error al listar préstamos'
             );
 
             return [
                 'error' => true,
                 'message' => 'Error inesperado',
-                'data' => []
+                'data' => [],
             ];
         }
     }
 
     /**
      * Prestar un ejemplar de un libro usando el codigo de dicho ejemplar.
-     * @param array $datos
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function prestarEjemplarBiblioteca(array $datos): array
     {
         try {
 
-
-            $datos["fecha_prestamo"] = now();
+            $datos['fecha_prestamo'] = now();
 
             $ejemplar = Ejemplares::where('codigo', $datos['codigo_ejemplar'])->first();
 
-            if (!$ejemplar) {
+            if (! $ejemplar) {
                 return [
                     'error' => true,
-                    'message' => "Ese ejemplar no existe en la Base de Datos",
+                    'message' => 'Ese ejemplar no existe en la Base de Datos',
                     'data' => $datos,
                 ];
             }
@@ -986,21 +1003,21 @@ class BibliotecaServices extends Service
             if ($ejemplar->estado != 1) {
                 return [
                     'error' => true,
-                    'message' => "El ejemplar seleccionado no se encuentra disponible para realizar prestamos",
-                    'data' => $datos
+                    'message' => 'El ejemplar seleccionado no se encuentra disponible para realizar prestamos',
+                    'data' => $datos,
                 ];
             }
-
 
             $prestamo_activo = PrestamosEjemplar::where('id_ejemplar', $ejemplar->id)
                 ->whereNull('fecha_devuelto')->exists();
 
             if ($prestamo_activo) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "Este ejemplar ya se encuentra prestado y no lo han devuelto...",
-                    'data' => $datos
+                    'message' => 'Este ejemplar ya se encuentra prestado y no lo han devuelto...',
+                    'data' => $datos,
                 ];
             }
 
@@ -1014,10 +1031,11 @@ class BibliotecaServices extends Service
 
             if (empty($prestamo)) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "El prestamo no pudo ser realizado",
-                    'data' => $datos
+                    'message' => 'El prestamo no pudo ser realizado',
+                    'data' => $datos,
                 ];
             }
 
@@ -1025,29 +1043,29 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Prestamo realizado correctamente",
-                'data' => $prestamo->toArray()
+                'message' => 'Prestamo realizado correctamente',
+                'data' => $prestamo->toArray(),
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
 
-            $this->sendError($e, "Error en realizar prestamo de ejemplar:");
+            $this->sendError($e, 'Error en realizar prestamo de ejemplar:');
 
             return [
                 'error' => true,
-                'message' => "Ha ocurrido un error inesperado al realizar el prestamo...",
-                'data' => $datos
+                'message' => 'Ha ocurrido un error inesperado al realizar el prestamo...',
+                'data' => $datos,
             ];
         }
     }
 
     public function devolverPrestamoEjemplarBiblioteca(array $data): array
     {
-        if (!$data['codigo_ejemplar']) {
+        if (! $data['codigo_ejemplar']) {
             return [
                 'error' => true,
-                'message' => "Es necesario el código del ejemplar para poder realizar la devolución",
-                'data' => $data
+                'message' => 'Es necesario el código del ejemplar para poder realizar la devolución',
+                'data' => $data,
             ];
         }
         try {
@@ -1055,12 +1073,13 @@ class BibliotecaServices extends Service
 
             $ejemplar = Ejemplares::where('codigo', $data['codigo_ejemplar'])->first();
 
-            if (!$ejemplar) {
+            if (! $ejemplar) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "No se encontró el ejemplar con ese código",
-                    'data' => $data
+                    'message' => 'No se encontró el ejemplar con ese código',
+                    'data' => $data,
                 ];
             }
 
@@ -1068,12 +1087,13 @@ class BibliotecaServices extends Service
                 ->whereNull('fecha_devuelto')
                 ->first();
 
-            if (!$prestamo) {
+            if (! $prestamo) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "Este ejemplar no se encuentra en prestamo",
-                    'data' => $data
+                    'message' => 'Este ejemplar no se encuentra en prestamo',
+                    'data' => $data,
                 ];
             }
 
@@ -1084,27 +1104,28 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Ejemplar devuelto exitosamente",
-                'data' => $data
+                'message' => 'Ejemplar devuelto exitosamente',
+                'data' => $data,
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
-            $this->sendError($e, "Error en el servidor al tratar de devolver el prestamo:");
+            $this->sendError($e, 'Error en el servidor al tratar de devolver el prestamo:');
+
             return [
                 'error' => true,
-                'message' => "Error inesperado al devolver el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
-                'data' => $data
+                'message' => 'Error inesperado al devolver el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua',
+                'data' => $data,
             ];
         }
     }
 
     public function aplazarPrestamoEjemplarBiblioteca(array $data): array
     {
-        if (!$data['id'] || !$data['fecha_devolucion']) {
+        if (! $data['id'] || ! $data['fecha_devolucion']) {
             return [
                 'error' => true,
-                'message' => "Es necesario el id del préstamo y la nueva fecha de devolución",
-                'data' => $data
+                'message' => 'Es necesario el id del préstamo y la nueva fecha de devolución',
+                'data' => $data,
             ];
         }
         try {
@@ -1113,21 +1134,23 @@ class BibliotecaServices extends Service
             $prestamo = PrestamosEjemplar::whereNull('fecha_devuelto')
                 ->find($data['id']);
 
-            if (!$prestamo) {
+            if (! $prestamo) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "No se encontró un préstamo activo con ese id",
-                    'data' => $data
+                    'message' => 'No se encontró un préstamo activo con ese id',
+                    'data' => $data,
                 ];
             }
 
             if ($data['fecha_devolucion'] <= $prestamo->fecha_devolucion->format('Y-m-d')) {
                 DB::rollBack();
+
                 return [
                     'error' => true,
-                    'message' => "La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo",
-                    'data' => $data
+                    'message' => 'La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo',
+                    'data' => $data,
                 ];
             }
 
@@ -1137,16 +1160,17 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Fecha de devolución aplazada exitosamente",
-                'data' => []
+                'message' => 'Fecha de devolución aplazada exitosamente',
+                'data' => [],
             ];
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             DB::rollBack();
-            $this->sendError($e, "Error en el servidor al tratar de aplazar el prestamo:");
+            $this->sendError($e, 'Error en el servidor al tratar de aplazar el prestamo:');
+
             return [
                 'error' => true,
-                'message' => "Error inesperado al aplazar el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua",
-                'data' => $data
+                'message' => 'Error inesperado al aplazar el prestamo del ejemplar, comuniquese con el area de sistemas si el problema continua',
+                'data' => $data,
             ];
         }
     }
@@ -1184,7 +1208,7 @@ class BibliotecaServices extends Service
                 'usuario.nivelRelacion:id,nombre',
             ])
             ->when(
-                !empty($search),
+                ! empty($search),
                 fn ($q) => $q->where(
                     fn ($grupo) => $grupo->whereHas(
                         'usuario',
@@ -1197,28 +1221,29 @@ class BibliotecaServices extends Service
                 )
             )
             ->when(
-                !empty($id_curso) || !empty($id_nivel),
+                ! empty($id_curso) || ! empty($id_nivel),
                 fn ($q) => $q->whereHas(
                     'usuario',
-                    fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
-                        ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
+                    fn ($sub) => $sub->when(! empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
+                        ->when(! empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
                 )
             )
             ->when(
-                !empty($codigo_ejemplar),
+                ! empty($codigo_ejemplar),
                 fn ($q) => $q->whereHas(
                     'ejemplar',
                     fn ($sub) => $sub->where('codigo', 'LIKE', "%$codigo_ejemplar%")
                 )
             )
-            ->when(!empty($fecha_inicio), fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fecha_inicio))
-            ->when(!empty($fecha_fin), fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fecha_fin))
+            ->when(! empty($fecha_inicio), fn ($q) => $q->whereDate('fecha_prestamo', '>=', $fecha_inicio))
+            ->when(! empty($fecha_fin), fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fecha_fin))
             ->orderByDesc('fecha_prestamo');
     }
 
     /**
      * Lista todos los préstamos de ejemplar activos (no devueltos) de la biblioteca,
      * sin filtrar por usuario ni ejemplar específico.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function obtenerPrestamosEjemplarActivos(
@@ -1229,8 +1254,7 @@ class BibliotecaServices extends Service
         ?string $fecha_inicio = null,
         ?string $fecha_fin = null,
         ?string $codigo_ejemplar = null
-    ): array
-    {
+    ): array {
         try {
             $prestamos = $this->filtrarPrestamosEjemplar(
                 false,
@@ -1255,11 +1279,12 @@ class BibliotecaServices extends Service
                 'message' => 'Préstamos activos listados correctamente',
                 'data' => $prestamos,
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al tratar de listar los préstamos activos");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al tratar de listar los préstamos activos');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al listar los préstamos activos",
+                'message' => 'Error en el servidor al listar los préstamos activos',
                 'data' => [],
             ];
         }
@@ -1268,6 +1293,7 @@ class BibliotecaServices extends Service
     /**
      * Lista todos los préstamos de ejemplar ya devueltos de la biblioteca,
      * sin filtrar por usuario ni ejemplar específico.
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function obtenerPrestamosEjemplarDevueltos(
@@ -1278,8 +1304,7 @@ class BibliotecaServices extends Service
         ?string $fecha_inicio = null,
         ?string $fecha_fin = null,
         ?string $codigo_ejemplar = null
-    ): array
-    {
+    ): array {
         try {
             $prestamos = $this->filtrarPrestamosEjemplar(
                 true,
@@ -1304,11 +1329,12 @@ class BibliotecaServices extends Service
                 'message' => 'Préstamos devueltos listados correctamente',
                 'data' => $prestamos,
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al tratar de listar los préstamos devueltos");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al tratar de listar los préstamos devueltos');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al listar los préstamos devueltos",
+                'message' => 'Error en el servidor al listar los préstamos devueltos',
                 'data' => [],
             ];
         }
@@ -1322,8 +1348,7 @@ class BibliotecaServices extends Service
         array|string|int|null $id_nivel = null,
         string $dir = 'desc',
         ?int $perpage = 10
-    )
-    {
+    ) {
         $id_curso = array_filter(Arr::wrap($id_curso));
         $id_nivel = array_filter(Arr::wrap($id_nivel));
         $dir = strtolower($dir) === 'asc' ? 'asc' : 'desc';
@@ -1340,7 +1365,7 @@ class BibliotecaServices extends Service
             ])->when($id_usuario, fn ($q) => $q->where('id_usuario', $id_usuario))
                 ->when($deuda, fn ($q) => $q->whereNull('id_devuelto'))
                 ->when(
-                    !empty($search),
+                    ! empty($search),
                     fn ($q) => $q->whereHas(
                         'usuario',
                         fn ($sub) => $sub->where('nombre', 'LIKE', "%$search%")
@@ -1349,11 +1374,11 @@ class BibliotecaServices extends Service
                     )
                 )
                 ->when(
-                    !empty($id_curso) || !empty($id_nivel),
+                    ! empty($id_curso) || ! empty($id_nivel),
                     fn ($q) => $q->whereHas(
                         'usuario',
-                        fn ($sub) => $sub->when(!empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
-                            ->when(!empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
+                        fn ($sub) => $sub->when(! empty($id_curso), fn ($s) => $s->whereIn('id_curso', $id_curso))
+                            ->when(! empty($id_nivel), fn ($s) => $s->whereIn('id_nivel', $id_nivel))
                     )
                 )
                 ->orderBy('fecha_prestamo', $dir)
@@ -1363,23 +1388,24 @@ class BibliotecaServices extends Service
                 return [
                     'error' => true,
                     'message' => $deuda
-                        ? "El usuario no tiene préstamos pendientes"
-                        : "No se encontraron historiales de préstamos",
-                    'data' => []
+                        ? 'El usuario no tiene préstamos pendientes'
+                        : 'No se encontraron historiales de préstamos',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Historial de prestamos obtenidos",
+                'message' => 'Historial de prestamos obtenidos',
                 'data' => $historial,
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al obtener el historial de prestamos");
+            $this->sendError($e, 'Error al obtener el historial de prestamos');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al obtener el historial de prestamos",
-                'data' => []
+                'message' => 'Error en el servidor al obtener el historial de prestamos',
+                'data' => [],
             ];
         }
     }
@@ -1387,7 +1413,7 @@ class BibliotecaServices extends Service
     /**
      * Envía un correo recordatorio a los usuarios indicados que tengan préstamos
      * de ejemplares sin devolver, adjuntando el PDF de paz y salvo con el detalle.
-     * @param array|string|int $ids_usuarios
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function enviarRecordatorioPrestamosPendientes(array|string|int $ids_usuarios): array
@@ -1398,7 +1424,7 @@ class BibliotecaServices extends Service
             if (empty($ids_usuarios)) {
                 return [
                     'error' => true,
-                    'message' => "No se recibieron usuarios a notificar",
+                    'message' => 'No se recibieron usuarios a notificar',
                     'data' => [],
                 ];
             }
@@ -1421,6 +1447,7 @@ class BibliotecaServices extends Service
 
                 if ($cantidadLibros === 0 && $cantidadPaquetes === 0) {
                     $sin_prestamos_pendientes[] = $usuario->id_user;
+
                     continue;
                 }
 
@@ -1429,6 +1456,7 @@ class BibliotecaServices extends Service
                 // no caía en ningún bucket: el envío fallaba en silencio y no se reportaba.
                 if (empty($usuario->correo) || filter_var($usuario->correo, FILTER_VALIDATE_EMAIL) === false) {
                     $sin_correo[] = $usuario->id_user;
+
                     continue;
                 }
 
@@ -1453,7 +1481,7 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Recordatorios procesados",
+                'message' => 'Recordatorios procesados',
                 'data' => [
                     'enviados' => $enviados,
                     'sin_prestamos_pendientes' => $sin_prestamos_pendientes,
@@ -1461,10 +1489,11 @@ class BibliotecaServices extends Service
                 ],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al enviar los recordatorios de préstamos");
+            $this->sendError($e, 'Error al enviar los recordatorios de préstamos');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al enviar los recordatorios de préstamos",
+                'message' => 'Error en el servidor al enviar los recordatorios de préstamos',
                 'data' => [],
             ];
         }
@@ -1477,7 +1506,8 @@ class BibliotecaServices extends Service
      * que sí califican, se envía sin importar si tienen o no préstamos pendientes.
      * Solo por curso: el envío global (a todos los usuarios activos) se retiró, y sin cursos
      * no se envía nada.
-     * @param int[] $cursos
+     *
+     * @param  int[]  $cursos
      * @return array{data: array, error: bool, message: string}
      */
     public function enviarPazYSalvoGlobal(array $cursos): array
@@ -1505,14 +1535,16 @@ class BibliotecaServices extends Service
                 // no caía en ningún bucket: el envío fallaba en silencio y no se reportaba.
                 if (empty($usuario->correo) || filter_var($usuario->correo, FILTER_VALIDATE_EMAIL) === false) {
                     $sin_correo[] = $usuario->id_user;
+
                     continue;
                 }
 
                 $tieneHistorialLibros = PrestamosEjemplar::where('id_usuario', $usuario->id_user)->exists();
                 $tieneHistorialPaquetes = PaquetePrestamos::where('id_usuario', $usuario->id_user)->exists();
 
-                if (!$tieneHistorialLibros && !$tieneHistorialPaquetes) {
+                if (! $tieneHistorialLibros && ! $tieneHistorialPaquetes) {
                     $sin_historial_prestamos[] = $usuario->id_user;
+
                     continue;
                 }
 
@@ -1549,7 +1581,7 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Paz y salvo enviado",
+                'message' => 'Paz y salvo enviado',
                 'data' => [
                     'enviados' => $enviados,
                     'sin_prestamos_pendientes' => $sin_prestamos_pendientes,
@@ -1558,10 +1590,11 @@ class BibliotecaServices extends Service
                 ],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al enviar el paz y salvo global");
+            $this->sendError($e, 'Error al enviar el paz y salvo global');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al enviar el paz y salvo global",
+                'message' => 'Error en el servidor al enviar el paz y salvo global',
                 'data' => [],
             ];
         }
@@ -1571,7 +1604,7 @@ class BibliotecaServices extends Service
      * Genera el PDF de "Paz y Salvo" con los libros Y paquetes que el usuario aún
      * no ha devuelto (ambos, no solo libros — un paz y salvo real debe reflejar
      * cualquier préstamo pendiente). Se genera en memoria, no se guarda en el servidor.
-     * @param int $id_usuario
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function generarPazYSalvoPdf(int $id_usuario): array
@@ -1579,7 +1612,7 @@ class BibliotecaServices extends Service
         try {
             $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'correo'])->find($id_usuario);
 
-            if (!$usuario) {
+            if (! $usuario) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el usuario con ID: {$id_usuario}",
@@ -1613,30 +1646,32 @@ class BibliotecaServices extends Service
             }
             unset($fila);
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'paz_y_salvo',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $documentos = app(DocumentoPdfService::class);
+            $sinPendientes = $prestamosLibros->isEmpty() && $prestamosPaquetes->isEmpty();
+            $contenido = $documentos->generar('pazYSalvo', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'prestamos' => $filas,
-                'sin_pendientes' => $prestamosLibros->isEmpty() && $prestamosPaquetes->isEmpty(),
-            ]);
+                // El sello certifica que no debe nada: solo va sin préstamos pendientes.
+                'sello' => $sinPendientes
+                    ? $documentos->imagenComoDataUrl(app(CloudinaryService::class)->rutaLocalRoyalSchool('paz-salvo/sello.webp'))
+                    : null,
+            ], $usuario->correo);
 
             return [
                 'error' => false,
-                'message' => "PDF generado correctamente",
+                'message' => 'PDF generado correctamente',
                 'data' => [
                     'contenido' => $contenido,
                     'nombre_archivo' => "paz_y_salvo_{$id_usuario}.pdf",
                 ],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al generar el PDF de paz y salvo");
+            $this->sendError($e, 'Error al generar el PDF de paz y salvo');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al generar el PDF de paz y salvo",
+                'message' => 'Error en el servidor al generar el PDF de paz y salvo',
                 'data' => [],
             ];
         }
@@ -1646,7 +1681,7 @@ class BibliotecaServices extends Service
      * Genera el PDF "Listado de Prestamos" con todos los préstamos (devueltos
      * o no) que ha realizado el usuario. Se genera en memoria, no se guarda
      * en el servidor.
-     * @param int $id_usuario
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function generarListadoPrestamosPdf(int $id_usuario): array
@@ -1654,7 +1689,7 @@ class BibliotecaServices extends Service
         try {
             $usuario = Usuario::select(['id_user', 'nombre', 'apellido', 'documento', 'correo'])->find($id_usuario);
 
-            if (!$usuario) {
+            if (! $usuario) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el usuario con ID: {$id_usuario}",
@@ -1671,36 +1706,33 @@ class BibliotecaServices extends Service
                 ->orderBy('fecha_prestamo', 'desc')
                 ->get();
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'listado',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $contenido = app(DocumentoPdfService::class)->generar('listadoPrestamos', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'prestamos' => $this->construirFilasPrestamosPdf($prestamos),
-            ]);
+            ], $usuario->correo);
 
             return [
                 'error' => false,
-                'message' => "PDF generado correctamente",
+                'message' => 'PDF generado correctamente',
                 'data' => [
                     'contenido' => $contenido,
                     'nombre_archivo' => "listado_prestamos_{$id_usuario}.pdf",
                 ],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al generar el PDF de listado de préstamos");
+            $this->sendError($e, 'Error al generar el PDF de listado de préstamos');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al generar el PDF de listado de préstamos",
+                'message' => 'Error en el servidor al generar el PDF de listado de préstamos',
                 'data' => [],
             ];
         }
     }
 
     /**
-     * Estado de un préstamo (libro o paquete) para las tablas de PazYSalvoPdfService:
+     * Estado de un préstamo (libro o paquete) para las tablas de los PDF de préstamos:
      * ya devuelto -> a tiempo/antes/tarde comparando fecha_devuelto vs fecha_devolucion;
      * no devuelto -> vencido/por vencer comparando fecha_devolucion vs hoy.
      */
@@ -1710,22 +1742,27 @@ class BibliotecaServices extends Service
             if ($fechaDevolucion && $fechaDevuelto) {
                 $entrega = $fechaDevuelto->toDateString();
                 $limite = $fechaDevolucion->toDateString();
+
                 return match (true) {
                     $entrega < $limite => 'DEVUELTO ANTES DE TIEMPO',
                     $entrega > $limite => 'DEVOLUCION TARDIA',
                     default => 'JUSTO A TIEMPO',
                 };
             }
+
             return 'JUSTO A TIEMPO';
         }
 
         $vencido = $fechaDevolucion && $fechaDevolucion->lt($hoy);
+
         return $vencido ? 'VENCIDO' : 'POR VENCER';
     }
 
     /**
-     * Mapea préstamos de ejemplar al formato de fila que espera PazYSalvoPdfService.
-     * @param \Illuminate\Support\Collection<int, PrestamosEjemplar> $prestamos
+     * Mapea préstamos de ejemplar al formato de fila de los PDF de préstamos (FilaPrestamoLibro en
+     * src/documentos/instituciones/comun/prestamosBiblioteca.ts del frontend).
+     *
+     * @param  Collection<int, PrestamosEjemplar>  $prestamos
      */
     private function construirFilasPrestamosPdf($prestamos): array
     {
@@ -1750,7 +1787,8 @@ class BibliotecaServices extends Service
      * para que ambos puedan fusionarse en una sola tabla de paz y salvo — 'categoria' se
      * usa como indicador de tipo ("Paquete") ya que la tabla de paz_y_salvo/listado no
      * tiene una columna de tipo propia y no se quiso alterar su layout medido a pixel.
-     * @param \Illuminate\Support\Collection<int, PaquetePrestamos> $prestamos
+     *
+     * @param  Collection<int, PaquetePrestamos>  $prestamos
      */
     private function construirFilasPaquetesPdf($prestamos): array
     {
@@ -1773,9 +1811,8 @@ class BibliotecaServices extends Service
     /**
      * Genera el PDF "Listado de Prestamos (Paquetes)" con todos los préstamos de
      * paquetes (devueltos o no) que ha realizado el usuario. Mismo estilo que
-     * generarListadoPrestamosPdf (libros), vía PazYSalvoPdfService::generate con
-     * tipo 'listado_paquetes'.
-     * @param int $id_usuario
+     * generarListadoPrestamosPdf (libros), vía DocumentoPdfService ('listadoPrestamosPaquetes').
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function generarListadoPrestamosPaquetesPdf(int $id_usuario): array
@@ -1785,7 +1822,7 @@ class BibliotecaServices extends Service
                 ->with('cursoRelacion:id,nombre')
                 ->find($id_usuario);
 
-            if (!$usuario) {
+            if (! $usuario) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el usuario con ID: {$id_usuario}",
@@ -1798,39 +1835,37 @@ class BibliotecaServices extends Service
                 ->orderBy('fecha_prestamo', 'desc')
                 ->get();
 
-            $pdfService = app(PazYSalvoPdfService::class);
-            $pdfService->setLogoPath(app(MarcaDominioService::class)->resolverRutaLocalPorCorreo($usuario->correo));
-            $contenido = $pdfService->generate([
-                'tipo' => 'listado_paquetes',
-                'institucion' => config('app.name'),
-                'nombre_trabajador' => trim("{$usuario->nombre} {$usuario->apellido}"),
-                'numero_documento' => (string) $usuario->documento,
+            $contenido = app(DocumentoPdfService::class)->generar('listadoPrestamosPaquetes', [
+                'nombre' => trim("{$usuario->nombre} {$usuario->apellido}"),
+                'documento' => (string) $usuario->documento,
                 'curso' => $usuario->cursoRelacion->nombre ?? '',
                 'prestamos' => $this->construirFilasPrestamosPaquetesPdf($prestamos),
-            ]);
+            ], $usuario->correo);
 
             return [
                 'error' => false,
-                'message' => "PDF generado correctamente",
+                'message' => 'PDF generado correctamente',
                 'data' => [
                     'contenido' => $contenido,
                     'nombre_archivo' => "listado_prestamos_paquetes_{$id_usuario}.pdf",
                 ],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al generar el PDF de listado de préstamos de paquetes");
+            $this->sendError($e, 'Error al generar el PDF de listado de préstamos de paquetes');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al generar el PDF de listado de préstamos de paquetes",
+                'message' => 'Error en el servidor al generar el PDF de listado de préstamos de paquetes',
                 'data' => [],
             ];
         }
     }
 
     /**
-     * Mapea préstamos de paquete al formato de fila que espera PazYSalvoPdfService
-     * (tipo 'listado_paquetes').
-     * @param \Illuminate\Support\Collection<int, PaquetePrestamos> $prestamos
+     * Mapea préstamos de paquete al formato de fila de 'listadoPrestamosPaquetes'
+     * (FilaPrestamoPaquete en el frontend).
+     *
+     * @param  Collection<int, PaquetePrestamos>  $prestamos
      */
     private function construirFilasPrestamosPaquetesPdf($prestamos): array
     {
@@ -1858,74 +1893,77 @@ class BibliotecaServices extends Service
 
     /**
      * Metodo para listar los paquetes y su respectivo contenido
-     * @param mixed $search
-     * @param mixed $perpage
+     *
+     * @param  mixed  $search
+     * @param  mixed  $perpage
      * @return array{data: array, error: bool, message: string}
      */
     public function listarPaquetesBiblioteca(?string $search = null, ?int $perpage = 10): array
     {
         try {
             $paquetes = Paquetes::with([
-                'contenidos' => fn($q) => $q->where('activo', 1)
+                'contenidos' => fn ($q) => $q->where('activo', 1),
             ])->where('activo', 1)
-                ->when(!empty($search), fn($q) => $q->where("nombre", 'LIKE', "%$search%"))
+                ->when(! empty($search), fn ($q) => $q->where('nombre', 'LIKE', "%$search%"))
                 ->paginate($perpage);
 
             if ($paquetes->isEmpty()) {
                 return [
                     'error' => true,
-                    'message' => "No hay paquetes a listar",
-                    'data' => []
+                    'message' => 'No hay paquetes a listar',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Paquetes listados completamente",
+                'message' => 'Paquetes listados completamente',
                 'data' => $paquetes,
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error en el servidor al tratar de listar los paquetes");
+            $this->sendError($e, 'Error en el servidor al tratar de listar los paquetes');
+
             return [
                 'error' => true,
-                'message' => "Ha ocurrido un error inesperado al tratar de listar los paquetes.",
-                'data' => []
+                'message' => 'Ha ocurrido un error inesperado al tratar de listar los paquetes.',
+                'data' => [],
             ];
         }
     }
 
     /**
      * Metodo para crear un nuevo paquete
-     * @param array $data
+     *
      * @return array{data: array, error: bool, message: string}
      */
     public function crearNuevoPaqueteBiblioteca(array $data): array
     {
         try {
             $ultimo_paquete = (Paquetes::max('id') ?? 0) + 1;
-            $data['codigo'] = 'PACK-' . str_pad($ultimo_paquete, 4, '0', STR_PAD_LEFT);
+            $data['codigo'] = 'PACK-'.str_pad($ultimo_paquete, 4, '0', STR_PAD_LEFT);
 
             $paquete_nuevo = Paquetes::create($data);
 
-            if (!$paquete_nuevo) {
+            if (! $paquete_nuevo) {
                 return [
                     'error' => true,
-                    'message' => "No se creo el paquete nuevo",
-                    'data' => $data
+                    'message' => 'No se creo el paquete nuevo',
+                    'data' => $data,
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Paquete creado éxitosamente!",
+                'message' => 'Paquete creado éxitosamente!',
                 'data' => $paquete_nuevo->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al crear el nuevo paquete");
+            $this->sendError($e, 'Error al crear el nuevo paquete');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al tratar de crear un nuevo paquete",
-                'data' => []
+                'message' => 'Error en el servidor al tratar de crear un nuevo paquete',
+                'data' => [],
             ];
         }
     }
@@ -1935,45 +1973,46 @@ class BibliotecaServices extends Service
         try {
             $paquetes = Paquetes::whereIn('id', $ids_paquetes);
 
-            if (!in_array($estado, [0, 1])) {
+            if (! in_array($estado, [0, 1])) {
                 return [
                     'error' => true,
                     'message' => 'Estado inválido',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
-            if (!$paquetes->exists()) {
+            if (! $paquetes->exists()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el paquete para hacer el cambio de estado",
-                    'data' => []
+                    'message' => 'No se encontró el paquete para hacer el cambio de estado',
+                    'data' => [],
                 ];
             }
 
             $filasAfectadas = $paquetes->update([
-                'activo' => $estado
+                'activo' => $estado,
             ]);
 
             if ($filasAfectadas === 0) {
                 return [
                     'error' => true,
                     'message' => 'No se actualizó ningún paquete',
-                    'data' => []
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Se cambió el estado del paquete correctamente",
-                'data' => []
+                'message' => 'Se cambió el estado del paquete correctamente',
+                'data' => [],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al actualizar el estado del paquete");
+            $this->sendError($e, 'Error al actualizar el estado del paquete');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al tratar de actualizar el estado de los paquetes",
-                'data' => []
+                'message' => 'Error en el servidor al tratar de actualizar el estado de los paquetes',
+                'data' => [],
             ];
         }
     }
@@ -1981,7 +2020,7 @@ class BibliotecaServices extends Service
     /*
     -------------------------------------------------
     |
-    |         BIBLIOTECA CONTENIDO PAQUETES 
+    |         BIBLIOTECA CONTENIDO PAQUETES
     |
     -------------------------------------------------
     */
@@ -1996,23 +2035,23 @@ class BibliotecaServices extends Service
                 ? (int) str_replace('CONT-', '', $ultimoCodigo)
                 : 0;
 
-            $data['codigo'] = 'CONT-' . str_pad($ultimoNumero + 1, 4, '0', STR_PAD_LEFT);
+            $data['codigo'] = 'CONT-'.str_pad($ultimoNumero + 1, 4, '0', STR_PAD_LEFT);
 
             $contenido = PaqueteContenido::create($data);
 
             return [
                 'error' => false,
                 'message' => 'Contenido creado correctamente',
-                'data' => $contenido->fresh()->toArray()
+                'data' => $contenido->fresh()->toArray(),
             ];
         } catch (Exception $e) {
 
-            $this->sendError($e, "Error al crear el contenido");
+            $this->sendError($e, 'Error al crear el contenido');
 
             return [
                 'error' => true,
-                'message' => "Error en el servidor al crear el contenido",
-                'data' => []
+                'message' => 'Error en el servidor al crear el contenido',
+                'data' => [],
             ];
         }
     }
@@ -2022,16 +2061,16 @@ class BibliotecaServices extends Service
         try {
             $contenidos = PaqueteContenido::whereIn('id', $ids)->where('id_paquete', $id_paquete);
 
-            if (!$contenidos->exists()) {
+            if (! $contenidos->exists()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el contenido para hacer el cambio de estado",
-                    'data' => []
+                    'message' => 'No se encontró el contenido para hacer el cambio de estado',
+                    'data' => [],
                 ];
             }
 
             $updateData = [
-                'activo' => $estado
+                'activo' => $estado,
             ];
 
             if ($estado === 0) {
@@ -2045,22 +2084,23 @@ class BibliotecaServices extends Service
             if ($contenidosUpdate === 0) {
                 return [
                     'error' => true,
-                    'message' => "No se actualizó ningún contenido",
-                    'data' => []
+                    'message' => 'No se actualizó ningún contenido',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Se cambió el estado del contenido correctamente",
-                'data' => ["actualizado" => $contenidosUpdate],
+                'message' => 'Se cambió el estado del contenido correctamente',
+                'data' => ['actualizado' => $contenidosUpdate],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al actualizar el estado del contenido");
+            $this->sendError($e, 'Error al actualizar el estado del contenido');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al actualizar el estado del contenido",
-                'data' => []
+                'message' => 'Error en el servidor al actualizar el estado del contenido',
+                'data' => [],
             ];
         }
     }
@@ -2074,11 +2114,11 @@ class BibliotecaServices extends Service
         try {
             $contenidos = PaqueteContenido::whereIn('id', $ids)->where('id_paquete', $id_paquete);
 
-            if (!$contenidos->exists()) {
+            if (! $contenidos->exists()) {
                 return [
                     'error' => true,
-                    'message' => "No se encontró el contenido a eliminar",
-                    'data' => []
+                    'message' => 'No se encontró el contenido a eliminar',
+                    'data' => [],
                 ];
             }
 
@@ -2086,15 +2126,16 @@ class BibliotecaServices extends Service
 
             return [
                 'error' => false,
-                'message' => "Contenido eliminado correctamente",
-                'data' => ["eliminados" => $eliminados],
+                'message' => 'Contenido eliminado correctamente',
+                'data' => ['eliminados' => $eliminados],
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al eliminar el contenido");
+            $this->sendError($e, 'Error al eliminar el contenido');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al eliminar el contenido",
-                'data' => []
+                'message' => 'Error en el servidor al eliminar el contenido',
+                'data' => [],
             ];
         }
     }
@@ -2104,35 +2145,36 @@ class BibliotecaServices extends Service
         try {
             $contenido = PaqueteContenido::find($id_contenido);
 
-            if (!$contenido) {
+            if (! $contenido) {
                 return [
                     'error' => true,
-                    'message' => "No se ha encontrado el contenido con el ID: " . $id_contenido,
-                    'data' => []
+                    'message' => 'No se ha encontrado el contenido con el ID: '.$id_contenido,
+                    'data' => [],
                 ];
             }
 
             $contenidoUpdate = $contenido->update($data);
 
-            if (!$contenidoUpdate) {
+            if (! $contenidoUpdate) {
                 return [
                     'error' => true,
-                    'message' => "No se ha actualizado el contenido",
-                    'data' => $contenido->toArray()
+                    'message' => 'No se ha actualizado el contenido',
+                    'data' => $contenido->toArray(),
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Contenido actualizado correctamente",
-                'data' => $contenido->refresh()->toArray()
+                'message' => 'Contenido actualizado correctamente',
+                'data' => $contenido->refresh()->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al actualizar el contenido");
+            $this->sendError($e, 'Error al actualizar el contenido');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al tratar de actualizar el contenido",
-                'data' => []
+                'message' => 'Error en el servidor al tratar de actualizar el contenido',
+                'data' => [],
             ];
         }
     }
@@ -2150,34 +2192,34 @@ class BibliotecaServices extends Service
             $historial = PaquetePrestamos::with([
                 'usuario:id_user,nombre,apellido,correo',
                 'paquete:id,nombre,codigo',
-                'devuelto:id_user,nombre,apellido,correo'
+                'devuelto:id_user,nombre,apellido,correo',
             ])
                 ->where('id_usuario', $id_usuario)
-                ->when($deuda, fn($q) => $q->whereNull('id_devuelto'))
+                ->when($deuda, fn ($q) => $q->whereNull('id_devuelto'))
                 ->get();
 
             if ($historial->isEmpty()) {
                 return [
                     'error' => true,
                     'message' => $deuda
-                        ? "El usuario no tiene préstamos pendientes"
-                        : "No se encontraron historiales de préstamos",
-                    'data' => []
+                        ? 'El usuario no tiene préstamos pendientes'
+                        : 'No se encontraron historiales de préstamos',
+                    'data' => [],
                 ];
             }
 
             return [
                 'error' => false,
-                'message' => "Historial de prestamos obtenidos",
+                'message' => 'Historial de prestamos obtenidos',
                 'data' => $historial->toArray(),
             ];
         } catch (Exception $e) {
-            $this->sendError($e, "Error al obtener el historial de prestamos");
+            $this->sendError($e, 'Error al obtener el historial de prestamos');
 
             return [
                 'error' => true,
-                'message' => "Error en el servidor al obtener el historial de prestamos",
-                'data' => []
+                'message' => 'Error en el servidor al obtener el historial de prestamos',
+                'data' => [],
             ];
         }
     }
@@ -2191,7 +2233,7 @@ class BibliotecaServices extends Service
         try {
             $paquete = Paquetes::where('codigo', $codigo)->first();
 
-            if (!$paquete) {
+            if (! $paquete) {
                 return [
                     'error' => true,
                     'message' => 'El paquete no existe',
@@ -2213,11 +2255,12 @@ class BibliotecaServices extends Service
                     'paquete' => $paquete,
                 ],
             ];
-        } catch (\Exception $e) {
-            $this->sendError($e, "Error al tratar de verificar el paquete");
+        } catch (Exception $e) {
+            $this->sendError($e, 'Error al tratar de verificar el paquete');
+
             return [
                 'error' => true,
-                'message' => "Error en el servidor al verificar el paquete",
+                'message' => 'Error en el servidor al verificar el paquete',
                 'data' => [],
             ];
         }
@@ -2235,25 +2278,25 @@ class BibliotecaServices extends Service
             ) {
                 $paquete = Paquetes::where('codigo', $codigo_paquete)->lockForUpdate()->first();
 
-                if (!$paquete) {
-                    throw new Exception("No se encontró el paquete con ese código");
+                if (! $paquete) {
+                    throw new Exception('No se encontró el paquete con ese código');
                 }
 
                 if ($paquete->estado == 2) {
-                    throw new Exception("El paquete ya se encuentra prestado");
+                    throw new Exception('El paquete ya se encuentra prestado');
                 }
 
                 $prestamo = PaquetePrestamos::create([
-                    'id_paquete'        => $paquete->id,
-                    'id_usuario'        => $id_usuario,
-                    'fecha_prestamo'    => now(),
-                    'fecha_devolucion'  => $fecha_devolucion,
-                    'observacion'       => $observacion,
-                    'id_log'            => Auth::id(),
+                    'id_paquete' => $paquete->id,
+                    'id_usuario' => $id_usuario,
+                    'fecha_prestamo' => now(),
+                    'fecha_devolucion' => $fecha_devolucion,
+                    'observacion' => $observacion,
+                    'id_log' => Auth::id(),
                 ]);
 
                 $paquete->update([
-                    'estado' => 2
+                    'estado' => 2,
                 ]);
 
                 return $prestamo;
@@ -2262,13 +2305,13 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => 'Préstamo generado correctamente',
-                'data' => $prestamo->toArray()
+                'data' => $prestamo->toArray(),
             ];
         } catch (Exception $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -2283,12 +2326,12 @@ class BibliotecaServices extends Service
 
                 $paquete = Paquetes::where('codigo', $codigo_paquete)->lockForUpdate()->first();
 
-                if (!$paquete) {
-                    throw new Exception("No se encontró el paquete con ese código");
+                if (! $paquete) {
+                    throw new Exception('No se encontró el paquete con ese código');
                 }
 
                 if ($paquete->estado == 1) {
-                    throw new Exception("Este paquete no se encuentra en préstamo");
+                    throw new Exception('Este paquete no se encuentra en préstamo');
                 }
 
                 $prestamo = PaquetePrestamos::where('id_paquete', $paquete->id)
@@ -2296,18 +2339,18 @@ class BibliotecaServices extends Service
                     ->lockForUpdate()
                     ->first();
 
-                if (!$prestamo) {
-                    throw new Exception("No se encontró un préstamo activo para este paquete");
+                if (! $prestamo) {
+                    throw new Exception('No se encontró un préstamo activo para este paquete');
                 }
 
                 $prestamo->update([
                     'observacion' => $observacion,
                     'id_devuelto' => Auth::id(),
-                    'fecha_devuelto' => now()
+                    'fecha_devuelto' => now(),
                 ]);
 
                 $paquete->update([
-                    'estado' => 1
+                    'estado' => 1,
                 ]);
 
                 return $prestamo;
@@ -2316,14 +2359,14 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => 'Préstamo devuelto correctamente',
-                'data' => $prestamo->toArray()
+                'data' => $prestamo->toArray(),
             ];
 
         } catch (Exception $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -2336,12 +2379,12 @@ class BibliotecaServices extends Service
                     ->lockForUpdate()
                     ->find($id);
 
-                if (!$prestamo) {
-                    throw new Exception("No se encontró un préstamo activo con ese id");
+                if (! $prestamo) {
+                    throw new Exception('No se encontró un préstamo activo con ese id');
                 }
 
                 if ($fecha_devolucion <= $prestamo->fecha_devolucion->format('Y-m-d')) {
-                    throw new Exception("La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo");
+                    throw new Exception('La nueva fecha de devolución debe ser posterior a la fecha actual del préstamo');
                 }
 
                 $prestamo->update(['fecha_devolucion' => $fecha_devolucion]);
@@ -2350,14 +2393,14 @@ class BibliotecaServices extends Service
             return [
                 'error' => false,
                 'message' => 'Fecha de devolución aplazada exitosamente',
-                'data' => []
+                'data' => [],
             ];
 
         } catch (Exception $e) {
             return [
                 'error' => true,
                 'message' => $e->getMessage(),
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -2395,6 +2438,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener estadísticas de paquetes');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener estadísticas de paquetes',
@@ -2430,6 +2474,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener libros más prestados');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener libros más prestados',
@@ -2465,6 +2510,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener categorías más prestadas');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener categorías más prestadas',
@@ -2481,7 +2527,7 @@ class BibliotecaServices extends Service
                 ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
                 ->pluck('id_usuario');
 
-            $cursos = \App\Models\Areas\Cursos::select('id', 'nombre')
+            $cursos = Cursos::select('id', 'nombre')
                 ->whereIn('id', fn ($q) => $q->select('id_curso')
                     ->from('usuarios')
                     ->whereIn('id_user', $usuariosConPrestamo))
@@ -2516,6 +2562,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener cursos con más préstamos de libros');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener cursos con más préstamos de libros',
@@ -2544,6 +2591,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener paquetes más prestados');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener paquetes más prestados',
@@ -2560,7 +2608,7 @@ class BibliotecaServices extends Service
                 ->when($fechaHasta, fn ($q) => $q->whereDate('fecha_prestamo', '<=', $fechaHasta))
                 ->pluck('id_usuario');
 
-            $cursos = \App\Models\Areas\Cursos::select('id', 'nombre')
+            $cursos = Cursos::select('id', 'nombre')
                 ->whereIn('id', fn ($q) => $q->select('id_curso')
                     ->from('usuarios')
                     ->whereIn('id_user', $usuariosConPrestamo))
@@ -2595,6 +2643,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener cursos con más préstamos de paquetes');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener cursos con más préstamos de paquetes',
@@ -2645,6 +2694,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener perfiles con más préstamos de libros');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener perfiles con más préstamos de libros',
@@ -2695,6 +2745,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener perfiles con más préstamos de paquetes');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener perfiles con más préstamos de paquetes',
@@ -2709,7 +2760,7 @@ class BibliotecaServices extends Service
         try {
             $libro = Libro::with('categoria:id,nombre')->find($id, ['id', 'titulo', 'autor', 'id_categoria']);
 
-            if (!$libro) {
+            if (! $libro) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el libro con ID: {$id}",
@@ -2765,6 +2816,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener estadísticas del libro');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener estadísticas del libro',
@@ -2779,7 +2831,7 @@ class BibliotecaServices extends Service
         try {
             $paquete = Paquetes::find($id, ['id', 'nombre', 'codigo', 'estado']);
 
-            if (!$paquete) {
+            if (! $paquete) {
                 return [
                     'error' => true,
                     'message' => "No se encontró el paquete con ID: {$id}",
@@ -2821,6 +2873,7 @@ class BibliotecaServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener estadísticas del paquete');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener estadísticas del paquete',
@@ -2852,7 +2905,7 @@ class BibliotecaServices extends Service
             $campoUsuario = 'id_curso';
             $keyId = 'curso_id';
             $keyNombre = 'curso_nombre';
-            $grupos = \App\Models\Areas\Cursos::select('id', 'nombre')
+            $grupos = Cursos::select('id', 'nombre')
                 ->whereIn('id', fn ($q) => $q->select('id_curso')->from('usuarios')->whereIn('id_user', $usuariosConPrestamo))
                 ->get()
                 ->map(fn ($g) => ['id' => $g->id, 'nombre' => $g->nombre]);

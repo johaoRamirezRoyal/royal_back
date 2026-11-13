@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Cursos;
 
 use App\Models\Areas\Grado;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Support\Permiso;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -45,7 +47,7 @@ class CursoRequest extends FormRequest
             'id_director' => [
                 'nullable',
                 'integer',
-                Rule::exists('usuarios', 'id_user')->whereIn('perfil', Permiso::PERFILES_DOCENTE)->where('estado', 'activo'),
+                Rule::exists('usuarios', 'id_user')->where(fn ($q) => $q->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::DOCENTE)))->where('estado', 'activo'),
             ],
             'activo' => ['sometimes', 'boolean'],
         ];

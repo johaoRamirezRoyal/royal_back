@@ -25,9 +25,7 @@ class MarcaDominioService extends Service
 
     private const TAMANO_MAXIMO = 5 * 1024 * 1024;
 
-    public function __construct(private CloudinaryService $cloudinaryService)
-    {
-    }
+    public function __construct(private CloudinaryService $cloudinaryService) {}
 
     public function listar(): array
     {
@@ -59,14 +57,14 @@ class MarcaDominioService extends Service
             }
 
             $subido = $this->subirLogo($logo);
-            if (!$subido) {
+            if (! $subido) {
                 return ['error' => true, 'message' => 'Error al subir el logo a Cloudinary.', 'data' => []];
             }
 
             $subidaImagen = null;
             if ($imagen) {
                 $subidaImagen = $this->subirLogo($imagen);
-                if (!$subidaImagen) {
+                if (! $subidaImagen) {
                     return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
                 }
             }
@@ -96,7 +94,7 @@ class MarcaDominioService extends Service
         try {
             $marca = MarcaDominio::find($id);
 
-            if (!$marca) {
+            if (! $marca) {
                 return ['error' => true, 'message' => 'La marca no existe.', 'data' => []];
             }
 
@@ -121,7 +119,7 @@ class MarcaDominioService extends Service
 
             if ($logo) {
                 $subido = $this->subirLogo($logo);
-                if (!$subido) {
+                if (! $subido) {
                     return ['error' => true, 'message' => 'Error al subir el logo a Cloudinary.', 'data' => []];
                 }
                 $marca->logo_path = $subido['url'];
@@ -130,7 +128,7 @@ class MarcaDominioService extends Service
 
             if ($imagen) {
                 $subidaImagen = $this->subirLogo($imagen);
-                if (!$subidaImagen) {
+                if (! $subidaImagen) {
                     return ['error' => true, 'message' => 'Error al subir la imagen a Cloudinary.', 'data' => []];
                 }
                 $marca->imagen_fondo_path = $subidaImagen['url'];
@@ -220,13 +218,13 @@ class MarcaDominioService extends Service
         $sinMatch = ['url' => null, 'nombre' => null, 'descripcion' => null, 'color' => null, 'imagen' => null];
 
         $dominio = $this->dominioDeCorreo($correo);
-        if (!$dominio) {
+        if (! $dominio) {
             return $sinMatch;
         }
 
         $marca = MarcaDominio::where('dominio', $dominio)->where('activo', true)->first();
 
-        if (!$marca) {
+        if (! $marca) {
             return $sinMatch;
         }
 
@@ -235,7 +233,7 @@ class MarcaDominioService extends Service
 
     /**
      * Descarga a un archivo temporal local el logo resuelto para este correo — is_file()
-     * (PazYSalvoPdfService::resolveImage, HorarioExcelService::agregarHoja) no verifica
+     * (DocumentoPdfService, HorarioExcelService::agregarHoja) no verifica
      * rutas http(s) de forma confiable, así que los consumidores que arman documentos
      * necesitan un path real en disco, no la URL de Cloudinary. Null si no hay marca
      * configurada para el dominio o si la descarga falla (el caller cae a su logo por
@@ -244,7 +242,7 @@ class MarcaDominioService extends Service
     public function resolverRutaLocalPorCorreo(?string $correo): ?string
     {
         $url = $this->resolverPorCorreo($correo)['url'];
-        if (!$url) {
+        if (! $url) {
             return null;
         }
 
@@ -261,13 +259,40 @@ class MarcaDominioService extends Service
     }
 
     /**
+     * Logo del colegio para incrustar en PDF/Excel: el de la marca del dominio del correo
+     * (por defecto, el del usuario autenticado) o, sin marca, el fijo de Royal School. Es el
+     * único punto de entrada para logos server-side: un colegio nuevo solo configura su
+     * marca en /marcas-dominio. Un WEBP se convierte a PNG porque TCPDF no lo soporta.
+     */
+    public function rutaLocalLogo(?string $correo = null): ?string
+    {
+        $ruta = $this->resolverRutaLocalPorCorreo($correo ?? auth()->user()?->correo)
+            ?? $this->cloudinaryService->rutaLocalRoyalSchool('logotipoBackground.png');
+
+        if (! $ruta || strtolower(pathinfo($ruta, PATHINFO_EXTENSION)) !== 'webp') {
+            return $ruta;
+        }
+
+        $imagen = @imagecreatefromwebp($ruta);
+        if (! $imagen) {
+            return null;
+        }
+
+        $png = tempnam(sys_get_temp_dir(), 'marca').'.png';
+        imagepng($imagen, $png);
+        imagedestroy($imagen);
+
+        return $png;
+    }
+
+    /**
      * Dominio de correo normalizado (minúsculas), o null si no hay correo o no trae "@" —
      * mismo criterio que resolverPorCorreo, expuesto para consumidores que solo necesitan
      * el dominio en sí, no la marca asociada (ver LogDominioMiddleware).
      */
     public function dominioDeCorreo(?string $correo): ?string
     {
-        if (!$correo || !str_contains($correo, '@')) {
+        if (! $correo || ! str_contains($correo, '@')) {
             return null;
         }
 
@@ -290,7 +315,7 @@ class MarcaDominioService extends Service
 
         $extension = strtolower($logo->getClientOriginalExtension());
 
-        if (!in_array($extension, self::EXTENSIONES_PERMITIDAS, true)) {
+        if (! in_array($extension, self::EXTENSIONES_PERMITIDAS, true)) {
             return 'Formato de imagen no permitido (usa jpg, png o webp).';
         }
 

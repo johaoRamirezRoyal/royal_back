@@ -320,7 +320,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     });
 
     // CURSOS DE TRABAJO EN ALTURAS (Gestión Humana) — también el permiso de alturas en PDF
-    // de los mantenimientos de Áreas Comunes (reportes.id_operativo).
+    // de los mantenimientos de Áreas Comunes y los trabajos en altura (trabajos_altura).
     Route::prefix('/cursos-altura')->group(function () {
         require __DIR__ . '/api/cursosAltura.php';
     });

@@ -4,9 +4,11 @@ namespace App\Services\AnioEscolar;
 
 use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\ConfiguracionAcademica;
+use App\Models\AnioEscolar\Periodo;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Services\Service;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class AnioEscolarServices extends Service
 {
@@ -25,6 +27,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al obtener años escolares');
+
             return [
                 'error' => true,
                 'message' => 'Error al obtener años escolares: '.$e->getMessage(),
@@ -44,7 +47,7 @@ class AnioEscolarServices extends Service
             // en último caso al año más reciente que exista.
             $anioVigente = Anio::where('activo', 1)->latest('id')->first();
 
-            if (!$anioVigente) {
+            if (! $anioVigente) {
                 $tipo = $this->obtenerTipoCalendario();
                 $anioInicioObjetivo = $this->anioInicioParaFecha(Carbon::now(), $tipo);
 
@@ -70,6 +73,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al obtener el último año escolar');
+
             return [
                 'error' => true,
                 'message' => 'Error al obtener el último año escolar: '.$e->getMessage(),
@@ -104,6 +108,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al obtener la configuración de calendario académico');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener la configuración de calendario académico',
@@ -115,7 +120,7 @@ class AnioEscolarServices extends Service
     public function actualizarConfiguracionCalendario(string $tipoCalendario): array
     {
         try {
-            if (!in_array($tipoCalendario, ['A', 'B'], true)) {
+            if (! in_array($tipoCalendario, ['A', 'B'], true)) {
                 return [
                     'error' => true,
                     'message' => 'El tipo de calendario debe ser A o B',
@@ -133,6 +138,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al actualizar la configuración de calendario académico');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar la configuración de calendario académico',
@@ -185,6 +191,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al crear el año escolar');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al crear el año escolar',
@@ -218,6 +225,7 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al actualizar el estado del año escolar');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el estado del año escolar',
@@ -248,7 +256,7 @@ class AnioEscolarServices extends Service
             }
 
             $abierto = null;
-            if ($anioInicioEsperado !== null && !Anio::where('anio_inicio', $anioInicioEsperado)->exists()) {
+            if ($anioInicioEsperado !== null && ! Anio::where('anio_inicio', $anioInicioEsperado)->exists()) {
                 $rango = $this->rangoParaAnioInicio($anioInicioEsperado, $tipo);
                 $nuevo = Anio::create([
                     'anio_inicio' => $anioInicioEsperado,
@@ -276,9 +284,71 @@ class AnioEscolarServices extends Service
             ];
         } catch (\Exception $e) {
             $this->sendError($e, 'Error al cerrar/abrir el año escolar');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al cerrar/abrir el año escolar: '.$e->getMessage(),
+                'data' => null,
+            ];
+        }
+    }
+
+    /**
+     * "Iniciar siguiente año escolar" en un clic (módulo Año Escolar y Periodos): toma el
+     * año habilitado (o el más reciente), crea el siguiente si no existe y lo deja como el
+     * único habilitado. Con `$copiarPeriodos`, si el año nuevo no tiene periodos
+     * administrativos, copia los del año anterior con las fechas corridas un año. Por
+     * último marca en curso el primer periodo del año nuevo, si tiene.
+     *
+     * @return array{error: bool, message: string, data: ?array{anio: Anio, periodos_copiados: int}}
+     */
+    public function iniciarSiguienteAnio(bool $copiarPeriodos, PeriodoServices $periodoServices): array
+    {
+        try {
+            $actual = Anio::where('activo', 1)->latest('id')->first() ?? Anio::orderByDesc('anio_inicio')->first();
+
+            if (! $actual) {
+                return ['error' => true, 'message' => 'No hay ningún año escolar registrado para tomar como base', 'data' => null];
+            }
+
+            $anioInicio = (int) $actual->anio_inicio + 1;
+
+            $resultado = DB::transaction(function () use ($actual, $anioInicio, $copiarPeriodos, $periodoServices) {
+                $siguiente = Anio::where('anio_inicio', $anioInicio)->first() ?? Anio::create([
+                    'anio_inicio' => $anioInicio,
+                    'anio_fin' => $this->rangoParaAnioInicio($anioInicio, $this->obtenerTipoCalendario())['anio_fin'],
+                    'activo' => true,
+                    'fechareg' => Carbon::now(),
+                ]);
+                $siguiente->update(['activo' => true]);
+                $this->deshabilitarOtros($siguiente->id);
+
+                $copiados = 0;
+                if ($copiarPeriodos && ! Periodo::where('id_anio', $siguiente->id)->exists()) {
+                    $copiados = $periodoServices->copiarDeAnio($actual->id, $siguiente->id);
+                }
+
+                $primero = Periodo::where('id_anio', $siguiente->id)->where('activo', 1)->orderBy('fecha_inicio')->first();
+                if ($primero) {
+                    Periodo::where('en_curso', 1)->update(['en_curso' => false]);
+                    $primero->update(['en_curso' => true]);
+                }
+
+                return ['anio' => $siguiente->fresh(), 'periodos_copiados' => $copiados];
+            });
+
+            return [
+                'error' => false,
+                'message' => "Año escolar {$resultado['anio']->anio_inicio}–{$resultado['anio']->anio_fin} iniciado"
+                    .($resultado['periodos_copiados'] ? "; se copiaron {$resultado['periodos_copiados']} periodos" : ''),
+                'data' => $resultado,
+            ];
+        } catch (\Exception $e) {
+            $this->sendError($e, 'Error al iniciar el siguiente año escolar');
+
+            return [
+                'error' => true,
+                'message' => 'Error en el servidor al iniciar el siguiente año escolar',
                 'data' => null,
             ];
         }
@@ -339,6 +409,7 @@ class AnioEscolarServices extends Service
     public function rangoDeAnioEscolar(Anio $anio): array
     {
         $tipo = $this->obtenerTipoCalendario();
+
         return $this->rangoParaAnioInicio((int) $anio->anio_inicio, $tipo);
     }
 
@@ -364,6 +435,7 @@ class AnioEscolarServices extends Service
         }
 
         $anioFin = $anioInicio + 1;
+
         return [
             'anio_fin' => $anioFin,
             'fecha_min' => "{$anioInicio}-08-01",

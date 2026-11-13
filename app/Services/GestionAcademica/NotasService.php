@@ -2,6 +2,7 @@
 
 namespace App\Services\GestionAcademica;
 
+use App\Enums\TipoPerfil;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\Boletin;
@@ -14,9 +15,9 @@ use App\Models\GestionAcademica\ReferentePlan;
 use App\Models\GestionAcademica\ReferentePlanHistorial;
 use App\Models\GestionAcademica\ValoracionReferente;
 use App\Models\Usuarios\NivelAcademico;
+use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
-use App\Services\Cursos\CursosServices;
 use App\Services\Service;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -785,7 +786,7 @@ class NotasService extends Service
             ->merge(ObservacionGeneral::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante'))
             ->unique();
 
-        return Usuario::where('perfil', CursosServices::PERFIL_ESTUDIANTE)
+        return Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
             ->where(fn ($q) => $q
                 ->where(fn ($q) => $q->where('id_curso', $idCurso)->where('estado', 'activo'))
                 ->orWhereIn('id_user', $conAlgo))

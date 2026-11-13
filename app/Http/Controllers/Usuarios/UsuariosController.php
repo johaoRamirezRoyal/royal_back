@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\Usuarios;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
+use App\Models\Usuarios\Perfil;
 use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
@@ -76,6 +78,17 @@ class UsuariosController extends Controller
     {
         $per_page = $request->input('per-page', 10);
         $perfil_filtro = $request->input('perfiles');
+
+        // ?tipos[]=ESTUDIANTE: por tipo de perfil (perfiles.tipo), que no cambia de un colegio
+        // a otro. Con perfiles[] y tipos[] a la vez, solo los perfiles que cumplen ambos.
+        $tipos = array_filter(array_map(fn ($t) => TipoPerfil::tryFrom((string) $t), (array) $request->input('tipos', [])));
+        if ($tipos) {
+            $idsTipo = Perfil::idsDeTipo(...$tipos);
+            $perfil_filtro = $perfil_filtro ? array_values(array_intersect(array_map('intval', (array) $perfil_filtro), $idsTipo)) : $idsTipo;
+            // Ningún perfil de ese tipo: un filtro imposible, no "sin filtro" (hay usuarios
+            // legacy con perfil 0, por eso -1).
+            $perfil_filtro = $perfil_filtro ?: [-1];
+        }
         $nivel_filtro = $request->input('niveles');
         $curso_filtro = $request->input('cursos');
         $busqueda = $request->input('s', $request->input('busqueda'));
@@ -362,7 +375,12 @@ class UsuariosController extends Controller
     // POST /usuarios/firma (multipart, campo firma)
     public function subirFirma(Request $request)
     {
-        $request->validate(['firma' => 'required|file']);
+        // Solo PNG/JPG: la firma se incrusta en PDFs (pdf-lib en la historia clínica del frontend,
+        // TCPDF en el reporte de inventario), que no manejan otros formatos. Misma regla que FORMATOS_FIRMA en MiFirmaModal.tsx (frontend).
+        $request->validate(
+            ['firma' => 'required|file|mimes:png,jpg,jpeg'],
+            ['firma.mimes' => 'La firma debe ser una imagen PNG o JPG.']
+        );
 
         $id_user = $request->user()->id_user;
         $response = $this->service_usuarios->subirFirmaUsuario($id_user, $request->file('firma'));

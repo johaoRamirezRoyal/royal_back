@@ -33,6 +33,7 @@ class ArchivosPrivadosTest extends TestCase
             'royal/proveedores/documentos/uuid',
             'royal/royal-school/firma_administrativa',
             'royal/royal-school/paz-salvo/sello',
+            'royal/Instituciones/CartasRecomendacion/carta-recomendacion-15',
         ] as $id) {
             $this->assertTrue(ArchivosPrivados::esPrivado($id), $id);
         }
@@ -42,7 +43,7 @@ class ArchivosPrivadosTest extends TestCase
             'royal/Noticias/Revistas/revista_x',
             'banner/b',
             'colegios-admision/logo',
-            'royal/Instituciones/CartasRecomendacion/c',
+            'royal/Instituciones/otra-carpeta/c',
             'royal/inventario/programacion-mant/m',
             'royal/noticias/n',
             'royal/royal-school/logotipoBackground',
@@ -50,6 +51,19 @@ class ArchivosPrivadosTest extends TestCase
         ] as $id) {
             $this->assertFalse(ArchivosPrivados::esPrivado($id), $id);
         }
+    }
+
+    /** Con ese public_id se borra de Cloudinary la firma reemplazada (UsuariosServices). */
+    public function test_recurso_de_la_url_de_una_firma(): void
+    {
+        config(['cloudinary.cloud_name' => 'demo']);
+
+        $this->assertSame(
+            ['image', 'royal/usuarios/firmas/firma_7_ab12cd34.png', 'royal/usuarios/firmas/firma_7_ab12cd34'],
+            ArchivosPrivados::recursoDe('https://res.cloudinary.com/demo/image/authenticated/s--Ab12_-Cd--/v1730000000/royal/usuarios/firmas/firma_7_ab12cd34.png')
+        );
+        $this->assertNull(ArchivosPrivados::recursoDe('https://res.cloudinary.com/demo/image/upload/royal/noticias/n.png'));
+        $this->assertNull(ArchivosPrivados::recursoDe('https://res.cloudinary.com/otra/image/authenticated/royal/usuarios/firmas/f.png'));
     }
 
     public function test_carpeta_de_colegio_que_choca_con_una_privada(): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Hikvision;
 
+use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Services\AdminManagement\BasesDatosService;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
@@ -9,6 +10,7 @@ use App\Services\AsistenciaTrabajadores\AsistenciaGestionService;
 use App\Services\Hikvisionattendance\hikvisionattendanceService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use App\Services\Usuarios\UsuariosServices;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -26,11 +28,14 @@ class HikvisionController extends Controller implements HasMiddleware
     }
 
     // Perfil de Estudiante en la tabla perfiles
-    const PERFIL_ESTUDIANTE = 16;
 
     // Ventana de debounce para descartar reintentos/rebotes del dispositivo (mismo
     // usuario marcando "de nuevo" a los pocos segundos de su marcación anterior).
     const SEGUNDOS_DEBOUNCE_MARCACION = 15;
+
+    /** Ver momentoDelEvento(): límites para confiar en la hora que manda la terminal. */
+    const MINUTOS_TOLERANCIA_FUTURO = 5;
+    const DIAS_MAXIMOS_ATRASO = 7;
 
     protected hikvisionattendanceService $hikvision_service;
 
@@ -724,6 +729,25 @@ class HikvisionController extends Controller implements HasMiddleware
 
         $idUsuario = (int) $employeeNoString;
 
+        // Un reenvío del mismo evento (la terminal reintenta si no recibió respuesta) trae
+        // el mismo serialNo: se procesa una sola vez. El serialNo es un contador por
+        // terminal, de ahí la MAC en la clave.
+        // ponytail: dedupe en caché (8 días), no en tabla. Si la caché se vacía, un reenvío
+        // pasaría, pero registrarMarcacion es idempotente (entrada = la más temprana,
+        // salida = la más tardía); solo quedaría una fila de más en las marcaciones.
+        // Una tabla con índice único si alguna vez hace falta garantía dura.
+        $serialNo = $data['AccessControllerEvent']['serialNo'] ?? null;
+        $terminal = $data['macAddress'] ?? $request->ip();
+        if ($serialNo !== null && !Cache::add("hikvision:evento:{$terminal}:{$serialNo}", true, now()->addDays(8))) {
+            Log::info('[hikvision-notification] Evento descartado: ya se había procesado (reenvío)', [
+                'idUsuario' => $idUsuario,
+                'serialNo' => $serialNo,
+            ]);
+            return;
+        }
+
+        $momento = $this->momentoDelEvento($data['dateTime'] ?? null, $idUsuario);
+
         // El dispositivo ya no distingue entrada/salida (eventos de marcación biométrica
         // genéricos) — cada método decide por su cuenta, con un typecheck sobre el estado
         // del día, si esta marcación aplica como entrada (llegada tarde solo tiene sentido
@@ -731,19 +755,56 @@ class HikvisionController extends Controller implements HasMiddleware
         // Después de responder: la llegada tarde manda correo y WhatsApp al acudiente y, si
         // el proveedor tarda, la terminal se queda esperando y reenvía el evento. Mismo
         // mecanismo que el aviso de tardanza de trabajadores (notificarLlegadaTardeDespuesDeResponder).
-        app()->terminating(fn () => $this->registrarLlegadaTardeSiAplica($idUsuario));
+        app()->terminating(fn () => $this->registrarLlegadaTardeSiAplica($idUsuario, $momento));
 
-        $this->registrarAsistenciaGestionSiAplica($idUsuario);
+        $this->registrarAsistenciaGestionSiAplica($idUsuario, $momento);
     }
 
     /**
-     * Registra una llegada tarde si el usuario es estudiante y el servidor recibió el
-     * evento después de la hora límite. Se usa la hora del servidor (no la del
-     * dispositivo) porque el reloj del equipo no es confiable. Idempotente por día
-     * (ver LlegadasTarde::agregarLlegadaTarde), así que es seguro invocarlo en cada
-     * marcación del día, no solo en la primera.
+     * Hora real de la marcación: la `dateTime` del evento (con su zona, p. ej.
+     * "2026-11-09T06:22:49-05:00"), no la de llegada al servidor. Cuando la terminal pierde
+     * la red guarda los eventos y los envía todos juntos al reconectar, a veces horas
+     * después (pasó el 2026-11-09: las marcaciones desde las 06:17 llegaron a las 14:04).
+     *
+     * Se usa la hora del servidor solo si la del evento no es creíble: falta o no se puede
+     * leer, va más de MINUTOS_TOLERANCIA_FUTURO por delante del servidor (reloj de la
+     * terminal adelantado) o tiene más de DIAS_MAXIMOS_ATRASO días.
      */
-    private function registrarLlegadaTardeSiAplica(int $idUsuario): void
+    private function momentoDelEvento(?string $dateTime, int $idUsuario): Carbon
+    {
+        $ahora = now();
+
+        try {
+            $momento = $dateTime ? Carbon::parse($dateTime)->setTimezone(config('app.timezone')) : null;
+        } catch (\Throwable) {
+            $momento = null;
+        }
+
+        $creible = $momento !== null
+            && $momento->lessThanOrEqualTo($ahora->copy()->addMinutes(self::MINUTOS_TOLERANCIA_FUTURO))
+            && $momento->greaterThanOrEqualTo($ahora->copy()->subDays(self::DIAS_MAXIMOS_ATRASO));
+
+        if (!$creible) {
+            Log::warning('[hikvision-notification] Hora del evento no creíble: se usa la del servidor', [
+                'idUsuario' => $idUsuario,
+                'dateTime' => $dateTime,
+                'servidor' => $ahora->toDateTimeString(),
+            ]);
+            return $ahora;
+        }
+
+        // Un evento del futuro cercano (dentro de la tolerancia) se toma como "ahora". El
+        // atraso no se loguea: queda en `fechareg` (hora de llegada) frente a la marcación.
+        return $momento->min($ahora);
+    }
+
+    /**
+     * Registra una llegada tarde si el usuario es estudiante y marcó después de la hora
+     * límite. `$momento` es la hora de la marcación (ver momentoDelEvento), no la de
+     * llegada al servidor. Idempotente por día (ver LlegadasTarde::agregarLlegadaTarde),
+     * así que es seguro invocarlo en cada marcación del día, no solo en la primera.
+     */
+    private function registrarLlegadaTardeSiAplica(int $idUsuario, Carbon $momento): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
@@ -752,7 +813,7 @@ class HikvisionController extends Controller implements HasMiddleware
             return;
         }
 
-        if ($usuario['usuario']->estado !== 'activo' || (int) $usuario['usuario']->perfil !== self::PERFIL_ESTUDIANTE) {
+        if ($usuario['usuario']->estado !== 'activo' || ! $usuario['usuario']->esTipo(TipoPerfil::ESTUDIANTE)) {
             Log::info('[hikvision-notification] Llegada tarde omitida: no aplica (no es estudiante activo)', [
                 'idUsuario' => $idUsuario,
                 'estado' => $usuario['usuario']->estado,
@@ -761,17 +822,28 @@ class HikvisionController extends Controller implements HasMiddleware
             return;
         }
 
-        $ahora = now();
         $horaLimite = ConfiguracionLlegadasTarde::find(1)?->hora_limite ?? '07:15:00';
 
-        if ($ahora->format('H:i:s') <= $horaLimite) {
+        if ($momento->format('H:i:s') <= $horaLimite) {
             return;
+        }
+
+        // Marcación que llegó con horas de atraso (terminal sin red): se registra, pero sin
+        // avisar al acudiente; un "llegó tarde" horas después confunde más de lo que ayuda.
+        $atrasoMinutos = (int) $momento->diffInMinutes(now());
+        $notificar = $atrasoMinutos <= AsistenciaGestionService::MINUTOS_MAXIMOS_ATRASO_AVISO;
+        if (!$notificar) {
+            Log::info('[hikvision-notification] Llegada tarde de estudiante sin aviso: la marcación llegó con atraso', [
+                'idUsuario' => $idUsuario,
+                'atrasoMinutos' => $atrasoMinutos,
+            ]);
         }
 
         $resultado = $this->llegadas_tarde_service->agregarLlegadaTarde(
             $idUsuario,
-            $ahora->format('Y-m-d'),
-            $ahora->format('H:i:s')
+            $momento->format('Y-m-d'),
+            $momento->format('H:i:s'),
+            notificar: $notificar,
         );
 
         if ($resultado['error']) {
@@ -788,7 +860,7 @@ class HikvisionController extends Controller implements HasMiddleware
      * lo resuelve AsistenciaGestionService::registrarMarcacion() con un typecheck sobre
      * el estado del día (ver docblock de ese método).
      */
-    private function registrarAsistenciaGestionSiAplica(int $idUsuario): void
+    private function registrarAsistenciaGestionSiAplica(int $idUsuario, Carbon $momento): void
     {
         $usuario = $this->usuario_services->mostrarInfoUsuarioId($idUsuario);
 
@@ -799,7 +871,7 @@ class HikvisionController extends Controller implements HasMiddleware
 
         $perfil = (int) $usuario['usuario']->perfil;
 
-        if (in_array($perfil, AsistenciaGestionService::PERFILES_EXCLUIDOS_ASISTENCIA, true)) {
+        if ($usuario['usuario']->esTipo(...AsistenciaGestionService::TIPOS_EXCLUIDOS_ASISTENCIA)) {
             Log::info('[hikvision-notification] Asistencia gestión omitida: perfil excluido', [
                 'idUsuario' => $idUsuario,
                 'perfil' => $perfil,
@@ -807,24 +879,28 @@ class HikvisionController extends Controller implements HasMiddleware
             return;
         }
 
-        // Cache::add() es atómico (falla si la clave ya existe): si el dispositivo
-        // reenvía el mismo evento físico segundos después (reintento/rebote), esta
-        // segunda petición se descarta aquí en vez de llegar a registrarMarcacion(),
-        // donde se interpretaría erróneamente como la salida del usuario.
-        if (!Cache::add("hikvision:marcacion:{$idUsuario}", true, self::SEGUNDOS_DEBOUNCE_MARCACION)) {
-            Log::info('[hikvision-notification] Marcación descartada: petición duplicada dentro de la ventana de debounce', [
+        // Doble reconocimiento de la misma persona en segundos (dos eventos con serialNo
+        // distinto): el segundo no debe leerse como la salida. La ventana se mide con la
+        // hora de la marcación, no con la de llegada: al reconectar, la terminal manda en
+        // ráfaga eventos separados por minutos, y medir con el reloj del servidor los
+        // descartaba (pasó el 2026-11-09). Cache::add() es atómico.
+        // ponytail: ventanas fijas de SEGUNDOS_DEBOUNCE_MARCACION; dos marcaciones a ambos
+        // lados del borde de una ventana pasan las dos. Basta para un doble reconocimiento.
+        $ventana = intdiv($momento->getTimestamp(), self::SEGUNDOS_DEBOUNCE_MARCACION);
+        $claveDebounce = 'hikvision:marcacion:' . config('database.default') . ":{$idUsuario}:{$ventana}";
+        if (!Cache::add($claveDebounce, true, now()->addDays(8))) {
+            Log::info('[hikvision-notification] Marcación descartada: doble reconocimiento dentro de la ventana de debounce', [
                 'idUsuario' => $idUsuario,
+                'momento' => $momento->toDateTimeString(),
             ]);
 
             return;
         }
 
-        $ahora = now();
-
         $resultado = $this->asistencia_gestion_service->registrarMarcacion(
             $idUsuario,
-            $ahora->format('Y-m-d'),
-            $ahora->format('H:i:s')
+            $momento->format('Y-m-d'),
+            $momento->format('H:i:s')
         );
 
         if ($resultado['error']) {

@@ -30,7 +30,7 @@ class PeriodoServices extends Service
                 $query->where('activo', (bool) $filtros['activo']);
             }
 
-            if (!empty($filtros['id_anio'])) {
+            if (! empty($filtros['id_anio'])) {
                 $query->where('id_anio', $filtros['id_anio']);
             }
 
@@ -41,6 +41,7 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener los periodos');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener los periodos',
@@ -70,6 +71,7 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al crear el periodo');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al crear el periodo',
@@ -91,6 +93,7 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar el periodo');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el periodo',
@@ -112,6 +115,7 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al actualizar el estado del periodo');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al actualizar el estado del periodo',
@@ -144,12 +148,100 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al marcar el periodo en curso');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al marcar el periodo en curso',
                 'data' => null,
             ];
         }
+    }
+
+    /**
+     * Comando diario `periodos-administrativos:sincronizar-en-curso`: marca en curso el
+     * periodo activo cuyas fechas cubren hoy. Si ninguno lo cubre (vacaciones, hueco entre
+     * periodos) no toca nada y se mantiene el último en curso.
+     *
+     * @return array{error: bool, message: string, data: ?Periodo}
+     */
+    public function sincronizarEnCurso(): array
+    {
+        $hoy = Carbon::today()->toDateString();
+        $periodo = Periodo::where('activo', 1)
+            ->whereDate('fecha_inicio', '<=', $hoy)
+            ->whereDate('fecha_fin', '>=', $hoy)
+            ->orderByDesc('fecha_inicio')
+            ->first();
+
+        if (! $periodo) {
+            return ['error' => false, 'message' => 'Ningún periodo cubre la fecha de hoy: sin cambios', 'data' => null];
+        }
+
+        if ($periodo->en_curso) {
+            return ['error' => false, 'message' => 'Sin cambios: el periodo en curso ya es el correcto', 'data' => $periodo];
+        }
+
+        return $this->marcarEnCurso($periodo->id);
+    }
+
+    /**
+     * "Pasar al siguiente periodo" en un clic: marca en curso el periodo activo que sigue
+     * (por fecha de inicio) al actual dentro de su año escolar. Si el actual no es del año
+     * escolar habilitado (o no hay ninguno en curso), toma el primero del año habilitado.
+     */
+    public function avanzar(): array
+    {
+        $actual = $this->resolverActivo();
+
+        $siguiente = $actual
+            ? Periodo::where('activo', 1)
+                ->where('id_anio', $actual->id_anio)
+                ->whereDate('fecha_inicio', '>', $actual->fecha_inicio->toDateString())
+                ->orderBy('fecha_inicio')
+                ->first()
+            : null;
+
+        if (! $siguiente && ! $actual?->anioEscolar?->activo) {
+            $siguiente = Periodo::where('activo', 1)
+                ->whereHas('anioEscolar', fn ($q) => $q->where('activo', 1))
+                ->when($actual, fn ($q) => $q->where('id', '!=', $actual->id))
+                ->orderBy('fecha_inicio')
+                ->first();
+        }
+
+        if (! $siguiente) {
+            return [
+                'error' => true,
+                'message' => 'No hay un periodo siguiente en este año escolar. Inicia el próximo año escolar o crea sus periodos primero.',
+                'data' => null,
+            ];
+        }
+
+        return $this->marcarEnCurso($siguiente->id);
+    }
+
+    /**
+     * Duplica los periodos de un año escolar en otro, corriendo las fechas `$anios` años
+     * (mismo `numero`, activos, ninguno en curso). Devuelve cuántos copió. No abre su
+     * propia transacción: la llama AnioEscolarServices::iniciarSiguienteAnio dentro de la suya.
+     */
+    public function copiarDeAnio(int $idAnioOrigen, int $idAnioDestino, int $anios = 1): int
+    {
+        $origen = Periodo::where('id_anio', $idAnioOrigen)->where('activo', 1)->orderBy('fecha_inicio')->get();
+
+        foreach ($origen as $periodo) {
+            Periodo::create([
+                'numero' => $periodo->numero,
+                'id_anio' => $idAnioDestino,
+                'fecha_inicio' => $periodo->fecha_inicio->copy()->addYearsNoOverflow($anios)->toDateString(),
+                'fecha_fin' => $periodo->fecha_fin->copy()->addYearsNoOverflow($anios)->toDateString(),
+                'activo' => true,
+                'en_curso' => false,
+                'fechareg' => Carbon::now(),
+            ]);
+        }
+
+        return $origen->count();
     }
 
     /**
@@ -182,6 +274,7 @@ class PeriodoServices extends Service
             ];
         } catch (Exception $e) {
             $this->sendError($e, 'Error al obtener el periodo activo');
+
             return [
                 'error' => true,
                 'message' => 'Error en el servidor al obtener el periodo activo',

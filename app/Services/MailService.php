@@ -65,6 +65,7 @@ class MailService
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
+
                 return [
                     'error' => true,
                     'message' => 'Intento de envío de correo sin destinatarios.',
@@ -97,28 +98,28 @@ class MailService
 
             return [
                 'error' => true,
-                'message' => 'Correo NO enviado: ' . $e->getMessage(),
+                'message' => 'Correo NO enviado: '.$e->getMessage(),
                 'data' => [],
             ];
         }
     }
 
-    
-    public function sendGeneric(array|string $to, string $titulo, string $contenido): array
+    public function sendGeneric(array|string $to, string $titulo, string $contenido, ?string $urlBoton = null, string $textoBoton = 'Ver en OMNIA'): array
     {
         try {
             $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
+
                 return [
-                    "error" => true,
-                    "message" => "Intento de envío de correo sin destinatarios.",
-                    "data" => []
+                    'error' => true,
+                    'message' => 'Intento de envío de correo sin destinatarios.',
+                    'data' => [],
                 ];
             }
 
-            Mail::to($recipients)->bcc($this->bccGestor($recipients))->send(new GenericMail($titulo, $contenido));
+            Mail::to($recipients)->bcc($this->bccGestor($recipients))->send(new GenericMail($titulo, $contenido, $urlBoton, $textoBoton));
 
             Log::info('Correo genérico enviado', [
                 'to' => $recipients,
@@ -128,7 +129,7 @@ class MailService
             return [
                 'error' => false,
                 'message' => 'Correo genérico enviado correctamente',
-                'data' => []
+                'data' => [],
             ];
         } catch (\Throwable $e) {
             Log::error('Error al enviar correo genérico', [
@@ -140,7 +141,7 @@ class MailService
             return [
                 'error' => true,
                 'message' => 'Correo genérico NO enviado',
-                'data' => []
+                'data' => [],
             ];
         }
     }
@@ -152,6 +153,7 @@ class MailService
 
             if (empty($recipients)) {
                 Log::warning('Intento de envío de correo sin destinatarios.');
+
                 return false;
             }
 

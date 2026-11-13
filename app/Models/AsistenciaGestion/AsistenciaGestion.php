@@ -55,7 +55,7 @@ class AsistenciaGestion extends Model
         }
 
         $hora = $this->hora_asistencia->format('H:i:s');
-        $grupoId = $this->usuario ? (hikvisionattendanceService::GROUP_ID_POR_PERFIL[(int) $this->usuario->perfil] ?? null) : null;
+        $grupoId = $this->usuario ? hikvisionattendanceService::grupoDePerfil($this->usuario->perfil) : null;
         // Con el día de ESTE registro, no el de hoy: si no, un mismo registro cambiaba de
         // banda según el día en que se consultara el reporte (ver horarioAplicable).
         $horario = self::horarioAplicable($grupoId, $this->fecha_asistencia);

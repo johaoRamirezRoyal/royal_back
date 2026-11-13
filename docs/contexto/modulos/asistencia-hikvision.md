@@ -72,7 +72,9 @@ guardar y es el id que usan el frontend, el caché de empleados y los logs.
   - Cuando esté corrida en todos, borra el bloque `legado` y las variables
     `HIKVISION_HOST/PORT/PROTOCOL/USERNAME/PASSWORD/HOSTS`.
 - Siguen en el `.env`, porque no son datos de una terminal: `HIKVISION_VERIFY_SSL`,
-  `HIKVISION_PASSWORD_NUMERICA` y `HIKVISION_GROUP_IDS`.
+  `HIKVISION_PASSWORD_NUMERICA` y `HIKVISION_GROUP_IDS`. Esta última va **por grupo**, no por
+  perfil (`"9:2"` manda el 2 en vez del 9; `"8:"` no manda grupo), porque es la misma para
+  todos los colegios. Solo cambia lo que se le envía a la terminal, no el horario.
 - Test: `tests/Feature/Hikvision/DispositivosServiceTest.php`. Córrelo con `composer run
   test`: con la configuración en caché, `php artisan test` apunta a la BD real (el test
   ahora lo detecta y falla).
@@ -83,7 +85,17 @@ guardar y es el id que usan el frontend, el caché de empleados y los logs.
 solo deja pasar las IPs de las terminales y cambia `database.default` al colegio.
 
 - Los eventos sin `employeeNoString` se ignoran; ese número es el `id_user`.
-- Siempre se usa la hora **del servidor**, no la del dispositivo.
+- **Se usa la hora del evento** (`dateTime`, con zona, p. ej. `2026-11-09T06:22:49-05:00`),
+  no la de llegada (desde 2026-11-09, `momentoDelEvento`). Una terminal sin red guarda los
+  eventos y los manda todos juntos al reconectar: ese día las marcaciones desde las 06:17
+  llegaron a las 14:04 y, con la hora del servidor, todos quedaron tarde (con correo), las
+  entradas se volvieron salidas y el debounce descartó marcaciones reales.
+  - Se cae a la hora del servidor (warning en el log) solo si `dateTime` falta o no se
+    lee, va más de 5 min adelantada o tiene más de 7 días.
+  - `fechareg` sigue siendo la hora de llegada: la diferencia con `hora_asistencia` es el
+    atraso (no se loguea aparte).
+  - **Reenvíos**: un evento con el mismo `serialNo` de la misma terminal (`macAddress`)
+    se procesa una vez (caché de 8 días).
 - **Estudiantes** (perfil 16, `registrarLlegadaTardeSiAplica`):
   - Se registra solo si pasa `configuracion_llegadas_tarde.hora_limite` (07:15 por
     defecto); a tiempo no se guarda nada.
@@ -91,8 +103,12 @@ solo deja pasar las IPs de las terminales y cambia `database.default` al colegio
   - Corre en `app()->terminating()`, después de responder a la terminal: el correo y el
     WhatsApp al acudiente la hacían esperar, y la terminal reenviaba el evento.
 - **Trabajadores** (perfiles fuera de `PERFILES_EXCLUIDOS_ASISTENCIA = [16, 17, 28, 6]`,
-  `AsistenciaGestionService::registrarMarcacion`), con un debounce de 15 s por usuario:
-  - La primera marcación del día es la entrada y dispara el aviso de tardanza.
+  `AsistenciaGestionService::registrarMarcacion`), con un debounce de 15 s por usuario
+  medido con la hora del evento (ventanas fijas), para el doble reconocimiento:
+  - **La entrada es la marcación MÁS TEMPRANA del día**, no la primera en llegar: una que
+    llegue después pero sea anterior la reemplaza, y la entrada vieja sigue como marcación
+    (puede ser la salida). La primera en crear la fila dispara el aviso de tardanza.
+    Test: `tests/Feature/Hikvision/MarcacionAtrasadaTest.php`.
   - Toda marcación posterior se guarda en `asistencia_gestion_marcaciones` (no hay
     endpoint que la muestre, a propósito).
   - **La salida es la ÚLTIMA marcación** desde `hora_minima_salida`. El `UPDATE` solo
@@ -107,7 +123,8 @@ solo deja pasar las IPs de las terminales y cambia `database.default` al colegio
   `id_usuario`, `hora_desde`/`hora_hasta` y `per_page`.
 - **Solo con `fecha` exacta** devuelve `faltantes` (con `ultima_llegada`) y `resumen`.
 - Cada fila trae `estado`, `puntualidad`, `es_tardanza` y `usuario.grupo`
-  (`GROUP_ID_POR_PERFIL`).
+  (`hikvisionattendanceService::grupoDePerfil()`: tipo de perfil y opción 171; ver
+  `docs/contexto/permisos.md`).
 - Otros endpoints: `POST /manual`, `DELETE /`, `GET /grafica*`, `GET /qr/token` y
   `POST /qr/marcar`. `POST /`, `/resumen`, `/ultimos-registros` y
   `/grafica/promedio-por-usuario` se eliminaron el 2026-10-22 por no tener consumidor;
@@ -125,8 +142,36 @@ fila única `configuracion_asistencia`:
 Los dos últimos reemplazaron un selector libre de perfiles. Hay un tope de
 `MAX_DESTINATARIOS_LLEGADA_TARDE = 30`.
 
+- **Marcación atrasada** (desde 2026-11-09): si una marcación de la terminal (`QR = 0`) llegó
+  más de `MINUTOS_MAXIMOS_ATRASO_AVISO = 120` min después de hecha (`fechareg` frente a
+  `hora_asistencia`), la tardanza se registra pero no se avisa: `correo_llegada_tarde =
+  'atrasado'`. Con estudiantes, el webhook pasa `notificar: false` a
+  `LlegadasTarde::agregarLlegadaTarde` (no se avisa al acudiente). Registros manuales y por
+  QR no se afectan.
+- **Revocar** (`POST /asistencia-gestion/{id}/revocar`): solo una tardanza real
+  (`esTardanza()`, si no 422). Después de responder se le manda al trabajador un correo
+  "Llegada tarde revocada" con la fecha, la hora y el motivo (la observación) si lo hay; si
+  falla, solo queda en el log.
+
+## Reloj de las terminales
+
+`hikvision:sincronizar-reloj` (cada hora, todos los colegios) lee `GET /ISAPI/System/time`
+de cada terminal activa y, si se desfasa más de `SEGUNDOS_TOLERANCIA_RELOJ = 10` s del
+servidor, le pone la hora del servidor (`PUT`, `timeMode` manual, conserva su `timeZone`).
+No usa NTP: las terminales están en la red interna y no se sabe si alcanzan un servidor NTP.
+`--solo-revisar` solo mide. El resultado queda en caché 1 día y sale en
+`GET /hikvision/devices` como `reloj` (`desfase_segundos`, negativo = atrasada; `corregido`;
+`error`; `revisado_at`), que la pantalla de Terminales muestra.
+
+- Medido el 2026-11-09 (desde un equipo local): las tres terminales de Royal iban 22, 33 y
+  67 s atrasadas. El "atraso" de ~20 s que se veía en los eventos era el reloj, no la red.
+
 ## QR de portería
 
+- `POST /asistencia-gestion/qr/salir-pantalla` (opción 63 o 148, `intentos:5,15`): valida
+  `password` contra la contraseña de la sesión (`Hash::check` con `usuarios.pass`); 422 si no
+  coincide. El frontend lo pide para salir de la pantalla completa del QR, que queda 24/7 en
+  portería con la sesión de quien la abrió.
 - `GET /asistencia-gestion/qr/token` (opción 63 o 148, la 148 da solo la pantalla): token `"{ventana}.{firma}"` que cambia
   cada 30 s, con HMAC sobre `app.key` y `database.default` (el QR de un colegio no sirve
   en otro). No guarda estado.

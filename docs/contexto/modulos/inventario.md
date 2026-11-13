@@ -72,8 +72,9 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 |---|---|---|
 | 108 Administrador | 1, 2 | todo el módulo |
 | 109 Uso | 11, 26 | todo el módulo, pero `obtenerTodosLosBloques` lo limita a su `id_nivel` si no tiene la 108 |
-| 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) |
-| 141 Mis áreas — de mi nivel | ninguno (se asigna en `/permisos`) | `/inventario/mis-areas` del frontend: ítems tipo 3 de los bloques activos de su `id_nivel` (directos o en sus áreas) |
+| 119 Mis áreas comunes | 11, 26 | solo `/mis-bloques` (los bloques donde es responsable en `bloque_usuario`) y, de ellos, solo lo asignado directo al bloque. Con solo la 119 (sin 12/17/108/109), `listadoConsolidado` limita los filtros en el servidor (`InventariosController::limitarAMisBloques`) |
+| 149 Mis áreas comunes — Ver áreas del bloque | ninguno | complemento de la 119 y de la 141: suma las áreas de sus bloques y su inventario (sin ella, solo lo asignado directo al bloque) |
+| 141 Mis áreas — de mi nivel | ninguno (se asigna en `/permisos`) | `/inventario/mis-areas` del frontend: ítems tipo 3 asignados directo a los bloques activos de su `id_nivel`; los de sus áreas solo con la 149. `misAreas` devuelve además `bloques` (catálogo del filtro "Bloque") y acepta `?id_bloque=` |
 | 142 Mis áreas — de mis áreas a cargo | ninguno | lo mismo, pero de las áreas donde tiene ítems con `inventario.id_user` = él |
 
 - Exigen la **108**: crear, editar y desactivar bloques, asignar responsables, asignar
@@ -111,7 +112,7 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 - Rutas `inventario/mantenimiento/programacion` (opción `Permiso::INVENTARIO`). Recrea
   `/mantenimientos/programacion` del legacy sobre sus mismas tablas:
   - `programacion_mant`: `estado` 0 Pendiente, 1 Terminado, 2 Completado parcial, 3 Aplazado,
-    4 Cancelado; `tipo` 1 Sistemas, 2 Operativos; `periodo` = `periodos.id` (antes ordinal
+    4 Cancelado; `tipo` 1 Sistemas, 2 Operativos, 3 Áreas comunes (3 no existe en el legacy); `periodo` = `periodos.id` (antes ordinal
     1/2, migrado en `2026_10_30_120000`; los años sin periodos registrados quedaron NULL);
     `fecha_fin` = último día de la franja (NULL = un solo día; `2026_10_30_130000`). Los
     filtros `desde`/`hasta` traen las programaciones que se cruzan con ese rango.
@@ -124,8 +125,8 @@ excluyen el tipo 3 cuando no llega `tipo_categoria`: `/inventario/listado` tambi
 - `GET .../calendario` (cronograma) devuelve solo programaciones, sin paginar.
 - `programarMantenimientoPreventivo` crea una programación por lote (misma descripción,
   periodo y usuario; `fecha_registro`/`fecha_fin` = primer y último día realmente asignado
-  a los equipos, no el rango elegido, porque cada equipo cae en un día aleatorio; `tipo` según la categoría del primer ítem, Áreas
-  Comunes cuenta como Operativos; estado 1 si se generó con solución, si no 0).
+  a los equipos, no el rango elegido, porque cada equipo cae en un día aleatorio; `tipo` según la categoría del primer ítem (Áreas
+  Comunes → 3; las anteriores a este cambio quedaron como Operativos); estado 1 si se generó con solución, si no 0).
 
 ## Trabajo en alturas (`CursosAlturaController`, `routes/api/cursosAltura.php`)
 
@@ -136,18 +137,56 @@ opcional). Para el CRUD se usa la opción **143**.
 
 - **Operativos**: los usuarios activos con perfil en
   `PermisosLicenciasServices::PERFILES_ASIGNABLES` (10, 23, 27, 32).
-- **Curso vigente**: `CursoAltura::scopeVigentes`. Exige `activo = 1` y
-  `fecha_expedicion <= hoy`, y además `fecha_finalizacion` NULL o `>= hoy`.
-- **`reportes.id_operativo`** (antes `evidencia`, un longblob legacy que nunca se usó) guarda
-  el operativo de un trabajo en altura. Hay dos formas de llenarlo:
-  - Al reportar un daño (`POST /inventario/reportar`).
-  - Al programar un preventivo (`POST /inventario/mantenimiento`).
+- **Curso vigente**: `CursoAltura::scopeVigentes($fecha)`. Exige `activo = 1` y
+  `fecha_expedicion <= fecha`, y además `fecha_finalizacion` NULL o `>= fecha` (hoy si no
+  se da la fecha).
+- **Trabajos en altura** (`trabajos_altura` 1 a 1 con el reporte padre, con `fecha_trabajo`
+  propia, + `trabajos_altura_operativos`; modelo `TrabajoAltura`): un reporte o mantenimiento
+  puede tener **varios** operativos. Se crean con `CursosAlturaServices::asignarTrabajo()`,
+  dentro de la transacción de:
+  - reportar un daño (`POST /inventario/reportar`);
+  - programar un preventivo (`POST /inventario/mantenimiento`).
 
-  En los dos casos se valida con `CursoAltura::reglaOperativo()`: si el operativo no tiene un
-  curso vigente, responde 422.
-- `GET /cursos-altura/operativos-vigentes` y `GET /cursos-altura/permiso/{idReporte}/pdf`
-  aceptan las opciones de Inventario y de Áreas Comunes (12, 108, 109, 119, 141, 142).
+  Los dos reciben `id_operativos` (arreglo) y lo validan con `CursoAltura::reglasOperativos()`:
+  si alguno no tiene curso vigente hoy, responde 422 con su nombre. `consultaReportes`
+  devuelve `id_trabajo_altura` y `nom_operativo` (nombres separados por coma).
+- **`reportes.id_operativo`** (antes `evidencia`) quedó **sin uso**: la migración
+  `2026_11_09_120000_create_trabajos_altura_tables` copió sus datos. **Pendiente**: borrar la
+  columna en otra migración cuando producción ya corra este código.
+- **Gestión Humana > Trabajos en altura** (opción 143): `GET /cursos-altura/trabajos` (paginado,
+  `s` busca por ítem, área o trabajador) y `PUT /cursos-altura/trabajos/{id}`
+  (`fecha_trabajo` + `id_operativos`). Al editar, el curso debe cubrir la **fecha del
+  trabajo**, no hoy. Con `id_operativos` vacío se borra el trabajo (deja de ser en altura).
+  Cambiar `fecha_trabajo` no toca las fechas de `reportes`.
+- `GET /cursos-altura/operativos-vigentes?fecha=` y `GET /cursos-altura/permiso/{idReporte}/pdf`
+  aceptan las opciones de Inventario, Áreas Comunes y Cursos de altura (12, 108, 109, 119,
+  141, 142, 143).
 - **El PDF** lo genera `PermisoAlturasPdfService` y sigue el formato de la Resolución
-  4272/2021: datos del trabajo, trabajador autorizado con su curso, lista de verificación
-  SÍ/NO, observaciones y tres firmas. La lista de verificación, la altura y las firmas se
-  llenan a mano en sitio. Si el reporte no tiene operativo, el endpoint responde 404.
+  4272/2021: datos del trabajo (con `fecha_trabajo`), una fila por trabajador con el curso que
+  cubre esa fecha (o el más reciente), lista de verificación SÍ/NO, observaciones y una firma
+  por trabajador más coordinador y quien autoriza. Lo demás se llena a mano en sitio. Si el
+  reporte no tiene trabajo en altura, el endpoint responde 404.
+- **Seguridad social (EPS/AFP/ARL)**, opción **150** (`Permiso::SEGURIDAD_SOCIAL`, que la
+  migración otorga a los perfiles que ya tienen la 143). Usa dos tablas:
+  `entidades_seguridad_social` (catálogo único, columna `tipo` EPS/AFP/ARL y
+  `unique(tipo, nombre)`) y `seguridad_social_trabajador` (una fila por `id_user` con
+  `id_eps|afp|arl` y `ruta_eps|afp|arl`). Solo se guarda para quien tiene algún curso con
+  `activo = 1`, vigente o no; si no, responde 422. Un documento nuevo reemplaza al anterior
+  y, sin archivo, se conserva el actual. Un id ausente queda en null. Los documentos van en
+  `gestion-humana/seguridad-social`, que es privada en Cloudinary.
+  - **Catálogo**: `PUT /entidades/{id}` renombra y `DELETE` es una baja lógica (`activo = 0`).
+    La unicidad del nombre solo cuenta entre las activas: crear una con el nombre de una
+    desactivada la reactiva (`updateOrCreate`). Una desactivada sigue siendo válida en
+    `id_eps|afp|arl` para no perderla al volver a guardar al trabajador.
+  - Con la 150, `GET /cursos-altura` agrega `seguridad_social` (con `eps|afp|arl`: id, nombre y
+    activo) a cada fila, para la columna del listado. Sin la 150 no la trae.
+  - **Tests**: en local `cursos_altura` es MyISAM, así que el `rollBack` no deshace sus filas.
+    `CursosAlturaTest` borra en `tearDown` los cursos con id mayor al máximo del `setUp`.
+
+## Carta de entrega (`/inventario/listado`)
+
+Botón "Carta de entrega": `GET /api/inventario/listado-consolidado/carta-entrega/pdf` (permiso INVENTARIO) con los mismos filtros del listado (`buildConsolidadoParams`). Recreación de `cartaEntregaOficial.php` (no de `cartaEntrega.php`, que usaba tabla temporal): una fila por grupo (usuario, área, descripción) con cantidad; marca/observación del ítem más reciente del grupo. Backend: `InventarioServices::generarCartaEntregaPdf` + `DocumentoPdfService` (documento `cartaEntrega` de `src/documentos` del frontend, el mismo que usa Compras en el navegador). Logo y nombre de institución: marca del dominio del usuario, si no "Royal School" (no se usa `super_empresa`).
+
+## Indicadores de gestión (`/indicadores-gestion`)
+
+`GET /api/indicadores-gestion` pagina en el servidor (DataTable remoto: `page`, `per-page`, `s`, `sort`, `dir` + `tipo_categoria`, `id_anio`, `periodo`, `id_categoria`) y devuelve `resumen` (`total`, `promedio`, `bajo_meta`) de todos los registros filtrados, no de la página. La página arranca sin año filtrado (histórico completo); la gráfica sigue por `/grafica`.

@@ -2,6 +2,8 @@
 
 namespace App\Services\Admisiones;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso;
 use App\Events\EstadoInscripcionCambiado;
 use App\Http\Resources\Academico\AnioAcademicoResource;
 use App\Models\Admisiones\Aspirante;
@@ -31,21 +33,23 @@ class AdmisionesServices extends Service
     ) {}
 
     /**
-     * IDs de perfil de psicóloga por nivel, con los grados que cada una atiende.
+     * Opción de psicóloga por nivel (167–169), con los grados que atiende. Antes eran los
+     * ids de perfil 21, 24 y 25; cada colegio otorga la opción al perfil que quiera.
      * Se reutiliza para: filtrar aspirantes por psicóloga, resolver a qué
      * psicóloga notificar según el grado del aspirante, y listar psicólogas disponibles.
      */
     private const NIVELES_PSICOLOGAS = [
-        21 => ['Stem', 'Pre Kinder', 'Kinder', 'Transición'],
-        24 => ['Primero de primaria', 'Segundo de primaria', 'Tercero de primaria', 'Cuarto de primaria', 'Quinto de primaria'],
-        25 => ['Sexto de bachillerato', 'Séptimo de bachillerato', 'Octavo de bachillerato', 'Noveno de bachillerato', 'Décimo de bachillerato', 'Undécimo de bachillerato'],
+        Permiso::ADMISIONES_PSICOLOGA_PREESCOLAR => ['Stem', 'Pre Kinder', 'Kinder', 'Transición'],
+        Permiso::ADMISIONES_PSICOLOGA_PRIMARIA => ['Primero de primaria', 'Segundo de primaria', 'Tercero de primaria', 'Cuarto de primaria', 'Quinto de primaria'],
+        Permiso::ADMISIONES_PSICOLOGA_BACHILLERATO => ['Sexto de bachillerato', 'Séptimo de bachillerato', 'Octavo de bachillerato', 'Noveno de bachillerato', 'Décimo de bachillerato', 'Undécimo de bachillerato'],
     ];
 
-    public static function perfilPsicologaParaGrado(?string $grado): ?int
+    /** La opción de psicóloga (167–169) que atiende ese grado, o null. */
+    public static function opcionPsicologaParaGrado(?string $grado): ?int
     {
-        foreach (self::NIVELES_PSICOLOGAS as $perfil => $cursos) {
+        foreach (self::NIVELES_PSICOLOGAS as $opcion => $cursos) {
             if (in_array($grado, $cursos, true)) {
-                return $perfil;
+                return $opcion;
             }
         }
 
@@ -1352,7 +1356,10 @@ class AdmisionesServices extends Service
     public function mostrarAspirantesAPsicologa(int $perfil_psicologa): array
     {
 
-        $cursosPermitidos = self::NIVELES_PSICOLOGAS[$perfil_psicologa] ?? [];
+        // Los grados de todas las opciones de psicóloga que tenga ese perfil.
+        $cursosPermitidos = collect(self::NIVELES_PSICOLOGAS)
+            ->filter(fn ($cursos, $opcion) => in_array($perfil_psicologa, PermisosPerfil::perfilesCon($opcion), true))
+            ->flatten()->all();
 
         try {
             $inscripciones = Inscripcion::with([
@@ -1402,7 +1409,7 @@ class AdmisionesServices extends Service
     public function listarPsicologasDisponibles(): array
     {
         try {
-            $psicologas = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))
+            $psicologas = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(...array_keys(self::NIVELES_PSICOLOGAS)))
                 ->where('estado', 'activo')
                 ->get(['id_user', 'nombre', 'apellido', 'correo', 'perfil']);
 
@@ -1448,7 +1455,7 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $psicologa = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))->find($id_psicologa);
+            $psicologa = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(...array_keys(self::NIVELES_PSICOLOGAS)))->find($id_psicologa);
 
             if (! $psicologa) {
                 return [
@@ -1644,7 +1651,7 @@ class AdmisionesServices extends Service
                 ];
             }
 
-            $psicologaNueva = Usuario::whereIn('perfil', array_keys(self::NIVELES_PSICOLOGAS))->find($id_psicologa);
+            $psicologaNueva = Usuario::whereIn('perfil', PermisosPerfil::perfilesCon(...array_keys(self::NIVELES_PSICOLOGAS)))->find($id_psicologa);
 
             if (! $psicologaNueva) {
                 return [
@@ -1781,10 +1788,18 @@ class AdmisionesServices extends Service
                     'user_log' => $userLog,
                 ]);
 
+                $idFirmaAnterior = HceObservacionesFirmas::where('id_inscripcion', $cita->id_inscripcion)->value('id_firma_psicologa');
+
                 HceObservacionesFirmas::updateOrCreate(
                     ['id_inscripcion' => $cita->id_inscripcion],
                     ['id_firma_psicologa' => $firmaPsicologa->id]
                 );
+
+                // Volver a atender la cita cambia la firma de la historia: la anterior, si era
+                // manual (o una «Mi firma» ya reemplazada) y nadie más la usa, se borra con su archivo.
+                if ($idFirmaAnterior && (int) $idFirmaAnterior !== $firmaPsicologa->id) {
+                    Firma::find($idFirmaAnterior)?->descartarSiNoSeUsa();
+                }
 
                 $idEstadoRevisionFinalizada = Estado::where('nombre', 'REVISION FINALIZADA. A LA ESPERA DE RESULTADOS')->value('id');
 

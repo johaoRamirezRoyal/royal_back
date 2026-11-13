@@ -35,9 +35,9 @@ class EstadoInscripcionCambiadoTest extends TestCase
                 return ['admisiones@colegio.com'];
             }
 
-            protected function correosDelPerfil(int $perfil): array
+            protected function correosDeLaOpcion(int $opcion): array
             {
-                return ["psicologa{$perfil}@colegio.com"];
+                return ["psicologa{$opcion}@colegio.com"];
             }
         };
         $listener->handle($evento);
@@ -57,11 +57,11 @@ class EstadoInscripcionCambiadoTest extends TestCase
     public function test_en_revision_de_psicologia_avisa_tambien_a_la_psicologa_del_nivel(): void
     {
         $enviados = $this->enviar($this->evento('EN REVISION (PSICOLOGIA)'));
-        $perfil = AdmisionesServices::perfilPsicologaParaGrado('Primero de primaria');
+        $opcion = AdmisionesServices::opcionPsicologaParaGrado('Primero de primaria');
 
-        $this->assertNotNull($perfil);
+        $this->assertSame(\App\Support\Permiso::ADMISIONES_PSICOLOGA_PRIMARIA, $opcion);
         $this->assertCount(2, $enviados);
-        $this->assertSame(["psicologa{$perfil}@colegio.com"], $enviados[1][0]);
+        $this->assertSame(["psicologa{$opcion}@colegio.com"], $enviados[1][0]);
     }
 
     public function test_el_listener_escucha_el_evento_en_cola(): void

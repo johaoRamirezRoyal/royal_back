@@ -26,4 +26,5 @@ Route::middleware('institucion.session')->group(function () {
     Route::post('verify-email-otp', [InstitucionController::class, 'verifyEmailOtp']);
     Route::post('carta-recomendacion', [InstitucionController::class, 'guardarCartaRecomendacion']);
     Route::get('carta-recomendacion', [InstitucionController::class, 'listarMisCartas']);
+    Route::get('carta-recomendacion/{id}/pdf', [InstitucionController::class, 'verCartaPdf'])->whereNumber('id');
 });

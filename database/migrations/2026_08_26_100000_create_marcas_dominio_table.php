@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /** Vive en la base `admin_management` (ver config/database.php), no en la operativa —
+    /** Vive en la connection `admin_management` (base `admin_managements` en producción, ver config/database.php), no en la operativa —
      * es transversal a los dominios/tenants, no dato de uno en particular. */
     protected $connection = 'admin_management';
 

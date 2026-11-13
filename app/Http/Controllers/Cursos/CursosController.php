@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Cursos;
 
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Cursos\CrearEstudianteRequest;
@@ -76,7 +78,7 @@ class CursosController extends Controller
      */
     public function miCurso(Request $request): JsonResponse
     {
-        if (! in_array((int) $request->user()->perfil, Permiso::PERFILES_DOCENTE, true)) {
+        if (! $request->user()->esTipo(TipoPerfil::DOCENTE)) {
             return $this->error('No tienes permiso para esta acción', 403);
         }
 
@@ -89,7 +91,7 @@ class CursosController extends Controller
      */
     public function sugerirRepiten(Request $request): JsonResponse
     {
-        if (! in_array((int) $request->user()->perfil, Permiso::PERFILES_DOCENTE, true)) {
+        if (! $request->user()->esTipo(TipoPerfil::DOCENTE)) {
             return $this->error('No tienes permiso para esta acción', 403);
         }
 
@@ -178,7 +180,7 @@ class CursosController extends Controller
 
         return $this->paginatedResponse($this->usuarios->mostrarUsuariosPaginados(
             (int) $request->input('per-page', 10),
-            [CursosServices::PERFIL_ESTUDIANTE],
+            Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE),
             null,
             $request->input('s'),
             'activo',

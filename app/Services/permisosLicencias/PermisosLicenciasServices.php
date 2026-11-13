@@ -2,6 +2,10 @@
 
 namespace App\Services\permisosLicencias;
 
+use App\Services\Usuarios\PermisosPerfil;
+use App\Support\Permiso as PermisoSistema;
+use App\Enums\TipoPerfil;
+use App\Models\Usuarios\Perfil;
 use App\Enums\Mails;
 use App\Models\PermisosLicencias\Permiso;
 use App\Models\PermisosLicencias\PermisoInstitucional;
@@ -12,6 +16,7 @@ use App\Models\PermisosLicencias\PermisoTipo;
 use App\Models\Usuarios\Usuario;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Support\Permiso as Opcion;
 use Exception;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -35,10 +40,8 @@ class PermisosLicenciasServices
     ];
 
     /** Perfiles a los que un usuario con la opción 92 puede asignarle un permiso (ver Permisos/index.php "operativos_check"). */
-    public const PERFILES_ASIGNABLES = [10, 23, 27, 32];
 
-    /** Perfiles cuyo correo también se notifica cuando alguien de su mismo nivel solicita/actualiza un permiso, y que ven el listado acotado a su nivel. */
-    private const PERFILES_COORDINACION_NIVEL = [26, 7];
+
 
     /** Campos que `actualizar()` puede cambiar, con su etiqueta para el correo de edición. */
     private const CAMPOS_EDITABLES = [
@@ -104,7 +107,7 @@ class PermisosLicenciasServices
     public function usuariosAsignables(): array
     {
         try {
-            $usuarios = Usuario::whereIn('perfil', self::PERFILES_ASIGNABLES)
+            $usuarios = Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::OPERATIVO))
                 ->where('estado', 'activo')
                 ->orderBy('nombre')
                 ->get(['id_user', 'nombre', 'apellido', 'perfil', 'id_nivel']);
@@ -437,6 +440,19 @@ class PermisosLicenciasServices
      * otro usuario registró el permiso a nombre del beneficiario (opción 92), también se
      * le notifica a él.
      */
+    /**
+     * Perfiles de su nivel a los que se avisa: la coordinación (opción 155) y, si quien pide
+     * no es coordinador, también la asistencia de nivel (165).
+     *
+     * @return array<int>
+     */
+    private function coordinacionAvisada(int|string|null $perfil): array
+    {
+        $coordinacion = PermisosPerfil::perfilesCon(PermisoSistema::COORDINACION_NIVEL);
+
+        return PermisosPerfil::perfilTiene($perfil, PermisoSistema::COORDINACION_NIVEL) ? $coordinacion : [...$coordinacion, ...PermisosPerfil::perfilesCon(PermisoSistema::ASISTENCIA_NIVEL)];
+    }
+
     private function destinatariosNotificacion(Permiso $permiso): array
     {
         $beneficiario = $permiso->usuario;
@@ -446,14 +462,14 @@ class PermisosLicenciasServices
         $destinatarios = array_merge(
             Mails::GESTION_HUMANA->recipients(),
             [$beneficiario?->correo],
-            Usuario::correosPorPerfilesYNivel($perfil === 26 ? [26] : [26, 11], $idNivel)
+            Usuario::correosPorPerfilesYNivel($this->coordinacionAvisada($perfil), $idNivel)
         );
 
         if ($permiso->id_log && $permiso->id_log !== $permiso->id_user) {
             $destinatarios[] = Usuario::find($permiso->id_log)?->correo;
         }
 
-        if ($idNivel === 1 || in_array($perfil, [23, 10, 32, 33], true) || $perfil === 11) {
+        if ($idNivel === 1 || in_array((int) $perfil, PermisosPerfil::perfilesCon(PermisoSistema::AVISA_DIRECCION_ADMINISTRATIVA), true)) {
             $destinatarios = array_merge($destinatarios, [
                 config('gestionHumana.correo_asistente_direccion_administrativa'),
                 config('gestionHumana.correo_direccion_administrativa'),
@@ -463,7 +479,7 @@ class PermisosLicenciasServices
         if (in_array($idNivel, [1, 2, 3], true)) {
             $destinatarios = array_merge(
                 $destinatarios,
-                Usuario::correosPorPerfilesYNivel([7], $idNivel)
+                Usuario::correosPorPerfilesYNivel(PermisosPerfil::perfilesCon(PermisoSistema::DIRECCION_ADMINISTRATIVA), $idNivel)
             );
         }
 
@@ -478,7 +494,7 @@ class PermisosLicenciasServices
             ...$this->lineasDetalle($permiso),
         ];
 
-        $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Solicitud de permiso/licencia', implode("\n", $lineas));
+        $this->enviarConBotonAprobadores($permiso, 'Solicitud de permiso/licencia', implode("\n", $lineas));
     }
 
     private function notificarCambioEstado(Permiso $permiso): void
@@ -537,7 +553,57 @@ class PermisosLicenciasServices
             'Fecha de actualización: '.($permiso->fecha_edit?->format('Y-m-d H:i') ?? now()->format('Y-m-d H:i')),
         ]);
 
-        $this->mailService->sendGeneric($this->destinatariosNotificacion($permiso), 'Permiso/licencia - Editada', implode("\n", $lineas));
+        $this->enviarConBotonAprobadores($permiso, 'Permiso/licencia - Editada', implode("\n", $lineas));
+    }
+
+    /**
+     * Mismo correo para todos los destinatarios, pero solo quienes pueden aprobar/rechazar
+     * (opción 83) reciben el botón a la página de detalle en el frontend.
+     */
+    private function enviarConBotonAprobadores(Permiso $permiso, string $asunto, string $contenido): void
+    {
+        $destinatarios = $this->destinatariosNotificacion($permiso);
+        // En minúsculas: MySQL compara el correo sin distinguir mayúsculas.
+        $correosAprobadores = array_map('strtolower', $this->correosQueAprueban($destinatarios));
+        $esAprobador = fn (string $correo) => in_array(strtolower($correo), $correosAprobadores, true);
+        $aprobadores = array_values(array_filter($destinatarios, $esAprobador));
+        $resto = array_values(array_filter($destinatarios, fn ($correo) => ! $esAprobador($correo)));
+        $url = rtrim((string) config('app.frontend_url'), '/')."/permisos-licencias/solicitud/{$permiso->id}?origen=correo";
+
+        if ($aprobadores) {
+            $this->mailService->sendGeneric($aprobadores, $asunto, $contenido, $url, 'Ver solicitud en OMNIA');
+        }
+
+        if ($resto) {
+            $this->mailService->sendGeneric($resto, $asunto, $contenido);
+        }
+    }
+
+    /**
+     * De `$correos`, los de usuarios cuyo perfil tiene la opción 83 (mismo criterio que PermisosPerfil).
+     *
+     * @param  array<int, string>  $correos
+     * @return array<int, string>
+     */
+    private function correosQueAprueban(array $correos): array
+    {
+        if (! $correos) {
+            return [];
+        }
+
+        return Usuario::whereIn('correo', $correos)
+            ->where(fn ($q) => $q->where('perfil', Opcion::PERFIL_SUPER_ADMIN)
+                ->orWhereExists(fn ($e) => $e->selectRaw('1')
+                    ->from('cron_permisos as p')
+                    ->join('cron_opciones as o', 'o.id', '=', 'p.id_opcion')
+                    ->join('cron_modulos as m', 'm.id', '=', 'o.id_modulo')
+                    ->whereColumn('p.id_perfil', 'usuarios.perfil')
+                    ->where('p.id_opcion', Opcion::PERMISOS_LICENCIAS_APROBAR)
+                    ->where('p.activo', 1)))
+            ->pluck('correo')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function valorCorreo(mixed $valor): string
