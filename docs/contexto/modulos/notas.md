@@ -10,6 +10,7 @@ cuantitativa (nota numérica) está pendiente. Frontend: `frontend/docs/contexto
 > coordinador, vista del curso, observaciones del director y cierre del trimestre con la foto del
 > boletín; el PDF del boletín (documento `boletin` de `src/documentos`, lo arma el navegador) y su
 > historial. La rama tiene fusionado `main` (permisos por tipo de perfil: `[TipoPerfil::DOCENTE]`).
+> Qué se cambió, por qué, el deploy y lo pendiente: [`NOTAS_CUALITATIVAS_2026_11_13.md`](../../NOTAS_CUALITATIVAS_2026_11_13.md).
 
 ## Diseño acordado (2026-11-13)
 
