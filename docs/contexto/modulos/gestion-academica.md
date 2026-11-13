@@ -126,7 +126,7 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   cuyo nombre encabeza el del curso: "Primero A" → Primero; renombrar un grado cambia qué cursos
   nuevos lo reciben). Al actualizar sin `id_grado` se conserva: renombrar un curso no lo mueve de
   grado. `ordenarPorGrado` ordena por nivel y luego por `academico_grado.orden` (la consulta debe
-  traer `id_grado`); los cursos del mismo grado comparten logros en Notas.
+  traer `id_grado`); los cursos del mismo grado comparten referentes en Notas.
 
 - `GET /cursos/all` sigue abierto (selects de otros módulos). Trae `id_nivel` y `nivel`
   (`{id, nombre}`) y sale en orden académico (`Cursos::ordenarPorGrado`): el frontend agrupa

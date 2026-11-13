@@ -1,212 +1,167 @@
 # Notas (`/gestion-academica/notas` — `NotasController`, `NotasService`)
 
-Sistema de notas. Hoy está construida la **parte cualitativa**: desempeños (escala) por
-indicadores (logros) de cada **grado**, agrupados en **dimensiones**, con un flujo de aprobación de
-los logros antes de calificar. **No depende de las asignaturas.** La parte cuantitativa (nota
-numérica) está pendiente. Frontend: `frontend/docs/contexto/modulos/notas.md`.
+Sistema de notas. Se está construyendo la **parte cualitativa**: desempeños (escala) por
+**referentes** de cada **grado**, agrupados en **propósitos** y definidos por **asignatura**, con un
+flujo de aprobación antes de calificar y un **boletín trimestral** con historial. La parte
+cuantitativa (nota numérica) está pendiente. Frontend: `frontend/docs/contexto/modulos/notas.md`.
+
+> **Estado (2026-11-13, rama `feat/notas-cualitativas`).** Fase 1 hecha: modelo, propósitos y
+> referentes con su plan. **La planilla, la consulta y "mis cursos" se quitaron** porque dependían
+> del modelo anterior (dimensiones, modos por nivel) y vuelven reescritos en la fase 2 (ver
+> "Pendiente"). El frontend de la rama aún usa la API anterior hasta la fase 3.
+
+## Diseño acordado (2026-11-13)
+
+- **Propósito** (antes "dimensión"): catálogo único del colegio, el mismo para todos los grados y
+  docentes.
+- **Referente** (antes "indicador" o "logro"): de un grado, un periodo, un propósito y una
+  asignatura. Cambian por periodo y por asignatura.
+- **Subreferente**: hijo de un referente (un nivel). Se califica igual que un referente pero **no
+  sale en el boletín**.
+- **Calificación**: el docente de la asignatura pone a cada estudiante un desempeño por
+  subreferente y un **desempeño final por referente** (lo elige él, no se calcula). El
+  **coordinador** (154 de su nivel) puede cambiar ese final; queda quién, cuándo y el valor del
+  docente. No hay desempeño final por propósito.
+- **Director de grupo**: ve en solo lectura todo lo calificado en su curso y escribe las
+  **"Observaciones Generales del Director de Grupo"** (una por estudiante y trimestre).
+- **Boletín trimestral**: lo **cierra el coordinador** por curso y periodo. El cierre guarda una
+  foto de los datos por estudiante (no cambia aunque luego se corrija una nota) y el PDF se genera
+  desde esa foto (`src/documentos` del frontend, pdfmake). El ajuste del coordinador vale hasta el
+  cierre. Los trimestres son los periodos académicos (`periodo_academico`).
+- Aplica a **todos los niveles cualitativos** (también preescolar). Ya no hay modos por nivel
+  (`tipo_unidad`, `calificador`), unidades de tipo asignatura ni sincronización.
 
 ## Conceptos y cómo se relacionan
 
 ```
 nivel_academico.metodo_calificacion ─ CUALITATIVA | CUANTITATIVA | AMBAS
-nivel_academico.tipo_unidad ─ DIMENSION | ASIGNATURA (AREA aún no) · calificador ─ DIRECTOR_GRUPO | DOCENTE_ASIGNATURA
-academico_grado ──< academico_grado_dimension >── academico_dimension
+academico_proposito (catálogo único)
 grado + periodo
-  └─ academico_logro_plan (estado) ──< academico_logro (indicador, en una dimensión del grado)
-curso (lo califica su director de grupo, curso.id_director):
-  academico_valoracion (estudiante + dimensión + periodo: desempeño final + observación)
-    └─ academico_valoracion_logro (desempeño por logro de esa dimensión)
+  └─ academico_referente_plan (estado) + _historial
+  └─ academico_referente (propósito + asignatura; id_padre → subreferente)
+       └─ academico_valoracion_referente (estudiante: desempeño del docente + ajuste del coordinador)
 desempeños: academico_escala_valoracion ──< academico_escala_valoracion_nivel
 ```
 
-- **Método por nivel académico** (`nivel_academico.metodo_calificacion`): `CUALITATIVA`
-  (desempeños por indicadores), `CUANTITATIVA` (nota numérica; aún no construida) o `AMBAS`. Todo lo
-  cualitativo aplica solo a cursos **con grado** de niveles `CUALITATIVA`/`AMBAS`
-  (`NivelAcademico::califCualitativa`): `esCursoCualitativo` / `cursosCualitativos` filtran las
-  listas y `sinCualitativa` rechaza los endpoints (un curso sin grado, como "Stem A" o "Egresado":
-  "Asígnaselo en Cursos"). Todos los niveles arrancaron en `CUALITATIVA`.
-- **Unidades evaluables / dimensiones** (`academico_dimension`; solo cualitativa): catálogo, no se
-  borran (se desactivan). Cada fila es una **unidad evaluable** (ver "Unidad evaluable y quién
-  califica"): `DIMENSION` (cognitiva, comunicativa, corporal… en preescolar) o `ASIGNATURA` (básica
-  y media). Se definen **por grado** (`academico_grado_dimension`): `dimensionesDe($idGrado, $tipo)`,
-  siempre filtrado por el `tipo_unidad` del nivel del curso (un plan no mezcla tipos). Las
-  dimensiones se asignan **desde la unidad** (`PUT /notas/dimensiones/{id}/grados`); las asignaturas,
-  con la sincronización.
-- **Logros (indicadores)** (`academico_logro`): por **grado + periodo** (no por asignatura), y cada
-  uno en una dimensión del grado (`id_dimension`, obligatoria). Todos los cursos del grado (Primero A
-  y Primero B) los comparten con su aprobación. Los endpoints reciben un `id_curso` (cualquiera del
-  grado) y el backend resuelve su grado. `PUT /notas/logros` reemplaza los logros **de las unidades
-  que quien guarda puede editar** (`cambiosDeLogros`): los de otras unidades se conservan. **No se
-  quita un logro que ya tiene notas** (rechaza todo el guardado diciendo cuántas tiene; antes la
-  cascada las borraba). Si a un grado se le quita una unidad, sus logros quedan "por reubicar" y no
-  dejan **enviar ni aprobar** hasta asignarles otra.
-- **Escala de desempeños** (`academico_escala_valoracion`: nombre, abreviatura, descripción
-  opcional, color, orden, activo). Con niveles en `academico_escala_valoracion_nivel` aplica a esos
-  niveles; sin niveles es la escala general. Un curso usa la escala activa de su nivel y, si su
-  nivel no tiene, la general (`escalaDelNivel`). No se borran: se desactivan.
-  `PUT /notas/escalas/orden` renumera una escala 1, 2, 3… según el orden arrastrado.
-- **Quién califica**: depende de `nivel_academico.calificador` (ver "Unidad evaluable y quién
-  califica"). Con `DIRECTOR_GRUPO` (por defecto) el **director de grupo** del curso
-  (`curso.id_director`; `dirige()`): un curso sin director no lo califica nadie hasta asignarlo
-  (Cursos). Con `DOCENTE_ASIGNATURA`, el docente con carga en esa asignatura y en ese curso.
-- **Valoración** (`academico_valoracion`, unique estudiante + dimensión + periodo): **desempeño
-  final de la dimensión** (lo elige el director; no se deriva de los logros) + observación.
-  `academico_valoracion_logro`: desempeño por logro (de esa dimensión). `id_curso` es la foto del
-  curso al calificar (la promoción cambia `usuarios.id_curso`). Una dimensión vacía (sin desempeño,
-  observación ni logros) = sin nota: se borra la fila.
-- Sin FK a `periodo_academico` ni `curso` (MyISAM en algunas BD): valida el service. Por eso un
-  periodo con notas no se puede eliminar (`eliminarPeriodoAcademico`).
+- **Método por nivel académico** (`nivel_academico.metodo_calificacion`): `CUALITATIVA`,
+  `CUANTITATIVA` (aún no construida) o `AMBAS`. Lo cualitativo aplica solo a cursos **con grado** de
+  niveles `CUALITATIVA`/`AMBAS` (`NivelAcademico::califCualitativa`): `sinCualitativa` rechaza los
+  endpoints de un curso sin grado ("Asígnaselo en Cursos").
+- **Propósitos** (`academico_proposito`): nombre (120), descripción, orden (arrastrable), activo.
+  No se borran: se desactivan. Uno desactivado sigue mostrándose en el plan si ya tiene referentes,
+  pero no deja enviar ni aprobar.
+- **Referentes** (`academico_referente`): por **grado + periodo** (Primero A y B comparten los de
+  Primero), con `id_proposito` y `id_asignatura` obligatorios (`id_asignatura` sin FK:
+  `academico_asignatura` es MyISAM). Un **subreferente** (`id_padre`) hereda grado, periodo,
+  propósito y asignatura del padre (el service los copia); borrar el padre borra los suyos (FK en
+  cascada). Los endpoints reciben un `id_curso` (cualquiera del grado) y el backend resuelve su grado.
+- **Asignaturas del grado** (`asignaturasDelGrado`): las que tienen carga activa
+  (`academico_carga_academica` + `academico_docente_asignatura`, ambas activas) en algún curso activo
+  del grado. Un referente de una asignatura que perdió su carga queda **por reubicar**: se lista, lo
+  puede mover quien gestiona, y no deja enviar ni aprobar.
+- **Escala de desempeños** (`academico_escala_valoracion`): nombre, abreviatura, descripción, color,
+  orden, activo. Con niveles en `academico_escala_valoracion_nivel` aplica a esos niveles; sin
+  niveles es la escala general. No se borran: se desactivan. `PUT /notas/escalas/orden` renumera.
+- **Valoración** (`academico_valoracion_referente`, unique estudiante + referente): `id_escala_docente`
+  y `id_docente`; en un referente (no subreferente), `id_escala_ajuste`, `id_ajustado_por` y
+  `ajustado_at`. Final = ajuste ?? docente. `id_periodo_academico` repite el del referente;
+  `id_curso` es la foto del curso al calificar (la promoción cambia `usuarios.id_curso`). Sin cascada
+  desde el referente: **no se quita un referente con notas** (`guardarReferentes` rechaza todo el
+  guardado diciendo cuántas tiene).
+- Sin FK a `periodo_academico` ni `curso` (MyISAM): valida el service. Un periodo con referentes no
+  se puede eliminar (`PeriodoAcademicoServices::eliminarPeriodoAcademico`).
 
-## Unidad evaluable y quién califica
+## Plan de referentes (estado y seguimiento)
 
-Royal califica preescolar por **dimensiones** (director de grupo) y básica y media **por
-asignatura** (docente de cada asignatura). La API no cambia de forma: la tabla y `id_dimension`
-conservan su nombre.
-
-- `academico_dimension.tipo`: `DIMENSION` (sin área ni asignatura), `AREA` (`id_area` →
-  `academico_area`) o `ASIGNATURA` (`id_asignatura` → `academico_asignatura`). `id_area` e
-  `id_asignatura` son únicos y **sin FK** (`academico_asignatura` es MyISAM). Consistencia: CHECK
-  `ck_unidad_tipo` (MariaDB ≥ 10.2 / MySQL ≥ 8.0.16; la local es MariaDB 10.4 y lo aplica) y, siempre,
-  `Dimension::errorDeTipo` en `guardarDimension`. Constantes `Dimension::DIMENSION|AREA|ASIGNATURA`.
-  **AREA queda en el esquema pero no se implementa ni se puede configurar.**
-- `nivel_academico.tipo_unidad` (`DIMENSION` | `ASIGNATURA`) y `nivel_academico.calificador`
-  (`DIRECTOR_GRUPO` | `DOCENTE_ASIGNATURA`), por defecto `DIMENSION` / `DIRECTOR_GRUPO`
-  (`modoDelNivel`). Combinaciones (`errorDeModo`, test en `CalificadorUnidadTest`): DIMENSION exige
-  DIRECTOR_GRUPO (una dimensión no tiene carga); ASIGNATURA admite los dos; AREA "aún no disponible".
-  Se cambian en `PUT /metodos-nivel/{id}`. **No se cambia `tipo_unidad`** si el nivel ya tiene logros
-  (en los grados de sus cursos) o notas (en sus cursos). Al pasar a ASIGNATURA se sincroniza.
-- **Sincronización** (`sincronizarUnidadesAsignatura`, `POST /notas/unidades/sincronizar`, 99):
-  idempotente y en transacción. Crea o actualiza una unidad ASIGNATURA por cada fila de
-  `academico_asignatura` (nombre recortado a 80 y `activo`; el orden de una existente no se toca, las
-  nuevas al final en orden alfabético) y vincula a cada grado (`insertOrIgnore`) las unidades de las
-  asignaturas con carga activa en alguno de sus cursos activos. No quita vínculos. No filtra por
-  nivel: en grados DIMENSION el vínculo queda pero no se usa (`dimensionesDe` filtra por tipo).
-- **Política** `calificadorPermite($calificador, $dirige, $tieneCarga)` (pura): con
-  `DOCENTE_ASIGNATURA`, quien tiene carga; con cualquier otro valor (también null), el director.
-  "Tiene carga" = `cubre($unidad, asignaturasConCarga($user, $cursos))`: carga activa
-  (`academico_carga_academica` + `academico_docente_asignatura`, ambas activas) en la asignatura
-  de la unidad (o en una asignatura activa del área). Una DIMENSION nunca tiene carga.
-- **Calificar** (`unidadesCalificables($user, $curso)`): las unidades del grado que el usuario
-  califica en **ese** curso. La usan `planilla` (`dimensiones[].editable`), `misCursos`
-  (`unidades_calificables`), `guardarPlanilla` (rechaza "No te corresponde calificar «…» en este
-  curso") y el controller (403 "No te corresponde calificar en este curso" si no califica ninguna).
-- **Logros en modo ASIGNATURA**: el plan sigue siendo uno por grado + periodo.
-  - `rol()['docente']`: con DOCENTE_ASIGNATURA, carga activa en algún curso del grado; con
-    DIRECTOR_GRUPO, director de alguno. `rol()['modo_unidad']`: DIMENSION / ASIGNATURA.
-  - `unidadesEditables()`: quien gestiona (150/151 del nivel), todas; en modo DIMENSION, todas para el
-    docente del grado; en modo ASIGNATURA con DOCENTE_ASIGNATURA, el docente solo las de sus
-    asignaturas con carga en algún curso del grado (con DIRECTOR_GRUPO, el director edita todas).
-    Va en `plan.dimensiones[].editable` (verPlan) y en `planilla.plan.unidades_editables`.
-  - `cambiosDeLogros` (pura, test `CambiosDeLogrosTest`): en unidades no editables, un logro que viene
-    sin cambios se ignora (el frontend manda la lista completa) y crear, cambiar o mover se rechaza;
-    solo se eliminan los de unidades editables que no vienen. Los "por reubicar" los mueve quien
-    gestiona (o, en DIMENSION, el docente).
-  - `acciones()`: con `modo_unidad = ASIGNATURA`, **solo quien gestiona envía** a revisión (así un
-    docente no cierra el plan antes de que los demás carguen los suyos); aprobar, devolver y reabrir
-    siguen con la 151. Sin la clave o con DIMENSION, como antes.
-
-## Plan de logros (estado y seguimiento)
-
-Los logros del grado los definen en conjunto los docentes del grado (directores de grupo, o en modo
-ASIGNATURA los docentes con carga, cada uno en sus asignaturas) y el coordinador / asistente de nivel.
-
-- `academico_logro_plan` (unique grado + periodo): `BORRADOR` → `EN_REVISION` → `APROBADO`, o
+- `academico_referente_plan` (unique grado + periodo): `BORRADOR` → `EN_REVISION` → `APROBADO`, o
   `DEVUELTO` (con comentario; vuelve a editarse). Se crea al primer cambio; sin fila = `BORRADOR`.
-  `academico_logro_plan_historial`: cada logro creado / editado / quitado y cada cambio de estado,
-  con quién, cuándo y el detalle (texto del logro y su dimensión, o comentario).
-- **Solo se califica con el plan `APROBADO`** (`guardarPlanilla` lo exige; `planilla.editable` lo
-  refleja). Para cambiar un plan aprobado, quien aprueba lo **reabre** (vuelve a `BORRADOR`; las
-  notas ya puestas se conservan, pero no se califica hasta aprobar de nuevo).
-- Enviar exige al menos un logro; enviar y aprobar exigen que todos estén en dimensiones del grado;
+  `academico_referente_plan_historial`: cada referente creado / editado / quitado (`↳` marca un
+  subreferente) y cada cambio de estado, con quién, cuándo y el detalle.
+- **Solo se califica con el plan `APROBADO`.** Para cambiar un plan aprobado, quien aprueba lo
+  **reabre** (vuelve a `BORRADOR`; las notas se conservan, pero no se califica hasta aprobar).
+- Enviar exige al menos un referente; enviar y aprobar exigen que ninguno esté por reubicar;
   devolver exige comentario.
-- Quién puede qué (`NotasService::rol` / `acciones`; el `actor` lo arma `NotasController::actor`):
-  - Docente del grado (`rol['docente']`: director de grupo de alguno de sus cursos, o con
-    DOCENTE_ASIGNATURA, carga en alguno): edita en `BORRADOR` / `DEVUELTO` (en ASIGNATURA, solo sus
-    unidades) y envía (en ASIGNATURA, no). Calificar exige que le toque **ese** curso
-    (`unidadesCalificables`).
-  - Opción **150** "Gestionar logros": lo mismo, en los grados de su nivel.
-  - Opción **151** "Aprobar logros": además aprueba / devuelve (en revisión) y reabre (aprobado); en
-    revisión es el único que edita.
+- Quién puede qué (`NotasService::rol` / `acciones`, test `AccionesPlanReferentesTest`; el `actor`
+  lo arma `NotasController::actor`):
+  - **Docente** (`rol['docente']`: carga activa en algún curso del grado): edita en `BORRADOR` /
+    `DEVUELTO` **solo los referentes de sus asignaturas** (`rol['asignaturas']`). No envía.
+  - Opción **153** "Gestionar referentes": edita todas las asignaturas y envía, en los grados de su
+    nivel.
+  - Opción **154** "Aprobar referentes": además aprueba / devuelve (en revisión) y reabre (aprobado);
+    en revisión es el único que edita.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
-    `DocenteHorarioService::idsNivelAcademicoParaNivel` (pública y estática). Con la **99** (y Super
-    Admin) vale para todos los niveles. Usuario con 150/151 sin nivel = sin grados (fail-closed).
-  - Las acciones disponibles van en `plan.puede`; el frontend no las recalcula.
+    `DocenteHorarioService::idsNivelAcademicoParaNivel`. Con la **99** (y Super Admin) vale para
+    todos los niveles. Usuario con 153/154 sin nivel = sin grados (fail-closed).
+  - Las acciones van en `puede`; el frontend no las recalcula.
+- **Varios docentes en el mismo plan** (`aplanar` + `cambiosDeReferentes`, puras, test
+  `CambiosDeReferentesTest`): `PUT /referentes` recibe la lista completa. Un referente de una
+  asignatura no editable que viene sin cambios (propósito, asignatura, padre y texto) se ignora; si
+  viene cambiado, movido o nuevo, se rechaza todo con "No puedes editar los referentes de «…»". Se
+  eliminan solo los de asignaturas editables que no vienen.
 
 ## Plazos
 
-Años escolares (calendario A/B, año vigente, crons) y periodos académicos (validación de fechas,
-cruces): ver `gestion-academica.md`. Lo propio de notas:
+Años escolares y periodos académicos (validación de fechas, cruces): ver `gestion-academica.md`.
 
-- `periodo_academico.fecha_limite_notas` (nullable, ≥ `fecha_fin`, se edita con el periodo). Se
-  califica y corrige desde `fecha_inicio` hasta `fecha_limite_notas ?? fecha_fin`
-  (`NotasService::periodoEditable`, test en `tests/Unit/GestionAcademica/PeriodoEditableNotasTest.php`).
-- Los logros se trabajan hasta esa misma fecha límite, también antes de que empiece el periodo.
-- Los periodos se listan por año vigente **sin filtrar `activo`**: el cron
-  `periodos:desactivar-vencidos` los apaga al pasar `fecha_fin` y pueden seguir en plazo de
-  corrección.
+- `periodo_academico.fecha_limite_notas` (nullable, ≥ `fecha_fin`). Se califica desde `fecha_inicio`
+  hasta `fecha_limite_notas ?? fecha_fin` (`NotasService::periodoEditable`, test
+  `PeriodoEditableNotasTest`).
+- Los referentes se trabajan hasta esa misma fecha límite, también antes de que empiece el periodo.
+- Los periodos se listan por año vigente **sin filtrar `activo`** (el cron
+  `periodos:desactivar-vencidos` los apaga al pasar `fecha_fin`).
 
 ## Endpoints y permisos (`routes/api/gestionAcademica.php`, prefijo `/notas`)
 
 | Endpoint | Quién |
 |---|---|
 | `GET/POST /escalas`, `PUT /escalas/{id}`, `PUT /escalas/orden` | 99 |
-| `GET /dimensiones?tipo=` (por defecto DIMENSION), `POST /dimensiones`, `PUT /dimensiones/{id}`, `PUT /dimensiones/orden` (ruta antes de `{id}`), `PUT /dimensiones/{id}/grados` | 99 |
-| `POST /unidades/sincronizar` | 99; devuelve `{ creadas, actualizadas, vinculos_nuevos }` |
-| `GET /metodos-nivel` (con `tipo_unidad` y `calificador`), `PUT /metodos-nivel/{id}` `{ metodo?, tipo_unidad?, calificador? }` (al menos uno) | 99 |
-| `GET /mis-cursos`, `PUT /planilla` | perfiles docente (3, 14); `PUT /planilla`: 403 si no califica ninguna unidad del curso, y el service valida cada unidad y que el plan esté aprobado |
-| `GET /planilla`, `GET /plan` (`?id_curso&id_periodo`) | docente del grado, 150/151 de su nivel, 99 o 149 (solo lectura) |
-| `PUT /logros`, `POST /plan/estado` | docente del grado o 150/151 de su nivel; el service valida el estado y las unidades |
-| `GET /logros/grados?id_periodo=` | 150 / 151 (grados del nivel con cursos, directores, cantidad de logros, estado y `alcance`) |
-| `GET /consulta/filtros`, `GET /consulta` | 99 o 149 (`Permiso::NOTAS_CONSULTAR`); matriz estudiantes × dimensiones |
+| `GET/POST /propositos`, `PUT /propositos/{id}`, `PUT /propositos/orden` (ruta antes de `{id}`) | 99 |
+| `GET /metodos-nivel`, `PUT /metodos-nivel/{id}` `{ metodo }` | 99 |
+| `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
+| `PUT /referentes`, `POST /plan/estado` | docente con carga en el grado o 153/154 de su nivel; el service valida estado y asignaturas |
+| `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
 
-Cuerpo de `PUT /planilla`: `{ id_curso, id_periodo, estudiantes: [{ id_estudiante, dimensiones: [{
-id_dimension, id_escala?, observacion?, logros?: [{ id_logro, id_escala }] }] }] }`. Cada logro debe
-ser de la dimensión en que viene; las dimensiones que no vienen no se tocan; una unidad que no le toca
-a quien guarda rechaza todo (el frontend debe mandar solo las `editable`).
-
-Campos nuevos en las respuestas (en modo DIMENSION, todo lo demás es idéntico a antes; comparado):
-
-- `GET /mis-cursos` → `cursos[]`: `{ id_curso, curso, grado, calificador, unidades_calificables: [ids] }`.
-- `GET /planilla` → `tipo_unidad`, `calificador`, `dimensiones[]` con `tipo`, `id_area`,
-  `id_asignatura` y `editable` (= puede calificarla en este curso, en plazo y con el plan aprobado),
-  `editable` global (con DIRECTOR_GRUPO como siempre; con DOCENTE_ASIGNATURA, alguna unidad
-  editable) y `plan.unidades_editables` (ids cuyos logros puede editar).
-- `GET /plan` → `dimensiones[]` con `tipo`, `id_area`, `id_asignatura` y `editable` (= puede editar
-  sus logros, aparte del estado; ese lo dice `puede.editar`). `puede.enviar` es false para el docente
-  en modo ASIGNATURA.
+- `PUT /referentes`: `{ id_curso, id_periodo, referentes: [{ id?, id_proposito, id_asignatura,
+  descripcion, subreferentes?: [{ id?, descripcion }] }] }` (hasta 100 referentes y 30
+  subreferentes cada uno). Responde los referentes guardados.
+- `GET /plan` → `{ curso, periodo, estado, grado, compartido, propositos[] (activos y los ya usados),
+  asignaturas[] { id, nombre, con_carga, editable }, referentes[] { id, id_proposito, id_asignatura,
+  descripcion, orden, subreferentes[] { id, descripcion, orden } }, historial[], puede }`.
+  `asignaturas[].editable` = puede editar sus referentes (aparte del estado; ese lo dice
+  `puede.editar`). `con_carga: false` = asignatura por reubicar.
 
 Opciones (módulo 14, no otorgadas a ningún perfil; se asignan en `/permisos`):
-**149** "Gestión Académica — Consultar notas", **150** "Gestionar logros", **151** "Aprobar logros".
+**152** "Gestión Académica — Consultar notas", **153** "Gestionar referentes", **154** "Aprobar
+referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no se usan.
 
 ## Migraciones (en `migraciones_sql.sql`)
 
 1. `2026_11_05_110000_create_academico_grado_table`: catálogo de grados y `curso.id_grado` (ver
-   gestion-academica.md). Corre **antes** que las tablas de notas: logros, plan y dimensiones del
-   grado tienen FK a `academico_grado`.
+   gestion-academica.md). Corre **antes** que las tablas de notas (FK a `academico_grado`).
 2. `2026_11_05_120000_create_academico_notas_cualitativas_tables`: todo el esquema (método por
-   nivel, fecha límite de notas, escala y sus niveles, dimensiones y sus grados, logros, plan de
-   logros e historial, valoraciones).
-3. `2026_11_05_120100_seed_opciones_notas`: opciones 149, 150 y 151.
+   nivel, fecha límite de notas, escala y sus niveles, propósitos, referentes, plan e historial,
+   valoraciones por referente).
+3. `2026_11_05_120100_seed_opciones_notas`: opciones 152, 153 y 154.
 
-Se fusionaron antes del primer commit (en desarrollo hubo un `tipo` de asignatura revertido, y
-logros y dimensiones por asignatura que pasaron a ser por grado). La cadena se verificó desde cero en
-una base temporal (sube y baja, con todas las FKs). En `sami_royal` local la migración de grados
-estaba registrada como `2026_11_06_120000` y se renombró en la tabla `migrations`; las tablas de
-logros / plan / valoraciones se rehicieron (se perdieron 4 logros de prueba). Estado al 2026-11-06:
-**`sami_hebreo` sin correr** (tiene además pendientes las de Cursos y Carnets desde el 2026-11-03).
-Al desplegar, migrar en cada base de colegio.
+La rama no está en producción, así que las migraciones se reescriben en vez de apilar correcciones.
+El 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
+aplicó a mano (sin `migrate:rollback`, porque el `down()` del seed viejo borraba los permisos de las
+opciones 149 y 150, que ya son de otros módulos): se borraron las tablas viejas y las columnas
+`tipo_unidad`/`calificador`, se corrió `down()` + `up()` de la nueva y se restauraron la escala, el
+método por nivel y las fechas límite; las dimensiones de tipo DIMENSION pasaron a ser los propósitos
+iniciales; las opciones 153 y 154 se renombraron. Se perdieron 2 logros y 1 nota de prueba (hay
+respaldo con mysqldump del 2026-11-13). **`sami_hebreo` sin correr.** Al desplegar, migrar en cada
+base de colegio.
 
 ## Tests
 
-`tests/Unit/GestionAcademica/PeriodoEditableNotasTest.php` (ventana para calificar) y
-`AccionesPlanLogrosTest.php` (quién puede editar, enviar, aprobar, devolver y reabrir los logros
-según estado, rol y plazo: `NotasService::acciones`), `CalificadorUnidadTest.php` (quién califica
-según `calificador`, combinaciones de `tipo_unidad`/`calificador` y la consistencia de tipo de una
-unidad), `CambiosDeLogrosTest.php` (logros con varios docentes en el mismo plan) y
-`FechasPeriodoAcademicoTest.php`. Lo que toca la base (sincronización idempotente, filtro por tipo,
-quitar un logro con notas, cambio de `tipo_unidad` bloqueado, planilla y regresión de DIMENSION) no
-tiene tests automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se
-probó a mano en `sami_royal` dentro de una transacción deshecha (2026-11-09).
+`tests/Unit/GestionAcademica/`: `AccionesPlanReferentesTest` (acciones por estado, rol y plazo),
+`CambiosDeReferentesTest` (aplanar y varios docentes en el mismo plan), `PeriodoEditableNotasTest` y
+`FechasPeriodoAcademicoTest`. Lo que toca la base (guardar referentes por docente, rechazo en
+asignatura ajena, enviar solo quien gestiona, no quitar un referente con notas) no tiene tests
+automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se probó en
+`sami_royal` dentro de una transacción deshecha (2026-11-13, Sexto, Español y Literatura + otra
+asignatura con otro docente).
 
 ## Trampas
 
@@ -215,19 +170,18 @@ probó a mano en `sami_royal` dentro de una transacción deshecha (2026-11-09).
 - `DB_DATABASE=otra php artisan …` en Git Bash **no** cambia de base (sigue usando la del `.env`):
   para probar migraciones en una base temporal, cambia `config('database.connections.mysql.database')`
   y haz `DB::purge`/`reconnect` dentro de tinker.
-- Los logros de un plan aprobado no se tocan sin reabrir: el editor lo bloquea y el backend también.
+- Los referentes de un plan aprobado no se tocan sin reabrir: el backend lo bloquea.
 
 ## Pendiente
 
-- **Frontend del modo ASIGNATURA** (el backend ya está):
-  - Configuración académica: elegir `tipo_unidad` y `calificador` por nivel (hoy la pestaña
-    Método de calificación solo cambia el método) y un botón "Sincronizar asignaturas".
-  - Logros: el plan por asignatura (las unidades son asignaturas), editando solo las
-    `dimensiones[].editable` y sin "Enviar" para el docente (`puede.enviar`). `LogrosSheet` debe
-    dejar de decir que quitar un logro borra sus desempeños: ahora se rechaza si tiene notas.
-  - Planilla: selector con los cursos de `mis-cursos` (también los de carga), columnas por unidad
-    según `dimensiones[].editable` y guardar **solo** las unidades editables (hoy manda todas y en
-    ASIGNATURA el backend lo rechazaría).
-- AREA como unidad (sincronizar desde `academico_area`).
-- Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`), boletín PDF y vista del
-  acudiente / estudiante.
+- **Fase 2 (backend)**: "mis cursos" (cursos donde el docente tiene carga, y los que dirige),
+  planilla del docente por sus referentes y subreferentes (en plazo y con el plan aprobado), ajuste
+  del coordinador al final de un referente, vista del director de su curso y sus "Observaciones
+  Generales del Director de Grupo" (tabla nueva), cierre del trimestre por curso con la foto del
+  boletín (tabla nueva), consulta (152).
+- **Fase 3 (frontend)**: renombrar a propósitos y referentes; páginas de Referentes, planilla del
+  docente y vista del director; Configuración académica (propósitos, método por nivel).
+- **Fase 4**: documento `boletin` en `src/documentos` (pdfmake), PDF en el servidor desde la foto e
+  historial de boletines.
+- Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`) y vista del acudiente /
+  estudiante.

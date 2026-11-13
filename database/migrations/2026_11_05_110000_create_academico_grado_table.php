@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
  * Catálogo de grados (academico_grado) y el grado de cada curso (curso.id_grado).
  *
  * Los grados se editan en Configuración académica → Grados (nombre, nivel, orden). Agrupan los
- * cursos que comparten logros en Notas (Primero A y B: mismo id_grado) y ordenan los cursos.
+ * cursos que comparten referentes en Notas (Primero A y B: mismo id_grado) y ordenan los cursos.
  * Se precargan los grados del calendario colombiano y cada curso existente recibe el suyo
  * deducido del nombre; lo que no se reconoce queda sin grado para completarlo a mano.
  *

@@ -122,7 +122,7 @@ esta tabla.
 | [`modulos/evaluaciones.md`](docs/contexto/modulos/evaluaciones.md) | Evaluaciones (Gestor de Calidad) y Encuestas |
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
-| [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, dimensiones, escala de desempeños, logros por grado (grupo) y su aprobación (opciones 149–151), planilla, plazo de corrección, migraciones |
+| [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, escala de desempeños, propósitos, referentes por grado y asignatura (con subreferentes) y su aprobación (opciones 152–154), planilla, boletín, plazo de corrección, migraciones |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,

@@ -5,10 +5,10 @@ namespace App\Models\GestionAcademica;
 use App\Models\Usuarios\Usuario;
 use Illuminate\Database\Eloquent\Model;
 
-/** Quién hizo qué en un plan de logros (cambios de logros y de estado). */
-class LogroPlanHistorial extends Model
+/** Quién hizo qué en un plan de referentes (cambios de referentes y de estado). */
+class ReferentePlanHistorial extends Model
 {
-    protected $table = 'academico_logro_plan_historial';
+    protected $table = 'academico_referente_plan_historial';
 
     public $timestamps = false;
 

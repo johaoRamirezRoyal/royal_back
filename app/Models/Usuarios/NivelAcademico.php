@@ -22,8 +22,6 @@ class NivelAcademico extends Model
         'id',
         'nombre',
         'metodo_calificacion',
-        'tipo_unidad',
-        'calificador',
     ];
 
     /** ¿Se califica con desempeños por indicadores (planilla cualitativa)? */

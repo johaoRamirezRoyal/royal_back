@@ -576,7 +576,7 @@ INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
 -- ---------------------------------------------------------------------------
 -- 2026_11_05_110000_create_academico_grado_table.php
 -- Catálogo de grados (editable en Configuración académica → Grados) y
--- curso.id_grado. Los logros cualitativos son por grado (todos sus cursos los
+-- curso.id_grado. Los referentes cualitativos son por grado (todos sus cursos los
 -- comparten). Precarga los 15 grados (Párvulos … Undécimo) y asigna a cada
 -- curso el grado cuya palabra encabeza su nombre; eso lo hace la migración en PHP.
 -- ---------------------------------------------------------------------------
@@ -586,65 +586,54 @@ ALTER TABLE curso ADD COLUMN id_grado INT NULL AFTER id_nivel;
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_05_120000_create_academico_notas_cualitativas_tables.php
--- Notas cualitativas: método de calificación, tipo de unidad evaluable y
--- calificador por nivel; fecha límite de notas del periodo; escala de
--- desempeños (general o por niveles); unidades evaluables (academico_dimension:
--- DIMENSION | AREA | ASIGNATURA, con CHECK ck_unidad_tipo) por grado; logros
--- por grado + periodo; plan de logros con historial; valoraciones por
--- estudiante + unidad + periodo. Sin FK a tablas MyISAM (periodo, curso,
--- asignatura).
+-- Notas cualitativas: método de calificación por nivel; fecha límite de notas
+-- del periodo; escala de desempeños (general o por niveles); propósitos
+-- (catálogo único); referentes por grado + periodo + propósito + asignatura,
+-- con subreferentes (id_padre); plan de referentes con historial; valoración
+-- por estudiante + referente (desempeño del docente y ajuste del coordinador).
+-- Sin FK a tablas MyISAM (periodo, curso, asignatura).
 -- ---------------------------------------------------------------------------
 alter table `nivel_academico` add `metodo_calificacion` varchar(12) not null default 'CUALITATIVA' after `nombre`;
-alter table `nivel_academico` add `tipo_unidad` varchar(12) not null default 'DIMENSION' after `metodo_calificacion`;
-alter table `nivel_academico` add `calificador` varchar(20) not null default 'DIRECTOR_GRUPO' after `tipo_unidad`;
 ALTER TABLE periodo_academico ADD COLUMN fecha_limite_notas DATE NULL AFTER fecha_fin;
 create table `academico_escala_valoracion` (`id` int not null auto_increment, `nombre` varchar(50) not null, `abreviatura` varchar(10) null, `descripcion` varchar(500) null, `color` varchar(20) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
 create table `academico_escala_valoracion_nivel` (`id_escala` int not null, `id_nivel_academico` int not null, primary key (`id_escala`, `id_nivel_academico`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
 alter table `academico_escala_valoracion_nivel` add constraint `academico_escala_valoracion_nivel_id_escala_foreign` foreign key (`id_escala`) references `academico_escala_valoracion` (`id`) on delete cascade;
 alter table `academico_escala_valoracion_nivel` add index `academico_escala_valoracion_nivel_id_nivel_academico_index`(`id_nivel_academico`);
-create table `academico_dimension` (`id` int not null auto_increment, `nombre` varchar(80) not null, `descripcion` varchar(500) null, `tipo` varchar(12) not null default 'DIMENSION', `id_area` int null, `id_asignatura` int null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_dimension` add unique `academico_dimension_id_area_unique`(`id_area`);
-alter table `academico_dimension` add unique `academico_dimension_id_asignatura_unique`(`id_asignatura`);
-ALTER TABLE academico_dimension ADD CONSTRAINT ck_unidad_tipo CHECK ( (tipo = 'DIMENSION' AND id_area IS NULL AND id_asignatura IS NULL) OR (tipo = 'AREA' AND id_area IS NOT NULL AND id_asignatura IS NULL) OR (tipo = 'ASIGNATURA' AND id_asignatura IS NOT NULL AND id_area IS NULL));
-create table `academico_grado_dimension` (`id_grado` int not null, `id_dimension` int not null, primary key (`id_grado`, `id_dimension`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_grado_dimension` add constraint `academico_grado_dimension_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`) on delete cascade;
-alter table `academico_grado_dimension` add constraint `academico_grado_dimension_id_dimension_foreign` foreign key (`id_dimension`) references `academico_dimension` (`id`) on delete cascade;
-alter table `academico_grado_dimension` add index `academico_grado_dimension_id_dimension_index`(`id_dimension`);
-create table `academico_logro` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `id_dimension` int not null, `descripcion` text not null, `orden` smallint unsigned not null default '0', `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_logro` add constraint `academico_logro_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
-alter table `academico_logro` add constraint `academico_logro_id_dimension_foreign` foreign key (`id_dimension`) references `academico_dimension` (`id`);
-alter table `academico_logro` add constraint `academico_logro_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
-alter table `academico_logro` add index `ix_logro_grado_periodo`(`id_grado`, `id_periodo_academico`);
-create table `academico_logro_plan` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `estado` varchar(15) not null default 'BORRADOR', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_logro_plan` add constraint `academico_logro_plan_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
-alter table `academico_logro_plan` add unique `uq_logro_plan`(`id_grado`, `id_periodo_academico`);
-alter table `academico_logro_plan` add index `ix_logro_plan_periodo_estado`(`id_periodo_academico`, `estado`);
-create table `academico_logro_plan_historial` (`id` int not null auto_increment, `id_plan` int not null, `id_usuario` int not null, `accion` varchar(20) not null, `detalle` text null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_logro_plan_historial` add constraint `academico_logro_plan_historial_id_plan_foreign` foreign key (`id_plan`) references `academico_logro_plan` (`id`) on delete cascade;
-alter table `academico_logro_plan_historial` add constraint `academico_logro_plan_historial_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
-alter table `academico_logro_plan_historial` add index `academico_logro_plan_historial_id_plan_index`(`id_plan`);
-create table `academico_valoracion` (`id` int not null auto_increment, `id_estudiante` int not null, `id_dimension` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `id_escala` int null, `observacion` text null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_valoracion` add constraint `academico_valoracion_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
-alter table `academico_valoracion` add constraint `academico_valoracion_id_dimension_foreign` foreign key (`id_dimension`) references `academico_dimension` (`id`);
-alter table `academico_valoracion` add constraint `academico_valoracion_id_escala_foreign` foreign key (`id_escala`) references `academico_escala_valoracion` (`id`);
-alter table `academico_valoracion` add constraint `academico_valoracion_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
-alter table `academico_valoracion` add unique `uq_valoracion_estudiante_dim_periodo`(`id_estudiante`, `id_dimension`, `id_periodo_academico`);
-alter table `academico_valoracion` add index `ix_valoracion_curso_periodo`(`id_curso`, `id_periodo_academico`);
-alter table `academico_valoracion` add index `academico_valoracion_id_curso_index`(`id_curso`);
-create table `academico_valoracion_logro` (`id` int not null auto_increment, `id_valoracion` int not null, `id_logro` int not null, `id_escala` int not null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
-alter table `academico_valoracion_logro` add constraint `academico_valoracion_logro_id_valoracion_foreign` foreign key (`id_valoracion`) references `academico_valoracion` (`id`) on delete cascade;
-alter table `academico_valoracion_logro` add constraint `academico_valoracion_logro_id_logro_foreign` foreign key (`id_logro`) references `academico_logro` (`id`) on delete cascade;
-alter table `academico_valoracion_logro` add constraint `academico_valoracion_logro_id_escala_foreign` foreign key (`id_escala`) references `academico_escala_valoracion` (`id`);
-alter table `academico_valoracion_logro` add unique `uq_valoracion_logro`(`id_valoracion`, `id_logro`);
+create table `academico_proposito` (`id` int not null auto_increment, `nombre` varchar(120) not null, `descripcion` varchar(500) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+create table `academico_referente` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `id_proposito` int not null, `id_asignatura` int not null, `id_padre` int null, `descripcion` text not null, `orden` smallint unsigned not null default '0', `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_referente` add constraint `academico_referente_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
+alter table `academico_referente` add constraint `academico_referente_id_proposito_foreign` foreign key (`id_proposito`) references `academico_proposito` (`id`);
+alter table `academico_referente` add constraint `academico_referente_id_padre_foreign` foreign key (`id_padre`) references `academico_referente` (`id`) on delete cascade;
+alter table `academico_referente` add constraint `academico_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_referente` add index `ix_referente_grado_periodo`(`id_grado`, `id_periodo_academico`);
+alter table `academico_referente` add index `academico_referente_id_padre_index`(`id_padre`);
+create table `academico_referente_plan` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `estado` varchar(15) not null default 'BORRADOR', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_referente_plan` add constraint `academico_referente_plan_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
+alter table `academico_referente_plan` add unique `uq_referente_plan`(`id_grado`, `id_periodo_academico`);
+alter table `academico_referente_plan` add index `ix_referente_plan_periodo_estado`(`id_periodo_academico`, `estado`);
+create table `academico_referente_plan_historial` (`id` int not null auto_increment, `id_plan` int not null, `id_usuario` int not null, `accion` varchar(20) not null, `detalle` text null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_referente_plan_historial` add constraint `academico_referente_plan_historial_id_plan_foreign` foreign key (`id_plan`) references `academico_referente_plan` (`id`) on delete cascade;
+alter table `academico_referente_plan_historial` add constraint `academico_referente_plan_historial_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_referente_plan_historial` add index `academico_referente_plan_historial_id_plan_index`(`id_plan`);
+create table `academico_valoracion_referente` (`id` int not null auto_increment, `id_estudiante` int not null, `id_referente` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `id_escala_docente` int null, `id_docente` int null, `id_escala_ajuste` int null, `id_ajustado_por` int null, `ajustado_at` timestamp null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_referente_foreign` foreign key (`id_referente`) references `academico_referente` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_escala_docente_foreign` foreign key (`id_escala_docente`) references `academico_escala_valoracion` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_escala_ajuste_foreign` foreign key (`id_escala_ajuste`) references `academico_escala_valoracion` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_ajustado_por_foreign` foreign key (`id_ajustado_por`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_referente` add unique `uq_valoracion_estudiante_referente`(`id_estudiante`, `id_referente`);
+alter table `academico_valoracion_referente` add index `ix_valoracion_curso_periodo`(`id_curso`, `id_periodo_academico`);
+alter table `academico_valoracion_referente` add index `academico_valoracion_referente_id_referente_index`(`id_referente`);
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_05_120100_seed_opciones_notas.php
--- Opciones 149 "Consultar notas", 150 "Gestionar logros" y 151 "Aprobar logros"
--- (módulo 14). No se otorgan a ningún perfil; se asignan desde /permisos.
+-- Opciones 152 "Consultar notas", 153 "Gestionar referentes" y 154 "Aprobar
+-- referentes" (módulo 14). No se otorgan a ningún perfil; se asignan desde /permisos.
 -- ---------------------------------------------------------------------------
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
-    SELECT 149, 'Gestión Académica — Consultar notas', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 149);
+    SELECT 152, 'Gestión Académica — Consultar notas', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 152);
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
-    SELECT 150, 'Gestión Académica — Gestionar logros', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 150);
+    SELECT 153, 'Gestión Académica — Gestionar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 153);
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
-    SELECT 151, 'Gestión Académica — Aprobar logros', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 151);
+    SELECT 154, 'Gestión Académica — Aprobar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 154);

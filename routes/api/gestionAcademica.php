@@ -523,15 +523,13 @@ Route::prefix('actas')->group(function () {
 
 /**
  * Notas cualitativas (NotasController; permisos en el controller y aquí). Ver
- * docs/contexto/modulos/notas.md.
- * Planilla / plan: ?id_curso=&id_asignatura=&id_periodo=  (id_periodo = periodo_academico.id)
- * PUT  /notas/logros       { id_curso, id_periodo, logros: [{ id?, id_dimension, descripcion }] }  reemplaza los del grado
+ * docs/contexto/modulos/notas.md. Plan: ?id_curso=&id_periodo=  (id_periodo = periodo_academico.id)
+ * PUT  /notas/referentes   { id_curso, id_periodo, referentes: [{ id?, id_proposito, id_asignatura, descripcion, subreferentes?: [{ id?, descripcion }] }] }
  * POST /notas/plan/estado  { id_curso, id_periodo, accion: enviar|aprobar|devolver|reabrir, comentario? }
- * PUT  /notas/planilla     { id_curso, id_periodo, estudiantes: [{ id_estudiante, dimensiones: [{ id_dimension, id_escala?, observacion?, logros? }] }] }
  */
 Route::prefix('/notas')->group(function () {
     $escala = Permiso::ruta([Permiso::GESTION_ACADEMICA]);
-    $logros = [Permiso::LOGROS_GESTIONAR, Permiso::LOGROS_APROBAR];
+    $referentes = [Permiso::REFERENTES_GESTIONAR, Permiso::REFERENTES_APROBAR];
 
     Route::get('/escalas', [NotasController::class, 'listarEscalas'])->middleware($escala);
     Route::post('/escalas', [NotasController::class, 'crearEscala'])->middleware($escala);
@@ -539,27 +537,17 @@ Route::prefix('/notas')->group(function () {
     Route::put('/escalas/orden', [NotasController::class, 'ordenarEscalas'])->middleware($escala);
     Route::put('/escalas/{id}', [NotasController::class, 'actualizarEscala'])->whereNumber('id')->middleware($escala);
 
-    // Dimensiones (catálogo y sus asignaturas) y método de calificación por nivel: 99.
-    Route::get('/dimensiones', [NotasController::class, 'listarDimensiones'])->middleware($escala);
-    Route::post('/dimensiones', [NotasController::class, 'crearDimension'])->middleware($escala);
-    // Antes de /dimensiones/{id}: reordena (ids en el orden nuevo).
-    Route::put('/dimensiones/orden', [NotasController::class, 'ordenarDimensiones'])->middleware($escala);
-    Route::put('/dimensiones/{id}', [NotasController::class, 'actualizarDimension'])->whereNumber('id')->middleware($escala);
-    Route::put('/dimensiones/{id}/grados', [NotasController::class, 'asignarGrados'])->whereNumber('id')->middleware($escala);
-    // Unidades ASIGNATURA desde academico_asignatura y sus vínculos con grados (por la carga académica).
-    Route::post('/unidades/sincronizar', [NotasController::class, 'sincronizarUnidades'])->middleware($escala);
+    // Propósitos (catálogo único) y método de calificación por nivel: 99.
+    Route::get('/propositos', [NotasController::class, 'listarPropositos'])->middleware($escala);
+    Route::post('/propositos', [NotasController::class, 'crearProposito'])->middleware($escala);
+    // Antes de /propositos/{id}: reordena (ids en el orden nuevo).
+    Route::put('/propositos/orden', [NotasController::class, 'ordenarPropositos'])->middleware($escala);
+    Route::put('/propositos/{id}', [NotasController::class, 'actualizarProposito'])->whereNumber('id')->middleware($escala);
     Route::get('/metodos-nivel', [NotasController::class, 'listarMetodosNivel'])->middleware($escala);
     Route::put('/metodos-nivel/{id}', [NotasController::class, 'cambiarMetodoNivel'])->whereNumber('id')->middleware($escala);
 
-    Route::get('/mis-cursos', [NotasController::class, 'misCursos'])->middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE));
-    Route::get('/planilla', [NotasController::class, 'planilla'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$logros], Permiso::PERFILES_DOCENTE));
-    Route::put('/planilla', [NotasController::class, 'guardarPlanilla'])->middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE));
-
-    Route::put('/logros', [NotasController::class, 'guardarLogros'])->middleware(Permiso::ruta($logros, Permiso::PERFILES_DOCENTE));
-    Route::get('/logros/grados', [NotasController::class, 'gradosLogros'])->middleware(Permiso::ruta($logros));
-    Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$logros], Permiso::PERFILES_DOCENTE));
-    Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($logros, Permiso::PERFILES_DOCENTE));
-
-    Route::get('/consulta/filtros', [NotasController::class, 'filtrosConsulta'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR]));
-    Route::get('/consulta', [NotasController::class, 'consulta'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR]));
+    Route::put('/referentes', [NotasController::class, 'guardarReferentes'])->middleware(Permiso::ruta($referentes, Permiso::PERFILES_DOCENTE));
+    Route::get('/referentes/grados', [NotasController::class, 'gradosReferentes'])->middleware(Permiso::ruta($referentes));
+    Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], Permiso::PERFILES_DOCENTE));
+    Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($referentes, Permiso::PERFILES_DOCENTE));
 });

@@ -7,7 +7,7 @@ use Illuminate\Support\Str;
 
 /**
  * Grado escolar (Primero, Segundo…), editable en Configuración académica. Los cursos con el
- * mismo grado (Primero A y B) comparten logros en Notas. No se borran: se desactivan.
+ * mismo grado (Primero A y B) comparten referentes en Notas. No se borran: se desactivan.
  */
 class Grado extends Model
 {

@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\GestionAcademica;
 
 use App\Http\Controllers\Controller;
-use App\Models\GestionAcademica\Dimension;
+use App\Models\GestionAcademica\EscalaValoracion;
+use App\Models\GestionAcademica\Proposito;
 use App\Models\Usuarios\NivelAcademico;
 use App\Services\GestionAcademica\NotasService;
 use App\Services\Usuarios\PermisosPerfil;
@@ -15,45 +16,36 @@ use Illuminate\Validation\Rule;
 
 /**
  * Notas cualitativas (ver docs/contexto/modulos/notas.md). Controller aparte de
- * GestionAcademicaController: calificar es autoservicio del docente y la consulta (149) no
- * debe abrir nada más del módulo. Los logros son por grado; quién califica y quién es "docente"
- * del plan depende del nivel (nivel_academico.calificador: director de grupo, o docente con carga
- * en la asignatura).
+ * GestionAcademicaController: calificar es autoservicio del docente y la consulta (152) no
+ * debe abrir nada más del módulo.
  *
- * - Escala, unidades (dimensiones), sincronización y modo por nivel: opción 99.
- * - Calificar (mis-cursos, guardar planilla): perfiles docente; el controller descarta a quien no
- *   califica ninguna unidad del curso y el service valida cada unidad y que los logros del grado
- *   estén APROBADOS.
- * - Logros y su estado (guardar logros, ver plan, cambiar estado): los docentes del grado (según
- *   el calificador) y quien tenga la 150 (gestionar) o la 151 (aprobar) en su nivel. El service
- *   decide qué acción cabe en cada estado y qué unidades edita cada uno.
- * - Ver planilla: docente del grado, 150/151 de su nivel, 99 o 149 (solo lectura).
- * - Consulta por curso: 99 o 149.
+ * - Escala, propósitos y método por nivel: opción 99.
+ * - Referentes y su estado (guardar referentes, ver plan, cambiar estado): los docentes con carga
+ *   en el grado (cada uno en sus asignaturas) y quien tenga la 153 (gestionar) o la 154 (aprobar)
+ *   en su nivel. El service decide qué acción cabe en cada estado y qué asignaturas edita cada uno.
  */
 class NotasController extends Controller implements HasMiddleware
 {
-    private const LOGROS = [Permiso::LOGROS_GESTIONAR, Permiso::LOGROS_APROBAR];
+    private const REFERENTES = [Permiso::REFERENTES_GESTIONAR, Permiso::REFERENTES_APROBAR];
 
     public static function middleware(): array
     {
         return [
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]), only: [
                 'listarEscalas', 'crearEscala', 'actualizarEscala', 'ordenarEscalas',
-                'listarDimensiones', 'crearDimension', 'actualizarDimension', 'ordenarDimensiones', 'asignarGrados',
-                'listarMetodosNivel', 'cambiarMetodoNivel', 'sincronizarUnidades',
+                'listarPropositos', 'crearProposito', 'actualizarProposito', 'ordenarPropositos',
+                'listarMetodosNivel', 'cambiarMetodoNivel',
             ]),
-            new Middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE), only: ['misCursos', 'guardarPlanilla']),
-            new Middleware(Permiso::ruta(self::LOGROS, Permiso::PERFILES_DOCENTE), only: ['guardarLogros', 'cambiarEstadoPlan']),
-            new Middleware(Permiso::ruta(self::LOGROS), only: ['gradosLogros']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::LOGROS], Permiso::PERFILES_DOCENTE), only: ['planilla', 'verPlan']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR]), only: ['filtrosConsulta', 'consulta']),
+            new Middleware(Permiso::ruta(self::REFERENTES, Permiso::PERFILES_DOCENTE), only: ['guardarReferentes', 'cambiarEstadoPlan']),
+            new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], Permiso::PERFILES_DOCENTE), only: ['verPlan']),
         ];
     }
 
     public function __construct(private NotasService $service) {}
 
     /**
-     * Quién pide, para NotasService: si gestiona (150) o aprueba (151) logros y en qué niveles
+     * Quién pide, para NotasService: si gestiona (153) o aprueba (154) referentes y en qué niveles
      * académicos. Con la 99 (o Super Admin, que la tiene) vale para todos los niveles.
      */
     private function actor(Request $request): array
@@ -62,13 +54,13 @@ class NotasController extends Controller implements HasMiddleware
 
         return [
             'id' => $id,
-            'gestiona' => PermisosPerfil::tiene($request, Permiso::LOGROS_GESTIONAR),
-            'aprueba' => PermisosPerfil::tiene($request, Permiso::LOGROS_APROBAR),
+            'gestiona' => PermisosPerfil::tiene($request, Permiso::REFERENTES_GESTIONAR),
+            'aprueba' => PermisosPerfil::tiene($request, Permiso::REFERENTES_APROBAR),
             'niveles' => PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA) ? null : $this->service->nivelesDeUsuario($id),
         ];
     }
 
-    /** ¿Puede ver el curso? Lectura global con 99/149; si no, ser director del grado o 150/151 de su nivel. */
+    /** ¿Puede ver el curso? Lectura global con 99/152; si no, docente con carga en el grado o 153/154 de su nivel. */
     private function veCurso(Request $request, array $actor, int $idCurso): bool
     {
         return PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR)
@@ -113,65 +105,44 @@ class NotasController extends Controller implements HasMiddleware
             'ids.*' => ['integer', 'distinct', 'exists:academico_escala_valoracion,id'],
         ]);
 
-        return $this->apiResponse($this->service->ordenar(\App\Models\GestionAcademica\EscalaValoracion::class, $body['ids']));
+        return $this->apiResponse($this->service->ordenar(EscalaValoracion::class, $body['ids']));
     }
 
-    /** { ids: [id...] } dimensiones en el orden nuevo: cada una queda con su posición como orden. */
-    public function ordenarDimensiones(Request $request)
-    {
-        $body = $request->validate([
-            'ids' => ['required', 'array', 'max:50'],
-            'ids.*' => ['integer', 'distinct', 'exists:academico_dimension,id'],
-        ]);
+    // ─── Propósitos y método por nivel ──────────────────────────
 
-        return $this->apiResponse($this->service->ordenar(\App\Models\GestionAcademica\Dimension::class, $body['ids']));
-    }
-
-    // ─── Dimensiones y método por nivel ─────────────────────────
-
-    private function reglasDimension(): array
+    private function reglasProposito(): array
     {
         return [
-            'nombre' => ['required', 'string', 'max:80'],
+            'nombre' => ['required', 'string', 'max:120'],
             'descripcion' => ['nullable', 'string', 'max:500'],
-            'orden' => ['nullable', 'integer', 'min:0'],
             'activo' => ['nullable', 'boolean'],
         ];
     }
 
-    /** ?tipo=DIMENSION|AREA|ASIGNATURA (por defecto DIMENSION). */
-    public function listarDimensiones(Request $request)
+    public function listarPropositos()
     {
-        $q = $request->validate(['tipo' => ['nullable', Rule::in([Dimension::DIMENSION, Dimension::AREA, Dimension::ASIGNATURA])]]);
-
-        return $this->apiResponse($this->service->listarDimensiones($q['tipo'] ?? null));
+        return $this->apiResponse($this->service->listarPropositos());
     }
 
-    /** Crea / actualiza una unidad ASIGNATURA por asignatura y la vincula a los grados donde tiene carga. */
-    public function sincronizarUnidades()
+    public function crearProposito(Request $request)
     {
-        return $this->apiResponse($this->service->sincronizarUnidadesAsignatura());
+        return $this->apiResponse($this->service->guardarProposito($request->validate($this->reglasProposito())));
     }
 
-    public function crearDimension(Request $request)
+    public function actualizarProposito(Request $request, int $id)
     {
-        return $this->apiResponse($this->service->guardarDimension($request->validate($this->reglasDimension())));
+        return $this->apiResponse($this->service->guardarProposito($request->validate($this->reglasProposito()), $id));
     }
 
-    public function actualizarDimension(Request $request, int $id)
-    {
-        return $this->apiResponse($this->service->guardarDimension($request->validate($this->reglasDimension()), $id));
-    }
-
-    /** { grados: [id...] } reemplaza los grados que se evalúan con la dimensión. */
-    public function asignarGrados(Request $request, int $id)
+    /** { ids: [id...] } propósitos en el orden nuevo: cada uno queda con su posición como orden. */
+    public function ordenarPropositos(Request $request)
     {
         $body = $request->validate([
-            'grados' => ['present', 'array'],
-            'grados.*' => ['integer', 'distinct', 'exists:academico_grado,id'],
+            'ids' => ['required', 'array', 'max:50'],
+            'ids.*' => ['integer', 'distinct', 'exists:academico_proposito,id'],
         ]);
 
-        return $this->apiResponse($this->service->asignarGrados($id, $body['grados']));
+        return $this->apiResponse($this->service->ordenar(Proposito::class, $body['ids']));
     }
 
     public function listarMetodosNivel()
@@ -179,28 +150,17 @@ class NotasController extends Controller implements HasMiddleware
         return $this->apiResponse($this->service->listarMetodosNivel());
     }
 
-    /**
-     * { metodo?: CUALITATIVA | CUANTITATIVA | AMBAS, tipo_unidad?: DIMENSION | ASIGNATURA,
-     *   calificador?: DIRECTOR_GRUPO | DOCENTE_ASIGNATURA }, al menos uno. Las combinaciones las
-     * valida el service (NotasService::errorDeModo) con mensajes en español.
-     */
+    /** { metodo: CUALITATIVA | CUANTITATIVA | AMBAS } */
     public function cambiarMetodoNivel(Request $request, int $id)
     {
-        $body = $request->validate([
-            'metodo' => ['required_without_all:tipo_unidad,calificador', Rule::in(NivelAcademico::METODOS)],
-            'tipo_unidad' => ['sometimes', 'string', 'max:12'],
-            'calificador' => ['sometimes', 'string', 'max:20'],
-        ]);
+        $body = $request->validate(['metodo' => ['required', Rule::in(NivelAcademico::METODOS)]]);
 
-        return $this->apiResponse($this->service->cambiarMetodoNivel($id, $body));
+        return $this->apiResponse($this->service->cambiarMetodoNivel($id, $body['metodo']));
     }
 
-    public function misCursos(Request $request)
-    {
-        return $this->apiResponse($this->service->misCursos($request->user()->id_user));
-    }
+    // ─── Referentes ─────────────────────────────────────────────
 
-    private function reglasPlanilla(): array
+    private function reglasCursoPeriodo(): array
     {
         return [
             'id_curso' => ['required', 'integer'],
@@ -208,25 +168,13 @@ class NotasController extends Controller implements HasMiddleware
         ];
     }
 
-    public function planilla(Request $request)
-    {
-        $q = $request->validate($this->reglasPlanilla());
-        $actor = $this->actor($request);
-
-        if (! $this->veCurso($request, $actor, $q['id_curso'])) {
-            return $this->error('No tienes acceso a las notas de este curso', 403);
-        }
-
-        return $this->apiResponse($this->service->planilla($actor, $q['id_curso'], $q['id_periodo']));
-    }
-
     public function verPlan(Request $request)
     {
-        $q = $request->validate($this->reglasPlanilla());
+        $q = $request->validate($this->reglasCursoPeriodo());
         $actor = $this->actor($request);
 
         if (! $this->veCurso($request, $actor, $q['id_curso'])) {
-            return $this->error('No tienes acceso a los logros de este grado', 403);
+            return $this->error('No tienes acceso a los referentes de este grado', 403);
         }
 
         return $this->apiResponse($this->service->verPlan($actor, $q['id_curso'], $q['id_periodo']));
@@ -235,7 +183,7 @@ class NotasController extends Controller implements HasMiddleware
     /** { id_curso, id_periodo, accion: enviar|aprobar|devolver|reabrir, comentario? } */
     public function cambiarEstadoPlan(Request $request)
     {
-        $body = $request->validate($this->reglasPlanilla() + [
+        $body = $request->validate($this->reglasCursoPeriodo() + [
             'accion' => ['required', 'in:enviar,aprobar,devolver,reabrir'],
             'comentario' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -245,68 +193,40 @@ class NotasController extends Controller implements HasMiddleware
         ));
     }
 
-    /** Grados del nivel de quien gestiona logros, con el estado de cada plan. ?id_periodo= */
-    public function gradosLogros(Request $request)
+    /** Grados del nivel de quien gestiona referentes, con el estado de cada plan. ?id_periodo= */
+    public function gradosReferentes(Request $request)
     {
         $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
 
         return $this->apiResponse($this->service->gradosDelNivel($this->actor($request), $q['id_periodo'] ?? null));
     }
 
-    /** { id_curso (cualquiera del grado), id_periodo, logros: [{ id?, id_dimension, descripcion }] } */
-    public function guardarLogros(Request $request)
+    /**
+     * { id_curso (cualquiera del grado), id_periodo,
+     *   referentes: [{ id?, id_proposito, id_asignatura, descripcion, subreferentes?: [{ id?, descripcion }] }] }
+     */
+    public function guardarReferentes(Request $request)
     {
-        $body = $request->validate($this->reglasPlanilla() + [
-            'logros' => ['present', 'array', 'max:60'],
-            'logros.*.id' => ['nullable', 'integer'],
-            // La dimensión del grado a la que pertenece (obligatoria; la valida el service).
-            'logros.*.id_dimension' => ['required', 'integer'],
-            'logros.*.descripcion' => ['required', 'string', 'max:1000'],
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'referentes' => ['present', 'array', 'max:100'],
+            'referentes.*.id' => ['nullable', 'integer'],
+            // Propósito y asignatura (obligatorios; los valida el service contra el grado).
+            'referentes.*.id_proposito' => ['required', 'integer'],
+            'referentes.*.id_asignatura' => ['required', 'integer'],
+            'referentes.*.descripcion' => ['required', 'string', 'max:1000'],
+            'referentes.*.subreferentes' => ['nullable', 'array', 'max:30'],
+            'referentes.*.subreferentes.*.id' => ['nullable', 'integer'],
+            'referentes.*.subreferentes.*.descripcion' => ['required', 'string', 'max:1000'],
         ], [
-            'logros.*.id_dimension.required' => 'Cada logro debe pertenecer a una dimensión.',
-            'logros.*.descripcion.required' => 'Cada logro necesita una descripción.',
-            'logros.*.descripcion.max' => 'Un logro no puede superar los 1000 caracteres.',
+            'referentes.*.id_proposito.required' => 'Cada referente debe pertenecer a un propósito.',
+            'referentes.*.id_asignatura.required' => 'Cada referente debe pertenecer a una asignatura.',
+            'referentes.*.descripcion.required' => 'Cada referente necesita una descripción.',
+            'referentes.*.subreferentes.*.descripcion.required' => 'Cada subreferente necesita una descripción.',
+            'referentes.*.descripcion.max' => 'Un referente no puede superar los 1000 caracteres.',
+            'referentes.*.subreferentes.*.descripcion.max' => 'Un subreferente no puede superar los 1000 caracteres.',
         ]);
 
-        // Directores del grado o 150/151 del nivel; el service decide según el estado.
-        return $this->apiResponse($this->service->guardarLogros($this->actor($request), $body['id_curso'], $body['id_periodo'], $body['logros']));
-    }
-
-    /** { id_curso, id_periodo, estudiantes: [{ id_estudiante, dimensiones: [{ id_dimension, id_escala?, observacion?, logros?: [{ id_logro, id_escala }] }] }] } */
-    public function guardarPlanilla(Request $request)
-    {
-        $body = $request->validate($this->reglasPlanilla() + [
-            'estudiantes' => ['required', 'array'],
-            'estudiantes.*.id_estudiante' => ['required', 'integer', 'distinct'],
-            'estudiantes.*.dimensiones' => ['present', 'array'],
-            'estudiantes.*.dimensiones.*.id_dimension' => ['required', 'integer'],
-            'estudiantes.*.dimensiones.*.id_escala' => ['nullable', 'integer'],
-            'estudiantes.*.dimensiones.*.observacion' => ['nullable', 'string', 'max:2000'],
-            'estudiantes.*.dimensiones.*.logros' => ['nullable', 'array'],
-            'estudiantes.*.dimensiones.*.logros.*.id_logro' => ['required', 'integer'],
-            'estudiantes.*.dimensiones.*.logros.*.id_escala' => ['required', 'integer'],
-        ], [
-            'estudiantes.*.dimensiones.*.observacion.max' => 'Una observación no puede superar los 2000 caracteres.',
-        ]);
-
-        // Aquí solo se descarta a quien no califica nada en el curso; el service valida unidad por unidad.
-        $idDocente = $request->user()->id_user;
-        if ($this->service->unidadesCalificables($idDocente, (int) $body['id_curso'])->isEmpty()) {
-            return $this->error('No te corresponde calificar en este curso', 403);
-        }
-
-        return $this->apiResponse($this->service->guardarPlanilla($idDocente, $body['id_curso'], $body['id_periodo'], $body['estudiantes']));
-    }
-
-    public function filtrosConsulta()
-    {
-        return $this->apiResponse($this->service->filtrosConsulta());
-    }
-
-    public function consulta(Request $request)
-    {
-        $q = $request->validate(['id_curso' => ['required', 'integer'], 'id_periodo' => ['required', 'integer']]);
-
-        return $this->apiResponse($this->service->consulta($q['id_curso'], $q['id_periodo']));
+        // Docentes con carga en el grado o 153/154 del nivel; el service decide según el estado.
+        return $this->apiResponse($this->service->guardarReferentes($this->actor($request), $body['id_curso'], $body['id_periodo'], $body['referentes']));
     }
 }

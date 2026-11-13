@@ -5,9 +5,10 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Opciones de notas (módulo 14, Gestión Académica). Ver NotasController.
- * - 149 "Consultar notas": ver en solo lectura las notas de cualquier curso.
- * - 150 "Gestionar logros": editar y enviar a revisión los logros de los cursos de su nivel.
- * - 151 "Aprobar logros": además aprobar, devolver y reabrir, en su nivel.
+ * - 152 "Consultar notas": ver en solo lectura las notas de cualquier curso.
+ * - 153 "Gestionar referentes": editar y enviar a revisión los referentes de los grados de su nivel.
+ * - 154 "Aprobar referentes": además aprobar, devolver y reabrir, en su nivel, y ajustar el
+ *   desempeño final de un referente.
  * Calificar no lleva opción: es autoservicio del docente de la carga (perfiles 3 y 14).
  *
  * No se otorgan a ningún perfil: se asignan desde /permisos. Ids explícitos: si uno ya está
@@ -16,9 +17,9 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration
 {
     private const OPCIONES = [
-        149 => 'Gestión Académica — Consultar notas',
-        150 => 'Gestión Académica — Gestionar logros',
-        151 => 'Gestión Académica — Aprobar logros',
+        152 => 'Gestión Académica — Consultar notas',
+        153 => 'Gestión Académica — Gestionar referentes',
+        154 => 'Gestión Académica — Aprobar referentes',
     ];
 
     private const ID_MODULO = 14;

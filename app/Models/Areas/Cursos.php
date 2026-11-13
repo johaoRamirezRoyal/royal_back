@@ -51,7 +51,7 @@ class Cursos extends Model
         return $this->hasMany(Usuario::class, 'id_curso', 'id');
     }
 
-    /** Grado del catálogo (Primero, Segundo…). Agrupa los cursos que comparten logros en Notas. */
+    /** Grado del catálogo (Primero, Segundo…). Agrupa los cursos que comparten referentes en Notas. */
     public function grado()
     {
         return $this->belongsTo(Grado::class, 'id_grado', 'id');
