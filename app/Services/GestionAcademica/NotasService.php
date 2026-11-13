@@ -4,7 +4,10 @@ namespace App\Services\GestionAcademica;
 
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
+use App\Models\GestionAcademica\Boletin;
+use App\Models\GestionAcademica\CierrePeriodo;
 use App\Models\GestionAcademica\EscalaValoracion;
+use App\Models\GestionAcademica\ObservacionGeneral;
 use App\Models\GestionAcademica\Proposito;
 use App\Models\GestionAcademica\Referente;
 use App\Models\GestionAcademica\ReferentePlan;
@@ -13,6 +16,7 @@ use App\Models\GestionAcademica\ValoracionReferente;
 use App\Models\Usuarios\NivelAcademico;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
+use App\Services\Cursos\CursosServices;
 use App\Services\Service;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -720,6 +724,567 @@ class NotasService extends Service
                 // Admin), los del usuario, o ninguno (usuario sin nivel).
                 'alcance' => $actor['niveles'] === null ? 'todos' : ($actor['niveles'] ? 'nivel' : 'sin_nivel'),
             ]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    // ─── Calificación ───────────────────────────────────────────
+    //
+    // El docente califica, en los cursos donde tiene carga, los referentes y subreferentes de esa
+    // asignatura (planilla). En un referente, el coordinador (154 de su nivel) puede ajustar el
+    // desempeño final. El director de grupo ve todo su curso y escribe las observaciones
+    // generales. Se califica en plazo y con el plan APROBADO; el coordinador ajusta hasta cerrar.
+    // Cerrado el curso en el periodo, nada de eso cambia.
+
+    /** Escala activa del nivel del curso; si el nivel no tiene desempeños propios, la general (sin niveles). */
+    private function escalaDelNivel(?int $idNivel): Collection
+    {
+        $propia = $idNivel
+            ? EscalaValoracion::where('activo', 1)->whereHas('niveles', fn ($q) => $q->where('nivel_academico.id', $idNivel))->orderBy('orden')->get()
+            : collect();
+
+        return $propia->isNotEmpty()
+            ? $propia
+            : EscalaValoracion::where('activo', 1)->doesntHave('niveles')->orderBy('orden')->get();
+    }
+
+    /** ¿Es hoy el director de grupo de ese curso activo? */
+    public function dirige(int $idUser, int $idCurso): bool
+    {
+        return Cursos::whereKey($idCurso)->where('activo', 1)->where('id_director', $idUser)->exists();
+    }
+
+    /** ¿Aprueba referentes (154) en el nivel del curso? Ajusta finales y cierra el periodo. */
+    private static function apruebaEnNivel(array $actor, Cursos $curso): bool
+    {
+        return $actor['aprueba'] && ($actor['niveles'] === null || in_array($curso->id_nivel, $actor['niveles'], true));
+    }
+
+    /** ¿Gestiona o aprueba referentes (153/154) en el nivel del curso? */
+    public function gestionaCurso(array $actor, int $idCurso): bool
+    {
+        $curso = Cursos::find($idCurso, ['id', 'id_nivel']);
+
+        return $curso && ($actor['gestiona'] || $actor['aprueba'])
+            && ($actor['niveles'] === null || in_array($curso->id_nivel, $actor['niveles'], true));
+    }
+
+    private static function cierreDe(int $idCurso, int $idPeriodo): ?CierrePeriodo
+    {
+        return CierrePeriodo::with('usuario:id_user,nombre,apellido')->where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->first();
+    }
+
+    /**
+     * Estudiantes activos que hoy están en el curso, más los que ya tienen nota u observación en él
+     * en ese periodo aunque se hayan movido (en_curso = false), por apellido.
+     */
+    private function estudiantesDe(int $idCurso, int $idPeriodo): Collection
+    {
+        $conAlgo = ValoracionReferente::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante')
+            ->merge(ObservacionGeneral::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante'))
+            ->unique();
+
+        return Usuario::where('perfil', CursosServices::PERFIL_ESTUDIANTE)
+            ->where(fn ($q) => $q
+                ->where(fn ($q) => $q->where('id_curso', $idCurso)->where('estado', 'activo'))
+                ->orWhereIn('id_user', $conAlgo))
+            ->orderBy('apellido')->orderBy('nombre')
+            ->get(['id_user', 'nombre', 'apellido', 'documento', 'foto_carnet', 'id_curso', 'estado'])
+            ->map(fn ($u) => [
+                'id_user' => $u->id_user,
+                'nombre' => $u->nombre,
+                'apellido' => $u->apellido,
+                'documento' => $u->documento,
+                'foto_carnet' => $u->foto_carnet,
+                'en_curso' => (int) $u->id_curso === $idCurso && $u->estado === 'activo',
+            ]);
+    }
+
+    /** id_estudiante → id_referente → { docente, ajuste, final, ajustado_por?, ajustado_at? } (final = ajuste ?? docente). */
+    private static function notasDe(Collection $idsEstudiante, Collection $idsReferente, bool $conAjustador = false): Collection
+    {
+        $notas = ValoracionReferente::whereIn('id_estudiante', $idsEstudiante)->whereIn('id_referente', $idsReferente)->get();
+        $ajustadores = $conAjustador
+            ? Usuario::whereIn('id_user', $notas->pluck('id_ajustado_por')->filter()->unique())->get(['id_user', 'nombre', 'apellido'])->keyBy('id_user')
+            : collect();
+
+        return $notas->groupBy('id_estudiante')->map(fn (Collection $suyas) => $suyas->mapWithKeys(fn (ValoracionReferente $v) => [
+            $v->id_referente => [
+                'docente' => $v->id_escala_docente,
+                'ajuste' => $v->id_escala_ajuste,
+                'final' => $v->id_escala_ajuste ?? $v->id_escala_docente,
+            ] + ($conAjustador ? [
+                'ajustado_por' => $v->id_ajustado_por ? self::nombreDe($ajustadores->get($v->id_ajustado_por)) : null,
+                'ajustado_at' => $v->ajustado_at,
+            ] : []),
+        ]));
+    }
+
+    /** Ids de los referentes y subreferentes de una lista de referentesDe(). */
+    private static function idsDe(Collection $referentes): Collection
+    {
+        return $referentes->flatMap(fn ($r) => collect($r['subreferentes'])->pluck('id')->prepend($r['id']));
+    }
+
+    /** Propósitos de esos referentes, en el orden del catálogo. */
+    private static function propositosDe(Collection $referentes): Collection
+    {
+        return Proposito::whereIn('id', $referentes->pluck('id_proposito')->unique())->orderBy('orden')->orderBy('nombre')->get(['id', 'nombre', 'descripcion']);
+    }
+
+    /**
+     * Cursos cualitativos del docente y los periodos del año: los que dirige (`es_director`) y
+     * aquellos en que tiene carga activa, con las asignaturas que califica en cada uno.
+     */
+    public function misCursos(int $idDocente): array
+    {
+        try {
+            $carga = DB::table('academico_carga_academica as c')
+                ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+                ->join('academico_asignatura as a', 'a.id', '=', 'da.id_asignatura')
+                ->where('c.activo', 1)->where('da.activo', 1)->where('da.id_docente', $idDocente)
+                ->distinct()->orderBy('a.nombre')->get(['c.id_curso', 'a.id', 'a.nombre'])
+                ->groupBy('id_curso');
+
+            $cursos = self::cursosCualitativos(fn ($q) => $q->where(fn ($q) => $q->where('id_director', $idDocente)->orWhereIn('id', $carga->keys())))
+                ->map(fn (Cursos $c) => [
+                    'id_curso' => $c->id,
+                    'curso' => $c->nombre,
+                    'grado' => $c->grado?->nombre,
+                    'es_director' => (int) $c->id_director === $idDocente,
+                    'asignaturas' => ($carga[$c->id] ?? collect())->map(fn ($a) => ['id' => (int) $a->id, 'nombre' => $a->nombre])->values(),
+                ])->values();
+
+            return ['error' => false, 'message' => 'Tus cursos', 'data' => ['cursos' => $cursos, 'periodos' => $this->periodosDelAnio()]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Cursos cualitativos (todos, o los de los niveles dados) y periodos del año, para elegir un curso. */
+    public function filtrosCursos(?array $niveles): array
+    {
+        try {
+            $cursos = self::cursosCualitativos(fn ($q) => $q->when($niveles !== null, fn ($q) => $q->whereIn('id_nivel', $niveles ?: [0])))
+                ->map(fn (Cursos $c) => [
+                    'id' => $c->id,
+                    'nombre' => $c->nombre,
+                    'grado' => $c->grado?->nombre,
+                    'nivel' => $c->nivel ? ['id' => $c->nivel->id, 'nombre' => $c->nivel->nombre] : null,
+                ])->values();
+
+            return ['error' => false, 'message' => 'Cursos', 'data' => ['cursos' => $cursos, 'periodos' => $this->periodosDelAnio()]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Planilla del docente en un curso y una asignatura: los referentes (con subreferentes) de esa
+     * asignatura y las notas de cada estudiante. `editable`: en plazo, plan aprobado y sin cierre.
+     */
+    public function planilla(int $idDocente, int $idCurso, int $idPeriodo, int $idAsignatura): array
+    {
+        if ($error = $this->sinCualitativa($idCurso)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso, $periodo] = $cp;
+            if (! $this->asignaturasConCarga($idDocente, $idCurso)->contains($idAsignatura)) {
+                return ['error' => true, 'message' => 'No tienes carga en esa asignatura en este curso.'];
+            }
+
+            $estado = $this->buscarPlan($curso->id_grado, $idPeriodo)->estado;
+            $cerrado = self::cierreDe($idCurso, $idPeriodo) !== null;
+            $referentes = $this->referentesDe($curso->id_grado, $idPeriodo)->where('id_asignatura', $idAsignatura)->values();
+            $estudiantes = $this->estudiantesDe($idCurso, $idPeriodo);
+            $notas = self::notasDe($estudiantes->pluck('id_user'), self::idsDe($referentes));
+
+            return ['error' => false, 'message' => 'Planilla', 'data' => [
+                'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
+                'grado' => $curso->grado?->nombre,
+                'director' => self::nombreDe($curso->director),
+                'asignatura' => ['id' => $idAsignatura, 'nombre' => DB::table('academico_asignatura')->where('id', $idAsignatura)->value('nombre')],
+                'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre, 'fecha_limite_notas' => $periodo->fecha_limite_notas ?? $periodo->fecha_fin],
+                'periodo_editable' => self::periodoEditable($periodo),
+                'estado_plan' => $estado,
+                'cerrado' => $cerrado,
+                'editable' => self::periodoEditable($periodo) && $estado === ReferentePlan::APROBADO && ! $cerrado,
+                'escala' => $this->escalaDelNivel($curso->id_nivel)->map->only(['id', 'nombre', 'abreviatura', 'descripcion', 'color'])->values(),
+                'propositos' => self::propositosDe($referentes),
+                'referentes' => $referentes,
+                'estudiantes' => $estudiantes->map(fn ($e) => $e + ['notas' => $notas->get($e['id_user'], collect())])->values(),
+            ]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Error si el curso ya se cerró en el periodo, o null. */
+    private static function errorSiCerrado(int $idCurso, int $idPeriodo): ?array
+    {
+        return self::cierreDe($idCurso, $idPeriodo)
+            ? ['error' => true, 'message' => 'El coordinador ya cerró este periodo en este curso: las notas no se pueden cambiar.']
+            : null;
+    }
+
+    private function validarVentana(int $idPeriodo): ?array
+    {
+        $periodo = PeriodoAcademico::find($idPeriodo);
+        if (! $periodo) {
+            return ['error' => true, 'message' => 'Periodo no encontrado'];
+        }
+        if (! self::periodoEditable($periodo)) {
+            return ['error' => true, 'message' => 'El periodo está cerrado para notas: ya pasó su fecha límite o aún no empieza.'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Guarda las notas del docente en su asignatura. Por estudiante, una lista de { id_referente,
+     * id_escala } (referentes o subreferentes de esa asignatura); id_escala null quita la nota del
+     * docente (si el coordinador la ajustó, el ajuste se conserva). Lo que no viene no se toca.
+     *
+     * @param  array<int, array{id_estudiante: int, notas: array<int, array{id_referente: int, id_escala: ?int}>}>  $estudiantes
+     */
+    public function guardarPlanilla(int $idDocente, int $idCurso, int $idPeriodo, int $idAsignatura, array $estudiantes): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? $this->validarVentana($idPeriodo) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+        $curso = Cursos::find($idCurso, ['id', 'id_nivel', 'id_grado']);
+        if (! $this->asignaturasConCarga($idDocente, $idCurso)->contains($idAsignatura)) {
+            return ['error' => true, 'message' => 'No tienes carga en esa asignatura en este curso.'];
+        }
+        if ($this->buscarPlan($curso->id_grado, $idPeriodo)->estado !== ReferentePlan::APROBADO) {
+            return ['error' => true, 'message' => 'Los referentes de este periodo aún no están aprobados: no se puede calificar todavía.'];
+        }
+
+        try {
+            $escalaValida = $this->escalaDelNivel($curso->id_nivel)->pluck('id')->flip();
+            $referentes = Referente::where('id_grado', $curso->id_grado)->where('id_periodo_academico', $idPeriodo)
+                ->where('id_asignatura', $idAsignatura)->pluck('id')->flip();
+            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
+
+            foreach ($estudiantes as $e) {
+                if (! $alumnos->has($e['id_estudiante'])) {
+                    return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
+                }
+                foreach ($e['notas'] as $n) {
+                    if (! $referentes->has($n['id_referente'])) {
+                        return ['error' => true, 'message' => 'Un referente no corresponde a esta asignatura, grado y periodo'];
+                    }
+                    if (($n['id_escala'] ?? null) !== null && ! $escalaValida->has($n['id_escala'])) {
+                        return ['error' => true, 'message' => 'Un desempeño no corresponde a la escala de este nivel'];
+                    }
+                }
+            }
+
+            DB::transaction(function () use ($idDocente, $idCurso, $idPeriodo, $estudiantes) {
+                foreach ($estudiantes as $e) {
+                    foreach ($e['notas'] as $n) {
+                        $v = ValoracionReferente::firstOrNew(['id_estudiante' => $e['id_estudiante'], 'id_referente' => $n['id_referente']]);
+                        $idEscala = $n['id_escala'] ?? null;
+                        if ($idEscala === null && ! $v->exists) {
+                            continue;
+                        }
+                        if ($idEscala === null && $v->id_escala_ajuste === null) {
+                            $v->delete();
+                            continue;
+                        }
+                        $v->fill([
+                            'id_periodo_academico' => $idPeriodo, 'id_curso' => $idCurso,
+                            'id_escala_docente' => $idEscala, 'id_docente' => $idDocente,
+                        ])->save();
+                    }
+                }
+            });
+
+            return ['error' => false, 'message' => 'Notas guardadas'];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Ajuste del coordinador (154 del nivel) al desempeño final de un referente (no de un
+     * subreferente) de un estudiante; id_escala null quita el ajuste y vuelve a valer el del
+     * docente. Con el plan aprobado y hasta cerrar el curso en el periodo (sin mirar el plazo).
+     */
+    public function ajustar(array $actor, int $idCurso, int $idPeriodo, int $idEstudiante, int $idReferente, ?int $idEscala): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso] = $cp;
+            if (! self::apruebaEnNivel($actor, $curso)) {
+                return ['error' => true, 'message' => 'Solo quien aprueba los referentes del nivel ajusta el desempeño final.'];
+            }
+            if ($this->buscarPlan($curso->id_grado, $idPeriodo)->estado !== ReferentePlan::APROBADO) {
+                return ['error' => true, 'message' => 'Los referentes de este periodo aún no están aprobados.'];
+            }
+            $referente = Referente::whereKey($idReferente)->where('id_grado', $curso->id_grado)->where('id_periodo_academico', $idPeriodo)->first();
+            if (! $referente) {
+                return ['error' => true, 'message' => 'El referente no corresponde al grado y periodo de este curso'];
+            }
+            if ($referente->id_padre !== null) {
+                return ['error' => true, 'message' => 'Solo se ajusta el desempeño final de un referente, no de un subreferente.'];
+            }
+            if (! $this->estudiantesDe($idCurso, $idPeriodo)->contains('id_user', $idEstudiante)) {
+                return ['error' => true, 'message' => 'El estudiante no pertenece a este curso'];
+            }
+            if ($idEscala !== null && ! $this->escalaDelNivel($curso->id_nivel)->contains('id', $idEscala)) {
+                return ['error' => true, 'message' => 'El desempeño no corresponde a la escala de este nivel'];
+            }
+
+            $v = ValoracionReferente::firstOrNew(['id_estudiante' => $idEstudiante, 'id_referente' => $idReferente]);
+            if ($idEscala === null) {
+                if ($v->exists) {
+                    $v->id_escala_docente === null
+                        ? $v->delete()
+                        : $v->fill(['id_escala_ajuste' => null, 'id_ajustado_por' => null, 'ajustado_at' => null])->save();
+                }
+
+                return ['error' => false, 'message' => 'Ajuste quitado: vale el desempeño del docente'];
+            }
+            $v->fill([
+                'id_periodo_academico' => $idPeriodo, 'id_curso' => $idCurso,
+                'id_escala_ajuste' => $idEscala, 'id_ajustado_por' => $actor['id'], 'ajustado_at' => now(),
+            ])->save();
+
+            return ['error' => false, 'message' => 'Desempeño final ajustado'];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Lo de un curso en un periodo, para la vista del director de grupo, el coordinador y la
+     * consulta: todos los referentes (con subreferentes), las notas de cada estudiante (con el
+     * ajuste y quién lo hizo) y las observaciones generales.
+     */
+    private function datosCurso(Cursos $curso, PeriodoAcademico $periodo): array
+    {
+        $referentes = $this->referentesDe($curso->id_grado, $periodo->id);
+        $estudiantes = $this->estudiantesDe($curso->id, $periodo->id);
+        $notas = self::notasDe($estudiantes->pluck('id_user'), self::idsDe($referentes), true);
+        $observaciones = ObservacionGeneral::whereIn('id_estudiante', $estudiantes->pluck('id_user'))
+            ->where('id_periodo_academico', $periodo->id)->pluck('observacion', 'id_estudiante');
+
+        return [
+            'propositos' => self::propositosDe($referentes),
+            'asignaturas' => DB::table('academico_asignatura')->whereIn('id', $referentes->pluck('id_asignatura')->unique())
+                ->orderBy('nombre')->get(['id', 'nombre']),
+            'referentes' => $referentes,
+            'estudiantes' => $estudiantes->map(fn ($e) => $e + [
+                'notas' => $notas->get($e['id_user'], collect()),
+                'observacion' => $observaciones[$e['id_user']] ?? null,
+            ])->values(),
+        ];
+    }
+
+    /**
+     * Vista de un curso en un periodo (director de grupo, 153/154 del nivel, 99, 152: el
+     * controller decide el acceso). `puede`: observar (director, en plazo y sin cierre), ajustar y
+     * cerrar (154 del nivel, plan aprobado y sin cierre), reabrir_cierre (154 del nivel, cerrado).
+     */
+    public function vistaCurso(array $actor, int $idCurso, int $idPeriodo): array
+    {
+        if ($error = $this->sinCualitativa($idCurso)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso, $periodo] = $cp;
+            $estado = $this->buscarPlan($curso->id_grado, $idPeriodo)->estado;
+            $cierre = self::cierreDe($idCurso, $idPeriodo);
+            $aprueba = self::apruebaEnNivel($actor, $curso);
+            $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
+
+            return ['error' => false, 'message' => 'Notas del curso', 'data' => [
+                'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
+                'grado' => $curso->grado?->nombre,
+                'director' => self::nombreDe($curso->director),
+                'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre, 'fecha_limite_notas' => $periodo->fecha_limite_notas ?? $periodo->fecha_fin],
+                'periodo_editable' => self::periodoEditable($periodo),
+                'estado_plan' => $estado,
+                'cierre' => $cierre ? ['fecha' => $cierre->fecha, 'usuario' => self::nombreDe($cierre->usuario)] : null,
+                'es_director' => $esDirector,
+                'puede' => [
+                    'observar' => $esDirector && self::periodoEditable($periodo) && ! $cierre,
+                    'ajustar' => $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
+                    'cerrar' => $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
+                    'reabrir_cierre' => $aprueba && $cierre !== null,
+                ],
+                // Toda la escala (también inactiva): una nota vieja puede usar un desempeño que ya se desactivó.
+                'escala' => EscalaValoracion::orderBy('orden')->get(['id', 'nombre', 'abreviatura', 'descripcion', 'color', 'activo']),
+            ] + $this->datosCurso($curso, $periodo)];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * "Observaciones Generales del Director de Grupo": solo el director del curso, en plazo y sin
+     * cierre. Una observación vacía se borra; los estudiantes que no vienen no se tocan.
+     *
+     * @param  array<int, array{id_estudiante: int, observacion: ?string}>  $observaciones
+     */
+    public function guardarObservaciones(int $idDocente, int $idCurso, int $idPeriodo, array $observaciones): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? $this->validarVentana($idPeriodo) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+        if (! $this->dirige($idDocente, $idCurso)) {
+            return ['error' => true, 'message' => 'Solo el director de grupo del curso escribe las observaciones generales.'];
+        }
+
+        try {
+            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
+            foreach ($observaciones as $o) {
+                if (! $alumnos->has($o['id_estudiante'])) {
+                    return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
+                }
+            }
+
+            DB::transaction(function () use ($idDocente, $idCurso, $idPeriodo, $observaciones) {
+                foreach ($observaciones as $o) {
+                    $clave = ['id_estudiante' => $o['id_estudiante'], 'id_periodo_academico' => $idPeriodo];
+                    $texto = trim((string) ($o['observacion'] ?? ''));
+                    $texto === ''
+                        ? ObservacionGeneral::where($clave)->delete()
+                        : ObservacionGeneral::updateOrCreate($clave, ['id_curso' => $idCurso, 'observacion' => $texto, 'id_docente' => $idDocente]);
+                }
+            });
+
+            return ['error' => false, 'message' => 'Observaciones guardadas'];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Foto del boletín de un estudiante: solo referentes (sin subreferentes) con su desempeño final,
+     * agrupados por propósito, y la observación general. Es lo que guarda academico_boletin.datos y
+     * de donde sale el PDF.
+     *
+     * @param  array  $base  curso, grado, periodo, director y fecha del cierre
+     * @param  array  $datos  de datosCurso()
+     * @param  array  $estudiante  uno de $datos['estudiantes']
+     */
+    public static function fotoBoletin(array $base, array $datos, array $estudiante, Collection $escala): array
+    {
+        $notas = collect($estudiante['notas']);
+        $asignaturas = collect($datos['asignaturas'])->pluck('nombre', 'id');
+        $desempeno = function ($idEscala) use ($escala) {
+            $e = $idEscala ? $escala->get($idEscala) : null;
+
+            return $e ? ['nombre' => $e->nombre, 'abreviatura' => $e->abreviatura, 'color' => $e->color] : null;
+        };
+
+        return $base + [
+            'estudiante' => collect($estudiante)->only(['id_user', 'nombre', 'apellido', 'documento'])->all(),
+            'propositos' => collect($datos['propositos'])->map(fn ($p) => [
+                'nombre' => $p['nombre'],
+                'descripcion' => $p['descripcion'],
+                'referentes' => collect($datos['referentes'])->where('id_proposito', $p['id'])->map(fn ($r) => [
+                    'descripcion' => $r['descripcion'],
+                    'asignatura' => $asignaturas[$r['id_asignatura']] ?? null,
+                    'desempeno' => $desempeno($notas->get($r['id'])['final'] ?? null),
+                ])->values()->all(),
+            ])->filter(fn ($p) => $p['referentes'])->values()->all(),
+            'observacion_general' => $estudiante['observacion'],
+        ];
+    }
+
+    /**
+     * Cierra el curso en el periodo (154 del nivel, con el plan aprobado): guarda la foto del
+     * boletín de cada estudiante. Desde ahí no se califica, ajusta ni observa. Avisa cuántos
+     * referentes quedaron sin desempeño, pero no lo impide.
+     */
+    public function cerrar(array $actor, int $idCurso, int $idPeriodo): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso, $periodo] = $cp;
+            if (! self::apruebaEnNivel($actor, $curso)) {
+                return ['error' => true, 'message' => 'Solo quien aprueba los referentes del nivel cierra el periodo.'];
+            }
+            if ($this->buscarPlan($curso->id_grado, $idPeriodo)->estado !== ReferentePlan::APROBADO) {
+                return ['error' => true, 'message' => 'Los referentes de este periodo aún no están aprobados: no hay nada que cerrar.'];
+            }
+
+            $datos = $this->datosCurso($curso, $periodo);
+            $datos['propositos'] = $datos['propositos']->toArray();
+            $datos['asignaturas'] = $datos['asignaturas']->map(fn ($a) => (array) $a)->all();
+            $escala = EscalaValoracion::all()->keyBy('id');
+            // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
+            // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
+            $yaTienen = Boletin::where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante')->flip();
+            $estudiantes = $datos['estudiantes']->reject(fn ($e) => $yaTienen->has($e['id_user']));
+            $principales = collect($datos['referentes'])->pluck('id');
+            $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
+
+            DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes) {
+                $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => now()]);
+                $base = [
+                    'curso' => $curso->nombre,
+                    'grado' => $curso->grado?->nombre,
+                    'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
+                    'director' => self::nombreDe($curso->director),
+                    'cerrado_at' => $cierre->fecha->toIso8601String(),
+                ];
+                foreach ($estudiantes as $e) {
+                    Boletin::create([
+                        'id_cierre' => $cierre->id, 'id_estudiante' => $e['id_user'], 'id_periodo_academico' => $periodo->id,
+                        'id_curso' => $curso->id, 'datos' => self::fotoBoletin($base, $datos, $e, $escala),
+                    ]);
+                }
+            });
+
+            $mensaje = "Periodo cerrado: {$estudiantes->count()} boletines guardados";
+
+            return ['error' => false, 'message' => $sinNota ? "{$mensaje}. Quedaron {$sinNota} referentes sin desempeño." : $mensaje];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Reabre un curso cerrado (154 del nivel): borra el cierre y sus boletines, y se vuelve a poder corregir. */
+    public function reabrirCierre(array $actor, int $idCurso, int $idPeriodo): array
+    {
+        try {
+            $curso = Cursos::find($idCurso, ['id', 'id_nivel']);
+            $cierre = self::cierreDe($idCurso, $idPeriodo);
+            if (! $curso || ! $cierre) {
+                return ['error' => true, 'message' => 'Este curso no está cerrado en ese periodo'];
+            }
+            if (! self::apruebaEnNivel($actor, $curso)) {
+                return ['error' => true, 'message' => 'Solo quien aprueba los referentes del nivel reabre el periodo.'];
+            }
+            $cierre->delete(); // los boletines caen en cascada
+
+            return ['error' => false, 'message' => 'Periodo reabierto: los boletines se generan de nuevo al cerrar'];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }

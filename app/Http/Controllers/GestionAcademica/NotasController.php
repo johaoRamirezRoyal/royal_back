@@ -38,7 +38,10 @@ class NotasController extends Controller implements HasMiddleware
             ]),
             new Middleware(Permiso::ruta(self::REFERENTES, Permiso::PERFILES_DOCENTE), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], Permiso::PERFILES_DOCENTE), only: ['verPlan']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], Permiso::PERFILES_DOCENTE), only: ['verPlan', 'vistaCurso']),
+            new Middleware(Permiso::ruta([], Permiso::PERFILES_DOCENTE), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
+            new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'reabrirCierre']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
         ];
     }
 
@@ -228,5 +231,106 @@ class NotasController extends Controller implements HasMiddleware
 
         // Docentes con carga en el grado o 153/154 del nivel; el service decide según el estado.
         return $this->apiResponse($this->service->guardarReferentes($this->actor($request), $body['id_curso'], $body['id_periodo'], $body['referentes']));
+    }
+
+    // ─── Calificación, vista del curso y cierre ─────────────────
+
+    public function misCursos(Request $request)
+    {
+        return $this->apiResponse($this->service->misCursos($request->user()->id_user));
+    }
+
+    /** Cursos para elegir en la vista de curso: todos con 99/152; si no, los del nivel de quien gestiona. */
+    public function filtrosCursos(Request $request)
+    {
+        $actor = $this->actor($request);
+        $todos = PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR);
+
+        return $this->apiResponse($this->service->filtrosCursos($todos ? null : $actor['niveles']));
+    }
+
+    /** ?id_curso&id_periodo&id_asignatura: la planilla del docente con carga en esa asignatura y curso. */
+    public function planilla(Request $request)
+    {
+        $q = $request->validate($this->reglasCursoPeriodo() + ['id_asignatura' => ['required', 'integer']]);
+
+        return $this->apiResponse($this->service->planilla($request->user()->id_user, $q['id_curso'], $q['id_periodo'], $q['id_asignatura']));
+    }
+
+    /** { id_curso, id_periodo, id_asignatura, estudiantes: [{ id_estudiante, notas: [{ id_referente, id_escala|null }] }] } */
+    public function guardarPlanilla(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'id_asignatura' => ['required', 'integer'],
+            'estudiantes' => ['required', 'array'],
+            'estudiantes.*.id_estudiante' => ['required', 'integer', 'distinct'],
+            'estudiantes.*.notas' => ['present', 'array'],
+            'estudiantes.*.notas.*.id_referente' => ['required', 'integer'],
+            'estudiantes.*.notas.*.id_escala' => ['present', 'nullable', 'integer'],
+        ]);
+
+        return $this->apiResponse($this->service->guardarPlanilla(
+            $request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['id_asignatura'], $body['estudiantes'],
+        ));
+    }
+
+    /** ?id_curso&id_periodo: todo lo calificado en el curso. Director del curso, 153/154 de su nivel, 99 o 152. */
+    public function vistaCurso(Request $request)
+    {
+        $q = $request->validate($this->reglasCursoPeriodo());
+        $actor = $this->actor($request);
+        $ve = PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR)
+            || $this->service->gestionaCurso($actor, $q['id_curso'])
+            || $this->service->dirige($actor['id'], $q['id_curso']);
+
+        if (! $ve) {
+            return $this->error('No tienes acceso a las notas de este curso', 403);
+        }
+
+        return $this->apiResponse($this->service->vistaCurso($actor, $q['id_curso'], $q['id_periodo']));
+    }
+
+    /** { id_curso, id_periodo, observaciones: [{ id_estudiante, observacion|null }] } (director del curso). */
+    public function guardarObservaciones(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'observaciones' => ['required', 'array'],
+            'observaciones.*.id_estudiante' => ['required', 'integer', 'distinct'],
+            'observaciones.*.observacion' => ['present', 'nullable', 'string', 'max:3000'],
+        ], [
+            'observaciones.*.observacion.max' => 'Una observación no puede superar los 3000 caracteres.',
+        ]);
+
+        return $this->apiResponse($this->service->guardarObservaciones($request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['observaciones']));
+    }
+
+    /** { id_curso, id_periodo, id_estudiante, id_referente, id_escala|null } (154 del nivel). */
+    public function ajustar(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'id_estudiante' => ['required', 'integer'],
+            'id_referente' => ['required', 'integer'],
+            'id_escala' => ['present', 'nullable', 'integer'],
+        ]);
+
+        return $this->apiResponse($this->service->ajustar(
+            $this->actor($request), $body['id_curso'], $body['id_periodo'], $body['id_estudiante'], $body['id_referente'], $body['id_escala'],
+        ));
+    }
+
+    /** { id_curso, id_periodo }: cierra el periodo en el curso y guarda los boletines (154 del nivel). */
+    public function cerrar(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo());
+
+        return $this->apiResponse($this->service->cerrar($this->actor($request), $body['id_curso'], $body['id_periodo']));
+    }
+
+    /** { id_curso, id_periodo }: reabre el periodo en el curso; borra sus boletines (154 del nivel). */
+    public function reabrirCierre(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo());
+
+        return $this->apiResponse($this->service->reabrirCierre($this->actor($request), $body['id_curso'], $body['id_periodo']));
     }
 }

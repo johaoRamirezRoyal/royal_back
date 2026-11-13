@@ -637,3 +637,23 @@ INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 153, 'Gestión Académica — Gestionar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 153);
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 154, 'Gestión Académica — Aprobar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 154);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120200_create_academico_boletin_tables.php
+-- Observaciones generales del director de grupo (por estudiante y periodo),
+-- cierre del periodo por curso (lo hace el coordinador) y foto del boletín de
+-- cada estudiante al cerrar (JSON). Sin FK a tablas MyISAM (periodo, curso).
+-- ---------------------------------------------------------------------------
+create table `academico_observacion_general` (`id` int not null auto_increment, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `observacion` text not null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_observacion_general` add constraint `academico_observacion_general_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_observacion_general` add constraint `academico_observacion_general_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_observacion_general` add unique `uq_observacion_estudiante_periodo`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_observacion_general` add index `ix_observacion_curso_periodo`(`id_curso`, `id_periodo_academico`);
+create table `academico_cierre_periodo` (`id` int not null auto_increment, `id_curso` int not null, `id_periodo_academico` int not null, `id_usuario` int not null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_cierre_periodo` add constraint `academico_cierre_periodo_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_cierre_periodo` add unique `uq_cierre_curso_periodo`(`id_curso`, `id_periodo_academico`);
+create table `academico_boletin` (`id` int not null auto_increment, `id_cierre` int not null, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `datos` longtext not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci';
+alter table `academico_boletin` add constraint `academico_boletin_id_cierre_foreign` foreign key (`id_cierre`) references `academico_cierre_periodo` (`id`) on delete cascade;
+alter table `academico_boletin` add constraint `academico_boletin_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_boletin` add unique `uq_boletin_estudiante_periodo`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_boletin` add index `academico_boletin_id_cierre_index`(`id_cierre`);

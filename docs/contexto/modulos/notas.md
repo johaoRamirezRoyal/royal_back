@@ -5,10 +5,10 @@ Sistema de notas. Se está construyendo la **parte cualitativa**: desempeños (e
 flujo de aprobación antes de calificar y un **boletín trimestral** con historial. La parte
 cuantitativa (nota numérica) está pendiente. Frontend: `frontend/docs/contexto/modulos/notas.md`.
 
-> **Estado (2026-11-13, rama `feat/notas-cualitativas`).** Fase 1 hecha: modelo, propósitos y
-> referentes con su plan. **La planilla, la consulta y "mis cursos" se quitaron** porque dependían
-> del modelo anterior (dimensiones, modos por nivel) y vuelven reescritos en la fase 2 (ver
-> "Pendiente"). El frontend de la rama aún usa la API anterior hasta la fase 3.
+> **Estado (2026-11-13, rama `feat/notas-cualitativas`).** Backend de las fases 1 y 2 hecho:
+> modelo, propósitos y referentes con su plan; planilla del docente, ajuste del coordinador, vista
+> del curso, observaciones del director y cierre del trimestre con la foto del boletín. El frontend
+> de la rama aún usa la API anterior hasta la fase 3; el PDF del boletín es la fase 4.
 
 ## Diseño acordado (2026-11-13)
 
@@ -99,6 +99,38 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   viene cambiado, movido o nuevo, se rechaza todo con "No puedes editar los referentes de «…»". Se
   eliminan solo los de asignaturas editables que no vienen.
 
+## Calificación, vista del curso y cierre
+
+- **Planilla del docente** (`planilla` / `guardarPlanilla`): por curso **y asignatura**, solo con
+  carga activa en esa asignatura en ese curso. Trae los referentes de esa asignatura con sus
+  subreferentes y, por estudiante, `notas[id_referente] = { docente, ajuste, final }` (el docente ve
+  si el coordinador ajustó). Se guarda en plazo, con el plan `APROBADO` y sin cierre. Cada nota es
+  `{ id_referente, id_escala }`: `null` quita la del docente (si hay ajuste, la fila se conserva con
+  el ajuste); lo que no viene no se toca. El final de un referente lo elige el docente: no se calcula
+  de los subreferentes.
+- **Estudiantes** (`estudiantesDe`): activos que hoy están en el curso, más los que ya tienen nota u
+  observación en él en ese periodo aunque se hayan movido (`en_curso: false`).
+- **Ajuste del coordinador** (`ajustar`, 154 del nivel del curso): cambia el final de un
+  **referente** (no de un subreferente); guarda quién y cuándo, y el valor del docente queda en
+  `id_escala_docente`. `id_escala: null` quita el ajuste. Con el plan aprobado y hasta el cierre, **sin
+  mirar el plazo** (el coordinador corrige después de la fecha límite).
+- **Vista del curso** (`vistaCurso`): para el director de grupo del curso, 153/154 de su nivel, 99 y
+  152. Todos los referentes con subreferentes, `notas` con `ajustado_por` / `ajustado_at`, la
+  `observacion` de cada estudiante, `cierre` (`{ fecha, usuario }` o null) y `puede`: `observar`
+  (director, en plazo, sin cierre), `ajustar` y `cerrar` (154 del nivel, plan aprobado, sin cierre),
+  `reabrir_cierre` (154 del nivel, cerrado). La escala va completa (también inactiva).
+- **Observaciones Generales del Director de Grupo** (`academico_observacion_general`, unique
+  estudiante + periodo): solo el director del curso, en plazo y sin cierre. Vacía = se borra.
+- **Cierre** (`cerrar`, 154 del nivel, plan aprobado): crea `academico_cierre_periodo` (curso +
+  periodo) y un `academico_boletin` por estudiante con la foto (`fotoBoletin`, pura, test
+  `FotoBoletinTest`): curso, grado, periodo, director, fecha del cierre, estudiante, propósitos con
+  sus referentes (**sin subreferentes**; propósitos sin referentes no salen) con asignatura y
+  desempeño final `{ nombre, abreviatura, color }` (o null), y la observación general. Avisa cuántos
+  referentes quedaron sin desempeño pero no lo impide. Cerrado, no se califica, ajusta ni observa.
+  Un estudiante que ya tiene boletín en ese periodo (de otro curso) se salta.
+- **Reabrir el cierre** (`reabrirCierre`, 154 del nivel): borra el cierre y sus boletines (en
+  cascada); al cerrar de nuevo se generan otra vez.
+
 ## Plazos
 
 Años escolares y periodos académicos (validación de fechas, cruces): ver `gestion-academica.md`.
@@ -120,6 +152,12 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
 | `PUT /referentes`, `POST /plan/estado` | docente con carga en el grado o 153/154 de su nivel; el service valida estado y asignaturas |
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
+| `GET /mis-cursos` | perfiles docente (3, 14): `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
+| `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
+| `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
+| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
+| `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
+| `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
 
 - `PUT /referentes`: `{ id_curso, id_periodo, referentes: [{ id?, id_proposito, id_asignatura,
   descripcion, subreferentes?: [{ id?, descripcion }] }] }` (hasta 100 referentes y 30
@@ -129,6 +167,12 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
   descripcion, orden, subreferentes[] { id, descripcion, orden } }, historial[], puede }`.
   `asignaturas[].editable` = puede editar sus referentes (aparte del estado; ese lo dice
   `puede.editar`). `con_carga: false` = asignatura por reubicar.
+- `PUT /planilla`: `{ id_curso, id_periodo, id_asignatura, estudiantes: [{ id_estudiante, notas: [{
+  id_referente, id_escala|null }] }] }`.
+- `PUT /observaciones`: `{ id_curso, id_periodo, observaciones: [{ id_estudiante, observacion|null }] }`
+  (hasta 3000 caracteres).
+- `PUT /ajuste`: `{ id_curso, id_periodo, id_estudiante, id_referente, id_escala|null }`.
+- `POST /cierre` y `DELETE /cierre`: `{ id_curso, id_periodo }`.
 
 Opciones (módulo 14, no otorgadas a ningún perfil; se asignan en `/permisos`):
 **152** "Gestión Académica — Consultar notas", **153** "Gestionar referentes", **154** "Aprobar
@@ -142,6 +186,8 @@ referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no
    nivel, fecha límite de notas, escala y sus niveles, propósitos, referentes, plan e historial,
    valoraciones por referente).
 3. `2026_11_05_120100_seed_opciones_notas`: opciones 152, 153 y 154.
+4. `2026_11_05_120200_create_academico_boletin_tables`: observaciones generales del director,
+   cierre del periodo por curso y boletines (foto JSON). En `sami_royal` se corrió con `migrate`.
 
 La rama no está en producción, así que las migraciones se reescriben en vez de apilar correcciones.
 El 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
@@ -156,12 +202,16 @@ base de colegio.
 ## Tests
 
 `tests/Unit/GestionAcademica/`: `AccionesPlanReferentesTest` (acciones por estado, rol y plazo),
-`CambiosDeReferentesTest` (aplanar y varios docentes en el mismo plan), `PeriodoEditableNotasTest` y
-`FechasPeriodoAcademicoTest`. Lo que toca la base (guardar referentes por docente, rechazo en
-asignatura ajena, enviar solo quien gestiona, no quitar un referente con notas) no tiene tests
-automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se probó en
-`sami_royal` dentro de una transacción deshecha (2026-11-13, Sexto, Español y Literatura + otra
-asignatura con otro docente).
+`CambiosDeReferentesTest` (aplanar y varios docentes en el mismo plan), `FotoBoletinTest` (qué guarda
+el boletín), `PeriodoEditableNotasTest` y `FechasPeriodoAcademicoTest`. Lo que toca la base no tiene
+tests automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se probó en
+`sami_royal` dentro de transacciones deshechas (2026-11-13, Sexto A, Español y Literatura + otra
+asignatura con otro docente): referentes por docente y rechazo en asignatura ajena, enviar solo
+quien gestiona, no quitar un referente con notas, planilla en plazo y con el plan aprobado, ajuste
+(no en subreferentes, solo 154), observaciones solo del director, vista del curso con `puede`,
+cierre con boletines, nada se cambia cerrado, reabrir el cierre y quitar la nota del docente
+conservando el ajuste. El periodo de prueba no había empezado: se movieron `fecha_inicio` y
+`fecha_limite_notas` y se restauraron a mano (MyISAM).
 
 ## Trampas
 
@@ -174,14 +224,11 @@ asignatura con otro docente).
 
 ## Pendiente
 
-- **Fase 2 (backend)**: "mis cursos" (cursos donde el docente tiene carga, y los que dirige),
-  planilla del docente por sus referentes y subreferentes (en plazo y con el plan aprobado), ajuste
-  del coordinador al final de un referente, vista del director de su curso y sus "Observaciones
-  Generales del Director de Grupo" (tabla nueva), cierre del trimestre por curso con la foto del
-  boletín (tabla nueva), consulta (152).
-- **Fase 3 (frontend)**: renombrar a propósitos y referentes; páginas de Referentes, planilla del
-  docente y vista del director; Configuración académica (propósitos, método por nivel).
-- **Fase 4**: documento `boletin` en `src/documentos` (pdfmake), PDF en el servidor desde la foto e
-  historial de boletines.
+- **Fase 3 (frontend)**: renombrar a propósitos y referentes; Configuración académica (propósitos,
+  método por nivel) y opciones 152–154; página de Referentes (por asignatura, con subreferentes);
+  planilla del docente (`mis-cursos` → curso → asignatura); vista del curso para el director
+  (observaciones) y el coordinador (ajuste, cierre, reabrir); consulta (152).
+- **Fase 4**: documento `boletin` en `src/documentos` (pdfmake), PDF en el servidor desde
+  `academico_boletin.datos` e historial de boletines por estudiante.
 - Parte cuantitativa (nota numérica, rangos por desempeño para `AMBAS`) y vista del acudiente /
   estudiante.

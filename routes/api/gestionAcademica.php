@@ -550,4 +550,17 @@ Route::prefix('/notas')->group(function () {
     Route::get('/referentes/grados', [NotasController::class, 'gradosReferentes'])->middleware(Permiso::ruta($referentes));
     Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], Permiso::PERFILES_DOCENTE));
     Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($referentes, Permiso::PERFILES_DOCENTE));
+
+    // Calificación: el docente en sus asignaturas; el director de grupo y el coordinador ven el curso.
+    $docente = Permiso::ruta([], Permiso::PERFILES_DOCENTE);
+    $aprueba = Permiso::ruta([Permiso::REFERENTES_APROBAR]);
+    Route::get('/mis-cursos', [NotasController::class, 'misCursos'])->middleware($docente);
+    Route::get('/planilla', [NotasController::class, 'planilla'])->middleware($docente);
+    Route::put('/planilla', [NotasController::class, 'guardarPlanilla'])->middleware($docente);
+    Route::get('/cursos', [NotasController::class, 'filtrosCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
+    Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], Permiso::PERFILES_DOCENTE));
+    Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);
+    Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
+    Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);
+    Route::delete('/cierre', [NotasController::class, 'reabrirCierre'])->middleware($aprueba);
 });
