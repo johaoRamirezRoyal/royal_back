@@ -771,3 +771,32 @@ alter table `colegios_admision` modify `nombre` varchar(190) null;
 --    dominio). Si no, se crea una marca con los valores del colegio.
 -- Resultado local: Royal School (id 1) = logo y color de royalschool.edu.co + logo secundario
 -- del colegio; Hebreo Union (id 2). colegios_admision royalschool -> 1.
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_14_100000_create_fotos_curso_tables.php
+-- Fotos del curso (portal para padres): un docente publica fotos de una clase o actividad y los
+-- acudientes las ven en la semana de su hijo durante el año escolar. Una publicación es de una
+-- asignatura (id_asignatura; null = actividad del curso) y puede ir a VARIOS cursos
+-- (fotos_curso_publicacion_curso): las fotos se suben una vez. Sin FK a curso ni a
+-- academico_asignatura (MyISAM en algunas bases) ni a usuarios (legacy). En CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `fotos_curso_publicaciones` (`id` bigint unsigned not null auto_increment primary key, `id_anio_escolar` int not null, `id_docente` int not null, `id_asignatura` int null, `fecha` date not null, `descripcion` varchar(500) null, `confirma_autorizacion` tinyint(1) not null default '0', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_publicaciones` add index `fotos_curso_publicaciones_id_anio_escolar_fecha_index`(`id_anio_escolar`, `fecha`);
+alter table `fotos_curso_publicaciones` add index `fotos_curso_publicaciones_id_docente_index`(`id_docente`);
+create table `fotos_curso_publicacion_curso` (`id_publicacion` bigint unsigned not null, `id_curso` int not null, primary key (`id_publicacion`, `id_curso`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_publicacion_curso` add constraint `fotos_curso_publicacion_curso_id_publicacion_foreign` foreign key (`id_publicacion`) references `fotos_curso_publicaciones` (`id`) on delete cascade;
+alter table `fotos_curso_publicacion_curso` add index `fotos_curso_publicacion_curso_id_curso_index`(`id_curso`);
+create table `fotos_curso_fotos` (`id` bigint unsigned not null auto_increment primary key, `id_publicacion` bigint unsigned not null, `ruta` varchar(255) not null, `orden` tinyint unsigned not null default '0', `created_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_fotos` add constraint `fotos_curso_fotos_id_publicacion_foreign` foreign key (`id_publicacion`) references `fotos_curso_publicaciones` (`id`) on delete cascade;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_14_100100_seed_opcion_fotos_curso.php
+-- Opción 172 "Fotos del curso — Ver y borrar las de todos los cursos" (módulo 14, Gestión
+-- Académica): moderar. Publicar es autoservicio del docente del curso, sin opción. Se otorga
+-- por NOMBRE de perfil: coordinador, vicerrector, directivo docente.
+-- ---------------------------------------------------------------------------
+insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (172, 'Fotos del curso — Ver y borrar las de todos los cursos', 14, 1, NOW());
+-- Por cada perfil cuyo nombre (minúsculas, espacios colapsados) sea coordinador, vicerrector o
+-- directivo docente, y que aún no la tenga:
+-- insert into `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) values (172, <id_perfil>, 1, NOW());
+-- Resultado local (sami_royal): perfiles 26 Coordinador, 12 Vicerrector y 20 Directivo Docente.

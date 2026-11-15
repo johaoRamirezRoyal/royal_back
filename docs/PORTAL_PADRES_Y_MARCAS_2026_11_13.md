@@ -85,7 +85,9 @@ no devuelven esos campos.
    endpoints del portal, y el backend nuevo ya no tiene el CRUD de `/api/branding/dominios`.
 2. `php artisan migrate`:
    - `2026_11_13_100000_add_index_correo_to_usuarios_table`: índice en `usuarios.correo` en
-     **cada** base con usuarios (`mysql`, `sami_hebreo`), solo si no existe.
+     **cada** base con usuarios (`mysql`, `sami_hebreo`), solo si no existe. Una base que no existe
+     (error 1049, habitual en local) se salta con un aviso; cualquier otro error detiene la
+     migración.
    - `2026_11_13_110000_create_marcas_table` (`admin_management`): crea `marcas`, copia cada
      marca por dominio y enlaza cada colegio con la marca de su mismo nombre (gana lo de Marcas por
      dominio; del colegio solo se toma lo que le falta, p. ej. el logo secundario). SQL y detalle
@@ -107,7 +109,7 @@ apunte a ella la mostraría rota mientras dura el despliegue.
 
 ## Pendientes
 
-- **Fotos del curso** (evidencias de clase o actividad): no existe. Decisiones abiertas en
+- ~~**Fotos del curso**~~: hecho el 2026-11-14, ver `contexto/modulos/fotos-curso.md`. Las decisiones, en
   `docs/contexto/modulos/portal-padres.md` del frontend.
 - **Notas / boletín** en el portal: depende de `feat/notas-cualitativas`.
 - `GET /api/gestion-academica/asistencias-clase` sin `id_horario_clase` responde 500 en vez de

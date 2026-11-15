@@ -15,7 +15,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        foreach (BasesDatosService::connectionsConUsuarios() as $connection) {
+        foreach ($this->connectionsDisponibles() as $connection) {
             if (! $this->tieneIndice($connection)) {
                 Schema::connection($connection)->table('usuarios', fn ($table) => $table->index('correo', 'usuarios_correo_index'));
             }
@@ -24,11 +24,36 @@ return new class extends Migration
 
     public function down(): void
     {
-        foreach (BasesDatosService::connectionsConUsuarios() as $connection) {
+        foreach ($this->connectionsDisponibles() as $connection) {
             if ($this->tieneIndice($connection)) {
                 Schema::connection($connection)->table('usuarios', fn ($table) => $table->dropIndex('usuarios_correo_index'));
             }
         }
+    }
+
+    /**
+     * Connections cuya base existe. En local no siempre están todas las bases de colegio
+     * (p. ej. `sami_hebreo`): esas se saltan con un aviso. Cualquier otro error detiene la
+     * migración, para que en producción no quede una base sin índice sin que se note.
+     *
+     * @return list<string>
+     */
+    private function connectionsDisponibles(): array
+    {
+        $disponibles = [];
+        foreach (BasesDatosService::connectionsConUsuarios() as $connection) {
+            try {
+                DB::connection($connection)->getPdo();
+                $disponibles[] = $connection;
+            } catch (QueryException|PDOException $e) {
+                if (! str_contains($e->getMessage(), '[1049]')) {
+                    throw $e;
+                }
+                fwrite(STDERR, "  Se omite la connection '{$connection}': su base de datos no existe.\n");
+            }
+        }
+
+        return $disponibles;
     }
 
     private function tieneIndice(string $connection): bool

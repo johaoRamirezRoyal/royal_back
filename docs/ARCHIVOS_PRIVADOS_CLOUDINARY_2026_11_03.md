@@ -32,6 +32,7 @@ completo. Las carpetas cuentan en cualquier nivel, con o sin la carpeta del cole
 | `historia-clinica/` | firmas de padre y madre |
 | `usuarios/firmas/` | firma de cada usuario («Mi firma») |
 | `carnets/<archivo>` | fotos de carnet (`carnets/plantillas/` sigue pública) |
+| `fotos-curso/<archivo>` | fotos de clases y actividades que publican los docentes para el portal para padres (desde el 2026-11-14). Como las de carnet, son **fotos**: van firmadas al CDN |
 | `certificados/` | certificados; también `formacion/certificados` y `experiencia-laboral/certificados` (Perfil) |
 | `gestion-humana/` | certificados de cursos de altura |
 | `produccion-intelectual/` | producción intelectual (Perfil) |

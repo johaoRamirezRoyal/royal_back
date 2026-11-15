@@ -5,7 +5,9 @@ namespace App\Http\Controllers\PortalPadres;
 use App\Enums\TipoPerfil;
 use App\Http\Controllers\Controller;
 use App\Models\Estudiantes\EstudiantesPadre;
+use App\Models\Usuarios\Usuario;
 use App\Services\Estudiantes\VinculacionAcudienteService;
+use App\Services\FotosCurso\FotosCursoService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +24,7 @@ class PortalPadresController extends Controller
     public function __construct(
         private VinculacionAcudienteService $vinculacion,
         private LlegadasTarde $llegadasTarde,
+        private FotosCursoService $fotosCurso,
     ) {
     }
 
@@ -52,17 +55,8 @@ class PortalPadresController extends Controller
      */
     public function semana(Request $request, int $idEstudiante)
     {
-        if (! $request->user()->esTipo(TipoPerfil::ACUDIENTE)) {
-            return $this->error('El portal para padres es solo para acudientes', 403);
-        }
-
-        $esHijo = EstudiantesPadre::where('id_acudiente', $request->user()->id_user)
-            ->where('id_estudiante', $idEstudiante)
-            ->where('activo', 1)
-            ->exists();
-
-        if (! $esHijo) {
-            return $this->error('Ese estudiante no está vinculado a tu cuenta', 404);
+        if ($rechazo = $this->sinVinculo($request, $idEstudiante)) {
+            return $rechazo;
         }
 
         $response = $this->llegadasTarde->obtenerLlegadasTarde(null, $idEstudiante);
@@ -95,6 +89,72 @@ class PortalPadresController extends Controller
             ->orderBy('f.hora_inicio')
             ->get(['ae.id', 'ac.fecha', 'ae.estado', 'a.nombre as asignatura', 'f.hora_inicio as hora']);
 
-        return $this->success('Semana obtenida correctamente', ['llegadas' => $llegadas, 'asistencias' => $asistencias]);
+        // Las fotos del curso no van aquí: se piden por mes (fotos) para no traer el año entero.
+        return $this->success('Semana obtenida correctamente', [
+            'llegadas' => $llegadas,
+            'asistencias' => $asistencias,
+        ]);
+    }
+
+    /**
+     * GET /hijos/{id}/fotos?mes=YYYY-MM | ?q=texto — fotos del curso ACTUAL del hijo en el año
+     * escolar activo: las de un mes (semana y carrusel) o una búsqueda (calendario).
+     */
+    public function fotos(Request $request, int $idEstudiante)
+    {
+        if ($rechazo = $this->sinVinculo($request, $idEstudiante)) {
+            return $rechazo;
+        }
+
+        $data = $request->validate([
+            'mes' => ['required_without:q', 'nullable', 'date_format:Y-m'],
+            'q' => ['nullable', 'string', 'max:80'],
+        ], ['mes.date_format' => 'El mes no es válido', 'mes.required_without' => 'Indica el mes o el texto a buscar']);
+
+        $idCurso = $this->cursoDe($idEstudiante);
+        if (! $idCurso) {
+            return $this->success('Sin curso', []);
+        }
+
+        $publicaciones = filled($data['q'] ?? null)
+            ? $this->fotosCurso->buscar($idCurso, $data['q'])
+            : $this->fotosCurso->delMes($idCurso, $data['mes']);
+
+        return $this->success('Fotos obtenidas correctamente', $publicaciones->values());
+    }
+
+    /** GET /hijos/{id}/fotos/calendario — por día, cuántas fotos hay y la portada; y el total del año. */
+    public function calendarioFotos(Request $request, int $idEstudiante)
+    {
+        if ($rechazo = $this->sinVinculo($request, $idEstudiante)) {
+            return $rechazo;
+        }
+
+        $idCurso = $this->cursoDe($idEstudiante);
+
+        return $this->success('Calendario obtenido correctamente', $idCurso ? $this->fotosCurso->calendario($idCurso) : ['dias' => [], 'total' => 0]);
+    }
+
+    /** null si el usuario es acudiente y el estudiante es su hijo activo; si no, la respuesta de error. */
+    private function sinVinculo(Request $request, int $idEstudiante): ?\Illuminate\Http\JsonResponse
+    {
+        if (! $request->user()->esTipo(TipoPerfil::ACUDIENTE)) {
+            return $this->error('El portal para padres es solo para acudientes', 403);
+        }
+
+        $esHijo = EstudiantesPadre::where('id_acudiente', $request->user()->id_user)
+            ->where('id_estudiante', $idEstudiante)
+            ->where('activo', 1)
+            ->exists();
+
+        return $esHijo ? null : $this->error('Ese estudiante no está vinculado a tu cuenta', 404);
+    }
+
+    /** Curso actual del estudiante (las fotos son las de su curso de hoy). */
+    private function cursoDe(int $idEstudiante): ?int
+    {
+        $idCurso = Usuario::where('id_user', $idEstudiante)->value('id_curso');
+
+        return $idCurso ? (int) $idCurso : null;
     }
 }

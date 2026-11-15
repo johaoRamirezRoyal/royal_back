@@ -15,6 +15,12 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
 
 ## Archivos
 
+- **Límites de PHP para subir archivos**: Laravel acepta imágenes de hasta 5–10 MB (marcas,
+  fotos del curso), pero si PHP tiene `upload_max_filesize` menor (2M por defecto), descarta el
+  archivo antes de Laravel y la validación responde "The `<campo>` failed to upload." (regla
+  `uploaded`). En local y en el servidor: `upload_max_filesize = 10M` y `post_max_size = 20M` en
+  el `php.ini` que carga PHP (`php --ini`), y reiniciar `php artisan serve` / PHP-FPM. Detrás de
+  nginx, también `client_max_body_size`.
 - **`GET /api/public/{ruta}?w=`** (`DocumentoController::verPublico`, con sesión, caché
   `private` de 7 días) sirve archivos del disco de uploads.
   - Con `w=64|128|256|512` y una imagen, devuelve una miniatura WebP con la orientación
@@ -108,8 +114,11 @@ Cloudinary responde 401. La regla está en `App\Services\Cloudinary\ArchivosPriv
 
 Quién pone la firma (nunca el frontend). **Una URL firmada no vence**: quien la tenga la abre,
 con sesión o sin ella. Por eso al navegador solo llegan firmadas las **fotos**
-(`ArchivosPrivados::esFoto`: `carnets/<archivo>`; en `/api/public`, también las imágenes de la
-raíz, que son fotos de perfil y carnets de SAMI), que se ven de a decenas en listas. Los
+(`ArchivosPrivados::esFoto`: `carnets/<archivo>` y `fotos-curso/<archivo>`; en `/api/public`,
+también las imágenes de la raíz, que son fotos de perfil y carnets de SAMI), que se ven de a
+decenas en listas. Las fotos del curso además llegan en el JSON ya firmadas por tamaño (con la
+transformación de Cloudinary): el navegador no pasa por Laravel ni por el 302 de `/api/public`
+(ver `modulos/fotos-curso.md`, «Rendimiento»). Los
 **documentos** (todo lo demás privado: Admisiones, firmas, certificados, cotizaciones…) pasan
 por Laravel con sesión, sin caché: al cerrar sesión dejan de abrir.
 

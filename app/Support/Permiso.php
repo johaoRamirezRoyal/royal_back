@@ -108,6 +108,7 @@ final class Permiso
     public const ADMISIONES_PSICOLOGA_BACHILLERATO = 169; // "Admisiones — Psicóloga de bachillerato" (antes 25)
     public const ADMISIONES_GESTION_PERSONAL = 170;     // "Admisiones — Gestionar inscripciones como personal" (antes nombres "administrador"/"admisiones")
     public const HIKVISION_GRUPO_PROFESORES = 171;      // "Asistencia — Grupo Profesores en las terminales" (antes perfiles 3, 13, 14 y 20 en GROUP_ID_POR_PERFIL)
+    public const FOTOS_CURSO_GESTIONAR = 172;           // "Fotos del curso — Ver y borrar las de todos los cursos" (publicar es autoservicio del docente)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

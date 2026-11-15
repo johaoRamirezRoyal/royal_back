@@ -130,11 +130,13 @@ esta tabla.
 | [`modulos/instituciones.md`](docs/contexto/modulos/instituciones.md) | portal de jardines asociados y su admin |
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 | [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
+| [`modulos/fotos-curso.md`](docs/contexto/modulos/fotos-curso.md) | fotos de clases y actividades que publican los docentes para el portal para padres |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con
 pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md`, `PORTAL_PADRES_Y_MARCAS_2026_11_13.md`
-(portal para padres, login por colegio y marcas unificadas: qué se cambió, deploy y pendientes) y
-`whatsapp-llegadas-tarde.md`.
+(portal para padres, login por colegio y marcas unificadas: qué se cambió, deploy y pendientes),
+`FOTOS_CURSO_2026_11_14.md` (fotos del curso, carrusel y calendario del portal: qué se cambió,
+deploy y pendientes) y `whatsapp-llegadas-tarde.md`.
