@@ -76,6 +76,13 @@ El portal (PortalPadresController, después de validar el vínculo) **nunca pide
 - Por mes y con caché en el frontend (`useFotosHijo`), resumen liviano para el calendario,
   búsqueda en el servidor y paginación en la vista del docente.
 
+## Pruebas de carga
+
+`tests/carga/portal-padres.js` (k6 + Grafana) carga estos endpoints y los del portal. Resultado y
+hallazgos: `docs/PRUEBAS_CARGA_2026_11_16.md`. Sin carga, `fotos/calendario` tarda ~200–270 ms y
+`fotos?mes=` ~120 ms; si el calendario crece, cachearlo por curso. Repite la prueba tras cambios de
+rendimiento.
+
 ## Pendiente
 
 - Campo de autorización de uso de imagen por estudiante, para avisar al docente al publicar.

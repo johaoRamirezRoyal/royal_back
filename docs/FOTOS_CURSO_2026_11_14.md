@@ -50,6 +50,25 @@ de sus hijos. Las decisiones (2026-11-14):
 - Componentes y utilidades nuevos: `VisorFotos`, `comprimirFoto`, `urlFoto` (ver
   `docs/contexto/componentes.md` del frontend).
 
+### Frontend, 2026-11-16 (sin cambios de backend)
+
+- **El portal pasa a secciones**: antes todo iba en una columna (semana, carrusel y novedades) y
+  no escalaba con notas y noticias. Ahora el friso y, en la placa, una sección a la vez: **Inicio**
+  (resumen: la semana de un vistazo y el carrusel del mes en curso), **Semana** (día por día) y
+  **Fotos** (el calendario con búsqueda, que deja de ser un modal). En el celular se navega con una
+  barra inferior y desde 640px con pestañas; la sección va en la URL (`?ver=`).
+- **Recorrido guiado** al primer ingreso (`useTutorial` + `SpotlightTour`, como los del panel) y un
+  botón de ayuda en el friso para repetirlo.
+- `SpotlightTour` (compartido con el panel) ubica la tarjeta según su alto real: antes podía tapar
+  el elemento señalado.
+- Refactor: un solo visor de fotos en la página y props uniformes entre secciones.
+- Detalle: `docs/contexto/modulos/portal-padres.md` y `DESIGN.md` del frontend.
+
+### Pruebas de estrés, 2026-11-16
+
+k6 + Grafana sobre los endpoints del portal y de «Fotos del curso»: resultados, hallazgos y
+pendientes en [`PRUEBAS_CARGA_2026_11_16.md`](PRUEBAS_CARGA_2026_11_16.md).
+
 ## Despliegue
 
 1. Subir backend y frontend juntos: el frontend nuevo usa `…/fotos`, `…/fotos/calendario` y la
@@ -77,6 +96,9 @@ que estas fotos nunca salgan sin sesión, se quitan las `urls` del JSON y vuelve
 - Un mes ya abierto en el portal no se refresca solo si un docente publica mientras tanto (se ve al
   recargar).
 - **Notas / boletín** en el portal: depende de `feat/notas-cualitativas`.
+- Rendimiento: `semana` trae el historial completo de llegadas tarde y es el endpoint más caro del
+  portal (~280 ms sin carga); medir la capacidad real en un servidor de pruebas. Ver
+  [`PRUEBAS_CARGA_2026_11_16.md`](PRUEBAS_CARGA_2026_11_16.md).
 
 ## Pruebas en local
 
