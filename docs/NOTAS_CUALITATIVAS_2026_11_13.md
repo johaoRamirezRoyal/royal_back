@@ -72,7 +72,9 @@ Cada docente envía a revisión los referentes de su asignatura (y puede retirar
 los demás no terminen). Cuando todas las asignaturas con carga en el grado enviaron, el plan pasa
 solo a revisión y coordinación (154) lo aprueba o lo devuelve; devolver o reabrir obliga a todos a
 enviar de nuevo. Migración `2026_11_05_120400_create_academico_referente_envio_table` (2026-11-17;
-antes enviaba solo quien gestiona, el plan completo).
+antes enviaba solo quien gestiona, el plan completo). Coordinación también puede aprobar
+directamente un plan en borrador o devuelto, sin esperar los envíos (con confirmación; queda en el
+seguimiento qué asignaturas no habían enviado).
 
 ### Plazos
 

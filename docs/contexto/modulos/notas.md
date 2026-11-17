@@ -97,7 +97,9 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
     quien gestiona el plan completo.)
   - Opción **153** "Gestionar referentes": edita todas las asignaturas en los grados de su nivel (no
     envía, salvo que también tenga carga en el grado).
-  - Opción **154** "Aprobar referentes": además aprueba / devuelve (en revisión) y reabre (aprobado);
+  - Opción **154** "Aprobar referentes": además aprueba (en revisión o, directamente, en borrador o
+    devuelto sin esperar los envíos: el seguimiento anota "Aprobados sin pasar por revisión" y las
+    asignaturas sin enviar; exige al menos un referente), devuelve (en revisión) y reabre (aprobado);
     en revisión es el único que edita.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
     `DocenteHorarioService::idsNivelAcademicoParaNivel`. Con la **99** (y Super Admin) vale para

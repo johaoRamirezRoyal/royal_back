@@ -38,7 +38,8 @@ class AccionesPlanReferentesTest extends TestCase
             ['BORRADOR', self::DOCENTE, true, [5, 7], ['editar'], [9], [5]],   // la 5 ya la envió: puede retirarla
             ['DEVUELTO', self::DOCENTE, true, [], ['editar'], [5, 9], []],
             ['BORRADOR', self::GESTOR, true, [], ['editar'], [], []],          // coordinación no envía
-            ['BORRADOR', self::APROBADOR, true, [], ['editar'], [], []],
+            ['BORRADOR', self::APROBADOR, true, [], ['editar', 'aprobar'], [], []], // coordinación aprueba directo
+            ['DEVUELTO', self::APROBADOR, true, [], ['editar', 'aprobar'], [], []],
             ['BORRADOR', self::AJENO, true, [], [], [], []],
             ['EN_REVISION', self::DOCENTE, true, [5, 9], [], [], []],          // en revisión no edita ni retira
             ['EN_REVISION', self::GESTOR, true, [], [], [], []],
@@ -48,6 +49,7 @@ class AccionesPlanReferentesTest extends TestCase
             ['BORRADOR', self::DOCENTE, false, [], [], [], []],                // fuera de plazo no se edita ni se envía
             ['BORRADOR', self::GESTOR, false, [], [], [], []],
             ['APROBADO', self::APROBADOR, false, [], [], [], []],              // ni se reabre
+            ['BORRADOR', self::APROBADOR, false, [], ['aprobar'], [], []],            // aprobar directo, aun vencido
             ['EN_REVISION', self::APROBADOR, false, [], ['aprobar', 'devolver'], [], []], // aprobar sí, aun vencido
         ];
 

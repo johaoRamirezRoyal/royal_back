@@ -328,6 +328,8 @@ class NotasService extends Service
      * referentes de su asignatura (`enviar`: ids de las suyas aún sin enviar) y puede retirar el
      * envío mientras el plan no pase a revisión (`retirar`). Con todas las asignaturas del grado
      * enviadas, el plan pasa solo a EN_REVISION; coordinación (154) lo aprueba o lo devuelve.
+     * Coordinación también puede aprobarlo directamente en borrador o devuelto, sin esperar los
+     * envíos (2026-11-17).
      *
      * @param  int[]  $enviadas  asignaturas del plan ya enviadas
      */
@@ -342,7 +344,7 @@ class NotasService extends Service
             'editar' => $abierto && (($editable && $participa) || ($estado === ReferentePlan::EN_REVISION && $rol['aprueba'])),
             'enviar' => $suyas->diff($enviadas)->sort()->values()->all(),
             'retirar' => $suyas->intersect($enviadas)->sort()->values()->all(),
-            'aprobar' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
+            'aprobar' => $estado !== ReferentePlan::APROBADO && $rol['aprueba'],
             'devolver' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
             'reabrir' => $abierto && $estado === ReferentePlan::APROBADO && $rol['aprueba'],
         ];
@@ -731,11 +733,19 @@ class NotasService extends Service
             if ($accion === 'enviar' && $porReubicar($referentes->where('id_asignatura', $idAsignatura))) {
                 return ['error' => true, 'message' => 'Hay referentes de tu asignatura en un propósito desactivado: cámbialos antes de enviarlos.'];
             }
+            if ($accion === 'aprobar' && $referentes->isEmpty()) {
+                return ['error' => true, 'message' => 'Define al menos un referente antes de aprobarlos.'];
+            }
             if ($accion === 'aprobar' && $porReubicar($referentes)) {
                 return ['error' => true, 'message' => 'Hay referentes por reubicar (su propósito está desactivado o su asignatura ya no tiene carga en el grado): cámbialos antes de continuar.'];
             }
 
             $nombre = $porAsignatura ? ($delGrado[$idAsignatura] ?? 'la asignatura') : null;
+            // Aprobación directa (sin pasar por revisión): queda en el seguimiento qué asignaturas no habían enviado.
+            $sinEnviar = $accion === 'aprobar' && $plan->estado !== ReferentePlan::EN_REVISION ? $delGrado->except($enviadas) : collect();
+            if ($accion === 'aprobar' && $plan->estado !== ReferentePlan::EN_REVISION) {
+                $comentario = 'Aprobados sin pasar por revisión' . ($sinEnviar->isNotEmpty() ? ' (sin enviar: ' . $sinEnviar->implode(', ') . ')' : '') . '.';
+            }
             $pendientes = $accion === 'enviar' ? $delGrado->except(array_merge($enviadas, [$idAsignatura])) : collect();
             // Con la última asignatura enviada (y algo que revisar), el plan pasa a revisión.
             $aRevision = $accion === 'enviar' && $pendientes->isEmpty() && $referentes->isNotEmpty();
