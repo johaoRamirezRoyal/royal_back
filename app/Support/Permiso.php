@@ -90,8 +90,8 @@ final class Permiso
     public const SEGURIDAD_SOCIAL = 150;                // "Gestión Humana — Seguridad social de trabajadores" (EPS/AFP/ARL de quien tiene curso de altura)
     // 151 libre en producción.
     public const NOTAS_CONSULTAR = 152;                 // "Gestión Académica — Consultar notas" (solo lectura, cualquier curso)
-    public const REFERENTES_GESTIONAR = 153;            // "Gestión Académica — Gestionar referentes" (editar/enviar, grados de su nivel)
-    public const REFERENTES_APROBAR = 154;              // "Gestión Académica — Aprobar referentes" (aprobar/devolver/reabrir, editar y ajustar finales, su nivel)
+    public const REFERENTES_GESTIONAR = 153;            // "Gestión Académica — Gestionar referentes" (editar los de todas las asignaturas, grados de su nivel; enviar lo hace cada docente)
+    public const REFERENTES_APROBAR = 154;              // "Gestión Académica — Aprobar referentes" (aprobar, también directo, devolver y reabrir; editar y ajustar finales; cerrar el periodo; su nivel)
     // Fase 3: lo que antes decidía un número de perfil (2026_11_10_110000_seed_opciones_roles).
     public const COORDINACION_NIVEL = 155;              // "Coordinación de nivel — Gestiona solo su nivel" (antes perfil 26; restrictiva)
     public const DIRECCION_ADMINISTRATIVA = 156;        // "Dirección administrativa — Gestiona los niveles administrativos" (antes perfil 7; restrictiva)
