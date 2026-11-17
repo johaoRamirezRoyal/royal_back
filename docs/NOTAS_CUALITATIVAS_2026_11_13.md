@@ -68,9 +68,11 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 **Evaluación descriptiva (2026-11-17).** Los grados marcados como `DESCRIPTIVA` (Pre-jardín, Stem…) no usan referentes ni escala: por estudiante, cada docente con carga en el curso escribe un texto en los campos de cada propósito (Fortalezas, Por fortalecer, Recomendaciones…, definidos por propósito en Configuración académica). Mismo cierre, sin plan que aprobar; el boletín es el documento `boletinDescriptivo`. Migración `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`.
 | 152 "Consultar notas" y 99 | Ver las notas de cualquier curso en solo lectura (99 también la configuración) |
 
-El docente envía los referentes a revisión y coordinación (154) los aprueba o los devuelve
-(cambiado el 2026-11-17; antes enviaba solo quien gestiona). El plan es del grado: el primer envío
-lo pasa a revisión para todos, y si a otro docente le faltaban los suyos, coordinación lo devuelve.
+Cada docente envía a revisión los referentes de su asignatura (y puede retirar ese envío mientras
+los demás no terminen). Cuando todas las asignaturas con carga en el grado enviaron, el plan pasa
+solo a revisión y coordinación (154) lo aprueba o lo devuelve; devolver o reabrir obliga a todos a
+enviar de nuevo. Migración `2026_11_05_120400_create_academico_referente_envio_table` (2026-11-17;
+antes enviaba solo quien gestiona, el plan completo).
 
 ### Plazos
 

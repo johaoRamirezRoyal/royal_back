@@ -677,6 +677,16 @@ alter table `academico_valoracion_descriptiva` add unique `uq_descriptiva_estudi
 alter table `academico_valoracion_descriptiva` add index `ix_descriptiva_curso_periodo`(`id_curso`, `id_periodo_academico`);
 
 -- ---------------------------------------------------------------------------
+-- 2026_11_05_120400_create_academico_referente_envio_table.php
+-- Envío a revisión por asignatura: cada docente envía los referentes de su asignatura; con
+-- todas las del grado enviadas, el plan pasa a EN_REVISION. Devolver o reabrir borra los envíos.
+-- ---------------------------------------------------------------------------
+create table `academico_referente_envio` (`id` int not null auto_increment, `id_plan` int not null, `id_asignatura` int not null, `id_usuario` int not null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_referente_envio` add constraint `academico_referente_envio_id_plan_foreign` foreign key (`id_plan`) references `academico_referente_plan` (`id`) on delete cascade;
+alter table `academico_referente_envio` add constraint `academico_referente_envio_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_referente_envio` add unique `uq_referente_envio`(`id_plan`, `id_asignatura`);
+
+-- ---------------------------------------------------------------------------
 -- 2026_11_05_120000_renombrar_opcion_editar_reservas.php
 -- La opción 120 pasa a cubrir editar, cancelar y finalizar cualquier reserva (antes
 -- cancelar/finalizar colgaba de la 41, que tienen casi todos los perfiles). Solo renombra.

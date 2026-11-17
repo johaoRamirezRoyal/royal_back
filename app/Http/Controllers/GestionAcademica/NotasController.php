@@ -189,16 +189,18 @@ class NotasController extends Controller implements HasMiddleware
         return $this->apiResponse($this->service->verPlan($actor, $q['id_curso'], $q['id_periodo']));
     }
 
-    /** { id_curso, id_periodo, accion: enviar|aprobar|devolver|reabrir, comentario? } */
+    /** { id_curso, id_periodo, accion: enviar|retirar|aprobar|devolver|reabrir, id_asignatura? (enviar y retirar), comentario? } */
     public function cambiarEstadoPlan(Request $request)
     {
         $body = $request->validate($this->reglasCursoPeriodo() + [
-            'accion' => ['required', 'in:enviar,aprobar,devolver,reabrir'],
+            'accion' => ['required', 'in:enviar,retirar,aprobar,devolver,reabrir'],
+            'id_asignatura' => ['required_if:accion,enviar,retirar', 'nullable', 'integer'],
             'comentario' => ['nullable', 'string', 'max:1000'],
         ]);
 
         return $this->apiResponse($this->service->cambiarEstado(
             $this->actor($request), $body['id_curso'], $body['id_periodo'], $body['accion'], $body['comentario'] ?? null,
+            isset($body['id_asignatura']) ? (int) $body['id_asignatura'] : null,
         ));
     }
 

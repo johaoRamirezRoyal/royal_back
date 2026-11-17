@@ -86,8 +86,15 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 - Quién puede qué (`NotasService::rol` / `acciones`, test `AccionesPlanReferentesTest`; el `actor`
   lo arma `NotasController::actor`):
   - **Docente** (`rol['docente']`: carga activa en algún curso del grado): edita en `BORRADOR` /
-    `DEVUELTO` **solo los referentes de sus asignaturas** (`rol['asignaturas']`) y **envía el plan a
-    revisión** (cambiado el 2026-11-17: antes enviaba solo quien gestiona).
+    `DEVUELTO` **solo los referentes de sus asignaturas** (`rol['asignaturas']`) y **envía a revisión
+    los de cada una por separado** (`acciones()['enviar']` / `['retirar']`: ids de asignatura; tabla
+    `academico_referente_envio`, una fila por plan y asignatura). Enviada una asignatura, el docente ya
+    no la edita (puede retirar el envío mientras el plan siga en borrador o devuelto). Cuando todas las
+    asignaturas con carga en el grado enviaron (y hay al menos un referente), el plan pasa solo a
+    `EN_REVISION` (historial `ENVIADO` por asignatura y `EN_REVISION`). Devolver y reabrir borran
+    todos los envíos: cada docente vuelve a enviar. Se puede enviar una asignatura sin referentes.
+    `gradosDelNivel` da `asignaturas_total` / `asignaturas_enviadas`. (2026-11-17; antes enviaba
+    quien gestiona el plan completo.)
   - Opción **153** "Gestionar referentes": edita todas las asignaturas en los grados de su nivel (no
     envía, salvo que también tenga carga en el grado).
   - Opción **154** "Aprobar referentes": además aprueba / devuelve (en revisión) y reabre (aprobado);

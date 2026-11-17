@@ -14,6 +14,7 @@ use App\Models\GestionAcademica\Proposito;
 use App\Models\GestionAcademica\PropositoCampo;
 use App\Models\GestionAcademica\ValoracionDescriptiva;
 use App\Models\GestionAcademica\Referente;
+use App\Models\GestionAcademica\ReferenteEnvio;
 use App\Models\GestionAcademica\ReferentePlan;
 use App\Models\GestionAcademica\ReferentePlanHistorial;
 use App\Models\GestionAcademica\ValoracionReferente;
@@ -318,22 +319,34 @@ class NotasService extends Service
     }
 
     /**
-     * Acciones permitidas según el estado, el rol y el plazo. El docente con carga en el grado envía
-     * los referentes a revisión; coordinación (154) los aprueba o los devuelve.
+     * Acciones permitidas según el estado, el rol y el plazo. Cada docente envía a revisión los
+     * referentes de su asignatura (`enviar`: ids de las suyas aún sin enviar) y puede retirar el
+     * envío mientras el plan no pase a revisión (`retirar`). Con todas las asignaturas del grado
+     * enviadas, el plan pasa solo a EN_REVISION; coordinación (154) lo aprueba o lo devuelve.
+     *
+     * @param  int[]  $enviadas  asignaturas del plan ya enviadas
      */
-    public static function acciones(string $estado, array $rol, bool $abierto): array
+    public static function acciones(string $estado, array $rol, bool $abierto, array $enviadas = []): array
     {
         $editable = in_array($estado, [ReferentePlan::BORRADOR, ReferentePlan::DEVUELTO], true);
         $participa = $rol['docente'] || $rol['gestiona'];
+        $suyas = $abierto && $editable && $rol['docente'] ? collect($rol['asignaturas'] ?? [])->map(fn ($id) => (int) $id) : collect();
 
         return [
             // En revisión solo quien aprueba ajusta los referentes.
             'editar' => $abierto && (($editable && $participa) || ($estado === ReferentePlan::EN_REVISION && $rol['aprueba'])),
-            'enviar' => $abierto && $editable && $rol['docente'],
+            'enviar' => $suyas->diff($enviadas)->sort()->values()->all(),
+            'retirar' => $suyas->intersect($enviadas)->sort()->values()->all(),
             'aprobar' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
             'devolver' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
             'reabrir' => $abierto && $estado === ReferentePlan::APROBADO && $rol['aprueba'],
         ];
+    }
+
+    /** Ids de las asignaturas del plan ya enviadas a revisión. */
+    private static function enviadasDe(ReferentePlan $plan): array
+    {
+        return $plan->exists ? ReferenteEnvio::where('id_plan', $plan->id)->pluck('id_asignatura')->map(fn ($id) => (int) $id)->all() : [];
     }
 
     private function buscarPlan(int $idGrado, int $idPeriodo): ReferentePlan
@@ -371,15 +384,18 @@ class NotasService extends Service
     /**
      * Ids de las asignaturas cuyos referentes puede editar quien pide (aparte del estado del plan,
      * que decide acciones()): quien gestiona, las del grado y las que ya tienen referentes (para
-     * reubicar los de una asignatura que perdió su carga); el docente, las suyas con carga en el grado.
+     * reubicar los de una asignatura que perdió su carga); el docente, las suyas con carga en el grado
+     * que aún no envió a revisión.
+     *
+     * @param  int[]  $enviadas
      */
-    private static function asignaturasEditables(array $rol, Collection $delGrado, Collection $usadas): Collection
+    private static function asignaturasEditables(array $rol, Collection $delGrado, Collection $usadas, array $enviadas = []): Collection
     {
         if ($rol['gestiona']) {
             return $delGrado->keys()->map(fn ($id) => (int) $id)->merge($usadas)->unique()->values();
         }
 
-        return $rol['docente'] ? $rol['asignaturas']->values() : collect();
+        return $rol['docente'] ? $rol['asignaturas']->diff($enviadas)->values() : collect();
     }
 
     /**
@@ -394,12 +410,14 @@ class NotasService extends Service
         $referentes = $this->referentesDe($curso->id_grado, $periodo->id);
         $delGrado = $this->asignaturasDelGrado($curso->id_grado);
         $usadas = $referentes->pluck('id_asignatura')->map(fn ($id) => (int) $id)->unique();
-        $editables = self::asignaturasEditables($rol, $delGrado, $usadas);
+        $plan = $this->buscarPlan($curso->id_grado, $periodo->id);
+        $envios = $plan->exists ? ReferenteEnvio::with('usuario:id_user,nombre,apellido')->where('id_plan', $plan->id)->get()->keyBy('id_asignatura') : collect();
+        $enviadas = $envios->keys()->map(fn ($id) => (int) $id)->all();
+        $editables = self::asignaturasEditables($rol, $delGrado, $usadas, $enviadas);
         // Una asignatura que ya no tiene carga en el grado pero conserva referentes también se
         // lista (por reubicar), con el nombre que tenga en el catálogo.
         $huerfanas = DB::table('academico_asignatura')->whereIn('id', $usadas->diff($delGrado->keys()->map(fn ($id) => (int) $id)))->pluck('nombre', 'id');
 
-        $plan = $this->buscarPlan($curso->id_grado, $periodo->id);
         $historial = $plan->exists
             ? $plan->historial()->with('usuario:id_user,nombre,apellido')->orderByDesc('id')->get()
                 ->map(fn ($h) => [
@@ -425,10 +443,12 @@ class NotasService extends Service
                     'nombre' => $nombre,
                     'con_carga' => $delGrado->has($id),
                     'editable' => $editables->contains((int) $id),
+                    // Envío a revisión de sus referentes (null: aún no).
+                    'envio' => ($e = $envios->get($id)) ? ['usuario' => self::nombreDe($e->usuario) ?? 'Usuario', 'fecha' => $e->fecha] : null,
                 ])->values(),
             'referentes' => $referentes,
             'historial' => $historial,
-            'puede' => self::acciones($plan->estado, $rol, self::periodoAbiertoParaReferentes($periodo)),
+            'puede' => self::acciones($plan->estado, $rol, self::periodoAbiertoParaReferentes($periodo), $enviadas),
         ];
     }
 
@@ -573,7 +593,8 @@ class NotasService extends Service
             $idGrado = $curso->id_grado;
             $plan = $this->buscarPlan($idGrado, $idPeriodo);
             $rol = $this->rol($actor, $curso);
-            if (! self::acciones($plan->estado, $rol, self::periodoAbiertoParaReferentes($periodo))['editar']) {
+            $enviadas = self::enviadasDe($plan);
+            if (! self::acciones($plan->estado, $rol, self::periodoAbiertoParaReferentes($periodo), $enviadas)['editar']) {
                 return ['error' => true, 'message' => $plan->estado === ReferentePlan::APROBADO
                     ? 'Los referentes están aprobados. Para cambiarlos, quien aprueba debe reabrirlos.'
                     : 'No puedes editar estos referentes en su estado actual o ya pasó el plazo del periodo.'];
@@ -606,12 +627,14 @@ class NotasService extends Service
                     'id_padre' => $r->id_padre, 'descripcion' => $r->descripcion,
                 ])->all(),
                 $planos,
-                self::asignaturasEditables($rol, $delGrado, $usadas)->all(),
+                self::asignaturasEditables($rol, $delGrado, $usadas, $enviadas)->all(),
             );
             if ($cambios['rechazada'] !== null) {
                 $nombre = $nombresAsignatura[$cambios['rechazada']] ?? 'esa asignatura';
 
-                return ['error' => true, 'message' => "No puedes editar los referentes de «{$nombre}»: solo los de las asignaturas en las que tienes carga en este grado."];
+                return ['error' => true, 'message' => in_array($cambios['rechazada'], $enviadas, true)
+                    ? "Ya enviaste a revisión los referentes de «{$nombre}». Para cambiarlos, retira primero el envío."
+                    : "No puedes editar los referentes de «{$nombre}»: solo los de las asignaturas en las que tienes carga en este grado."];
             }
 
             // Quitar un referente con notas las perdería: se rechaza todo el guardado.
@@ -665,10 +688,13 @@ class NotasService extends Service
     }
 
     /**
-     * Cambia el estado del plan: enviar (a revisión), aprobar, devolver (con comentario) o
-     * reabrir (un aprobado vuelve a BORRADOR; las notas ya puestas se conservan).
+     * Cambia el plan. enviar / retirar (con `idAsignatura`): el docente envía a revisión los
+     * referentes de su asignatura o retira ese envío; cuando todas las asignaturas con carga en el
+     * grado enviaron (y hay al menos un referente), el plan pasa solo a EN_REVISION. aprobar,
+     * devolver (con comentario) y reabrir (un aprobado vuelve a BORRADOR; las notas se conservan):
+     * coordinación. Devolver y reabrir borran los envíos: cada docente vuelve a enviar.
      */
-    public function cambiarEstado(array $actor, int $idCurso, int $idPeriodo, string $accion, ?string $comentario): array
+    public function cambiarEstado(array $actor, int $idCurso, int $idPeriodo, string $accion, ?string $comentario, ?int $idAsignatura = null): array
     {
         if ($error = $this->sinCualitativa($idCurso)) {
             return $error;
@@ -680,37 +706,58 @@ class NotasService extends Service
             }
             [$curso, $periodo] = $cp;
             $plan = $this->buscarPlan($curso->id_grado, $idPeriodo);
-            if (! (self::acciones($plan->estado, $this->rol($actor, $curso), self::periodoAbiertoParaReferentes($periodo))[$accion] ?? false)) {
+            $enviadas = self::enviadasDe($plan);
+            $puede = self::acciones($plan->estado, $this->rol($actor, $curso), self::periodoAbiertoParaReferentes($periodo), $enviadas)[$accion] ?? false;
+            $porAsignatura = in_array($accion, ['enviar', 'retirar'], true);
+            if ($porAsignatura ? ! in_array($idAsignatura, $puede, true) : ! $puede) {
                 return ['error' => true, 'message' => 'Esta acción no está disponible para ti en el estado actual de los referentes.'];
             }
             $comentario = trim((string) $comentario) ?: null;
             if ($accion === 'devolver' && $comentario === null) {
                 return ['error' => true, 'message' => 'Indica qué hay que corregir al devolver los referentes.'];
             }
-            if (in_array($accion, ['enviar', 'aprobar'], true)) {
-                $referentes = Referente::where('id_grado', $curso->id_grado)->where('id_periodo_academico', $idPeriodo)->get(['id_proposito', 'id_asignatura']);
-                if ($accion === 'enviar' && $referentes->isEmpty()) {
-                    return ['error' => true, 'message' => 'Define al menos un referente antes de enviarlos a revisión.'];
-                }
-                // Un referente con un propósito desactivado o una asignatura sin carga en el grado no se califica.
-                $activos = Proposito::where('activo', 1)->pluck('id');
-                $delGrado = $this->asignaturasDelGrado($curso->id_grado)->keys()->map(fn ($id) => (int) $id);
-                if ($referentes->contains(fn ($r) => ! $activos->contains($r->id_proposito) || ! $delGrado->contains($r->id_asignatura))) {
-                    return ['error' => true, 'message' => 'Hay referentes por reubicar (su propósito está desactivado o su asignatura ya no tiene carga en el grado): cámbialos antes de continuar.'];
-                }
+
+            $referentes = Referente::where('id_grado', $curso->id_grado)->where('id_periodo_academico', $idPeriodo)->get(['id_proposito', 'id_asignatura']);
+            $delGrado = $this->asignaturasDelGrado($curso->id_grado);
+            $idsDelGrado = $delGrado->keys()->map(fn ($id) => (int) $id);
+            // Un referente con un propósito desactivado o una asignatura sin carga en el grado no se califica.
+            $activos = Proposito::where('activo', 1)->pluck('id');
+            $porReubicar = fn (Collection $rs) => $rs->contains(fn ($r) => ! $activos->contains($r->id_proposito) || ! $idsDelGrado->contains($r->id_asignatura));
+            if ($accion === 'enviar' && $porReubicar($referentes->where('id_asignatura', $idAsignatura))) {
+                return ['error' => true, 'message' => 'Hay referentes de tu asignatura en un propósito desactivado: cámbialos antes de enviarlos.'];
+            }
+            if ($accion === 'aprobar' && $porReubicar($referentes)) {
+                return ['error' => true, 'message' => 'Hay referentes por reubicar (su propósito está desactivado o su asignatura ya no tiene carga en el grado): cámbialos antes de continuar.'];
             }
 
+            $nombre = $porAsignatura ? ($delGrado[$idAsignatura] ?? 'la asignatura') : null;
+            $pendientes = $accion === 'enviar' ? $delGrado->except(array_merge($enviadas, [$idAsignatura])) : collect();
+            // Con la última asignatura enviada (y algo que revisar), el plan pasa a revisión.
+            $aRevision = $accion === 'enviar' && $pendientes->isEmpty() && $referentes->isNotEmpty();
+
             [$estado, $registro, $mensaje] = match ($accion) {
-                'enviar' => [ReferentePlan::EN_REVISION, 'ENVIADO', 'Referentes enviados a revisión'],
+                'enviar' => [$aRevision ? ReferentePlan::EN_REVISION : $plan->estado, 'ENVIADO', $aRevision
+                    ? "Referentes de {$nombre} enviados. Todas las asignaturas enviaron los suyos: pasaron a revisión de coordinación."
+                    : "Referentes de {$nombre} enviados. Faltan: " . $pendientes->implode(', ') . '.'],
+                'retirar' => [$plan->estado, 'RETIRADO', "Retiraste el envío de {$nombre}: ya puedes editar sus referentes."],
                 'aprobar' => [ReferentePlan::APROBADO, 'APROBADO', 'Referentes aprobados: ya se puede calificar'],
-                'devolver' => [ReferentePlan::DEVUELTO, 'DEVUELTO', 'Referentes devueltos para corregir'],
+                'devolver' => [ReferentePlan::DEVUELTO, 'DEVUELTO', 'Referentes devueltos: cada docente los corrige y los envía de nuevo'],
                 'reabrir' => [ReferentePlan::BORRADOR, 'REABIERTO', 'Referentes reabiertos: no se califica hasta aprobarlos de nuevo'],
             };
 
-            DB::transaction(function () use ($plan, $estado, $actor, $registro, $comentario) {
+            DB::transaction(function () use ($plan, $estado, $actor, $accion, $registro, $comentario, $idAsignatura, $nombre, $aRevision) {
                 $plan->estado = $estado;
                 $plan->save();
-                $this->registrar($plan, $actor['id'], $registro, $comentario);
+                match ($accion) {
+                    'enviar' => ReferenteEnvio::create(['id_plan' => $plan->id, 'id_asignatura' => $idAsignatura, 'id_usuario' => $actor['id'], 'fecha' => now()]),
+                    'retirar' => ReferenteEnvio::where('id_plan', $plan->id)->where('id_asignatura', $idAsignatura)->delete(),
+                    'devolver', 'reabrir' => ReferenteEnvio::where('id_plan', $plan->id)->delete(),
+                    default => null,
+                };
+                $this->registrar($plan, $actor['id'], $registro, $nombre ?? $comentario);
+                if ($aRevision) {
+                    $this->registrar($plan, $actor['id'], 'EN_REVISION', 'Todas las asignaturas enviaron sus referentes');
+                }
             });
 
             return ['error' => false, 'message' => $mensaje];
@@ -736,6 +783,18 @@ class NotasService extends Service
                 ? Referente::where('id_periodo_academico', $idPeriodo)->whereNull('id_padre')->selectRaw('id_grado, count(*) as n')->groupBy('id_grado')->pluck('n', 'id_grado')
                 : collect();
             $cerrados = $idPeriodo ? CierrePeriodo::where('id_periodo_academico', $idPeriodo)->pluck('id_curso')->flip() : collect();
+            // Envío por asignatura: las asignaturas con carga en cada grado y las ya enviadas.
+            $conCarga = DB::table('academico_carga_academica as c')
+                ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+                ->join('curso as cu', 'cu.id', '=', 'c.id_curso')
+                ->where('c.activo', 1)->where('da.activo', 1)->where('cu.activo', 1)->whereNotNull('cu.id_grado')
+                ->distinct()->get(['cu.id_grado', 'da.id_asignatura'])
+                ->groupBy('id_grado')->map(fn ($xs) => $xs->pluck('id_asignatura')->map(fn ($id) => (int) $id));
+            $enviadas = $idPeriodo
+                ? ReferenteEnvio::join('academico_referente_plan as p', 'p.id', '=', 'academico_referente_envio.id_plan')
+                    ->where('p.id_periodo_academico', $idPeriodo)->get(['p.id_grado', 'academico_referente_envio.id_asignatura'])
+                    ->groupBy('id_grado')->map(fn ($xs) => $xs->pluck('id_asignatura')->map(fn ($id) => (int) $id))
+                : collect();
 
             // Una fila por grado, en orden académico. id_curso es el primero del grado: con él se abre su plan.
             $data = $cursos->groupBy('id_grado')->map(fn (Collection $cs, $idGrado) => [
@@ -751,6 +810,9 @@ class NotasService extends Service
                 'directores' => $cs->map(fn ($c) => self::nombreDe($c->director))->filter()->unique()->values(),
                 'referentes' => (int) ($cantidad[$idGrado] ?? 0),
                 'estado' => $estados[$idGrado] ?? ReferentePlan::BORRADOR,
+                // Asignaturas con carga en el grado y cuántas ya enviaron sus referentes a revisión.
+                'asignaturas_total' => ($conCarga[$idGrado] ?? collect())->count(),
+                'asignaturas_enviadas' => ($conCarga[$idGrado] ?? collect())->intersect($enviadas[$idGrado] ?? [])->count(),
                 // DESCRIPTIVA: no lleva referentes ni plan (la página lo muestra aparte).
                 'tipo_evaluacion' => $cs->first()->grado?->tipo_evaluacion ?? Grado::REFERENTES,
             ])->values();
