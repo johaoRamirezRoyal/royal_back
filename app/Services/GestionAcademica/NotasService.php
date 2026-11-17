@@ -25,6 +25,7 @@ use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Services\Service;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -204,24 +205,28 @@ class NotasService extends Service
             ->map(fn (PeriodoAcademico $p) => ['id' => $p->id, 'nombre' => $p->nombre, 'editable' => self::periodoEditable($p)]);
     }
 
-    /** Ids de las asignaturas en las que el docente tiene carga activa en ese curso (o esos cursos). */
-    private function asignaturasConCarga(int $idUser, int|array $idsCurso): Collection
+    /** Carga académica activa (c) con su docente y asignatura (da) activos. Cada uso agrega su filtro. */
+    private static function consultaCarga(): Builder
     {
         return DB::table('academico_carga_academica as c')
             ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
-            ->whereIn('c.id_curso', (array) $idsCurso)->where('c.activo', 1)
-            ->where('da.activo', 1)->where('da.id_docente', $idUser)
+            ->where('c.activo', 1)->where('da.activo', 1);
+    }
+
+    /** Ids de las asignaturas en las que el docente tiene carga activa en ese curso (o esos cursos). */
+    private function asignaturasConCarga(int $idUser, int|array $idsCurso): Collection
+    {
+        return self::consultaCarga()->whereIn('c.id_curso', (array) $idsCurso)->where('da.id_docente', $idUser)
             ->distinct()->pluck('da.id_asignatura')->map(fn ($id) => (int) $id);
     }
 
     /** Asignaturas con carga activa en algún curso activo del grado: id → nombre, por nombre. */
     private function asignaturasDelGrado(int $idGrado): Collection
     {
-        return DB::table('academico_carga_academica as c')
-            ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+        return self::consultaCarga()
             ->join('curso as cu', 'cu.id', '=', 'c.id_curso')
             ->join('academico_asignatura as a', 'a.id', '=', 'da.id_asignatura')
-            ->where('c.activo', 1)->where('da.activo', 1)->where('cu.activo', 1)->where('cu.id_grado', $idGrado)
+            ->where('cu.activo', 1)->where('cu.id_grado', $idGrado)
             ->distinct()->orderBy('a.nombre')->pluck('a.nombre', 'a.id');
     }
 
@@ -784,10 +789,9 @@ class NotasService extends Service
                 : collect();
             $cerrados = $idPeriodo ? CierrePeriodo::where('id_periodo_academico', $idPeriodo)->pluck('id_curso')->flip() : collect();
             // Envío por asignatura: las asignaturas con carga en cada grado y las ya enviadas.
-            $conCarga = DB::table('academico_carga_academica as c')
-                ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+            $conCarga = self::consultaCarga()
                 ->join('curso as cu', 'cu.id', '=', 'c.id_curso')
-                ->where('c.activo', 1)->where('da.activo', 1)->where('cu.activo', 1)->whereNotNull('cu.id_grado')
+                ->where('cu.activo', 1)->whereNotNull('cu.id_grado')
                 ->distinct()->get(['cu.id_grado', 'da.id_asignatura'])
                 ->groupBy('id_grado')->map(fn ($xs) => $xs->pluck('id_asignatura')->map(fn ($id) => (int) $id));
             $enviadas = $idPeriodo
@@ -946,10 +950,9 @@ class NotasService extends Service
     public function misCursos(int $idDocente): array
     {
         try {
-            $carga = DB::table('academico_carga_academica as c')
-                ->join('academico_docente_asignatura as da', 'da.id', '=', 'c.id_docente_asignatura')
+            $carga = self::consultaCarga()
                 ->join('academico_asignatura as a', 'a.id', '=', 'da.id_asignatura')
-                ->where('c.activo', 1)->where('da.activo', 1)->where('da.id_docente', $idDocente)
+                ->where('da.id_docente', $idDocente)
                 ->distinct()->orderBy('a.nombre')->get(['c.id_curso', 'a.id', 'a.nombre'])
                 ->groupBy('id_curso');
 
