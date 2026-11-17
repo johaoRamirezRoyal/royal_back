@@ -102,18 +102,37 @@ que estas fotos nunca salgan sin sesión, se quitan las `urls` del JSON y vuelve
 
 ## Pruebas en local
 
-En `sami_royal` quedaron datos de prueba que no van a producción: `docente.prueba@royalschool.edu.co`
-(id 11274; dicta Sociales en Quinto B y Noveno A y Economía en Décimo A), `padre.prueba@gmail.com`
-(id 11276) y la estudiante Sofía Prueba (id 11275, Quinto B), y las publicaciones que haya hecho
-ese docente. Se borran con:
+En la base local donde se desarrolló quedaron datos de prueba que no van a producción:
+`docente.prueba@royalschool.edu.co` (dicta Sociales en Quinto B y Noveno A y Economía en Décimo A),
+`padre.prueba@gmail.com`, la estudiante Sofía Prueba (Quinto B) y las publicaciones que haya hecho
+ese docente.
+
+**Los ids cambian de una base a otra: nunca borres por id fijo.** Una versión anterior de este
+documento borraba los usuarios 11274–11276, las cargas 158–161 y las asignaciones 34–35; en otra
+copia de `sami_royal` esos ids son usuarios reales y la carga de un docente real. Busca las cuentas
+por correo, revisa el resultado y solo entonces borra:
 
 ```sql
-DELETE f FROM fotos_curso_fotos f JOIN fotos_curso_publicaciones p ON p.id = f.id_publicacion WHERE p.id_docente = 11274;
-DELETE FROM fotos_curso_publicaciones WHERE id_docente = 11274;
-DELETE FROM academico_carga_academica WHERE id IN (158, 159, 160, 161);
-DELETE FROM academico_docente_asignatura WHERE id IN (34, 35);
-DELETE FROM estudiantes_padres WHERE id_acudiente = 11276;
-DELETE FROM usuarios WHERE id_user IN (11274, 11275, 11276);
+-- 1. Revisar: tienen que salir solo las cuentas de prueba.
+SELECT id_user, correo, nombre, apellido, perfil FROM usuarios
+ WHERE correo IN ('docente.prueba@royalschool.edu.co', 'padre.prueba@gmail.com')
+    OR (nombre LIKE 'Sof%a%' AND apellido LIKE 'Prueba%');
+
+SET @docente = (SELECT id_user FROM usuarios WHERE correo = 'docente.prueba@royalschool.edu.co');
+SET @padre   = (SELECT id_user FROM usuarios WHERE correo = 'padre.prueba@gmail.com');
+-- La estudiante, a mano con el id que mostró el SELECT. No la deduzcas de los hijos del padre:
+-- en otra base esa cuenta puede estar vinculada a estudiantes reales.
+SET @estudiante = NULL;
+
+-- 2. Borrar (una variable en NULL no borra nada).
+DELETE f FROM fotos_curso_fotos f JOIN fotos_curso_publicaciones p ON p.id = f.id_publicacion WHERE p.id_docente = @docente;
+DELETE FROM fotos_curso_publicaciones WHERE id_docente = @docente;
+DELETE ca FROM academico_carga_academica ca
+  LEFT JOIN academico_docente_asignatura da ON da.id = ca.id_docente_asignatura
+ WHERE ca.id_docente = @docente OR da.id_docente = @docente;
+DELETE FROM academico_docente_asignatura WHERE id_docente = @docente;
+DELETE FROM estudiantes_padres WHERE id_acudiente = @padre OR id_estudiante = @estudiante;
+DELETE FROM usuarios WHERE id_user IN (@docente, @padre, @estudiante);
 ```
 
 Los archivos de esas fotos (`storage/app/public/fotos-curso/`) se borran aparte, o antes desde la
