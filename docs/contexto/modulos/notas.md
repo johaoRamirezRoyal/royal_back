@@ -130,6 +130,13 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   desempeño final `{ nombre, abreviatura, color }` (o null), y la observación general. Avisa cuántos
   referentes quedaron sin desempeño pero no lo impide. Cerrado, no se califica, ajusta ni observa.
   Un estudiante que ya tiene boletín en ese periodo (de otro curso) se salta.
+  Desde el 2026-11-17 la foto trae además (para el "INFORME EVALUATIVO" de Royal School):
+  `id_director`, `anio` ("2026 - 2027", de `anio_escolar`), `escala` (la del nivel, en orden:
+  `{ nombre, abreviatura }`), `estudiante.usuario` (`usuarios.user`), `numero_lista` (posición en
+  la lista del curso por apellido), `inasistencias` (días distintos con alguna clase marcada
+  `AUSENTE` en `academico_asistencia_estudiante` dentro de las fechas del periodo) y
+  `llegadas_tarde` (`llegadas_tardes` no revocadas dentro de las fechas del periodo). Las fotos
+  anteriores no los traen.
 - **Cierre general por nivel** (`cerrarNivel`, `POST /cierre/nivel { id_nivel, id_periodo }`, 154
   de ese nivel o 99): cierra el periodo en todos los cursos cualitativos activos del nivel con la
   misma lógica del cierre por curso (`guardarCierre`). Salta los ya cerrados y los de grados con
@@ -168,8 +175,13 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
 | `POST /cierre/nivel` `{ id_nivel, id_periodo }` | 154; el service exige ese nivel (con 99, cualquiera) |
-| `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `[{ id_estudiante, datos }]` (las fotos del cierre, por apellido; vacío si no está cerrado) |
-| `GET /boletines/estudiante?id_estudiante` | ruta como `GET /curso`; su historial (`{ id_periodo, id_curso, periodo, curso, cerrado_at, datos }`, lo más reciente primero) solo de los cursos que quien pide puede ver |
+| `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `{ boletines: [{ id_estudiante, datos }], firmas }` (las fotos del cierre, por apellido; vacío si no está cerrado) |
+| `GET /boletines/estudiante?id_estudiante` | ruta como `GET /curso`; `{ historial: [{ id_periodo, id_curso, periodo, curso, cerrado_at, datos }], firmas }` (lo más reciente primero) solo de los cursos que quien pide puede ver |
+
+`firmas`: id_director → data URL PNG/JPEG de su firma activa («Mi firma», `Firma::contenidoActiva`,
+la misma que usa Inventario). No se guarda en la foto: es la que tenga al imprimir. Sin firma o si
+no se pudo leer, no viene. En local la firma suele no leerse (la URL es de `/api/public`, que pide
+sesión): el boletín sale con el recuadro en blanco.
 
 "Perfiles docente" en esta tabla = `[TipoPerfil::DOCENTE]` en la ruta (Docente y Docente ICT en el
 Royal; cada colegio lo define en `perfiles.tipo`).

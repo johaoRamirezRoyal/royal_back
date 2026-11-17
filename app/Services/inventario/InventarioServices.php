@@ -3081,27 +3081,10 @@ class InventarioServices
         }
     }
 
-    /**
-     * Bytes de la firma activa del usuario (tabla `firmas`, `url` de Cloudinary), o null si no
-     * tiene o no se pudo leer — el PDF sale igual, con la línea de firma en blanco. Las firmas
-     * del legacy (solo `nombre`, sin `url`) ya no se leen: el usuario la vuelve a subir.
-     */
+    /** Bytes de la firma activa del usuario, o null (ver Firma::contenidoActiva). */
     private function descargarFirma(?int $idUser): ?string
     {
-        $url = $idUser ? Firma::where('id_user', $idUser)->where('activo', 1)->value('url') : null;
-        if (! $url) {
-            return null;
-        }
-
-        try {
-            $res = Http::timeout(5)->get(ArchivosPrivados::firmar($url));
-
-            return $res->successful() ? $res->body() : null;
-        } catch (\Throwable $e) {
-            Log::warning("No se pudo descargar la firma del usuario {$idUser}: ".$e->getMessage());
-
-            return null;
-        }
+        return Firma::contenidoActiva($idUser);
     }
 
     /**

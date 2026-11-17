@@ -3,8 +3,10 @@
 namespace App\Models\Usuarios;
 
 use App\Models\HistoriaClinica\HceObservacionesFirmas;
+use App\Services\Cloudinary\ArchivosPrivados;
 use App\Services\Cloudinary\CloudinaryService;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class Firma extends Model
@@ -31,6 +33,29 @@ class Firma extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'id_user', 'id_user');
+    }
+
+    /**
+     * Bytes de la firma activa del usuario («Mi firma», `url` de Cloudinary), o null si no tiene
+     * o no se pudo leer: el documento sale igual, con la línea de firma en blanco. Las firmas del
+     * legacy (solo `nombre`, sin `url`) ya no se leen: el usuario la vuelve a subir.
+     */
+    public static function contenidoActiva(?int $idUser): ?string
+    {
+        $url = $idUser ? self::where('id_user', $idUser)->where('activo', 1)->value('url') : null;
+        if (! $url) {
+            return null;
+        }
+
+        try {
+            $res = Http::timeout(5)->get(ArchivosPrivados::firmar($url));
+
+            return $res->successful() ? $res->body() : null;
+        } catch (\Throwable $e) {
+            Log::warning("No se pudo descargar la firma del usuario {$idUser}: ".$e->getMessage());
+
+            return null;
+        }
     }
 
     /**

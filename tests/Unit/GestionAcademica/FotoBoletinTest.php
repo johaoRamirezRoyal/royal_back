@@ -28,7 +28,8 @@ class FotoBoletinTest extends TestCase
             ]),
         ];
         $estudiante = [
-            'id_user' => 7, 'nombre' => 'Ana', 'apellido' => 'Pérez', 'documento' => '123', 'foto_carnet' => null, 'en_curso' => true,
+            'id_user' => 7, 'nombre' => 'Ana', 'apellido' => 'Pérez', 'documento' => '123', 'usuario' => 'aperez', 'foto_carnet' => null, 'en_curso' => true,
+            'numero_lista' => 4, 'inasistencias' => 2, 'llegadas_tarde' => 1,
             'notas' => collect([
                 100 => ['docente' => 1, 'ajuste' => 2, 'final' => 2], // ajustado por el coordinador
                 101 => ['docente' => 3, 'ajuste' => null, 'final' => 3], // subreferente: no sale
@@ -45,7 +46,8 @@ class FotoBoletinTest extends TestCase
         $foto = NotasService::fotoBoletin(['curso' => 'Primero A'], $datos, $estudiante, $escala);
 
         $this->assertSame('Primero A', $foto['curso']);
-        $this->assertSame(['id_user' => 7, 'nombre' => 'Ana', 'apellido' => 'Pérez', 'documento' => '123'], $foto['estudiante']);
+        $this->assertSame(['id_user' => 7, 'nombre' => 'Ana', 'apellido' => 'Pérez', 'documento' => '123', 'usuario' => 'aperez'], $foto['estudiante']);
+        $this->assertSame([4, 2, 1], [$foto['numero_lista'], $foto['inasistencias'], $foto['llegadas_tarde']]);
         $this->assertSame(['Comunicativo', 'Ético'], array_column($foto['propositos'], 'nombre'));
         $this->assertSame([
             ['descripcion' => 'Lee', 'asignatura' => 'Español', 'desempeno' => ['nombre' => 'Alto', 'abreviatura' => 'A', 'color' => '#00a']],

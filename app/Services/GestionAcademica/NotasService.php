@@ -14,6 +14,7 @@ use App\Models\GestionAcademica\Referente;
 use App\Models\GestionAcademica\ReferentePlan;
 use App\Models\GestionAcademica\ReferentePlanHistorial;
 use App\Models\GestionAcademica\ValoracionReferente;
+use App\Models\Usuarios\Firma;
 use App\Models\Usuarios\NivelAcademico;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
@@ -797,12 +798,14 @@ class NotasService extends Service
                 ->where(fn ($q) => $q->where('id_curso', $idCurso)->where('estado', 'activo'))
                 ->orWhereIn('id_user', $conAlgo))
             ->orderBy('apellido')->orderBy('nombre')
-            ->get(['id_user', 'nombre', 'apellido', 'documento', 'foto_carnet', 'id_curso', 'estado'])
+            ->get(['id_user', 'user', 'nombre', 'apellido', 'documento', 'foto_carnet', 'id_curso', 'estado'])
             ->map(fn ($u) => [
                 'id_user' => $u->id_user,
                 'nombre' => $u->nombre,
                 'apellido' => $u->apellido,
                 'documento' => $u->documento,
+                // Usuario de inicio de sesión (sale en el boletín).
+                'usuario' => $u->user,
                 'foto_carnet' => $u->foto_carnet,
                 'en_curso' => (int) $u->id_curso === $idCurso && $u->estado === 'activo',
             ]);
@@ -1204,7 +1207,11 @@ class NotasService extends Service
         };
 
         return $base + [
-            'estudiante' => collect($estudiante)->only(['id_user', 'nombre', 'apellido', 'documento'])->all(),
+            'estudiante' => collect($estudiante)->only(['id_user', 'nombre', 'apellido', 'documento', 'usuario'])->all(),
+            // Los pone guardarCierre (posición en la lista, faltas y llegadas tarde del periodo).
+            'numero_lista' => $estudiante['numero_lista'] ?? null,
+            'inasistencias' => $estudiante['inasistencias'] ?? null,
+            'llegadas_tarde' => $estudiante['llegadas_tarde'] ?? null,
             'propositos' => collect($datos['propositos'])->map(fn ($p) => [
                 'nombre' => $p['nombre'],
                 'descripcion' => $p['descripcion'],
@@ -1262,6 +1269,16 @@ class NotasService extends Service
         $datos['propositos'] = $datos['propositos']->toArray();
         $datos['asignaturas'] = $datos['asignaturas']->map(fn ($a) => (array) $a)->all();
         $escala = EscalaValoracion::all()->keyBy('id');
+        // Número de lista = posición en la lista del curso (por apellido), y lo que el boletín
+        // muestra de asistencia en el periodo.
+        $ids = $datos['estudiantes']->pluck('id_user');
+        $faltas = $this->inasistenciasPorDia($ids, $periodo);
+        $tardes = $this->llegadasTarde($ids, $periodo);
+        $datos['estudiantes'] = $datos['estudiantes']->values()->map(fn ($e, $i) => $e + [
+            'numero_lista' => $i + 1,
+            'inasistencias' => (int) ($faltas[$e['id_user']] ?? 0),
+            'llegadas_tarde' => (int) ($tardes[$e['id_user']] ?? 0),
+        ]);
         // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
         // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
         $yaTienen = Boletin::where('id_periodo_academico', $periodo->id)->pluck('id_estudiante')->flip();
@@ -1276,6 +1293,12 @@ class NotasService extends Service
                 'grado' => $curso->grado?->nombre,
                 'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
                 'director' => self::nombreDe($curso->director),
+                // Para la firma del director (GET /boletines la trae aparte, como imagen).
+                'id_director' => $curso->id_director ? (int) $curso->id_director : null,
+                'anio' => DB::table('anio_escolar')->where('id', $periodo->id_anio_escolar)->get(['anio_inicio', 'anio_fin'])
+                    ->map(fn ($a) => "{$a->anio_inicio} - {$a->anio_fin}")->first(),
+                // La escala del nivel, en orden: la leyenda y las columnas del boletín.
+                'escala' => $this->escalaDelNivel($curso->id_nivel)->map(fn ($e) => ['nombre' => $e->nombre, 'abreviatura' => $e->abreviatura])->values()->all(),
                 'cerrado_at' => $cierre->fecha->toIso8601String(),
             ];
             foreach ($estudiantes as $e) {
@@ -1287,6 +1310,27 @@ class NotasService extends Service
         });
 
         return ['boletines' => $estudiantes->count(), 'sin_nota' => (int) $sinNota];
+    }
+
+    /** id_estudiante → días con alguna clase marcada AUSENTE (asistencia de clases) dentro del periodo. */
+    private function inasistenciasPorDia(Collection $idsEstudiante, PeriodoAcademico $periodo): Collection
+    {
+        return DB::table('academico_asistencia_estudiante as ae')
+            ->join('academico_asistencia_clase as ac', 'ac.id', '=', 'ae.id_asistencia_clase')
+            ->whereIn('ae.id_alumno', $idsEstudiante)->where('ae.estado', 'AUSENTE')
+            ->whereBetween('ac.fecha', [$periodo->fecha_inicio, $periodo->fecha_fin])
+            ->selectRaw('ae.id_alumno, count(distinct ac.fecha) as n')->groupBy('ae.id_alumno')
+            ->pluck('n', 'id_alumno');
+    }
+
+    /** id_estudiante → llegadas tarde a la portería dentro del periodo (sin las revocadas). */
+    private function llegadasTarde(Collection $idsEstudiante, PeriodoAcademico $periodo): Collection
+    {
+        return DB::table('llegadas_tardes')
+            ->whereIn('id_alumno', $idsEstudiante)->where('revocado', 0)
+            ->whereBetween('fecha', [$periodo->fecha_inicio, $periodo->fecha_fin])
+            ->selectRaw('id_alumno, count(*) as n')->groupBy('id_alumno')
+            ->pluck('n', 'id_alumno');
     }
 
     /**
@@ -1378,14 +1422,36 @@ class NotasService extends Service
         return mb_strtolower(trim(($datos['estudiante']['apellido'] ?? '') . ' ' . ($datos['estudiante']['nombre'] ?? '')));
     }
 
-    /** Boletines guardados de un curso en un periodo (vacío si no está cerrado), por apellido. */
+    /**
+     * Firma activa de cada director de esas fotos, como data URL (id_director → data URL). No se
+     * guarda en la foto: es la que el director tenga en «Mi firma» al imprimir. Sin firma (o si
+     * no se pudo leer), no viene y el boletín deja la línea en blanco.
+     *
+     * @param  Collection<int, array>  $fotos
+     */
+    private static function firmasDirectores(Collection $fotos): array
+    {
+        $firmas = [];
+        foreach ($fotos->pluck('id_director')->filter()->unique() as $id) {
+            $bytes = Firma::contenidoActiva((int) $id);
+            $mime = $bytes ? (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes) : null;
+            if ($bytes && in_array($mime, ['image/png', 'image/jpeg'], true)) {
+                $firmas[(int) $id] = "data:{$mime};base64," . base64_encode($bytes);
+            }
+        }
+
+        return $firmas;
+    }
+
+    /** Boletines guardados de un curso en un periodo (vacío si no está cerrado), por apellido, y las firmas. */
     public function boletinesDelCurso(int $idCurso, int $idPeriodo): array
     {
         try {
-            $data = Boletin::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->get(['id_estudiante', 'datos'])
+            $boletines = Boletin::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->get(['id_estudiante', 'datos'])
                 ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
                 ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
                 ->values();
+            $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos'))];
 
             return ['error' => false, 'message' => 'Boletines del curso', 'data' => $data];
         } catch (Throwable $e) {
@@ -1400,7 +1466,7 @@ class NotasService extends Service
     public function boletinesDelEstudiante(int $idEstudiante, callable $veCurso): array
     {
         try {
-            $data = Boletin::where('id_estudiante', $idEstudiante)->orderByDesc('id_periodo_academico')->get(['id_curso', 'id_periodo_academico', 'datos'])
+            $historial = Boletin::where('id_estudiante', $idEstudiante)->orderByDesc('id_periodo_academico')->get(['id_curso', 'id_periodo_academico', 'datos'])
                 ->filter(fn (Boletin $b) => $veCurso((int) $b->id_curso))
                 ->map(fn (Boletin $b) => [
                     'id_periodo' => $b->id_periodo_academico,
@@ -1410,6 +1476,7 @@ class NotasService extends Service
                     'cerrado_at' => $b->datos['cerrado_at'] ?? null,
                     'datos' => $b->datos,
                 ])->values();
+            $data = ['historial' => $historial, 'firmas' => (object) self::firmasDirectores($historial->pluck('datos'))];
 
             return ['error' => false, 'message' => 'Boletines del estudiante', 'data' => $data];
         } catch (Throwable $e) {
