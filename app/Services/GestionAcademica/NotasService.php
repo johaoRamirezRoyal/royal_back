@@ -742,8 +742,8 @@ class NotasService extends Service
 
             $nombre = $porAsignatura ? ($delGrado[$idAsignatura] ?? 'la asignatura') : null;
             // Aprobación directa (sin pasar por revisión): queda en el seguimiento qué asignaturas no habían enviado.
-            $sinEnviar = $accion === 'aprobar' && $plan->estado !== ReferentePlan::EN_REVISION ? $delGrado->except($enviadas) : collect();
             if ($accion === 'aprobar' && $plan->estado !== ReferentePlan::EN_REVISION) {
+                $sinEnviar = $delGrado->except($enviadas);
                 $comentario = 'Aprobados sin pasar por revisión' . ($sinEnviar->isNotEmpty() ? ' (sin enviar: ' . $sinEnviar->implode(', ') . ')' : '') . '.';
             }
             $pendientes = $accion === 'enviar' ? $delGrado->except(array_merge($enviadas, [$idAsignatura])) : collect();
