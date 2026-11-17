@@ -62,3 +62,18 @@ php artisan asistencia:cerrar-vencidas
 - `app/Console/Commands/CerrarAsistenciasVencidasCommand.php` — comando Artisan.
 - `app/Services/AsistenciaTrabajadores/AsistenciaGestionService.php` (método `cerrarAsistenciasVencidas`) — lógica de negocio: busca marcaciones del día con entrada pero sin salida, resuelve el horario aplicable al usuario (`AsistenciaGestion::horarioAplicable`), y si ya pasó `hora_salida_esperada` marca la salida automáticamente y notifica por correo al trabajador y a RH.
 - `deploy/royal-back-queue.service` — unidad hermana para el queue worker de emails; el mismo patrón `enable --now` aplica.
+
+## Un colegio por base: los comandos recorren todas
+
+Cada colegio tiene su propia base (`BasesDatosService::connectionsConUsuarios()`: hoy `mysql`
+y `sami_hebreo`) y `schedule:run` arranca con `database.default = mysql`. Un comando que no
+cambie de base solo actúa sobre ese colegio: así pasó con `periodos:desactivar-vencidos`,
+que nunca desactivó los periodos vencidos de los demás.
+
+Los comandos programados que tocan datos de un colegio usan el trait
+`App\Console\Commands\Concerns\EnCadaColegio` (`return $this->enCadaColegio(fn () => ...)`),
+que corre el paso una vez por base e imprime `colegio: mensaje`. Un comando nuevo de ese
+tipo tiene que usarlo. No lo necesitan `logs-dominio:purgar-antiguos` (`admin_management`
+es transversal) ni `hikvision:sincronizar-reloj` (ya recorre los colegios por su cuenta).
+`noticias:enviar-diarias` todavía corre solo en `mysql`: pasarlo a todos los colegios
+empieza a mandar correos en los demás, así que se decide aparte.
