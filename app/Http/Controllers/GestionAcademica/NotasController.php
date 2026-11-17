@@ -41,7 +41,7 @@ class NotasController extends Controller implements HasMiddleware
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesCurso', 'boletinesEstudiante']),
             new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
-            new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'reabrirCierre']),
+            new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'cerrarNivel', 'reabrirCierre']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
         ];
     }
@@ -354,6 +354,20 @@ class NotasController extends Controller implements HasMiddleware
         $body = $request->validate($this->reglasCursoPeriodo());
 
         return $this->apiResponse($this->service->cerrar($this->actor($request), $body['id_curso'], $body['id_periodo']));
+    }
+
+    /**
+     * { id_nivel, id_periodo }: cierre general, el periodo en todos los cursos del nivel (154 de ese
+     * nivel). Responde { cerrados: [{ curso, boletines, sin_nota }], saltados: [{ curso, motivo }] }.
+     */
+    public function cerrarNivel(Request $request)
+    {
+        $body = $request->validate([
+            'id_nivel' => ['required', 'integer', 'exists:nivel_academico,id'],
+            'id_periodo' => ['required', 'integer'],
+        ]);
+
+        return $this->apiResponse($this->service->cerrarNivel($this->actor($request), $body['id_nivel'], $body['id_periodo']));
     }
 
     /** { id_curso, id_periodo }: reabre el periodo en el curso; borra sus boletines (154 del nivel). */

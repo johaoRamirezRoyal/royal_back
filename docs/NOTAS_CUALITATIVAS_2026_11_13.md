@@ -63,7 +63,7 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 | Docente con carga en el grado | Definir los referentes de **sus** asignaturas (en borrador o devuelto) y calificar sus referentes y subreferentes en los cursos donde tiene carga |
 | Director de grupo | Ver todo lo calificado en su curso y escribir las observaciones generales |
 | 153 "Gestionar referentes" (de su nivel) | Editar los referentes de todas las asignaturas, **enviar a revisión** |
-| 154 "Aprobar referentes" (de su nivel) | Además aprobar, devolver y reabrir el plan; ajustar el final de un referente; cerrar y reabrir el periodo de un curso |
+| 154 "Aprobar referentes" (de su nivel) | Además aprobar, devolver y reabrir el plan; ajustar el final de un referente; cerrar y reabrir el periodo de un curso, o cerrarlo en todos los cursos del nivel a la vez (cierre general, agregado el 2026-11-17) |
 | 152 "Consultar notas" y 99 | Ver las notas de cualquier curso en solo lectura (99 también la configuración) |
 
 Solo quien gestiona envía a revisión: así un docente no cierra el plan antes de que los demás

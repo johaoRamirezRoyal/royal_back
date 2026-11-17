@@ -703,13 +703,17 @@ class NotasService extends Service
             $cantidad = $idPeriodo
                 ? Referente::where('id_periodo_academico', $idPeriodo)->whereNull('id_padre')->selectRaw('id_grado, count(*) as n')->groupBy('id_grado')->pluck('n', 'id_grado')
                 : collect();
+            $cerrados = $idPeriodo ? CierrePeriodo::where('id_periodo_academico', $idPeriodo)->pluck('id_curso')->flip() : collect();
 
             // Una fila por grado, en orden académico. id_curso es el primero del grado: con él se abre su plan.
             $data = $cursos->groupBy('id_grado')->map(fn (Collection $cs, $idGrado) => [
                 'id_grado' => (int) $idGrado,
                 'id_curso' => $cs->first()->id,
                 'grado' => $cs->first()->grado?->nombre,
+                'id_nivel' => $cs->first()->id_nivel,
                 'nivel' => $cs->first()->nivel?->nombre,
+                // Cursos del grado ya cerrados en el periodo (boletines guardados).
+                'cursos_cerrados' => $cs->filter(fn ($c) => $cerrados->has($c->id))->count(),
                 // Para el buscador y el detalle.
                 'cursos' => $cs->pluck('nombre')->values(),
                 'directores' => $cs->map(fn ($c) => self::nombreDe($c->director))->filter()->unique()->values(),
@@ -724,6 +728,8 @@ class NotasService extends Service
                 // Para que la página explique bien una lista vacía: todos los niveles (99 / Super
                 // Admin), los del usuario, o ninguno (usuario sin nivel).
                 'alcance' => $actor['niveles'] === null ? 'todos' : ($actor['niveles'] ? 'nivel' : 'sin_nivel'),
+                // 154: puede cerrar el periodo en todos los cursos de un nivel (POST /cierre/nivel).
+                'puede_cerrar' => (bool) $actor['aprueba'],
             ]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -1235,37 +1241,106 @@ class NotasService extends Service
                 return ['error' => true, 'message' => 'Los referentes de este periodo aún no están aprobados: no hay nada que cerrar.'];
             }
 
-            $datos = $this->datosCurso($curso, $periodo);
-            $datos['propositos'] = $datos['propositos']->toArray();
-            $datos['asignaturas'] = $datos['asignaturas']->map(fn ($a) => (array) $a)->all();
-            $escala = EscalaValoracion::all()->keyBy('id');
-            // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
-            // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
-            $yaTienen = Boletin::where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante')->flip();
-            $estudiantes = $datos['estudiantes']->reject(fn ($e) => $yaTienen->has($e['id_user']));
-            $principales = collect($datos['referentes'])->pluck('id');
-            $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
+            $r = $this->guardarCierre($actor, $curso, $periodo);
+            $mensaje = "Periodo cerrado: {$r['boletines']} boletines guardados";
 
-            DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes) {
-                $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => now()]);
-                $base = [
-                    'curso' => $curso->nombre,
-                    'grado' => $curso->grado?->nombre,
-                    'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
-                    'director' => self::nombreDe($curso->director),
-                    'cerrado_at' => $cierre->fecha->toIso8601String(),
-                ];
-                foreach ($estudiantes as $e) {
-                    Boletin::create([
-                        'id_cierre' => $cierre->id, 'id_estudiante' => $e['id_user'], 'id_periodo_academico' => $periodo->id,
-                        'id_curso' => $curso->id, 'datos' => self::fotoBoletin($base, $datos, $e, $escala),
-                    ]);
+            return ['error' => false, 'message' => $r['sin_nota'] ? "{$mensaje}. Quedaron {$r['sin_nota']} referentes sin desempeño." : $mensaje];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Crea el cierre del curso en el periodo y la foto del boletín de cada estudiante. No valida
+     * nada (lo hacen cerrar() y cerrarNivel()).
+     *
+     * @return array{boletines: int, sin_nota: int} sin_nota: referentes sin desempeño final
+     */
+    private function guardarCierre(array $actor, Cursos $curso, PeriodoAcademico $periodo): array
+    {
+        $datos = $this->datosCurso($curso, $periodo);
+        $datos['propositos'] = $datos['propositos']->toArray();
+        $datos['asignaturas'] = $datos['asignaturas']->map(fn ($a) => (array) $a)->all();
+        $escala = EscalaValoracion::all()->keyBy('id');
+        // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
+        // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
+        $yaTienen = Boletin::where('id_periodo_academico', $periodo->id)->pluck('id_estudiante')->flip();
+        $estudiantes = $datos['estudiantes']->reject(fn ($e) => $yaTienen->has($e['id_user']));
+        $principales = collect($datos['referentes'])->pluck('id');
+        $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
+
+        DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes) {
+            $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => now()]);
+            $base = [
+                'curso' => $curso->nombre,
+                'grado' => $curso->grado?->nombre,
+                'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
+                'director' => self::nombreDe($curso->director),
+                'cerrado_at' => $cierre->fecha->toIso8601String(),
+            ];
+            foreach ($estudiantes as $e) {
+                Boletin::create([
+                    'id_cierre' => $cierre->id, 'id_estudiante' => $e['id_user'], 'id_periodo_academico' => $periodo->id,
+                    'id_curso' => $curso->id, 'datos' => self::fotoBoletin($base, $datos, $e, $escala),
+                ]);
+            }
+        });
+
+        return ['boletines' => $estudiantes->count(), 'sin_nota' => (int) $sinNota];
+    }
+
+    /**
+     * Cierre general: cierra el periodo en todos los cursos cualitativos activos de un nivel (154
+     * de ese nivel; con la 99, cualquiera). Salta, sin fallar, los cursos ya cerrados y los de
+     * grados cuyos referentes no están aprobados. Cada curso se cierra en su propia transacción:
+     * si uno falla, los demás quedan cerrados y el error sale en `saltados`.
+     *
+     * @return array{error: bool, message: string, data?: array{cerrados: array, saltados: array}}
+     */
+    public function cerrarNivel(array $actor, int $idNivel, int $idPeriodo): array
+    {
+        try {
+            $periodo = PeriodoAcademico::find($idPeriodo);
+            if (! $periodo) {
+                return ['error' => true, 'message' => 'Periodo no encontrado'];
+            }
+            if (! $actor['aprueba'] || ($actor['niveles'] !== null && ! in_array($idNivel, $actor['niveles'], true))) {
+                return ['error' => true, 'message' => 'Solo quien aprueba los referentes de este nivel cierra el periodo.'];
+            }
+
+            $cursos = self::cursosCualitativos(fn ($q) => $q->where('id_nivel', $idNivel));
+            if ($cursos->isEmpty()) {
+                return ['error' => true, 'message' => 'El nivel no tiene cursos activos con grado y calificación cualitativa.'];
+            }
+            $cerradosAntes = CierrePeriodo::where('id_periodo_academico', $idPeriodo)->whereIn('id_curso', $cursos->pluck('id'))->pluck('id_curso')->flip();
+            $aprobados = ReferentePlan::where('id_periodo_academico', $idPeriodo)->where('estado', ReferentePlan::APROBADO)->pluck('id_grado')->flip();
+
+            $cerrados = $saltados = [];
+            foreach ($cursos as $curso) {
+                if ($cerradosAntes->has($curso->id)) {
+                    $saltados[] = ['curso' => $curso->nombre, 'motivo' => 'Ya estaba cerrado'];
+                    continue;
                 }
-            });
+                if (! $aprobados->has($curso->id_grado)) {
+                    $saltados[] = ['curso' => $curso->nombre, 'motivo' => "Los referentes de {$curso->grado?->nombre} no están aprobados"];
+                    continue;
+                }
+                try {
+                    $cerrados[] = ['curso' => $curso->nombre] + $this->guardarCierre($actor, $curso, $periodo);
+                } catch (Throwable $e) {
+                    $saltados[] = ['curso' => $curso->nombre, 'motivo' => $e->getMessage()];
+                }
+            }
 
-            $mensaje = "Periodo cerrado: {$estudiantes->count()} boletines guardados";
+            $boletines = array_sum(array_column($cerrados, 'boletines'));
+            $mensaje = count($cerrados) === 0
+                ? 'No se cerró ningún curso.'
+                : 'Periodo cerrado en ' . count($cerrados) . (count($cerrados) === 1 ? ' curso' : ' cursos') . ": {$boletines} boletines guardados.";
+            if ($saltados) {
+                $mensaje .= ' ' . count($saltados) . (count($saltados) === 1 ? ' curso quedó' : ' cursos quedaron') . ' sin cerrar.';
+            }
 
-            return ['error' => false, 'message' => $sinNota ? "{$mensaje}. Quedaron {$sinNota} referentes sin desempeño." : $mensaje];
+            return ['error' => false, 'message' => $mensaje, 'data' => ['cerrados' => $cerrados, 'saltados' => $saltados]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }

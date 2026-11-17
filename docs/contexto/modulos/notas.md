@@ -130,6 +130,13 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   desempeño final `{ nombre, abreviatura, color }` (o null), y la observación general. Avisa cuántos
   referentes quedaron sin desempeño pero no lo impide. Cerrado, no se califica, ajusta ni observa.
   Un estudiante que ya tiene boletín en ese periodo (de otro curso) se salta.
+- **Cierre general por nivel** (`cerrarNivel`, `POST /cierre/nivel { id_nivel, id_periodo }`, 154
+  de ese nivel o 99): cierra el periodo en todos los cursos cualitativos activos del nivel con la
+  misma lógica del cierre por curso (`guardarCierre`). Salta los ya cerrados y los de grados con
+  los referentes sin aprobar; cada curso va en su transacción, así que un error en uno no deshace
+  los demás. Responde `{ cerrados: [{ curso, boletines, sin_nota }], saltados: [{ curso, motivo }] }`.
+  En la página de Referentes, botón "Cerrar periodo del nivel" en cada nivel (`puede_cerrar`).
+  `GET /referentes/grados` trae además `id_nivel` y `cursos_cerrados` por grado.
 - **Reabrir el cierre** (`reabrirCierre`, 154 del nivel): borra el cierre y sus boletines (en
   cascada); al cerrar de nuevo se generan otra vez.
 
@@ -160,6 +167,7 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
+| `POST /cierre/nivel` `{ id_nivel, id_periodo }` | 154; el service exige ese nivel (con 99, cualquiera) |
 | `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `[{ id_estudiante, datos }]` (las fotos del cierre, por apellido; vacío si no está cerrado) |
 | `GET /boletines/estudiante?id_estudiante` | ruta como `GET /curso`; su historial (`{ id_periodo, id_curso, periodo, curso, cerrado_at, datos }`, lo más reciente primero) solo de los cursos que quien pide puede ver |
 

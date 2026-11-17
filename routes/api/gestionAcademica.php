@@ -563,6 +563,8 @@ Route::prefix('/notas')->group(function () {
     Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);
     Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
     Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);
+    // Cierre general: todos los cursos cualitativos del nivel en el periodo.
+    Route::post('/cierre/nivel', [NotasController::class, 'cerrarNivel'])->middleware($aprueba);
     Route::delete('/cierre', [NotasController::class, 'reabrirCierre'])->middleware($aprueba);
 
     // Boletines (fotos guardadas al cerrar; el PDF lo arma el frontend): mismo acceso que /curso.
