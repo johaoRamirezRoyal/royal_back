@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Encuestas\EncuestasController;
-use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
+use Illuminate\Support\Facades\Route;
 
 // ─── Tipos de pregunta (catálogo, reusa el de Evaluaciones) ───
 Route::get('/tipos-pregunta', [EncuestasController::class, 'listarTiposPregunta'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
@@ -24,6 +24,8 @@ Route::delete('/{id}', [EncuestasController::class, 'eliminar'])->middleware(Per
 Route::put('/{id}/toggle-activo', [EncuestasController::class, 'toggleActivo'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN]));
 Route::post('/{id}/duplicar', [EncuestasController::class, 'duplicar'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN]));
 Route::get('/{id}/resultados', [EncuestasController::class, 'resultados'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
+Route::get('/{id}/resultados/pdf', [EncuestasController::class, 'resultadosPdf'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
+Route::get('/{id}/envios', [EncuestasController::class, 'envios'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
 Route::get('/{id}/salones-con-respuestas', [EncuestasController::class, 'salonesConRespuestas'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
 Route::get('/{id}/reservas-con-respuestas', [EncuestasController::class, 'reservasConRespuestas'])->middleware(Permiso::ruta([Permiso::ENCUESTAS_ADMIN, Permiso::ENCUESTAS_RESULTADOS]));
 

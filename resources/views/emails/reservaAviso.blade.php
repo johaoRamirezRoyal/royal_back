@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reserva de salón — {{ config('app.name') }}</title>
+    <title>Reserva de salón — {{ $nombreColegio }}</title>
 </head>
 
 <body style="margin:0;padding:32px 16px;background:#f4f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
@@ -34,7 +34,7 @@
             @endif
         </div>
         <p style="margin:0;padding:0 32px 20px;font-size:12px;color:#8a8a80;text-align:center;">
-            {{ config('app.name') }} — correo automático, no responder.
+            {{ $nombreColegio }} — correo automático, no responder.
         </p>
     </div>
 </body>

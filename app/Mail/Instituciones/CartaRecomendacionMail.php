@@ -3,6 +3,8 @@
 namespace App\Mail\Instituciones;
 
 use App\Models\Instituciones\CartaRecomendacion;
+use App\Services\branding\MarcaDominioService;
+use App\Services\Documentos\DocumentoPdfService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
@@ -18,8 +20,7 @@ class CartaRecomendacionMail extends Mailable
         public readonly CartaRecomendacion $carta,
         public readonly string $pdfContenido,
         public readonly string $pdfNombre,
-    ) {
-    }
+    ) {}
 
     public function envelope(): Envelope
     {
@@ -37,6 +38,7 @@ class CartaRecomendacionMail extends Mailable
             with: [
                 'nombreInstitucion' => $this->carta->institucion?->nombre ?? '',
                 'nombreEstudiante' => $this->carta->datos['nombre_estudiante'] ?? '',
+                'nombreColegio' => app(MarcaDominioService::class)->nombreInstitucion('@'.DocumentoPdfService::dominioDelColegio()),
             ],
         );
     }

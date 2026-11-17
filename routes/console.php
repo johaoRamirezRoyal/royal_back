@@ -69,6 +69,13 @@ Schedule::command('noticias:enviar-diarias')->hourly()->withoutOverlapping();
 // la hora de cada marcación es la que manda la terminal. Misma nota operativa que arriba.
 Schedule::command('hikvision:sincronizar-reloj')->hourly()->withoutOverlapping();
 
+// A las 5 pm envía a cada responsable de una reserva de hoy el PDF consolidado de las
+// encuestas respondidas en ella (ver EncuestasServices::enviarConsolidadosDelDia). Las
+// reservas sin respuestas no reciben correo, y lo respondido después solo aparece en la
+// descarga del módulo. Si el servidor está apagado a esa hora, ese día no se envía.
+// Misma nota operativa que arriba.
+Schedule::command('encuestas:enviar-consolidado')->dailyAt('17:00')->withoutOverlapping();
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');

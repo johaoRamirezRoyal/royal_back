@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reserva de salón — {{ config('app.name') }}</title>
+    <title>Reserva de salón — {{ $nombreColegio }}</title>
     <style>
         body {
             margin: 0;
@@ -117,7 +117,7 @@
                 <img class="qr" src="{{ $message->embedData($jpg, 'qr-encuesta.jpg', 'image/jpeg') }}" alt="Información de la reserva y código QR de la encuesta">
             </div>
         </div>
-        <p class="footer">{{ config('app.name') }} — correo automático, no responder.</p>
+        <p class="footer">{{ $nombreColegio }} — correo automático, no responder.</p>
     </div>
 </body>
 
