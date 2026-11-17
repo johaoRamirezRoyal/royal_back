@@ -25,10 +25,11 @@ class AccionesPlanReferentesTest extends TestCase
     public function test_reglas(): void
     {
         $casos = [
-            ['BORRADOR', self::DOCENTE, true, ['editar']],                   // edita lo suyo, no envía
-            ['DEVUELTO', self::DOCENTE, true, ['editar']],
-            ['BORRADOR', self::GESTOR, true, ['editar', 'enviar']],
-            ['BORRADOR', self::APROBADOR, true, ['editar', 'enviar']],
+            ['BORRADOR', self::DOCENTE, true, ['editar', 'enviar']],          // edita lo suyo y envía a revisión
+            ['DEVUELTO', self::DOCENTE, true, ['editar', 'enviar']],
+            ['BORRADOR', self::GESTOR, true, ['editar']],                    // coordinación no envía
+            ['BORRADOR', self::APROBADOR, true, ['editar']],
+            ['BORRADOR', ['docente' => true, 'gestiona' => true, 'aprueba' => true], true, ['editar', 'enviar']], // coordinador que además dicta en el grado
             ['BORRADOR', self::AJENO, true, []],
             ['EN_REVISION', self::DOCENTE, true, []],                        // en revisión el docente no edita
             ['EN_REVISION', self::GESTOR, true, []],                         // ni quien solo gestiona
@@ -36,7 +37,7 @@ class AccionesPlanReferentesTest extends TestCase
             ['APROBADO', self::DOCENTE, true, []],                           // aprobado: nadie edita
             ['APROBADO', self::APROBADOR, true, ['reabrir']],
             ['BORRADOR', self::DOCENTE, false, []],                          // fuera de plazo no se edita
-            ['BORRADOR', self::GESTOR, false, []],                           // ni se envía
+            ['BORRADOR', self::GESTOR, false, []],                           // ni quien gestiona edita
             ['APROBADO', self::APROBADOR, false, []],                        // ni se reabre
             ['EN_REVISION', self::APROBADOR, false, ['aprobar', 'devolver']], // aprobar sí, aun vencido
         ];

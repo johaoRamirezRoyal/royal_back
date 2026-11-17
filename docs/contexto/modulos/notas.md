@@ -86,9 +86,10 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 - Quién puede qué (`NotasService::rol` / `acciones`, test `AccionesPlanReferentesTest`; el `actor`
   lo arma `NotasController::actor`):
   - **Docente** (`rol['docente']`: carga activa en algún curso del grado): edita en `BORRADOR` /
-    `DEVUELTO` **solo los referentes de sus asignaturas** (`rol['asignaturas']`). No envía.
-  - Opción **153** "Gestionar referentes": edita todas las asignaturas y envía, en los grados de su
-    nivel.
+    `DEVUELTO` **solo los referentes de sus asignaturas** (`rol['asignaturas']`) y **envía el plan a
+    revisión** (cambiado el 2026-11-17: antes enviaba solo quien gestiona).
+  - Opción **153** "Gestionar referentes": edita todas las asignaturas en los grados de su nivel (no
+    envía, salvo que también tenga carga en el grado).
   - Opción **154** "Aprobar referentes": además aprueba / devuelve (en revisión) y reabre (aprobado);
     en revisión es el único que edita.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
@@ -266,8 +267,8 @@ base de colegio.
 el boletín), `PeriodoEditableNotasTest` y `FechasPeriodoAcademicoTest`. Lo que toca la base no tiene
 tests automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se probó en
 `sami_royal` dentro de transacciones deshechas (2026-11-13, Sexto A, Español y Literatura + otra
-asignatura con otro docente): referentes por docente y rechazo en asignatura ajena, enviar solo
-quien gestiona, no quitar un referente con notas, planilla en plazo y con el plan aprobado, ajuste
+asignatura con otro docente): referentes por docente y rechazo en asignatura ajena, enviar (entonces solo
+quien gestiona; desde el 2026-11-17, el docente), no quitar un referente con notas, planilla en plazo y con el plan aprobado, ajuste
 (no en subreferentes, solo 154), observaciones solo del director, vista del curso con `puede`,
 cierre con boletines, nada se cambia cerrado, reabrir el cierre y quitar la nota del docente
 conservando el ajuste. El periodo de prueba no había empezado: se movieron `fecha_inicio` y

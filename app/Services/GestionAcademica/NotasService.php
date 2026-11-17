@@ -318,8 +318,8 @@ class NotasService extends Service
     }
 
     /**
-     * Acciones permitidas según el estado, el rol y el plazo. Solo quien gestiona envía a
-     * revisión: así un docente no cierra el plan antes de que los demás carguen los suyos.
+     * Acciones permitidas según el estado, el rol y el plazo. El docente con carga en el grado envía
+     * los referentes a revisión; coordinación (154) los aprueba o los devuelve.
      */
     public static function acciones(string $estado, array $rol, bool $abierto): array
     {
@@ -329,7 +329,7 @@ class NotasService extends Service
         return [
             // En revisión solo quien aprueba ajusta los referentes.
             'editar' => $abierto && (($editable && $participa) || ($estado === ReferentePlan::EN_REVISION && $rol['aprueba'])),
-            'enviar' => $abierto && $editable && $rol['gestiona'],
+            'enviar' => $abierto && $editable && $rol['docente'],
             'aprobar' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
             'devolver' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
             'reabrir' => $abierto && $estado === ReferentePlan::APROBADO && $rol['aprueba'],
@@ -346,7 +346,7 @@ class NotasService extends Service
     {
         $curso = Cursos::with(['grado:id,nombre,tipo_evaluacion', 'director:id_user,nombre,apellido'])->find($idCurso, ['id', 'nombre', 'id_nivel', 'id_grado', 'id_director']);
         $periodo = PeriodoAcademico::find($idPeriodo);
-
+        
         return $curso && $periodo ? [$curso, $periodo] : null;
     }
 

@@ -60,16 +60,17 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 
 | Rol | Puede |
 |---|---|
-| Docente con carga en el grado | Definir los referentes de **sus** asignaturas (en borrador o devuelto) y calificar sus referentes y subreferentes en los cursos donde tiene carga |
+| Docente con carga en el grado | Definir los referentes de **sus** asignaturas (en borrador o devuelto) y **enviarlos a revisión de coordinación** y calificar sus referentes y subreferentes en los cursos donde tiene carga |
 | Director de grupo | Ver todo lo calificado en su curso y escribir las observaciones generales |
-| 153 "Gestionar referentes" (de su nivel) | Editar los referentes de todas las asignaturas, **enviar a revisión** |
+| 153 "Gestionar referentes" (de su nivel) | Editar los referentes de todas las asignaturas |
 | 154 "Aprobar referentes" (de su nivel) | Además aprobar, devolver y reabrir el plan; ajustar el final de un referente; cerrar y reabrir el periodo de un curso, o cerrarlo en todos los cursos del nivel a la vez (cierre general, agregado el 2026-11-17) |
 
 **Evaluación descriptiva (2026-11-17).** Los grados marcados como `DESCRIPTIVA` (Pre-jardín, Stem…) no usan referentes ni escala: por estudiante, cada docente con carga en el curso escribe un texto en los campos de cada propósito (Fortalezas, Por fortalecer, Recomendaciones…, definidos por propósito en Configuración académica). Mismo cierre, sin plan que aprobar; el boletín es el documento `boletinDescriptivo`. Migración `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`.
 | 152 "Consultar notas" y 99 | Ver las notas de cualquier curso en solo lectura (99 también la configuración) |
 
-Solo quien gestiona envía a revisión: así un docente no cierra el plan antes de que los demás
-carguen los suyos.
+El docente envía los referentes a revisión y coordinación (154) los aprueba o los devuelve
+(cambiado el 2026-11-17; antes enviaba solo quien gestiona). El plan es del grado: el primer envío
+lo pasa a revisión para todos, y si a otro docente le faltaban los suyos, coordinación lo devuelve.
 
 ### Plazos
 
