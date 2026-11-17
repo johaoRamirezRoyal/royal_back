@@ -558,6 +558,9 @@ Route::prefix('/notas')->group(function () {
     Route::get('/mis-cursos', [NotasController::class, 'misCursos'])->middleware($docente);
     Route::get('/planilla', [NotasController::class, 'planilla'])->middleware($docente);
     Route::put('/planilla', [NotasController::class, 'guardarPlanilla'])->middleware($docente);
+    // Evaluación descriptiva (grados DESCRIPTIVA): textos por campo de cada propósito.
+    Route::get('/planilla-descriptiva', [NotasController::class, 'planillaDescriptiva'])->middleware($docente);
+    Route::put('/planilla-descriptiva', [NotasController::class, 'guardarPlanillaDescriptiva'])->middleware($docente);
     Route::get('/cursos', [NotasController::class, 'filtrosCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
     Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
     Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);

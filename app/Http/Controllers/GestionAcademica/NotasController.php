@@ -40,7 +40,7 @@ class NotasController extends Controller implements HasMiddleware
             new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesCurso', 'boletinesEstudiante']),
-            new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'guardarObservaciones']),
+            new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'planillaDescriptiva', 'guardarPlanillaDescriptiva', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'cerrarNivel', 'reabrirCierre']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
         ];
@@ -120,6 +120,11 @@ class NotasController extends Controller implements HasMiddleware
             'nombre' => ['required', 'string', 'max:120'],
             'descripcion' => ['nullable', 'string', 'max:500'],
             'activo' => ['nullable', 'boolean'],
+            // Campos de la evaluación descriptiva (lista completa, en orden). Sin la clave, no se tocan.
+            'campos' => ['sometimes', 'array', 'max:20'],
+            'campos.*.id' => ['nullable', 'integer'],
+            'campos.*.nombre' => ['required', 'string', 'max:80'],
+            'campos.*.activo' => ['nullable', 'boolean'],
         ];
     }
 
@@ -259,6 +264,28 @@ class NotasController extends Controller implements HasMiddleware
     }
 
     /** { id_curso, id_periodo, id_asignatura, estudiantes: [{ id_estudiante, notas: [{ id_referente, id_escala|null }] }] } */
+    /** ?id_curso&id_periodo: planilla descriptiva (grado DESCRIPTIVA) del docente con carga en el curso. */
+    public function planillaDescriptiva(Request $request)
+    {
+        $q = $request->validate($this->reglasCursoPeriodo());
+
+        return $this->apiResponse($this->service->planillaDescriptiva($request->user()->id_user, $q['id_curso'], $q['id_periodo']));
+    }
+
+    /** { id_curso, id_periodo, estudiantes: [{ id_estudiante, textos: [{ id_campo, texto|null }] }] } */
+    public function guardarPlanillaDescriptiva(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'estudiantes' => ['required', 'array'],
+            'estudiantes.*.id_estudiante' => ['required', 'integer', 'distinct'],
+            'estudiantes.*.textos' => ['present', 'array'],
+            'estudiantes.*.textos.*.id_campo' => ['required', 'integer'],
+            'estudiantes.*.textos.*.texto' => ['present', 'nullable', 'string', 'max:3000'],
+        ], ['estudiantes.*.textos.*.texto.max' => 'Un texto no puede superar los 3000 caracteres.']);
+
+        return $this->apiResponse($this->service->guardarPlanillaDescriptiva($request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['estudiantes']));
+    }
+
     public function guardarPlanilla(Request $request)
     {
         $body = $request->validate($this->reglasCursoPeriodo() + [

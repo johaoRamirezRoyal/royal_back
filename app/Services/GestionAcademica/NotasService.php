@@ -9,7 +9,10 @@ use App\Models\GestionAcademica\Boletin;
 use App\Models\GestionAcademica\CierrePeriodo;
 use App\Models\GestionAcademica\EscalaValoracion;
 use App\Models\GestionAcademica\ObservacionGeneral;
+use App\Models\Areas\Grado;
 use App\Models\GestionAcademica\Proposito;
+use App\Models\GestionAcademica\PropositoCampo;
+use App\Models\GestionAcademica\ValoracionDescriptiva;
 use App\Models\GestionAcademica\Referente;
 use App\Models\GestionAcademica\ReferentePlan;
 use App\Models\GestionAcademica\ReferentePlanHistorial;
@@ -95,10 +98,15 @@ class NotasService extends Service
 
     // ─── Propósitos y método por nivel (Configuración académica, 99) ─────────
 
+    /** Propósitos con sus campos de evaluación descriptiva (activos e inactivos, en orden). */
     public function listarPropositos(): array
     {
         try {
-            $data = Proposito::orderBy('orden')->orderBy('nombre')->get(['id', 'nombre', 'descripcion', 'orden', 'activo']);
+            $campos = PropositoCampo::orderBy('orden')->orderBy('id')->get(['id', 'id_proposito', 'nombre', 'orden', 'activo'])->groupBy('id_proposito');
+            $data = Proposito::orderBy('orden')->orderBy('nombre')->get(['id', 'nombre', 'descripcion', 'orden', 'activo'])
+                ->map(fn (Proposito $p) => $p->toArray() + [
+                    'campos' => ($campos[$p->id] ?? collect())->map->only(['id', 'nombre', 'orden', 'activo'])->values(),
+                ]);
 
             return ['error' => false, 'message' => 'Propósitos', 'data' => $data];
         } catch (Throwable $e) {
@@ -106,6 +114,13 @@ class NotasService extends Service
         }
     }
 
+    /**
+     * Crea o actualiza un propósito. Con `campos` (la lista completa, en orden), reemplaza sus campos
+     * de evaluación descriptiva: los que traen id se actualizan, los nuevos se crean y los que no
+     * vienen se borran, o se desactivan si ya tienen textos de estudiantes.
+     *
+     * @param  array{nombre: string, descripcion?: ?string, activo?: bool, campos?: array<int, array{id?: ?int, nombre: string, activo?: bool}>}  $data
+     */
     public function guardarProposito(array $data, ?int $id = null): array
     {
         try {
@@ -113,7 +128,23 @@ class NotasService extends Service
             if (! $proposito) {
                 return ['error' => true, 'message' => 'No se encontró el propósito'];
             }
-            $proposito->fill($data)->save();
+            DB::transaction(function () use ($proposito, $data) {
+                $proposito->fill(collect($data)->except('campos')->all())->save();
+                if (! array_key_exists('campos', $data)) {
+                    return;
+                }
+                $existentes = PropositoCampo::where('id_proposito', $proposito->id)->get()->keyBy('id');
+                $vienen = [];
+                foreach (array_values($data['campos']) as $orden => $c) {
+                    $campo = isset($c['id']) ? $existentes->get($c['id']) : null;
+                    $campo ??= new PropositoCampo(['id_proposito' => $proposito->id]);
+                    $campo->fill(['nombre' => trim($c['nombre']), 'orden' => $orden + 1, 'activo' => $c['activo'] ?? true])->save();
+                    $vienen[] = $campo->id;
+                }
+                foreach ($existentes->except($vienen) as $campo) {
+                    ValoracionDescriptiva::where('id_campo', $campo->id)->exists() ? $campo->update(['activo' => false]) : $campo->delete();
+                }
+            });
 
             return ['error' => false, 'message' => $id ? 'Propósito actualizado' : 'Propósito creado', 'data' => $proposito];
         } catch (Throwable $e) {
@@ -233,7 +264,7 @@ class NotasService extends Service
     /** Cursos cualitativos activos (con grado y nivel cargados), en orden académico. */
     private static function cursosCualitativos(?callable $filtro = null): Collection
     {
-        $q = Cursos::with(['grado:id,nombre', 'nivel:id,nombre,metodo_calificacion', 'director:id_user,nombre,apellido'])
+        $q = Cursos::with(['grado:id,nombre,tipo_evaluacion', 'nivel:id,nombre,metodo_calificacion', 'director:id_user,nombre,apellido'])
             ->where('activo', 1)->whereNotNull('id_grado');
         if ($filtro) {
             $filtro($q);
@@ -313,7 +344,7 @@ class NotasService extends Service
     /** Curso (con su grado, nivel y director) y periodo; null si alguno no existe. */
     private static function cursoYPeriodo(int $idCurso, int $idPeriodo): ?array
     {
-        $curso = Cursos::with(['grado:id,nombre', 'director:id_user,nombre,apellido'])->find($idCurso, ['id', 'nombre', 'id_nivel', 'id_grado', 'id_director']);
+        $curso = Cursos::with(['grado:id,nombre,tipo_evaluacion', 'director:id_user,nombre,apellido'])->find($idCurso, ['id', 'nombre', 'id_nivel', 'id_grado', 'id_director']);
         $periodo = PeriodoAcademico::find($idPeriodo);
 
         return $curso && $periodo ? [$curso, $periodo] : null;
@@ -720,6 +751,8 @@ class NotasService extends Service
                 'directores' => $cs->map(fn ($c) => self::nombreDe($c->director))->filter()->unique()->values(),
                 'referentes' => (int) ($cantidad[$idGrado] ?? 0),
                 'estado' => $estados[$idGrado] ?? ReferentePlan::BORRADOR,
+                // DESCRIPTIVA: no lleva referentes ni plan (la página lo muestra aparte).
+                'tipo_evaluacion' => $cs->first()->grado?->tipo_evaluacion ?? Grado::REFERENTES,
             ])->values();
 
             return ['error' => false, 'message' => 'Grados del nivel', 'data' => [
@@ -791,6 +824,7 @@ class NotasService extends Service
     {
         $conAlgo = ValoracionReferente::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante')
             ->merge(ObservacionGeneral::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante'))
+            ->merge(ValoracionDescriptiva::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->pluck('id_estudiante'))
             ->unique();
 
         return Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
@@ -863,6 +897,8 @@ class NotasService extends Service
                     'curso' => $c->nombre,
                     'grado' => $c->grado?->nombre,
                     'es_director' => (int) $c->id_director === $idDocente,
+                    // REFERENTES: planilla por asignatura; DESCRIPTIVA: planilla descriptiva del curso.
+                    'tipo_evaluacion' => $c->grado?->tipo_evaluacion ?? Grado::REFERENTES,
                     'asignaturas' => ($carga[$c->id] ?? collect())->map(fn ($a) => ['id' => (int) $a->id, 'nombre' => $a->nombre])->values(),
                 ])->values();
 
@@ -905,6 +941,9 @@ class NotasService extends Service
                 return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
             }
             [$curso, $periodo] = $cp;
+            if (self::esDescriptivo($curso)) {
+                return ['error' => true, 'message' => 'Este curso se evalúa de forma descriptiva: usa la planilla descriptiva.'];
+            }
             if (! $this->asignaturasConCarga($idDocente, $idCurso)->contains($idAsignatura)) {
                 return ['error' => true, 'message' => 'No tienes carga en esa asignatura en este curso.'];
             }
@@ -1086,6 +1125,9 @@ class NotasService extends Service
      */
     private function datosCurso(Cursos $curso, PeriodoAcademico $periodo): array
     {
+        if (self::esDescriptivo($curso)) {
+            return $this->datosDescriptivos($curso, $periodo);
+        }
         $referentes = $this->referentesDe($curso->id_grado, $periodo->id);
         $estudiantes = $this->estudiantesDe($curso->id, $periodo->id);
         $notas = self::notasDe($estudiantes->pluck('id_user'), self::idsDe($referentes), true);
@@ -1124,10 +1166,12 @@ class NotasService extends Service
             $cierre = self::cierreDe($idCurso, $idPeriodo);
             $aprueba = self::apruebaEnNivel($actor, $curso);
             $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
+            $descriptivo = self::esDescriptivo($curso);
 
             return ['error' => false, 'message' => 'Notas del curso', 'data' => [
                 'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
                 'grado' => $curso->grado?->nombre,
+                'tipo_evaluacion' => $descriptivo ? Grado::DESCRIPTIVA : Grado::REFERENTES,
                 'director' => self::nombreDe($curso->director),
                 'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre, 'fecha_limite_notas' => $periodo->fecha_limite_notas ?? $periodo->fecha_fin],
                 'periodo_editable' => self::periodoEditable($periodo),
@@ -1136,8 +1180,9 @@ class NotasService extends Service
                 'es_director' => $esDirector,
                 'puede' => [
                     'observar' => $esDirector && self::periodoEditable($periodo) && ! $cierre,
-                    'ajustar' => $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
-                    'cerrar' => $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
+                    // Descriptiva: no hay desempeños que ajustar ni plan que aprobar.
+                    'ajustar' => ! $descriptivo && $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
+                    'cerrar' => $aprueba && ($descriptivo || $estado === ReferentePlan::APROBADO) && ! $cierre,
                     'reabrir_cierre' => $aprueba && $cierre !== null,
                 ],
                 // Toda la escala (también inactiva): una nota vieja puede usar un desempeño que ya se desactivó.
@@ -1244,14 +1289,16 @@ class NotasService extends Service
             if (! self::apruebaEnNivel($actor, $curso)) {
                 return ['error' => true, 'message' => 'Solo quien aprueba los referentes del nivel cierra el periodo.'];
             }
-            if ($this->buscarPlan($curso->id_grado, $idPeriodo)->estado !== ReferentePlan::APROBADO) {
+            // Un grado descriptivo no tiene referentes ni plan que aprobar.
+            if (! self::esDescriptivo($curso) && $this->buscarPlan($curso->id_grado, $idPeriodo)->estado !== ReferentePlan::APROBADO) {
                 return ['error' => true, 'message' => 'Los referentes de este periodo aún no están aprobados: no hay nada que cerrar.'];
             }
 
             $r = $this->guardarCierre($actor, $curso, $periodo);
             $mensaje = "Periodo cerrado: {$r['boletines']} boletines guardados";
+            $falta = self::esDescriptivo($curso) ? 'campos sin texto' : 'referentes sin desempeño';
 
-            return ['error' => false, 'message' => $r['sin_nota'] ? "{$mensaje}. Quedaron {$r['sin_nota']} referentes sin desempeño." : $mensaje];
+            return ['error' => false, 'message' => $r['sin_nota'] ? "{$mensaje}. Quedaron {$r['sin_nota']} {$falta}." : $mensaje];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -1283,12 +1330,21 @@ class NotasService extends Service
         // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
         $yaTienen = Boletin::where('id_periodo_academico', $periodo->id)->pluck('id_estudiante')->flip();
         $estudiantes = $datos['estudiantes']->reject(fn ($e) => $yaTienen->has($e['id_user']));
-        $principales = collect($datos['referentes'])->pluck('id');
-        $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
+        $descriptivo = self::esDescriptivo($curso);
+        if ($descriptivo) {
+            // Lo que falta en un boletín descriptivo: campos sin texto.
+            $campos = collect($datos['propositos'])->flatMap(fn ($p) => collect($p['campos'])->pluck('id'));
+            $sinNota = $estudiantes->sum(fn ($e) => $campos->filter(fn ($id) => trim((string) ($e['textos'][$id] ?? '')) === '')->count());
+        } else {
+            $principales = collect($datos['referentes'])->pluck('id');
+            $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
+        }
 
-        DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes) {
+        DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes, $descriptivo) {
             $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => now()]);
             $base = [
+                // REFERENTES o DESCRIPTIVA: qué documento pinta la foto.
+                'tipo' => $descriptivo ? Grado::DESCRIPTIVA : Grado::REFERENTES,
                 'curso' => $curso->nombre,
                 'grado' => $curso->grado?->nombre,
                 'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
@@ -1304,7 +1360,8 @@ class NotasService extends Service
             foreach ($estudiantes as $e) {
                 Boletin::create([
                     'id_cierre' => $cierre->id, 'id_estudiante' => $e['id_user'], 'id_periodo_academico' => $periodo->id,
-                    'id_curso' => $curso->id, 'datos' => self::fotoBoletin($base, $datos, $e, $escala),
+                    'id_curso' => $curso->id,
+                    'datos' => $descriptivo ? self::fotoDescriptiva($base, $datos, $e) : self::fotoBoletin($base, $datos, $e, $escala),
                 ]);
             }
         });
@@ -1365,7 +1422,7 @@ class NotasService extends Service
                     $saltados[] = ['curso' => $curso->nombre, 'motivo' => 'Ya estaba cerrado'];
                     continue;
                 }
-                if (! $aprobados->has($curso->id_grado)) {
+                if (! self::esDescriptivo($curso) && ! $aprobados->has($curso->id_grado)) {
                     $saltados[] = ['curso' => $curso->nombre, 'motivo' => "Los referentes de {$curso->grado?->nombre} no están aprobados"];
                     continue;
                 }
@@ -1408,6 +1465,181 @@ class NotasService extends Service
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    // ─── Evaluación descriptiva ─────────────────────────────────
+    //
+    // Grados con tipo_evaluacion DESCRIPTIVA (Pre-jardín, Stem...): sin referentes ni escala. Por
+    // estudiante, un texto en cada campo de cada propósito (Fortalezas, Por fortalecer,
+    // Recomendaciones...). Lo escribe cualquier docente con carga en el curso, en plazo y sin
+    // cierre; el director escribe las observaciones generales (como en referentes). El cierre es el
+    // mismo, sin plan que aprobar.
+
+    private static function esDescriptivo(Cursos $curso): bool
+    {
+        return ($curso->grado?->tipo_evaluacion ?? null) === Grado::DESCRIPTIVA;
+    }
+
+    /**
+     * Propósitos activos con sus campos activos, en orden; más los campos (y su propósito) que ya
+     * tienen textos en `$idsCampoUsados` aunque se hayan desactivado, para no esconder lo escrito.
+     */
+    private static function propositosConCampos(Collection $idsCampoUsados): Collection
+    {
+        $campos = PropositoCampo::where(fn ($q) => $q->where('activo', 1)->orWhereIn('id', $idsCampoUsados))
+            ->orderBy('orden')->orderBy('id')->get(['id', 'id_proposito', 'nombre'])->groupBy('id_proposito');
+
+        return Proposito::where(fn ($q) => $q->where('activo', 1)->orWhereIn('id', $campos->keys()))
+            ->orderBy('orden')->orderBy('nombre')->get(['id', 'nombre', 'descripcion'])
+            ->map(fn (Proposito $p) => $p->only(['id', 'nombre', 'descripcion']) + [
+                'campos' => ($campos[$p->id] ?? collect())->map->only(['id', 'nombre'])->values()->all(),
+            ])
+            ->filter(fn ($p) => $p['campos'])->values();
+    }
+
+    /** id_estudiante → id_campo → texto, en el curso y periodo. */
+    private static function textosDe(int $idCurso, int $idPeriodo, Collection $idsEstudiante): Collection
+    {
+        return ValoracionDescriptiva::where('id_periodo_academico', $idPeriodo)->whereIn('id_estudiante', $idsEstudiante)
+            ->get(['id_estudiante', 'id_campo', 'texto'])
+            ->groupBy('id_estudiante')->map(fn (Collection $t) => $t->pluck('texto', 'id_campo'));
+    }
+
+    /** Lo de un curso descriptivo en un periodo: propósitos con campos, y por estudiante sus textos y la observación. */
+    private function datosDescriptivos(Cursos $curso, PeriodoAcademico $periodo): array
+    {
+        $estudiantes = $this->estudiantesDe($curso->id, $periodo->id);
+        $textos = self::textosDe($curso->id, $periodo->id, $estudiantes->pluck('id_user'));
+        $usados = $textos->flatMap(fn ($t) => $t->keys())->unique();
+        $observaciones = ObservacionGeneral::whereIn('id_estudiante', $estudiantes->pluck('id_user'))
+            ->where('id_periodo_academico', $periodo->id)->pluck('observacion', 'id_estudiante');
+
+        return [
+            'propositos' => self::propositosConCampos($usados),
+            'asignaturas' => collect(),
+            'referentes' => collect(),
+            'estudiantes' => $estudiantes->map(fn ($e) => $e + [
+                'textos' => $textos->get($e['id_user'], collect()),
+                'observacion' => $observaciones[$e['id_user']] ?? null,
+            ])->values(),
+        ];
+    }
+
+    /**
+     * Planilla descriptiva de un curso para el docente: con carga en el curso (cualquier
+     * asignatura). `editable`: en plazo y sin cierre.
+     */
+    public function planillaDescriptiva(int $idDocente, int $idCurso, int $idPeriodo): array
+    {
+        if ($error = $this->sinCualitativa($idCurso)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso, $periodo] = $cp;
+            if (! self::esDescriptivo($curso)) {
+                return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
+            }
+            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
+                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            }
+            $cerrado = self::cierreDe($idCurso, $idPeriodo) !== null;
+
+            return ['error' => false, 'message' => 'Planilla descriptiva', 'data' => [
+                'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
+                'grado' => $curso->grado?->nombre,
+                'director' => self::nombreDe($curso->director),
+                'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre, 'fecha_limite_notas' => $periodo->fecha_limite_notas ?? $periodo->fecha_fin],
+                'periodo_editable' => self::periodoEditable($periodo),
+                'cerrado' => $cerrado,
+                'editable' => self::periodoEditable($periodo) && ! $cerrado,
+            ] + collect($this->datosDescriptivos($curso, $periodo))->only(['propositos', 'estudiantes'])->all()];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Guarda los textos del docente. Por estudiante, una lista de { id_campo, texto }: un texto
+     * vacío borra el de ese campo; lo que no viene no se toca.
+     *
+     * @param  array<int, array{id_estudiante: int, textos: array<int, array{id_campo: int, texto: ?string}>}>  $estudiantes
+     */
+    public function guardarPlanillaDescriptiva(int $idDocente, int $idCurso, int $idPeriodo, array $estudiantes): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? $this->validarVentana($idPeriodo) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+
+        try {
+            $curso = Cursos::with('grado:id,nombre,tipo_evaluacion')->find($idCurso, ['id', 'id_nivel', 'id_grado']);
+            if (! self::esDescriptivo($curso)) {
+                return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
+            }
+            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
+                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            }
+            $campos = PropositoCampo::pluck('id')->flip();
+            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
+            foreach ($estudiantes as $e) {
+                if (! $alumnos->has($e['id_estudiante'])) {
+                    return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
+                }
+                foreach ($e['textos'] as $t) {
+                    if (! $campos->has($t['id_campo'])) {
+                        return ['error' => true, 'message' => 'Un campo no existe'];
+                    }
+                }
+            }
+
+            DB::transaction(function () use ($idDocente, $idCurso, $idPeriodo, $estudiantes) {
+                foreach ($estudiantes as $e) {
+                    foreach ($e['textos'] as $t) {
+                        $clave = ['id_estudiante' => $e['id_estudiante'], 'id_campo' => $t['id_campo'], 'id_periodo_academico' => $idPeriodo];
+                        $texto = trim((string) ($t['texto'] ?? ''));
+                        $texto === ''
+                            ? ValoracionDescriptiva::where($clave)->delete()
+                            : ValoracionDescriptiva::updateOrCreate($clave, ['id_curso' => $idCurso, 'texto' => $texto, 'id_docente' => $idDocente]);
+                    }
+                }
+            });
+
+            return ['error' => false, 'message' => 'Boletín descriptivo guardado'];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Foto del boletín descriptivo de un estudiante: por propósito, cada campo con su texto (o
+     * null), y la observación general. Mismos datos de cabecera que fotoBoletin.
+     *
+     * @param  array  $base  de guardarCierre
+     * @param  array  $datos  de datosDescriptivos()
+     * @param  array  $estudiante  uno de $datos['estudiantes']
+     */
+    public static function fotoDescriptiva(array $base, array $datos, array $estudiante): array
+    {
+        $textos = collect($estudiante['textos']);
+
+        return $base + [
+            'estudiante' => collect($estudiante)->only(['id_user', 'nombre', 'apellido', 'documento', 'usuario'])->all(),
+            'numero_lista' => $estudiante['numero_lista'] ?? null,
+            'inasistencias' => $estudiante['inasistencias'] ?? null,
+            'llegadas_tarde' => $estudiante['llegadas_tarde'] ?? null,
+            'propositos' => collect($datos['propositos'])->map(fn ($p) => [
+                'nombre' => $p['nombre'],
+                'descripcion' => $p['descripcion'],
+                'campos' => collect($p['campos'])->map(fn ($c) => [
+                    'nombre' => $c['nombre'],
+                    'texto' => trim((string) ($textos->get($c['id']) ?? '')) ?: null,
+                ])->all(),
+            ])->values()->all(),
+            'observacion_general' => $estudiante['observacion'],
+        ];
     }
 
     // ─── Boletines ──────────────────────────────────────────────

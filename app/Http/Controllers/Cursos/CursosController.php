@@ -51,6 +51,8 @@ class CursosController extends Controller
         $data = $request->validate([
             'nombre' => ['required', 'string', 'max:80'],
             'id_nivel_academico' => ['nullable', 'integer', 'exists:nivel_academico,id'],
+            // Notas: por referentes (con escala) o descriptiva (textos por propósito).
+            'tipo_evaluacion' => ['nullable', 'in:REFERENTES,DESCRIPTIVA'],
             'orden' => ['nullable', 'integer', 'min:0'],
             'activo' => ['nullable', 'boolean'],
         ], ['nombre.required' => 'El nombre del grado es obligatorio']);

@@ -13,7 +13,11 @@ class Grado extends Model
 {
     protected $table = 'academico_grado';
 
-    protected $fillable = ['nombre', 'id_nivel_academico', 'orden', 'activo'];
+    /** Cómo se evalúa el grado en Notas: por referentes (con escala) o descriptiva (textos por propósito). */
+    public const REFERENTES = 'REFERENTES';
+    public const DESCRIPTIVA = 'DESCRIPTIVA';
+
+    protected $fillable = ['nombre', 'id_nivel_academico', 'tipo_evaluacion', 'orden', 'activo'];
 
     protected $casts = ['activo' => 'boolean', 'orden' => 'integer', 'id_nivel_academico' => 'integer'];
 

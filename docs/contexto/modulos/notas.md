@@ -147,6 +147,37 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 - **Reabrir el cierre** (`reabrirCierre`, 154 del nivel): borra el cierre y sus boletines (en
   cascada); al cerrar de nuevo se generan otra vez.
 
+## Evaluación descriptiva (2026-11-17)
+
+Para grados que no califican por referentes ni escala (los más pequeños: Pre-jardín, Stem...).
+Modelo del colegio: el "Boletín Descriptivo" (Word de ejemplo de Pre-Jardín, primer período).
+
+- **Por grado**: `academico_grado.tipo_evaluacion` = `REFERENTES` (por defecto) | `DESCRIPTIVA`, en
+  Configuración académica → Grados (`CursosController::guardarGrado`). Todos los cursos del grado
+  lo comparten. Un curso sin grado (Stem A hoy) queda fuera de notas: hay que crearle un grado.
+- **Campos por propósito** (`academico_proposito_campo`: nombre, orden, activo): se editan con el
+  propósito (`PUT /propositos/{id}` con `campos: [{ id?, nombre, activo? }]`, la lista completa en
+  orden). Un campo que no viene se borra, o se **desactiva** si ya tiene textos. `GET /propositos`
+  trae `campos[]`.
+- **Textos** (`academico_valoracion_descriptiva`, unique estudiante + campo + periodo): los escribe
+  **cualquier docente con carga en el curso** (cualquier asignatura), en plazo y sin cierre
+  (`planillaDescriptiva` / `guardarPlanillaDescriptiva`, `GET|PUT /planilla-descriptiva`). Texto
+  vacío = se borra. El director escribe las observaciones generales como siempre.
+- `GET /mis-cursos` trae `tipo_evaluacion` por curso; `GET /planilla` (por asignatura) rechaza un
+  curso descriptivo y `GET /planilla-descriptiva` uno por referentes.
+- **Vista del curso**: `tipo_evaluacion`; en un curso descriptivo los estudiantes traen `textos`
+  (id_campo → texto) y `propositos[]` trae `campos[]` (`datosDescriptivos`); `referentes` y
+  `asignaturas` vienen vacíos. `puede.ajustar` siempre false.
+- **Cierre**: igual, pero **sin plan que aprobar** (`cerrar` y `cerrarNivel` no lo exigen en un
+  grado descriptivo). La foto (`fotoDescriptiva`, pura, test `FotoDescriptivaTest`) lleva
+  `tipo: "DESCRIPTIVA"` y, por propósito, `campos: [{ nombre, texto|null }]`, con la misma cabecera
+  de la foto por referentes. Todas las fotos llevan ahora `tipo` (`REFERENTES` en las de
+  referentes). El aviso del cierre cuenta los campos sin texto.
+- **Referentes**: `GET /referentes/grados` trae `tipo_evaluacion` por grado (la página no muestra
+  plan para los descriptivos).
+- ponytail: cambiar el tipo de un grado que ya tiene referentes o textos no está bloqueado; lo que
+  no aplica al tipo nuevo simplemente no se muestra.
+
 ## Plazos
 
 Años escolares y periodos académicos (validación de fechas, cruces): ver `gestion-academica.md`.
@@ -215,6 +246,8 @@ referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no
 3. `2026_11_05_120100_seed_opciones_notas`: opciones 152, 153 y 154.
 4. `2026_11_05_120200_create_academico_boletin_tables`: observaciones generales del director,
    cierre del periodo por curso y boletines (foto JSON). En `sami_royal` se corrió con `migrate`.
+5. `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`: `academico_grado.tipo_evaluacion`,
+   campos por propósito y textos descriptivos. En `sami_royal` se corrió con `migrate` (2026-11-17).
 
 La rama no está en producción, así que las migraciones se reescriben en vez de apilar correcciones.
 El 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
@@ -229,7 +262,7 @@ base de colegio.
 ## Tests
 
 `tests/Unit/GestionAcademica/`: `AccionesPlanReferentesTest` (acciones por estado, rol y plazo),
-`CambiosDeReferentesTest` (aplanar y varios docentes en el mismo plan), `FotoBoletinTest` (qué guarda
+`CambiosDeReferentesTest` (aplanar y varios docentes en el mismo plan), `FotoDescriptivaTest` (boletín descriptivo), `FotoBoletinTest` (qué guarda
 el boletín), `PeriodoEditableNotasTest` y `FechasPeriodoAcademicoTest`. Lo que toca la base no tiene
 tests automáticos: `phpunit.xml` usa SQLite en memoria y el esquema legacy es de MySQL. Se probó en
 `sami_royal` dentro de transacciones deshechas (2026-11-13, Sexto A, Español y Literatura + otra

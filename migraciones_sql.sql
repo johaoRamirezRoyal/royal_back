@@ -660,6 +660,23 @@ alter table `academico_boletin` add unique `uq_boletin_estudiante_periodo`(`id_e
 alter table `academico_boletin` add index `academico_boletin_id_cierre_index`(`id_cierre`);
 
 -- ---------------------------------------------------------------------------
+-- 2026_11_05_120300_create_academico_evaluacion_descriptiva_tables.php
+-- Evaluación descriptiva: academico_grado.tipo_evaluacion (REFERENTES |
+-- DESCRIPTIVA), campos de cada propósito (Fortalezas, Por fortalecer...) y el
+-- texto de cada estudiante por campo y periodo. Sin FK a tablas MyISAM.
+-- ---------------------------------------------------------------------------
+alter table `academico_grado` add `tipo_evaluacion` varchar(12) not null default 'REFERENTES' after `id_nivel_academico`;
+create table `academico_proposito_campo` (`id` int not null auto_increment, `id_proposito` int not null, `nombre` varchar(80) not null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_proposito_campo` add constraint `academico_proposito_campo_id_proposito_foreign` foreign key (`id_proposito`) references `academico_proposito` (`id`) on delete cascade;
+alter table `academico_proposito_campo` add index `academico_proposito_campo_id_proposito_index`(`id_proposito`);
+create table `academico_valoracion_descriptiva` (`id` int not null auto_increment, `id_estudiante` int not null, `id_campo` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `texto` text not null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_campo_foreign` foreign key (`id_campo`) references `academico_proposito_campo` (`id`);
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_descriptiva` add unique `uq_descriptiva_estudiante_campo_periodo`(`id_estudiante`, `id_campo`, `id_periodo_academico`);
+alter table `academico_valoracion_descriptiva` add index `ix_descriptiva_curso_periodo`(`id_curso`, `id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
 -- 2026_11_05_120000_renombrar_opcion_editar_reservas.php
 -- La opción 120 pasa a cubrir editar, cancelar y finalizar cualquier reserva (antes
 -- cancelar/finalizar colgaba de la 41, que tienen casi todos los perfiles). Solo renombra.

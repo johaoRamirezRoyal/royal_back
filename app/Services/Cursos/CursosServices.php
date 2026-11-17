@@ -56,7 +56,7 @@ class CursosServices
     {
         try {
             $grados = Grado::orderBy('orden')->orderBy('nombre')->get()
-                ->map(fn (Grado $g) => $g->only(['id', 'nombre', 'id_nivel_academico', 'orden', 'activo'])
+                ->map(fn (Grado $g) => $g->only(['id', 'nombre', 'id_nivel_academico', 'tipo_evaluacion', 'orden', 'activo'])
                     + ['cursos' => Cursos::where('id_grado', $g->id)->where('activo', 1)->count()]);
 
             return ['error' => false, 'message' => 'Grados', 'data' => $grados];
