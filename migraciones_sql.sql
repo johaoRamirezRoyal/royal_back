@@ -878,8 +878,8 @@ alter table `trabajos_altura` add `finalizado_por` int null after `finalizado_en
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_18_100000_create_academico_asistencia_manual_table.php
--- Inasistencias y llegadas tarde del boletín escritas a mano: solo cuentan para el dato del que el
--- estudiante no tiene registros en el periodo. Sin FK a tablas MyISAM (periodo, curso).
+-- Inasistencias y llegadas tarde del boletín escritas a mano: reemplazan al conteo de los registros
+-- (asistencia de clases / portería); null = usar el conteo. Sin FK a tablas MyISAM (periodo, curso).
 -- ---------------------------------------------------------------------------
 create table `academico_asistencia_manual` (`id` int not null auto_increment, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `inasistencias` smallint unsigned null, `llegadas_tarde` smallint unsigned null, `id_usuario` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
 alter table `academico_asistencia_manual` add constraint `academico_asistencia_manual_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;

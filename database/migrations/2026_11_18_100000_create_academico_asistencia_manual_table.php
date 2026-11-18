@@ -6,8 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Inasistencias y llegadas tarde del boletín escritas a mano (ver docs/contexto/modulos/notas.md):
- * solo cuentan para el dato del que el estudiante no tiene registros en el periodo (ninguna
- * asistencia de clases, o ninguna llegada tarde). Null = sin valor manual.
+ * reemplazan al conteo de los registros (asistencia de clases / portería). Null = usar el conteo.
  *
  * id_periodo_academico e id_curso sin FK: periodo_academico y (en algunas BD) curso son MyISAM.
  */
