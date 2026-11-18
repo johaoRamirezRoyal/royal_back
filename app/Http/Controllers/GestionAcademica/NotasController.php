@@ -44,7 +44,7 @@ class NotasController extends Controller implements HasMiddleware
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR], [TipoPerfil::DOCENTE]), only: ['guardarAsistenciaManual']),
             new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'planillaDescriptiva', 'guardarPlanillaDescriptiva', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'cerrarNivel', 'reabrirCierre']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos', 'registroBoletines']),
         ];
     }
 
@@ -325,6 +325,18 @@ class NotasController extends Controller implements HasMiddleware
         return PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR)
             || $this->service->gestionaCurso($actor, $idCurso)
             || $this->service->dirige($actor['id'], $idCurso);
+    }
+
+    /**
+     * ?id_periodo: registro de boletines del periodo (cada curso con su cierre o sin cerrar). 99/152
+     * ven todos los cursos; 153/154, los de su nivel.
+     */
+    public function registroBoletines(Request $request)
+    {
+        $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
+        $todos = PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR);
+
+        return $this->apiResponse($this->service->registroBoletines($todos ? null : $this->actor($request)['niveles'], $q['id_periodo'] ?? null));
     }
 
     /** ?id_curso&id_periodo: las fotos de boletín guardadas al cerrar (el PDF lo arma el frontend). */

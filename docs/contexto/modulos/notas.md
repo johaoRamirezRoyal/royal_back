@@ -232,6 +232,7 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `POST /cierre/nivel` `{ id_nivel, id_periodo }` | 154; el service exige ese nivel (con 99, cualquiera) |
 | `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `{ boletines: [{ id_estudiante, datos }], firmas }` (las fotos del cierre, por apellido; vacío si no está cerrado) |
 | `GET /boletines/estudiante?id_estudiante` | ruta como `GET /curso`; `{ historial: [{ id_periodo, id_curso, periodo, curso, cerrado_at, datos }], firmas }` (lo más reciente primero) solo de los cursos que quien pide puede ver |
+| `GET /boletines/registro?id_periodo` | 99, 152, 153, 154 (99/152 todos los cursos; 153/154 los de su nivel): `{ periodos, id_periodo, cursos: [{ id, nombre, grado, nivel, cierre: { fecha, usuario, boletines } \| null }] }` — `registroBoletines`; incluye cursos cerrados que luego se desactivaron |
 
 `firmas`: id_director → data URL PNG/JPEG de su firma activa («Mi firma», `Firma::contenidoActiva`,
 la misma que usa Inventario). No se guarda en la foto: es la que tenga al imprimir. Sin firma o si

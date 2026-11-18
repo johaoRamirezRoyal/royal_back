@@ -576,4 +576,6 @@ Route::prefix('/notas')->group(function () {
     $veCurso = Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]);
     Route::get('/boletines', [NotasController::class, 'boletinesCurso'])->middleware($veCurso);
     Route::get('/boletines/estudiante', [NotasController::class, 'boletinesEstudiante'])->middleware($veCurso);
+    // Registro de boletines (?id_periodo): cada curso del periodo con su cierre. 99/152 todos; 153/154 su nivel.
+    Route::get('/boletines/registro', [NotasController::class, 'registroBoletines'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
 });

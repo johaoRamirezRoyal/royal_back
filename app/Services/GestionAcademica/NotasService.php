@@ -1851,6 +1851,51 @@ class NotasService extends Service
     }
 
     /** Boletines guardados de un curso en un periodo (vacío si no está cerrado), por apellido, y las firmas. */
+    /**
+     * Registro de boletines de un periodo: cada curso cualitativo (de los niveles de quien pide; null
+     * = todos) con su cierre (fecha, quién, cuántos boletines guardó) o sin cerrar. Un curso que se
+     * cerró y luego se desactivó también sale (sus boletines existen).
+     */
+    public function registroBoletines(?array $niveles, ?int $idPeriodo): array
+    {
+        try {
+            $periodos = $this->periodosDelAnio();
+            $idPeriodo ??= ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
+            $enNivel = fn ($q) => $q->when($niveles !== null, fn ($q) => $q->whereIn('id_nivel', $niveles ?: [0]));
+
+            $cierres = $idPeriodo
+                ? CierrePeriodo::with('usuario:id_user,nombre,apellido')->where('id_periodo_academico', $idPeriodo)->get()->keyBy('id_curso')
+                : collect();
+            $boletines = $idPeriodo
+                ? Boletin::where('id_periodo_academico', $idPeriodo)->selectRaw('id_curso, count(*) as n')->groupBy('id_curso')->pluck('n', 'id_curso')
+                : collect();
+            // Los cursos cualitativos activos y, aparte, los cerrados que ya no lo están.
+            $cursos = self::cursosCualitativos($enNivel);
+            $faltan = $cierres->keys()->diff($cursos->pluck('id'));
+            if ($faltan->isNotEmpty()) {
+                $cursos = $cursos->concat($enNivel(Cursos::with(['grado:id,nombre', 'nivel:id,nombre'])->whereIn('id', $faltan))->get());
+            }
+
+            return ['error' => false, 'message' => 'Registro de boletines', 'data' => [
+                'periodos' => $periodos,
+                'id_periodo' => $idPeriodo,
+                'cursos' => $cursos->map(fn (Cursos $c) => [
+                    'id' => $c->id,
+                    'nombre' => $c->nombre,
+                    'grado' => $c->grado?->nombre,
+                    'nivel' => $c->nivel ? ['id' => $c->nivel->id, 'nombre' => $c->nivel->nombre] : null,
+                    'cierre' => ($ci = $cierres->get($c->id)) ? [
+                        'fecha' => $ci->fecha,
+                        'usuario' => self::nombreDe($ci->usuario),
+                        'boletines' => (int) ($boletines[$c->id] ?? 0),
+                    ] : null,
+                ])->values(),
+            ]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     public function boletinesDelCurso(int $idCurso, int $idPeriodo): array
     {
         try {
