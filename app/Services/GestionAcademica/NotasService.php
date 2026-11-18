@@ -1336,8 +1336,8 @@ class NotasService extends Service
 
     /**
      * Inasistencias y llegadas tarde del boletín escritas a mano: el director del curso (en plazo) o
-     * 154 del nivel, sin cierre. Cada dato solo se acepta si el estudiante no tiene registros de ese
-     * tipo en el periodo (ver asistenciaDe). Null = sin valor; los dos null borran la fila.
+     * 154 del nivel, sin cierre. Aunque haya registros: el valor escrito reemplaza al conteo en el
+     * boletín (ver asistenciaDe). Null = usar el conteo; los dos null borran la fila.
      *
      * @param  array<int, array{id_estudiante: int, inasistencias: ?int, llegadas_tarde: ?int}>  $estudiantes
      */
@@ -1357,21 +1357,10 @@ class NotasService extends Service
                 return ['error' => true, 'message' => 'Solo el director de grupo (en el plazo del periodo) o coordinación pueden escribir la asistencia del boletín.'];
             }
 
-            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->keyBy('id_user');
-            $asistencia = $this->asistenciaDe($alumnos->keys(), $periodo);
+            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
             foreach ($estudiantes as $e) {
                 if (! $alumnos->has($e['id_estudiante'])) {
                     return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
-                }
-                $a = $asistencia[$e['id_estudiante']];
-                // Algunos registros traen apellido ".": no va en el mensaje.
-                $nombre = collect([$alumnos[$e['id_estudiante']]['nombre'] ?? '', $alumnos[$e['id_estudiante']]['apellido'] ?? ''])
-                    ->map(fn ($p) => trim((string) $p))->reject(fn ($p) => $p === '' || $p === '.')->implode(' ');
-                if (($e['inasistencias'] ?? null) !== null && ! $a['inasistencias_manual']) {
-                    return ['error' => true, 'message' => "{$nombre} tiene asistencia de clases registrada en el periodo: sus inasistencias salen de ahí."];
-                }
-                if (($e['llegadas_tarde'] ?? null) !== null && ! $a['llegadas_manual']) {
-                    return ['error' => true, 'message' => "{$nombre} tiene llegadas tarde registradas en el periodo: salen de ahí."];
                 }
             }
 
@@ -1533,10 +1522,11 @@ class NotasService extends Service
      * Lo que el boletín muestra de asistencia en el periodo, por estudiante:
      * - inasistencias: días con alguna clase marcada AUSENTE (asistencia de clases);
      * - llegadas_tarde: llegadas a la portería (sin las revocadas).
-     * Cada dato sale de sus registros. Si el estudiante no tiene ninguno de ese tipo en el periodo
-     * (`*_manual` = true), vale el valor escrito a mano (academico_asistencia_manual), o null.
+     * Cada dato es el escrito a mano (academico_asistencia_manual) si lo hay, y si no, el conteo de
+     * los registros. `*_registradas` = el conteo (null: no hay ningún registro de ese tipo en el
+     * periodo); `*_manual` = lo escrito a mano (null: nada). Así la UI avisa cuántos ya cuenta.
      *
-     * @return Collection<int, array{inasistencias: ?int, inasistencias_manual: bool, llegadas_tarde: ?int, llegadas_manual: bool}>
+     * @return Collection<int, array{inasistencias: ?int, inasistencias_registradas: ?int, inasistencias_manual: ?int, llegadas_tarde: ?int, llegadas_registradas: ?int, llegadas_manual: ?int}>
      */
     private function asistenciaDe(Collection $idsEstudiante, PeriodoAcademico $periodo): Collection
     {
@@ -1550,14 +1540,17 @@ class NotasService extends Service
         $manual = AsistenciaManual::whereIn('id_estudiante', $idsEstudiante)->where('id_periodo_academico', $periodo->id)->get()->keyBy('id_estudiante');
 
         return $idsEstudiante->mapWithKeys(function ($id) use ($clases, $tardes, $manual) {
-            $sinClases = ! $clases->has($id);
-            $sinTardes = ! $tardes->has($id);
+            $faltas = $clases->has($id) ? (int) $clases[$id] : null;
+            $llegadas = $tardes->has($id) ? (int) $tardes[$id] : null;
+            $m = $manual->get($id);
 
             return [$id => [
-                'inasistencias' => $sinClases ? $manual->get($id)?->inasistencias : (int) $clases[$id],
-                'inasistencias_manual' => $sinClases,
-                'llegadas_tarde' => $sinTardes ? $manual->get($id)?->llegadas_tarde : (int) $tardes[$id],
-                'llegadas_manual' => $sinTardes,
+                'inasistencias' => $m?->inasistencias ?? $faltas,
+                'inasistencias_registradas' => $faltas,
+                'inasistencias_manual' => $m?->inasistencias,
+                'llegadas_tarde' => $m?->llegadas_tarde ?? $llegadas,
+                'llegadas_registradas' => $llegadas,
+                'llegadas_manual' => $m?->llegadas_tarde,
             ]];
         });
     }
