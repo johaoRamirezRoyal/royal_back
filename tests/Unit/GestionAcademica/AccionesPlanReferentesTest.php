@@ -46,11 +46,11 @@ class AccionesPlanReferentesTest extends TestCase
             ['EN_REVISION', self::APROBADOR, true, [], ['editar', 'aprobar', 'devolver'], [], []],
             ['APROBADO', self::DOCENTE, true, [], [], [], []],                 // aprobado: nadie edita
             ['APROBADO', self::APROBADOR, true, [], ['reabrir'], [], []],
-            ['BORRADOR', self::DOCENTE, false, [], [], [], []],                // fuera de plazo no se edita ni se envía
-            ['BORRADOR', self::GESTOR, false, [], [], [], []],
-            ['APROBADO', self::APROBADOR, false, [], [], [], []],              // ni se reabre
-            ['BORRADOR', self::APROBADOR, false, [], ['aprobar'], [], []],            // aprobar directo, aun vencido
-            ['EN_REVISION', self::APROBADOR, false, [], ['aprobar', 'devolver'], [], []], // aprobar sí, aun vencido
+            ['BORRADOR', self::DOCENTE, false, [], [], [], []],                // el docente, fuera de plazo, ni edita ni envía
+            ['BORRADOR', self::GESTOR, false, [], ['editar'], [], []],               // coordinación edita un periodo pasado
+            ['APROBADO', self::APROBADOR, false, [], ['reabrir'], [], []],        // y lo reabre
+            ['BORRADOR', self::APROBADOR, false, [], ['editar', 'aprobar'], [], []],            // aprobar directo, aun vencido
+            ['EN_REVISION', self::APROBADOR, false, [], ['editar', 'aprobar', 'devolver'], [], []], // aprobar sí, aun vencido
         ];
 
         foreach ($casos as [$estado, $rol, $abierto, $enviadas, $sino, $enviar, $retirar]) {

@@ -331,22 +331,25 @@ class NotasService extends Service
      * Coordinación también puede aprobarlo directamente en borrador o devuelto, sin esperar los
      * envíos (2026-11-17).
      *
+     * El plazo (`$abierto`) solo limita a los docentes: coordinación (153/154) también edita y
+     * reabre los referentes de un periodo pasado (2026-11-18; la UI avisa que es un periodo pasado).
+     *
      * @param  int[]  $enviadas  asignaturas del plan ya enviadas
      */
     public static function acciones(string $estado, array $rol, bool $abierto, array $enviadas = []): array
     {
         $editable = in_array($estado, [ReferentePlan::BORRADOR, ReferentePlan::DEVUELTO], true);
-        $participa = $rol['docente'] || $rol['gestiona'];
         $suyas = $abierto && $editable && $rol['docente'] ? collect($rol['asignaturas'] ?? [])->map(fn ($id) => (int) $id) : collect();
 
         return [
             // En revisión solo quien aprueba ajusta los referentes.
-            'editar' => $abierto && (($editable && $participa) || ($estado === ReferentePlan::EN_REVISION && $rol['aprueba'])),
+            'editar' => ($editable && ($rol['gestiona'] || ($rol['docente'] && $abierto)))
+                || ($estado === ReferentePlan::EN_REVISION && $rol['aprueba']),
             'enviar' => $suyas->diff($enviadas)->sort()->values()->all(),
             'retirar' => $suyas->intersect($enviadas)->sort()->values()->all(),
             'aprobar' => $estado !== ReferentePlan::APROBADO && $rol['aprueba'],
             'devolver' => $estado === ReferentePlan::EN_REVISION && $rol['aprueba'],
-            'reabrir' => $abierto && $estado === ReferentePlan::APROBADO && $rol['aprueba'],
+            'reabrir' => $estado === ReferentePlan::APROBADO && $rol['aprueba'],
         ];
     }
 
@@ -455,6 +458,9 @@ class NotasService extends Service
                 ])->values(),
             'referentes' => $referentes,
             'historial' => $historial,
+            // Ya pasó la fecha límite del periodo: solo coordinación edita, y la UI lo advierte.
+            'periodo_pasado' => ! self::periodoAbiertoParaReferentes($periodo),
+            'fecha_cierre' => $periodo->fecha_limite_notas ?? $periodo->fecha_fin,
             'puede' => self::acciones($plan->estado, $rol, self::periodoAbiertoParaReferentes($periodo), $enviadas),
         ];
     }
@@ -655,7 +661,9 @@ class NotasService extends Service
                     . ($n === 1 ? 'nota registrada' : 'notas registradas') . ' y se perderían. Edita su texto en lugar de quitarlo, o quita primero esas notas en la planilla.'];
             }
 
-            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $planos, $existentes, $cambios, $propositos, $nombresAsignatura) {
+            // En un periodo pasado, cada cambio queda marcado así en el seguimiento.
+            $pasado = ! self::periodoAbiertoParaReferentes($periodo) ? ' · periodo pasado' : '';
+            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $planos, $existentes, $cambios, $propositos, $nombresAsignatura, $pasado) {
                 $plan->save();
                 $idDe = []; // índice en $planos → id guardado (para colgar los subreferentes nuevos)
 
@@ -665,7 +673,7 @@ class NotasService extends Service
                         continue;
                     }
                     $idPadre = $r['padre'] === null ? null : $idDe[$r['padre']];
-                    $donde = ' (' . $propositos[$r['id_proposito']] . ' · ' . $nombresAsignatura[$r['id_asignatura']] . ')';
+                    $donde = ' (' . $propositos[$r['id_proposito']] . ' · ' . $nombresAsignatura[$r['id_asignatura']] . $pasado . ')';
                     $texto = ($idPadre ? '↳ ' : '') . $r['descripcion'];
                     $referente = $r['id'] !== null ? $existentes->get($r['id']) : null;
                     if (! $referente) {
@@ -683,7 +691,7 @@ class NotasService extends Service
                 }
 
                 foreach ($cambios['eliminar'] as $id) {
-                    $this->registrar($plan, $actor['id'], 'REFERENTE_ELIMINADO', $existentes->get($id)?->descripcion);
+                    $this->registrar($plan, $actor['id'], 'REFERENTE_ELIMINADO', $existentes->get($id)?->descripcion . ($pasado ? ' (periodo pasado)' : ''));
                 }
                 Referente::whereIn('id', $cambios['eliminar'])->delete();
             });

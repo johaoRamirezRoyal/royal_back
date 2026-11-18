@@ -196,6 +196,9 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
   hasta `fecha_limite_notas ?? fecha_fin` (`NotasService::periodoEditable`, test
   `PeriodoEditableNotasTest`).
 - Los referentes se trabajan hasta esa misma fecha límite, también antes de que empiece el periodo.
+  Ese plazo solo limita a los **docentes** (editar, enviar, retirar): coordinación (153/154) edita y
+  reabre los referentes de un **periodo pasado** (2026-11-18). El plan trae `periodo_pasado` y
+  `fecha_cierre` para que la UI lo advierta, y cada cambio en el seguimiento lleva "periodo pasado".
 - Los periodos se listan por año vigente **sin filtrar `activo`** (el cron
   `periodos:desactivar-vencidos` los apaga al pasar `fecha_fin`).
 
