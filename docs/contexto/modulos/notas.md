@@ -199,6 +199,9 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
   Ese plazo solo limita a los **docentes** (editar, enviar, retirar): coordinación (153/154) edita y
   reabre los referentes de un **periodo pasado** (2026-11-18). El plan trae `periodo_pasado` y
   `fecha_cierre` para que la UI lo advierta, y cada cambio en el seguimiento lleva "periodo pasado".
+  Además, cada guardado con cambios en un periodo pasado registra aparte `FUERA_DE_PLAZO` en el
+  historial ("El periodo cerró el dd/mm/aaaa. Referentes y subreferentes: N creados, M editados…"),
+  como constancia de que se cambiaron después del cierre.
 - Los periodos se listan por año vigente **sin filtrar `activo`** (el cron
   `periodos:desactivar-vencidos` los apaga al pasar `fecha_fin`).
 

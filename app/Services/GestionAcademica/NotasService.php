@@ -661,11 +661,14 @@ class NotasService extends Service
                     . ($n === 1 ? 'nota registrada' : 'notas registradas') . ' y se perderían. Edita su texto en lugar de quitarlo, o quita primero esas notas en la planilla.'];
             }
 
-            // En un periodo pasado, cada cambio queda marcado así en el seguimiento.
+            // En un periodo pasado, cada cambio queda marcado así en el seguimiento, y al final se
+            // registra aparte (FUERA_DE_PLAZO) que se cambiaron referentes después del cierre.
             $pasado = ! self::periodoAbiertoParaReferentes($periodo) ? ' · periodo pasado' : '';
-            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $planos, $existentes, $cambios, $propositos, $nombresAsignatura, $pasado) {
+            $cierre = Carbon::parse($periodo->fecha_limite_notas ?? $periodo->fecha_fin)->format('d/m/Y');
+            DB::transaction(function () use ($actor, $plan, $idGrado, $idPeriodo, $planos, $existentes, $cambios, $propositos, $nombresAsignatura, $pasado, $cierre) {
                 $plan->save();
                 $idDe = []; // índice en $planos → id guardado (para colgar los subreferentes nuevos)
+                $creados = $editados = 0;
 
                 foreach ($planos as $i => $r) {
                     if (in_array($i, $cambios['ignorar'], true)) {
@@ -679,9 +682,11 @@ class NotasService extends Service
                     if (! $referente) {
                         $referente = new Referente(['id_grado' => $idGrado, 'id_periodo_academico' => $idPeriodo, 'id_docente' => $actor['id']]);
                         $this->registrar($plan, $actor['id'], 'REFERENTE_CREADO', $texto . $donde);
+                        $creados++;
                     } elseif ($referente->descripcion !== $r['descripcion'] || $referente->id_proposito !== $r['id_proposito']
                         || $referente->id_asignatura !== $r['id_asignatura'] || $referente->id_padre !== $idPadre) {
                         $this->registrar($plan, $actor['id'], 'REFERENTE_EDITADO', "«{$referente->descripcion}» → «{$r['descripcion']}»{$donde}");
+                        $editados++;
                     }
                     $referente->fill([
                         'descripcion' => $r['descripcion'], 'id_proposito' => $r['id_proposito'],
@@ -694,6 +699,13 @@ class NotasService extends Service
                     $this->registrar($plan, $actor['id'], 'REFERENTE_ELIMINADO', $existentes->get($id)?->descripcion . ($pasado ? ' (periodo pasado)' : ''));
                 }
                 Referente::whereIn('id', $cambios['eliminar'])->delete();
+
+                $quitados = count($cambios['eliminar']);
+                if ($pasado && $creados + $editados + $quitados > 0) {
+                    $resumen = collect(['creado' => $creados, 'editado' => $editados, 'quitado' => $quitados])
+                        ->filter()->map(fn ($n, $v) => $n . ' ' . ($n === 1 ? $v : $v . 's'))->implode(', ');
+                    $this->registrar($plan, $actor['id'], 'FUERA_DE_PLAZO', "El periodo cerró el {$cierre}. Referentes y subreferentes: {$resumen}.");
+                }
             });
 
             return ['error' => false, 'message' => 'Referentes guardados', 'data' => $this->referentesDe($idGrado, $idPeriodo)];
