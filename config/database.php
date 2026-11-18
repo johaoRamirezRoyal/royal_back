@@ -117,7 +117,7 @@ return [
             'url' => env('DB_PLAY_URL'),
             'host' => env('DB_PLAY_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => env('DB_PLAY_PORT', env('DB_PORT', '3306')),
-            'database' => env('DB_PLAY_DATABASE', 'sami_hebreo'),
+            'database' => env('DB_PLAY_DATABASE', 'sami_play'),
             'username' => env('DB_PLAY_USERNAME', env('DB_USERNAME', 'root')),
             'password' => env('DB_PLAY_PASSWORD', env('DB_PASSWORD', '')),
             'unix_socket' => env('DB_SOCKET', ''),

@@ -22,6 +22,7 @@ class BasesDatosService extends Service
     private const CONNECTIONS = [
         'mysql' => 'Base de datos (Royal School)',
         'sami_hebreo' => 'Base de datos de Sami (hebreo)',
+        'sami_play' => 'Base de datos de Sami (Play and Learn)',
         'admin_management' => 'Administración (marcas por dominio, logs)',
     ];
 

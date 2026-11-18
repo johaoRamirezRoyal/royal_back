@@ -25,6 +25,7 @@ class DocumentoPdfService
     private const DOMINIO_POR_CONNECTION = [
         'mysql' => 'royalschool.edu.co',
         'sami_hebreo' => 'colegiohebreounion.edu.co',
+        'sami_play' => 'playandlearn.edu.co',
     ];
 
     /** Dominio del colegio de la base activa en esta petición (`database.default`). */
