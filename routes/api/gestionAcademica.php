@@ -564,6 +564,8 @@ Route::prefix('/notas')->group(function () {
     Route::get('/cursos', [NotasController::class, 'filtrosCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
     Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
     Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);
+    // Inasistencias y llegadas tarde del boletín a mano (solo donde no hay registros): director o 154.
+    Route::put('/asistencia-manual', [NotasController::class, 'guardarAsistenciaManual'])->middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR], [TipoPerfil::DOCENTE]));
     Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
     Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);
     // Cierre general: todos los cursos cualitativos del nivel en el periodo.

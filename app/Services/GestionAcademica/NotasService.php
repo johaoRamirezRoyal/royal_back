@@ -5,6 +5,7 @@ namespace App\Services\GestionAcademica;
 use App\Enums\TipoPerfil;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
+use App\Models\GestionAcademica\AsistenciaManual;
 use App\Models\GestionAcademica\Boletin;
 use App\Models\GestionAcademica\CierrePeriodo;
 use App\Models\GestionAcademica\EscalaValoracion;
@@ -1262,6 +1263,10 @@ class NotasService extends Service
             $aprueba = self::apruebaEnNivel($actor, $curso);
             $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
             $descriptivo = self::esDescriptivo($curso);
+            $datos = $this->datosCurso($curso, $periodo);
+            // Lo que saldrá de asistencia en el boletín (y si se puede escribir a mano).
+            $asistencia = $this->asistenciaDe($datos['estudiantes']->pluck('id_user'), $periodo);
+            $datos['estudiantes'] = $datos['estudiantes']->map(fn ($e) => $e + ['asistencia' => $asistencia[$e['id_user']]])->values();
 
             return ['error' => false, 'message' => 'Notas del curso', 'data' => [
                 'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
@@ -1279,10 +1284,12 @@ class NotasService extends Service
                     'ajustar' => ! $descriptivo && $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
                     'cerrar' => $aprueba && ($descriptivo || $estado === ReferentePlan::APROBADO) && ! $cierre,
                     'reabrir_cierre' => $aprueba && $cierre !== null,
+                    // Inasistencias / llegadas tarde a mano (solo donde no hay registros): director en plazo o 154, sin cierre.
+                    'asistencia' => (($esDirector && self::periodoEditable($periodo)) || $aprueba) && ! $cierre,
                 ],
                 // Toda la escala (también inactiva): una nota vieja puede usar un desempeño que ya se desactivó.
                 'escala' => EscalaValoracion::orderBy('orden')->get(['id', 'nombre', 'abreviatura', 'descripcion', 'color', 'activo']),
-            ] + $this->datosCurso($curso, $periodo)];
+            ] + $datos];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -1322,6 +1329,66 @@ class NotasService extends Service
             });
 
             return ['error' => false, 'message' => 'Observaciones guardadas'];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Inasistencias y llegadas tarde del boletín escritas a mano: el director del curso (en plazo) o
+     * 154 del nivel, sin cierre. Cada dato solo se acepta si el estudiante no tiene registros de ese
+     * tipo en el periodo (ver asistenciaDe). Null = sin valor; los dos null borran la fila.
+     *
+     * @param  array<int, array{id_estudiante: int, inasistencias: ?int, llegadas_tarde: ?int}>  $estudiantes
+     */
+    public function guardarAsistenciaManual(array $actor, int $idCurso, int $idPeriodo, array $estudiantes): array
+    {
+        if ($error = $this->sinCualitativa($idCurso) ?? self::errorSiCerrado($idCurso, $idPeriodo)) {
+            return $error;
+        }
+
+        try {
+            if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+            }
+            [$curso, $periodo] = $cp;
+            $esDirector = $curso->id_director !== null && (int) $curso->id_director === $actor['id'];
+            if (! (($esDirector && self::periodoEditable($periodo)) || self::apruebaEnNivel($actor, $curso))) {
+                return ['error' => true, 'message' => 'Solo el director de grupo (en el plazo del periodo) o coordinación pueden escribir la asistencia del boletín.'];
+            }
+
+            $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->keyBy('id_user');
+            $asistencia = $this->asistenciaDe($alumnos->keys(), $periodo);
+            foreach ($estudiantes as $e) {
+                if (! $alumnos->has($e['id_estudiante'])) {
+                    return ['error' => true, 'message' => 'Uno de los estudiantes no pertenece a este curso'];
+                }
+                $a = $asistencia[$e['id_estudiante']];
+                // Algunos registros traen apellido ".": no va en el mensaje.
+                $nombre = collect([$alumnos[$e['id_estudiante']]['nombre'] ?? '', $alumnos[$e['id_estudiante']]['apellido'] ?? ''])
+                    ->map(fn ($p) => trim((string) $p))->reject(fn ($p) => $p === '' || $p === '.')->implode(' ');
+                if (($e['inasistencias'] ?? null) !== null && ! $a['inasistencias_manual']) {
+                    return ['error' => true, 'message' => "{$nombre} tiene asistencia de clases registrada en el periodo: sus inasistencias salen de ahí."];
+                }
+                if (($e['llegadas_tarde'] ?? null) !== null && ! $a['llegadas_manual']) {
+                    return ['error' => true, 'message' => "{$nombre} tiene llegadas tarde registradas en el periodo: salen de ahí."];
+                }
+            }
+
+            DB::transaction(function () use ($actor, $idCurso, $idPeriodo, $estudiantes) {
+                foreach ($estudiantes as $e) {
+                    $clave = ['id_estudiante' => $e['id_estudiante'], 'id_periodo_academico' => $idPeriodo];
+                    $inasistencias = $e['inasistencias'] ?? null;
+                    $tardes = $e['llegadas_tarde'] ?? null;
+                    $inasistencias === null && $tardes === null
+                        ? AsistenciaManual::where($clave)->delete()
+                        : AsistenciaManual::updateOrCreate($clave, [
+                            'id_curso' => $idCurso, 'inasistencias' => $inasistencias, 'llegadas_tarde' => $tardes, 'id_usuario' => $actor['id'],
+                        ]);
+                }
+            });
+
+            return ['error' => false, 'message' => 'Asistencia del boletín guardada'];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -1413,13 +1480,11 @@ class NotasService extends Service
         $escala = EscalaValoracion::all()->keyBy('id');
         // Número de lista = posición en la lista del curso (por apellido), y lo que el boletín
         // muestra de asistencia en el periodo.
-        $ids = $datos['estudiantes']->pluck('id_user');
-        $faltas = $this->inasistenciasPorDia($ids, $periodo);
-        $tardes = $this->llegadasTarde($ids, $periodo);
+        $asistencia = $this->asistenciaDe($datos['estudiantes']->pluck('id_user'), $periodo);
         $datos['estudiantes'] = $datos['estudiantes']->values()->map(fn ($e, $i) => $e + [
             'numero_lista' => $i + 1,
-            'inasistencias' => (int) ($faltas[$e['id_user']] ?? 0),
-            'llegadas_tarde' => (int) ($tardes[$e['id_user']] ?? 0),
+            'inasistencias' => (int) ($asistencia[$e['id_user']]['inasistencias'] ?? 0),
+            'llegadas_tarde' => (int) ($asistencia[$e['id_user']]['llegadas_tarde'] ?? 0),
         ]);
         // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
         // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
@@ -1464,15 +1529,37 @@ class NotasService extends Service
         return ['boletines' => $estudiantes->count(), 'sin_nota' => (int) $sinNota];
     }
 
-    /** id_estudiante → días con alguna clase marcada AUSENTE (asistencia de clases) dentro del periodo. */
-    private function inasistenciasPorDia(Collection $idsEstudiante, PeriodoAcademico $periodo): Collection
+    /**
+     * Lo que el boletín muestra de asistencia en el periodo, por estudiante:
+     * - inasistencias: días con alguna clase marcada AUSENTE (asistencia de clases);
+     * - llegadas_tarde: llegadas a la portería (sin las revocadas).
+     * Cada dato sale de sus registros. Si el estudiante no tiene ninguno de ese tipo en el periodo
+     * (`*_manual` = true), vale el valor escrito a mano (academico_asistencia_manual), o null.
+     *
+     * @return Collection<int, array{inasistencias: ?int, inasistencias_manual: bool, llegadas_tarde: ?int, llegadas_manual: bool}>
+     */
+    private function asistenciaDe(Collection $idsEstudiante, PeriodoAcademico $periodo): Collection
     {
-        return DB::table('academico_asistencia_estudiante as ae')
+        $clases = DB::table('academico_asistencia_estudiante as ae')
             ->join('academico_asistencia_clase as ac', 'ac.id', '=', 'ae.id_asistencia_clase')
-            ->whereIn('ae.id_alumno', $idsEstudiante)->where('ae.estado', 'AUSENTE')
+            ->whereIn('ae.id_alumno', $idsEstudiante)
             ->whereBetween('ac.fecha', [$periodo->fecha_inicio, $periodo->fecha_fin])
-            ->selectRaw('ae.id_alumno, count(distinct ac.fecha) as n')->groupBy('ae.id_alumno')
-            ->pluck('n', 'id_alumno');
+            ->selectRaw("ae.id_alumno, count(distinct case when ae.estado = 'AUSENTE' then ac.fecha end) as faltas")
+            ->groupBy('ae.id_alumno')->pluck('faltas', 'id_alumno');
+        $tardes = $this->llegadasTarde($idsEstudiante, $periodo);
+        $manual = AsistenciaManual::whereIn('id_estudiante', $idsEstudiante)->where('id_periodo_academico', $periodo->id)->get()->keyBy('id_estudiante');
+
+        return $idsEstudiante->mapWithKeys(function ($id) use ($clases, $tardes, $manual) {
+            $sinClases = ! $clases->has($id);
+            $sinTardes = ! $tardes->has($id);
+
+            return [$id => [
+                'inasistencias' => $sinClases ? $manual->get($id)?->inasistencias : (int) $clases[$id],
+                'inasistencias_manual' => $sinClases,
+                'llegadas_tarde' => $sinTardes ? $manual->get($id)?->llegadas_tarde : (int) $tardes[$id],
+                'llegadas_manual' => $sinTardes,
+            ]];
+        });
     }
 
     /** id_estudiante → llegadas tarde a la portería dentro del periodo (sin las revocadas). */

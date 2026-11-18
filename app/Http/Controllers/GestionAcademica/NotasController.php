@@ -40,6 +40,8 @@ class NotasController extends Controller implements HasMiddleware
             new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesCurso', 'boletinesEstudiante']),
+            // Asistencia del boletín a mano: el director (tipo Docente) o 154; el service afina.
+            new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR], [TipoPerfil::DOCENTE]), only: ['guardarAsistenciaManual']),
             new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'planillaDescriptiva', 'guardarPlanillaDescriptiva', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'cerrarNivel', 'reabrirCierre']),
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
@@ -361,6 +363,25 @@ class NotasController extends Controller implements HasMiddleware
         ]);
 
         return $this->apiResponse($this->service->guardarObservaciones($request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['observaciones']));
+    }
+
+    /**
+     * { id_curso, id_periodo, estudiantes: [{ id_estudiante, inasistencias|null, llegadas_tarde|null }] }:
+     * asistencia del boletín a mano, solo donde no hay registros (director en plazo o 154).
+     */
+    public function guardarAsistenciaManual(Request $request)
+    {
+        $body = $request->validate($this->reglasCursoPeriodo() + [
+            'estudiantes' => ['required', 'array'],
+            'estudiantes.*.id_estudiante' => ['required', 'integer', 'distinct'],
+            'estudiantes.*.inasistencias' => ['present', 'nullable', 'integer', 'min:0', 'max:365'],
+            'estudiantes.*.llegadas_tarde' => ['present', 'nullable', 'integer', 'min:0', 'max:365'],
+        ], [
+            'estudiantes.*.inasistencias.max' => 'Las inasistencias no pueden pasar de 365.',
+            'estudiantes.*.llegadas_tarde.max' => 'Las llegadas tarde no pueden pasar de 365.',
+        ]);
+
+        return $this->apiResponse($this->service->guardarAsistenciaManual($this->actor($request), $body['id_curso'], $body['id_periodo'], $body['estudiantes']));
     }
 
     /** { id_curso, id_periodo, id_estudiante, id_referente, id_escala|null } (154 del nivel). */

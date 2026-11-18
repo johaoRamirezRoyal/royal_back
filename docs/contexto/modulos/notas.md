@@ -147,6 +147,14 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   `AUSENTE` en `academico_asistencia_estudiante` dentro de las fechas del periodo) y
   `llegadas_tarde` (`llegadas_tardes` no revocadas dentro de las fechas del periodo). Las fotos
   anteriores no los traen.
+- **Asistencia a mano** (2026-11-18, `asistenciaDe`, tabla `academico_asistencia_manual`): cada dato
+  sale de sus registros; si el estudiante **no tiene ninguno** de ese tipo en el periodo (ninguna
+  asistencia de clases, o ninguna llegada tarde), vale el valor escrito a mano (o 0 en la foto).
+  `PUT /notas/asistencia-manual { id_curso, id_periodo, estudiantes: [{ id_estudiante,
+  inasistencias|null, llegadas_tarde|null }] }`: el director del curso en plazo o 154 del nivel, sin
+  cierre; rechaza el dato que sí tiene registros. La vista del curso trae por estudiante
+  `asistencia { inasistencias, inasistencias_manual, llegadas_tarde, llegadas_manual }` y
+  `puede.asistencia`. Migración `2026_11_18_100000_create_academico_asistencia_manual_table`.
 - **Cierre general por nivel** (`cerrarNivel`, `POST /cierre/nivel { id_nivel, id_periodo }`, 154
   de ese nivel o 99): cierra el periodo en todos los cursos cualitativos activos del nivel con la
   misma lógica del cierre por curso (`guardarCierre`). Salta los ya cerrados y los de grados con
