@@ -101,6 +101,11 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
     devuelto sin esperar los envíos: el seguimiento anota "Aprobados sin pasar por revisión" y las
     asignaturas sin enviar; exige al menos un referente), devuelve (en revisión) y reabre (aprobado);
     en revisión es el único que edita.
+  - 153 y 154 editan y reabren también en un **periodo pasado** (ver "Plazos"); el plazo solo
+    limita a los docentes.
+  - Opciones **172** / **173** "Ver registro de boletines" (2026-11-18): solo el Registro de
+    boletines y la descarga de las fotos del curso (`GET /boletines`); 172 en su nivel, 173 en
+    todos. No dan acceso a Notas del curso ni a Referentes.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
     `DocenteHorarioService::idsNivelAcademicoParaNivel`. Con la **99** (y Super Admin) vale para
     todos los niveles. Usuario con 153/154 sin nivel = sin grados (fail-closed).
@@ -221,13 +226,15 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET/POST /propositos`, `PUT /propositos/{id}`, `PUT /propositos/orden` (ruta antes de `{id}`) | 99 |
 | `GET /metodos-nivel`, `PUT /metodos-nivel/{id}` `{ metodo }` | 99 |
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
-| `PUT /referentes`, `POST /plan/estado` | docente con carga en el grado o 153/154 de su nivel; el service valida estado y asignaturas |
+| `PUT /referentes`, `POST /plan/estado` `{ accion: enviar\|retirar\|aprobar\|devolver\|reabrir, id_asignatura? (enviar/retirar), comentario? }` | docente con carga en el grado o 153/154 de su nivel; el service valida estado, plazo (solo a docentes) y asignaturas |
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
 | `GET /mis-cursos` | tipo Docente: `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
+| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y carga en el curso (cualquier asignatura) |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
 | `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
+| `PUT /asistencia-manual` `{ id_curso, id_periodo, estudiantes: [{ id_estudiante, inasistencias\|null, llegadas_tarde\|null }] }` | tipo Docente o 154; el service exige el director del curso en plazo o 154 de su nivel, sin cierre |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
 | `POST /cierre/nivel` `{ id_nivel, id_periodo }` | 154; el service exige ese nivel (con 99, cualquiera) |
 | `GET /boletines?id_curso&id_periodo` | como `GET /curso`: `{ boletines: [{ id_estudiante, datos }], firmas }` (las fotos del cierre, por apellido; vacío si no está cerrado) |

@@ -63,10 +63,11 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
 | Docente con carga en el grado | Definir los referentes de **sus** asignaturas (en borrador o devuelto) y **enviarlos a revisión de coordinación** y calificar sus referentes y subreferentes en los cursos donde tiene carga |
 | Director de grupo | Ver todo lo calificado en su curso y escribir las observaciones generales |
 | 153 "Gestionar referentes" (de su nivel) | Editar los referentes de todas las asignaturas |
-| 154 "Aprobar referentes" (de su nivel) | Además aprobar, devolver y reabrir el plan; ajustar el final de un referente; cerrar y reabrir el periodo de un curso, o cerrarlo en todos los cursos del nivel a la vez (cierre general, agregado el 2026-11-17) |
+| 154 "Aprobar referentes" (de su nivel) | Además aprobar (también directo, sin esperar los envíos), devolver y reabrir el plan; ajustar el final de un referente; cerrar y reabrir el periodo de un curso, o cerrarlo en todos los cursos del nivel a la vez (cierre general, 2026-11-17); escribir la asistencia del boletín |
+| 152 "Consultar notas" y 99 | Ver las notas de cualquier curso en solo lectura (99 también la configuración) |
+| 172 / 173 "Ver registro de boletines" (2026-11-18) | Ver el Registro de boletines y descargar los PDF: 172 los cursos de su nivel, 173 los de todos los niveles. No dan acceso a Notas del curso |
 
 **Evaluación descriptiva (2026-11-17).** Los grados marcados como `DESCRIPTIVA` (Pre-jardín, Stem…) no usan referentes ni escala: por estudiante, cada docente con carga en el curso escribe un texto en los campos de cada propósito (Fortalezas, Por fortalecer, Recomendaciones…, definidos por propósito en Configuración académica). Mismo cierre, sin plan que aprobar; el boletín es el documento `boletinDescriptivo`. Migración `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`.
-| 152 "Consultar notas" y 99 | Ver las notas de cualquier curso en solo lectura (99 también la configuración) |
 
 Cada docente envía a revisión los referentes de su asignatura (y puede retirar ese envío mientras
 los demás no terminen). Cuando todas las asignaturas con carga en el grado enviaron, el plan pasa
@@ -81,19 +82,41 @@ seguimiento qué asignaturas no habían enviado).
 - Se califica y observa entre `fecha_inicio` y `fecha_limite_notas ?? fecha_fin` del periodo, con
   el plan **aprobado** y **sin cierre**.
 - El coordinador ajusta hasta el cierre **sin mirar el plazo** (corrige después de la fecha límite).
+- Los referentes se trabajan hasta esa misma fecha límite, pero el plazo **solo limita a los
+  docentes**: coordinación (153/154) edita y reabre los de un **periodo pasado** (2026-11-18). La UI
+  lo advierte, cada cambio queda marcado "periodo pasado" y cada guardado deja en el historial una
+  entrada `FUERA_DE_PLAZO` (fecha de cierre y cuántos referentes se crearon, editaron o quitaron).
 - Después del cierre nada cambia. Reabrir borra el cierre y sus boletines, y al cerrar de nuevo se
   generan otra vez (no queda historial de versiones de un mismo trimestre).
+
+### Asistencia del boletín (2026-11-18)
+
+Inasistencias (días con alguna clase AUSENTE) y llegadas tarde (portería, sin revocadas) se cuentan
+al cerrar. En Notas del curso, el director (en plazo) o 154 (sin cierre) pueden **escribirlas a mano
+aunque haya registros**: lo escrito reemplaza al conteo en el boletín, la ficha avisa cuántas ya
+cuenta el sistema y vacío vuelve al conteo. Tabla `academico_asistencia_manual`.
+
+### Registro de boletines (2026-11-18)
+
+Página Notas → Registro de boletines: por periodo, cada curso cualitativo con su cierre (fecha,
+quién, cuántos boletines) o sin cerrar, agrupado por nivel, con descarga del PDF del curso. 99, 152
+y 173 ven todos los niveles; 153, 154 y 172, el suyo.
 
 ### Backend (`royal_back`)
 
 - `NotasService` y `NotasController` reescritos; endpoints con prefijo `/api/gestion-academica/notas`:
   - Configuración (99): `/escalas`, `/propositos` (+ `/orden`), `/metodos-nivel`.
-  - Referentes: `GET /plan`, `PUT /referentes`, `POST /plan/estado`, `GET /referentes/grados`.
-  - Calificación: `GET /mis-cursos`, `GET|PUT /planilla` (por curso **y asignatura**).
-  - Curso: `GET /cursos`, `GET /curso`, `PUT /observaciones`, `PUT /ajuste`, `POST|DELETE /cierre`.
-  - Boletines: `GET /boletines` (del curso) y `GET /boletines/estudiante` (historial).
-- Modelos nuevos: `Proposito`, `Referente`, `ReferentePlan`, `ReferentePlanHistorial`,
-  `ValoracionReferente`, `ObservacionGeneral`, `CierrePeriodo`, `Boletin`. Se borraron `Dimension`,
+  - Referentes: `GET /plan`, `PUT /referentes`, `POST /plan/estado` (enviar y retirar por
+    asignatura, aprobar, devolver, reabrir), `GET /referentes/grados`.
+  - Calificación: `GET /mis-cursos`, `GET|PUT /planilla` (por curso **y asignatura**),
+    `GET|PUT /planilla-descriptiva` (grados descriptivos).
+  - Curso: `GET /cursos`, `GET /curso`, `PUT /observaciones`, `PUT /asistencia-manual`, `PUT /ajuste`,
+    `POST|DELETE /cierre`, `POST /cierre/nivel`.
+  - Boletines: `GET /boletines` (del curso), `GET /boletines/estudiante` (historial) y
+    `GET /boletines/registro` (registro por periodo).
+- Modelos nuevos: `Proposito`, `PropositoCampo`, `Referente`, `ReferentePlan`, `ReferentePlanHistorial`,
+  `ReferenteEnvio`, `ValoracionReferente`, `ValoracionDescriptiva`, `ObservacionGeneral`,
+  `AsistenciaManual`, `CierrePeriodo`, `Boletin`. Se borraron `Dimension`,
   `Logro`, `LogroPlan`, `LogroPlanHistorial`, `Valoracion` y `ValoracionLogro`.
 - Se retiraron los modos por nivel (`nivel_academico.tipo_unidad` y `calificador`), las unidades
   de tipo asignatura, la sincronización de asignaturas y `academico_grado_dimension`.
@@ -108,17 +131,24 @@ seguimiento qué asignaturas no habían enviado).
 | **Referentes** (antes Logros) | `/gestion-academica/referentes` | 153 / 154 |
 | **Notas** (planilla del docente: curso → asignatura → periodo) | `/gestion-academica/notas` | tipo Docente |
 | **Notas del curso** (antes Consulta de notas) | `/gestion-academica/notas/curso` | 99, 152, 153, 154 o tipo Docente |
+| **Registro de boletines** (2026-11-18) | `/gestion-academica/notas/boletines` | 99, 152, 153, 154, 172, 173 |
+
+En el menú, todo esto va en Gestion Academica → Notas (Calificar, Notas del curso, Referentes,
+Registro de boletines).
 
 - La planilla y Notas del curso abren primero la lista del curso y, al elegir un estudiante, su
   formulario: un bloque por propósito con cada referente (su desempeño es el final) y sus
   subreferentes debajo.
 - El editor de referentes tiene una sección por asignatura; cada docente edita solo las suyas y ve
   las demás en solo lectura.
-- **Boletín en PDF**: documento `boletin` en `src/documentos/instituciones/comun/boletin.ts`
-  (pdfmake, logo y nombre de la marca), uno por hoja. **Lo genera el navegador** con la foto
-  guardada al cerrar, así que no necesita Node en el servidor. En Notas del curso: "Descargar
-  boletines (PDF)" del curso cerrado y, en la ficha de cada estudiante, su historial con
-  "Descargar PDF".
+- **Boletín en PDF**: documento `boletin` (común en `src/documentos/instituciones/comun/boletin.ts`;
+  Royal School tiene el suyo, el "INFORME EVALUATIVO", en `royal-school/boletin.ts`) y
+  `boletinDescriptivo` para los grados descriptivos; uno por hoja. **Lo genera el navegador** con
+  la foto guardada al cerrar (`helpers/boletinesPdf.ts`), así que no necesita Node en el servidor.
+  Se descarga en Notas del curso (el curso y el historial de cada estudiante) y en el Registro de
+  boletines. La foto lleva número de lista, usuario, año, inasistencias y llegadas tarde: un cierre
+  hecho antes de que existieran (2026-11-17 en la mañana) no los trae; se arregla reabriendo y
+  cerrando de nuevo.
 
 ## Migraciones
 
@@ -132,6 +162,19 @@ correcciones. Orden (todas en `migraciones_sql.sql`):
    notas", **153** "Gestionar referentes", **154** "Aprobar referentes" (módulo 14). Falla si un id
    ya está ocupado por otra opción.
 4. `2026_11_05_120200_create_academico_boletin_tables`: observaciones generales, cierres y boletines.
+5. `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`: `academico_grado.tipo_evaluacion`,
+   campos por propósito y textos descriptivos.
+6. `2026_11_05_120400_create_academico_referente_envio_table`: envío a revisión por asignatura.
+7. `2026_11_18_100000_create_academico_asistencia_manual_table`: inasistencias y llegadas tarde del
+   boletín escritas a mano.
+8. `2026_11_18_110000_seed_opciones_registro_boletines`: opciones **172** "Ver registro de boletines
+   (su nivel)" y **173** "(todos los niveles)", módulo 14. Falla si un id ya está ocupado.
+
+**SQL a mano y MyISAM.** El servidor crea las tablas MyISAM si el `create table` no dice
+`engine = InnoDB`, y MyISAM descarta las llaves foráneas en silencio; después una tabla InnoDB no
+puede apuntar a ellas (error 150). Por eso todas las tablas de notas en `migraciones_sql.sql` llevan
+`engine = InnoDB`. En producción las migraciones 1–6 se corrieron a mano el 2026-11-17 con un script
+repetible (crea solo lo que falta, pasa a InnoDB y agrega cada llave con `IF NOT EXISTS`).
 
 **Ids de opción.** La primera versión usaba 149–151, pero en producción el 149 es "Mis áreas
 comunes — Ver áreas del bloque" y el 150 "Seguridad social de trabajadores". Por eso pasaron a
@@ -147,13 +190,14 @@ renombraron. Se perdieron 2 logros y 1 nota de prueba de otra sesión (respaldo 
 
 ## Deploy
 
-1. Fusionar `feat/notas-cualitativas` en `main` en los dos repos y subir backend y frontend juntos
-   (el frontend de la rama solo habla con la API nueva). El backend se despliega fusionando `main`
-   en `produccion`.
-2. Correr las migraciones en **cada base de colegio** (`sami_hebreo` no tiene ninguna de esta
-   rama). Antes, confirmar que los ids 152–154 siguen libres en esa base.
-3. En `/permisos`, otorgar 152, 153 y 154 a los perfiles que correspondan (la migración no las
-   otorga a nadie).
+1. `feat/notas-cualitativas` se fusionó en `main` (los dos repos) y en `produccion` el 2026-11-17;
+   lo posterior se trabaja directo en `main`. Backend y frontend se suben juntos; el backend se
+   despliega fusionando `main` en `produccion`.
+2. Correr las migraciones en **cada base de colegio** (`sami_hebreo` no tiene ninguna). Antes,
+   confirmar que los ids 152–154 y 172–173 siguen libres en esa base. Si se corren a mano, usar el
+   SQL de `migraciones_sql.sql` (con `engine = InnoDB`) y registrarlas en `migrations`.
+3. En `/permisos`, otorgar 152, 153, 154, 172 y 173 a los perfiles que correspondan (las
+   migraciones no las otorgan a nadie).
 4. En Configuración académica: método de calificación de cada nivel, escala de valoración y
    propósitos. Cada curso necesita su **grado** (Cursos) y las asignaturas su **carga académica**:
    sin carga, un grado no tiene asignaturas para definir referentes.
@@ -165,7 +209,8 @@ renombraron. Se perdieron 2 logros y 1 nota de prueba de otra sesión (respaldo 
   `CambiosDeReferentesTest`, `FotoBoletinTest`, `PeriodoEditableNotasTest`,
   `FechasPeriodoAcademicoTest`. Con `main` fusionado pasan los 113 tests unitarios del backend.
 - Contra `sami_royal`, en transacciones deshechas (Sexto A, dos docentes reales con asignaturas
-  distintas): referentes por docente y rechazo en asignatura ajena, enviar solo quien gestiona, no
+  distintas): referentes por docente y rechazo en asignatura ajena, enviar solo quien gestiona (la
+  regla de entonces; hoy envía cada docente su asignatura), no
   quitar un referente con notas, planilla en plazo y con el plan aprobado, ajuste (no en
   subreferentes, solo 154), observaciones solo del director, cierre con boletines, nada cambia
   cerrado, reabrir, quitar la nota del docente conservando el ajuste.
@@ -184,6 +229,8 @@ renombraron. Se perdieron 2 logros y 1 nota de prueba de otra sesión (respaldo 
   `CursosServices::PERFIL_ESTUDIANTE`: notas usa ahora `[TipoPerfil::DOCENTE]` en las rutas y
   `Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE)`; en el frontend, `allowedTipos: ["DOCENTE"]`.
 - Algunos nombres de estudiantes vienen con espacios de más y apellido ".": el boletín los limpia.
+- La foto del boletín es la del momento del cierre: un campo que se agregue después no aparece en
+  los boletines ya cerrados hasta reabrir y cerrar de nuevo (pasó con número de lista, usuario y año).
 
 ## Decisiones para revisar con el colegio
 
@@ -192,14 +239,17 @@ renombraron. Se perdieron 2 logros y 1 nota de prueba de otra sesión (respaldo 
 - Un estudiante que se cambia de curso a mitad del trimestre recibe el boletín del **primer curso
   que se cierre** (unique estudiante + periodo); el otro lo salta.
 - Cerrar el periodo **avisa** cuántos referentes quedaron sin desempeño, pero no lo impide.
-- El boletín usa el formato común (logo y nombre de la marca, firmas "Director de grupo" y
-  "Coordinación"). Un formato propio del colegio iría en `instituciones/<colegio>/boletin.ts`.
+- Royal School usa su propio boletín ("INFORME EVALUATIVO", solo referentes y propósitos, sin
+  asignatura ni subreferentes, con la firma del director). Los demás colegios, el formato común.
+- La asistencia escrita a mano reemplaza al conteo de los registros en el boletín (no los cambia).
 
 ## Pendiente
 
 - Probar la planilla del docente (`/gestion-academica/notas`) con un docente con carga académica.
 - Revisar las páginas a 360 px.
-- Push de las ramas y deploy (ver arriba).
+- Subir los cambios del 2026-11-18 (periodo pasado, asistencia manual, registro de boletines) y
+  correr las migraciones 7 y 8 en el servidor.
+- Decidir si hace falta una opción para ver los referentes de todos los niveles (hoy solo con la 99).
 - PDF del boletín en el servidor, si se quiere enviar por correo o al acudiente.
 - Parte cuantitativa (nota numérica) y vista del acudiente / estudiante.
 
