@@ -902,10 +902,7 @@ class NotasService extends Service
     /** ¿Gestiona o aprueba referentes (153/154) en el nivel del curso? */
     public function gestionaCurso(array $actor, int $idCurso): bool
     {
-        $curso = Cursos::find($idCurso, ['id', 'id_nivel']);
-
-        return $curso && ($actor['gestiona'] || $actor['aprueba'])
-            && ($actor['niveles'] === null || in_array($curso->id_nivel, $actor['niveles'], true));
+        return ($actor['gestiona'] || $actor['aprueba']) && $this->cursoEnNiveles($actor['niveles'], $idCurso);
     }
 
     /** ¿El curso es de alguno de esos niveles académicos? (null = todos.) Para la opción 172. */
