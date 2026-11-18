@@ -15,8 +15,8 @@ su hijo del portal para padres (`PortalPadresController::semana`). Frontend: pá
   cualquiera de sus cursos (carga o el que dirige, `CargaAcademicaService::obtenerCursosDocente`).
   El backend lo valida en cada publicación, sin importar lo que mande el cliente.
 - **Sin aprobación**: las familias las ven al publicar. Borra el autor o quien tenga la
-  **opción 172** («Fotos del curso — Ver y borrar las de todos los cursos», otorgada por nombre
-  a Coordinador, Vicerrector y Directivo Docente). La 172 ve y borra en todos los cursos, pero
+  **opción 174** («Fotos del curso — Ver y borrar las de todos los cursos», otorgada por nombre
+  a Coordinador, Vicerrector y Directivo Docente). La 174 ve y borra en todos los cursos, pero
   **no publica** en uno donde no es docente (`puede_publicar` en `/cursos`).
 - **Autorización de imagen**: no existe un campo por estudiante. Al publicar, el docente
   confirma que no aparece ningún estudiante sin autorización (`confirma_autorizacion`,
@@ -46,16 +46,16 @@ su hijo del portal para padres (`PortalPadresController::semana`). Frontend: pá
 
 ## Endpoints (`routes/api/fotosCurso.php`)
 
-Todos con `Permiso::ruta([172], [TipoPerfil::DOCENTE])`; el controller repite la regla y limita
-al docente sin la 172 a sus cursos.
+Todos con `Permiso::ruta([174], [TipoPerfil::DOCENTE])`; el controller repite la regla y limita
+al docente sin la 174 a sus cursos.
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/api/fotos-curso/cursos` | cursos del docente (con la 172, todos los activos), cada uno con `puede_publicar` |
+| GET | `/api/fotos-curso/cursos` | cursos del docente (con la 174, todos los activos), cada uno con `puede_publicar` |
 | GET | `/api/fotos-curso/opciones` | para publicar: cada asignatura que dicta con sus cursos, y la de `id_asignatura` null con todos sus cursos |
 | GET | `/api/fotos-curso?id_curso=&pagina=` | publicaciones del año activo del curso, de a 10 (`POR_PAGINA`), con `puede_borrar`; `{ publicaciones, hay_mas, total_publicaciones, total_fotos }` |
 | POST | `/api/fotos-curso` | multipart: `id_asignatura?`, `id_cursos[]`, `fecha`, `descripcion?`, `fotos[]`, `confirma_autorizacion` |
-| DELETE | `/api/fotos-curso/{id}` | el autor o la 172 |
+| DELETE | `/api/fotos-curso/{id}` | el autor o la 174 |
 
 El portal (PortalPadresController, después de validar el vínculo) **nunca pide el año entero**:
 

@@ -12,10 +12,23 @@ class NivelAcademico extends Model
 
     public $timestamps = false;
 
+    /** Método de calificación del nivel (ver NotasService). La planilla cualitativa aplica a CUALITATIVA y AMBAS. */
+    public const CUALITATIVA = 'CUALITATIVA';
+    public const CUANTITATIVA = 'CUANTITATIVA';
+    public const AMBAS = 'AMBAS';
+    public const METODOS = [self::CUALITATIVA, self::CUANTITATIVA, self::AMBAS];
+
     protected $fillable = [
         'id',
         'nombre',
+        'metodo_calificacion',
     ];
+
+    /** ¿Se califica con desempeños por indicadores (planilla cualitativa)? */
+    public static function califCualitativa(?string $metodo): bool
+    {
+        return in_array($metodo ?? self::CUALITATIVA, [self::CUALITATIVA, self::AMBAS], true);
+    }
 
     public function niveles(): HasMany
     {

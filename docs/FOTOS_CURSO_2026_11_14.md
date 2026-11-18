@@ -12,7 +12,7 @@ Era la primera fase pendiente del portal: que las familias vean fotos de las cla
 de sus hijos. Las decisiones (2026-11-14):
 
 - Publica cualquier docente del curso, sin aprobación previa; borra el autor o quien tenga la
-  opción 172.
+  opción 174.
 - Autorización de imagen: el docente la confirma al publicar (no hay campo por estudiante).
 - Las fotos se ven durante el año escolar de la publicación.
 - Cada publicación es de una asignatura (o «Actividad del curso») y puede ir a varios cursos.
@@ -23,7 +23,7 @@ de sus hijos. Las decisiones (2026-11-14):
 
 - Tablas `fotos_curso_publicaciones` (año, docente, asignatura o null, fecha, descripción,
   `confirma_autorizacion`), `fotos_curso_publicacion_curso` (publicación ↔ curso) y
-  `fotos_curso_fotos` (rutas). Opción **172** «Fotos del curso — Ver y borrar las de todos los
+  `fotos_curso_fotos` (rutas). Opción **174** «Fotos del curso — Ver y borrar las de todos los
   cursos» (`Permiso::FOTOS_CURSO_GESTIONAR`), otorgada por nombre a Coordinador, Vicerrector y
   Directivo Docente.
 - `FotosCursoService` / `FotosCursoController` (`/api/fotos-curso`: `cursos`, `opciones`, listar
@@ -41,7 +41,7 @@ de sus hijos. Las decisiones (2026-11-14):
 
 ### Frontend
 
-- Página **«Fotos del curso»** (`/gestion-academica/fotos-curso`, tipo DOCENTE o 172): elegir
+- Página **«Fotos del curso»** (`/gestion-academica/fotos-curso`, tipo DOCENTE o 174): elegir
   curso, publicar (asignatura, cursos, fecha, descripción, hasta 10 fotos reducidas en el
   navegador, confirmación de imagen), listar de a 10 («Cargar más») y borrar.
 - Portal: año escolar en el friso; fotos como novedad del día; **carrusel** del mes de la semana
@@ -77,7 +77,7 @@ pendientes en [`PRUEBAS_CARGA_2026_11_16.md`](PRUEBAS_CARGA_2026_11_16.md).
    y `2026_11_14_100100_seed_opcion_fotos_curso`). SQL en `migraciones_sql.sql`. Estas migraciones
    se reescribieron durante el desarrollo (antes la publicación tenía `id_curso`): en producción se
    aplican por primera vez, así que no hay datos que migrar.
-3. Revisar en `/permisos` a quién se dio la 172 en cada colegio (se otorga por nombre de perfil;
+3. Revisar en `/permisos` a quién se dio la 174 en cada colegio (se otorga por nombre de perfil;
    en un colegio con otros nombres puede quedar sin otorgar).
 4. Con `UPLOADS_DISK=cloudinary`, las fotos nuevas suben como `authenticated` solas (la carpeta es
    nueva, no hace falta `cloudinary:privatizar`).

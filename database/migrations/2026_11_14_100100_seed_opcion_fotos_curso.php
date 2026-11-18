@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
-    private const ID = 172;
+    private const ID = 174;
     private const NOMBRE = 'Fotos del curso — Ver y borrar las de todos los cursos';
     private const MODULO = 14; // Gestión Académica
     private const PERFILES = ['coordinador', 'vicerrector', 'directivo docente'];

@@ -574,6 +574,117 @@ alter table `carnet_solicitudes` add index `carnet_solicitudes_estado_index`(`es
 -- ---------------------------------------------------------------------------
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 147, 'Solicitar carnet', 10, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 147);
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_110000_create_academico_grado_table.php
+-- Catálogo de grados (editable en Configuración académica → Grados) y
+-- curso.id_grado. Los referentes cualitativos son por grado (todos sus cursos los
+-- comparten). Precarga los 15 grados (Párvulos … Undécimo) y asigna a cada
+-- curso el grado cuya palabra encabeza su nombre; eso lo hace la migración en PHP.
+-- ---------------------------------------------------------------------------
+create table `academico_grado` (`id` int not null auto_increment, `nombre` varchar(80) not null, `id_nivel_academico` int null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_grado` add index `academico_grado_id_nivel_academico_index`(`id_nivel_academico`);
+ALTER TABLE curso ADD COLUMN id_grado INT NULL AFTER id_nivel;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120000_create_academico_notas_cualitativas_tables.php
+-- Notas cualitativas: método de calificación por nivel; fecha límite de notas
+-- del periodo; escala de desempeños (general o por niveles); propósitos
+-- (catálogo único); referentes por grado + periodo + propósito + asignatura,
+-- con subreferentes (id_padre); plan de referentes con historial; valoración
+-- por estudiante + referente (desempeño del docente y ajuste del coordinador).
+-- Sin FK a tablas MyISAM (periodo, curso, asignatura).
+-- ---------------------------------------------------------------------------
+alter table `nivel_academico` add `metodo_calificacion` varchar(12) not null default 'CUALITATIVA' after `nombre`;
+ALTER TABLE periodo_academico ADD COLUMN fecha_limite_notas DATE NULL AFTER fecha_fin;
+create table `academico_escala_valoracion` (`id` int not null auto_increment, `nombre` varchar(50) not null, `abreviatura` varchar(10) null, `descripcion` varchar(500) null, `color` varchar(20) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+create table `academico_escala_valoracion_nivel` (`id_escala` int not null, `id_nivel_academico` int not null, primary key (`id_escala`, `id_nivel_academico`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_escala_valoracion_nivel` add constraint `academico_escala_valoracion_nivel_id_escala_foreign` foreign key (`id_escala`) references `academico_escala_valoracion` (`id`) on delete cascade;
+alter table `academico_escala_valoracion_nivel` add index `academico_escala_valoracion_nivel_id_nivel_academico_index`(`id_nivel_academico`);
+create table `academico_proposito` (`id` int not null auto_increment, `nombre` varchar(120) not null, `descripcion` varchar(500) null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+create table `academico_referente` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `id_proposito` int not null, `id_asignatura` int not null, `id_padre` int null, `descripcion` text not null, `orden` smallint unsigned not null default '0', `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_referente` add constraint `academico_referente_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
+alter table `academico_referente` add constraint `academico_referente_id_proposito_foreign` foreign key (`id_proposito`) references `academico_proposito` (`id`);
+alter table `academico_referente` add constraint `academico_referente_id_padre_foreign` foreign key (`id_padre`) references `academico_referente` (`id`) on delete cascade;
+alter table `academico_referente` add constraint `academico_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_referente` add index `ix_referente_grado_periodo`(`id_grado`, `id_periodo_academico`);
+alter table `academico_referente` add index `academico_referente_id_padre_index`(`id_padre`);
+create table `academico_referente_plan` (`id` int not null auto_increment, `id_grado` int not null, `id_periodo_academico` int not null, `estado` varchar(15) not null default 'BORRADOR', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_referente_plan` add constraint `academico_referente_plan_id_grado_foreign` foreign key (`id_grado`) references `academico_grado` (`id`);
+alter table `academico_referente_plan` add unique `uq_referente_plan`(`id_grado`, `id_periodo_academico`);
+alter table `academico_referente_plan` add index `ix_referente_plan_periodo_estado`(`id_periodo_academico`, `estado`);
+create table `academico_referente_plan_historial` (`id` int not null auto_increment, `id_plan` int not null, `id_usuario` int not null, `accion` varchar(20) not null, `detalle` text null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_referente_plan_historial` add constraint `academico_referente_plan_historial_id_plan_foreign` foreign key (`id_plan`) references `academico_referente_plan` (`id`) on delete cascade;
+alter table `academico_referente_plan_historial` add constraint `academico_referente_plan_historial_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_referente_plan_historial` add index `academico_referente_plan_historial_id_plan_index`(`id_plan`);
+create table `academico_valoracion_referente` (`id` int not null auto_increment, `id_estudiante` int not null, `id_referente` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `id_escala_docente` int null, `id_docente` int null, `id_escala_ajuste` int null, `id_ajustado_por` int null, `ajustado_at` timestamp null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_referente_foreign` foreign key (`id_referente`) references `academico_referente` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_escala_docente_foreign` foreign key (`id_escala_docente`) references `academico_escala_valoracion` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_escala_ajuste_foreign` foreign key (`id_escala_ajuste`) references `academico_escala_valoracion` (`id`);
+alter table `academico_valoracion_referente` add constraint `academico_valoracion_referente_id_ajustado_por_foreign` foreign key (`id_ajustado_por`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_referente` add unique `uq_valoracion_estudiante_referente`(`id_estudiante`, `id_referente`);
+alter table `academico_valoracion_referente` add index `ix_valoracion_curso_periodo`(`id_curso`, `id_periodo_academico`);
+alter table `academico_valoracion_referente` add index `academico_valoracion_referente_id_referente_index`(`id_referente`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120100_seed_opciones_notas.php
+-- Opciones 152 "Consultar notas", 153 "Gestionar referentes" y 154 "Aprobar
+-- referentes" (módulo 14). No se otorgan a ningún perfil; se asignan desde /permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 152, 'Gestión Académica — Consultar notas', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 152);
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 153, 'Gestión Académica — Gestionar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 153);
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 154, 'Gestión Académica — Aprobar referentes', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 154);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120200_create_academico_boletin_tables.php
+-- Observaciones generales del director de grupo (por estudiante y periodo),
+-- cierre del periodo por curso (lo hace el coordinador) y foto del boletín de
+-- cada estudiante al cerrar (JSON). Sin FK a tablas MyISAM (periodo, curso).
+-- ---------------------------------------------------------------------------
+create table `academico_observacion_general` (`id` int not null auto_increment, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `observacion` text not null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_observacion_general` add constraint `academico_observacion_general_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_observacion_general` add constraint `academico_observacion_general_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_observacion_general` add unique `uq_observacion_estudiante_periodo`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_observacion_general` add index `ix_observacion_curso_periodo`(`id_curso`, `id_periodo_academico`);
+create table `academico_cierre_periodo` (`id` int not null auto_increment, `id_curso` int not null, `id_periodo_academico` int not null, `id_usuario` int not null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_cierre_periodo` add constraint `academico_cierre_periodo_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_cierre_periodo` add unique `uq_cierre_curso_periodo`(`id_curso`, `id_periodo_academico`);
+create table `academico_boletin` (`id` int not null auto_increment, `id_cierre` int not null, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `datos` longtext not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_boletin` add constraint `academico_boletin_id_cierre_foreign` foreign key (`id_cierre`) references `academico_cierre_periodo` (`id`) on delete cascade;
+alter table `academico_boletin` add constraint `academico_boletin_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_boletin` add unique `uq_boletin_estudiante_periodo`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_boletin` add index `academico_boletin_id_cierre_index`(`id_cierre`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120300_create_academico_evaluacion_descriptiva_tables.php
+-- Evaluación descriptiva: academico_grado.tipo_evaluacion (REFERENTES |
+-- DESCRIPTIVA), campos de cada propósito (Fortalezas, Por fortalecer...) y el
+-- texto de cada estudiante por campo y periodo. Sin FK a tablas MyISAM.
+-- ---------------------------------------------------------------------------
+alter table `academico_grado` add `tipo_evaluacion` varchar(12) not null default 'REFERENTES' after `id_nivel_academico`;
+create table `academico_proposito_campo` (`id` int not null auto_increment, `id_proposito` int not null, `nombre` varchar(80) not null, `orden` smallint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_proposito_campo` add constraint `academico_proposito_campo_id_proposito_foreign` foreign key (`id_proposito`) references `academico_proposito` (`id`) on delete cascade;
+alter table `academico_proposito_campo` add index `academico_proposito_campo_id_proposito_index`(`id_proposito`);
+create table `academico_valoracion_descriptiva` (`id` int not null auto_increment, `id_estudiante` int not null, `id_campo` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `texto` text not null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_campo_foreign` foreign key (`id_campo`) references `academico_proposito_campo` (`id`);
+alter table `academico_valoracion_descriptiva` add constraint `academico_valoracion_descriptiva_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_valoracion_descriptiva` add unique `uq_descriptiva_estudiante_campo_periodo`(`id_estudiante`, `id_campo`, `id_periodo_academico`);
+alter table `academico_valoracion_descriptiva` add index `ix_descriptiva_curso_periodo`(`id_curso`, `id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_05_120400_create_academico_referente_envio_table.php
+-- Envío a revisión por asignatura: cada docente envía los referentes de su asignatura; con
+-- todas las del grado enviadas, el plan pasa a EN_REVISION. Devolver o reabrir borra los envíos.
+-- ---------------------------------------------------------------------------
+create table `academico_referente_envio` (`id` int not null auto_increment, `id_plan` int not null, `id_asignatura` int not null, `id_usuario` int not null, `fecha` timestamp not null default CURRENT_TIMESTAMP, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_referente_envio` add constraint `academico_referente_envio_id_plan_foreign` foreign key (`id_plan`) references `academico_referente_plan` (`id`) on delete cascade;
+alter table `academico_referente_envio` add constraint `academico_referente_envio_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_referente_envio` add unique `uq_referente_envio`(`id_plan`, `id_asignatura`);
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_05_120000_renombrar_opcion_editar_reservas.php
@@ -741,6 +852,50 @@ INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
 alter table `salones` add `id_responsable` int unsigned null after `sonido`;
 
 -- ---------------------------------------------------------------------------
+-- 2026_11_12_120000_trabajos_altura_independientes.php
+-- Trabajos en altura creados desde Gestión Humana sin reporte ni mantenimiento: id_reporte
+-- opcional y datos propios del permiso (tipo, bloque, área, elemento, descripción), más
+-- altura aproximada, hora de inicio y fecha de finalización opcionales. bloques es MyISAM: sin FK.
+-- ---------------------------------------------------------------------------
+alter table `trabajos_altura` modify `id_reporte` int null;
+alter table `trabajos_altura` add `tipo_trabajo` varchar(100) null after `fecha_trabajo`;
+alter table `trabajos_altura` add `id_bloque` bigint unsigned null after `tipo_trabajo`;
+alter table `trabajos_altura` add `id_area` int null after `id_bloque`;
+alter table `trabajos_altura` add `elemento` varchar(190) null after `id_area`;
+alter table `trabajos_altura` add `descripcion` text null after `elemento`;
+alter table `trabajos_altura` add `altura_aproximada` decimal(5, 2) null after `descripcion`;
+alter table `trabajos_altura` add `hora_inicio` time null after `altura_aproximada`;
+alter table `trabajos_altura` add `fecha_finalizacion` date null after `hora_inicio`;
+alter table `trabajos_altura` add constraint `trabajos_altura_id_area_foreign` foreign key (`id_area`) references `areas` (`id`) on delete set null;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_12_130000_add_finalizado_to_trabajos_altura.php
+-- Estado de los trabajos en altura creados en Gestión Humana: pendientes hasta que se marcan
+-- finalizados (cuándo y quién); se pueden reabrir. Los de un reporte toman el estado del reporte.
+-- ---------------------------------------------------------------------------
+alter table `trabajos_altura` add `finalizado_en` datetime null after `fecha_finalizacion`;
+alter table `trabajos_altura` add `finalizado_por` int null after `finalizado_en`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_18_100000_create_academico_asistencia_manual_table.php
+-- Inasistencias y llegadas tarde del boletín escritas a mano: reemplazan al conteo de los registros
+-- (asistencia de clases / portería); null = usar el conteo. Sin FK a tablas MyISAM (periodo, curso).
+-- ---------------------------------------------------------------------------
+create table `academico_asistencia_manual` (`id` int not null auto_increment, `id_estudiante` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `inasistencias` smallint unsigned null, `llegadas_tarde` smallint unsigned null, `id_usuario` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_asistencia_manual` add constraint `academico_asistencia_manual_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_asistencia_manual` add constraint `academico_asistencia_manual_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
+alter table `academico_asistencia_manual` add unique `uq_asistencia_manual`(`id_estudiante`, `id_periodo_academico`);
+alter table `academico_asistencia_manual` add index `ix_asistencia_manual_curso_periodo`(`id_curso`, `id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_18_110000_seed_opciones_registro_boletines.php
+-- Registro de boletines (módulo 14): 172 = ver el registro y descargar los boletines de su nivel;
+-- 173 = de todos los niveles. No se otorgan a ningún perfil; se asignan desde /permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 172, 'Gestión Académica — Ver registro de boletines (su nivel)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 172);
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 173, 'Gestión Académica — Ver registro de boletines (todos los niveles)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 173);
 -- 2026_11_13_100000_add_index_correo_to_usuarios_table.php
 -- Índice en usuarios.correo (no único: los correos personales de los acudientes pueden
 -- repetirse entre colegios). El login busca por correo en cada base y leía la tabla completa.
@@ -791,12 +946,12 @@ alter table `fotos_curso_fotos` add constraint `fotos_curso_fotos_id_publicacion
 
 -- ---------------------------------------------------------------------------
 -- 2026_11_14_100100_seed_opcion_fotos_curso.php
--- Opción 172 "Fotos del curso — Ver y borrar las de todos los cursos" (módulo 14, Gestión
+-- Opción 174 "Fotos del curso — Ver y borrar las de todos los cursos" (módulo 14, Gestión
 -- Académica): moderar. Publicar es autoservicio del docente del curso, sin opción. Se otorga
 -- por NOMBRE de perfil: coordinador, vicerrector, directivo docente.
 -- ---------------------------------------------------------------------------
-insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (172, 'Fotos del curso — Ver y borrar las de todos los cursos', 14, 1, NOW());
+insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (174, 'Fotos del curso — Ver y borrar las de todos los cursos', 14, 1, NOW());
 -- Por cada perfil cuyo nombre (minúsculas, espacios colapsados) sea coordinador, vicerrector o
 -- directivo docente, y que aún no la tenga:
--- insert into `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) values (172, <id_perfil>, 1, NOW());
+-- insert into `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) values (174, <id_perfil>, 1, NOW());
 -- Resultado local (sami_royal): perfiles 26 Coordinador, 12 Vicerrector y 20 Directivo Docente.

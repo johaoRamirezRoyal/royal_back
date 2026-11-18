@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Storage;
 
 /**
  * Fotos del curso (portal para padres). Publica un docente del curso (carga académica activa o
- * director de grupo), sin aprobación; borra el autor o quien tenga la opción 172. Cada
+ * director de grupo), sin aprobación; borra el autor o quien tenga la opción 174. Cada
  * publicación queda en el año escolar activo cuando se crea, y los acudientes ven solo las del
  * año activo del curso actual de su hijo. Las fotos son privadas (`fotos-curso/`): al cliente
  * llega la ruta y la abre por /api/public, que valida la sesión.
@@ -59,7 +59,7 @@ class FotosCursoService extends Service
     }
 
     /**
-     * Cursos donde puede publicar: los de su carga y el que dirige. Con la opción 172, todos los
+     * Cursos donde puede publicar: los de su carga y el que dirige. Con la opción 174, todos los
      * activos (para moderar).
      */
     public function cursos(int $idUsuario, bool $moderador): array

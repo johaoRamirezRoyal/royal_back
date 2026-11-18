@@ -89,8 +89,9 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
 
 - **No confundir** con `periodos` (`Periodo`, `PeriodoServices`): ese es el catálogo
   institucional/administrativo (opción 107, bandera manual `en_curso`, lo usan Inventario y
-  Evaluaciones). `periodo_academico` es el académico: actas, observaciones, llegadas tarde.
-- Columnas: `id_anio_escolar`, `nombre`, `fecha_inicio`, `fecha_fin` y `activo`.
+  Evaluaciones). `periodo_academico` es el académico: notas, actas, observaciones, llegadas tarde.
+- Columnas: `id_anio_escolar`, `nombre`, `fecha_inicio`, `fecha_fin`, `activo` y
+  `fecha_limite_notas` (opcional, ≥ `fecha_fin`: plazo para calificar y corregir, ver notas.md).
   MyISAM en algunas BD: sin FK hacia él, y un `rollBack()` no deshace cambios.
 - CRUD en `/compartido/anio-academico/periodo-academico` (escritura con la 99). El año escolar
   **no se elige**: se resuelve por `fecha_inicio` (`obtenerAnioEscolarPorFecha`), al crear y al
@@ -103,8 +104,9 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
   Antes se exigía `fecha_fin ≤ 30 de junio` fijo, lo que en calendario A rechazaba todo periodo
   que terminara después de junio; editar no revalidaba nada ni recalculaba el año.
 - El cron diario `periodos:desactivar-vencidos` pone `activo = 0` cuando `fecha_fin` ya pasó (el
-  último día sigue activo). Lo que dependa de un plazo propio que pase de `fecha_fin` no debe
-  filtrar por `activo`, sino por fechas.
+  último día sigue activo). Por eso lo que depende de un plazo propio (notas) **no** filtra por
+  `activo`, sino por fechas.
+- Un periodo con notas no se elimina (las notas lo referencian sin FK): se desactiva.
 
 ## Vinculación Estudiante - Padre (`/vinculacion-acudientes`, opción 131)
 
@@ -123,6 +125,21 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   - Las filas válidas se aplican aunque otras fallen.
 
 ## Cursos y estudiantes (`/cursos`, opción 145)
+
+- **Grados** (`academico_grado`, modelo `Grado`: nombre, nivel académico opcional, orden, activo):
+  catálogo editable en Configuración académica → Grados (`GET /cursos/grados` con 145 o 99;
+  `POST`/`PUT /cursos/grados[/{id}]` con 99). No se borran: se desactivan. La migración
+  `2026_11_06_120000_create_academico_grado_table` precargó Párvulos … Undécimo y asignó a cada
+  curso el grado cuya palabra encabeza su nombre; los demás quedaron sin grado.
+- **`curso.id_grado`** (nullable, sin FK: curso es MyISAM en algunas BD). Se edita en el modal.
+  **El nivel del curso sale del grado**: si el grado tiene `id_nivel_academico`,
+  `CursoRequest::prepareForValidation` lo pone como `id_nivel` (manda sobre el que se envíe); solo
+  un curso sin grado, o con un grado de todos los niveles, necesita `id_nivel` explícito. Al
+  crear sin `id_grado`, `CursosServices::crear` propone `Grado::paraNombreDeCurso` (el grado activo
+  cuyo nombre encabeza el del curso: "Primero A" → Primero; renombrar un grado cambia qué cursos
+  nuevos lo reciben). Al actualizar sin `id_grado` se conserva: renombrar un curso no lo mueve de
+  grado. `ordenarPorGrado` ordena por nivel y luego por `academico_grado.orden` (la consulta debe
+  traer `id_grado`); los cursos del mismo grado comparten referentes en Notas.
 
 - `GET /cursos/all` sigue abierto (selects de otros módulos). Trae `id_nivel` y `nivel`
   (`{id, nombre}`) y sale en orden académico (`Cursos::ordenarPorGrado`): el frontend agrupa

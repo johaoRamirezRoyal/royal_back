@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
 
 /**
  * Fotos del curso, lado del colegio. Publicar es autoservicio del docente (tipo DOCENTE) en los
- * cursos de su carga o que dirige, sin opción; la opción 172 ve y borra las de cualquier curso.
+ * cursos de su carga o que dirige, sin opción; la opción 174 ve y borra las de cualquier curso.
  * La ruta deja pasar a los dos (Permiso::ruta con tipo DOCENTE) y aquí se limita al curso.
  * Lo que ven los padres sale por PortalPadresController::semana.
  */
@@ -110,8 +110,8 @@ class FotosCursoController extends Controller
     }
 
     /**
-     * La misma regla del middleware de la ruta (opción 172 o tipo DOCENTE) y, con `$idCurso`,
-     * que el docente sin la 172 sea del curso.
+     * La misma regla del middleware de la ruta (opción 174 o tipo DOCENTE) y, con `$idCurso`,
+     * que el docente sin la 174 sea del curso.
      */
     private function sinAcceso(Request $request, ?int $idCurso = null): ?JsonResponse
     {

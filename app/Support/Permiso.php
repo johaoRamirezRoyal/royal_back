@@ -88,7 +88,12 @@ final class Permiso
     public const ASISTENCIA_PANTALLA_QR = 148;          // "Asistencia — Pantalla del código QR" (solo la pantalla de portería)
     public const MIS_AREAS_COMUNES_CON_AREAS = 149;     // "Mis áreas comunes — Ver áreas del bloque" (complemento de la 119)
     public const SEGURIDAD_SOCIAL = 150;                // "Gestión Humana — Seguridad social de trabajadores" (EPS/AFP/ARL de quien tiene curso de altura)
-    // 151–154 libres en producción (reservados para renumerar la rama de notas).
+    // 151 libre en producción.
+    public const NOTAS_CONSULTAR = 152;                 // "Gestión Académica — Consultar notas" (solo lectura, cualquier curso)
+    public const REFERENTES_GESTIONAR = 153;            // "Gestión Académica — Gestionar referentes" (editar los de todas las asignaturas, grados de su nivel; enviar lo hace cada docente)
+    public const REFERENTES_APROBAR = 154;              // "Gestión Académica — Aprobar referentes" (aprobar, también directo, devolver y reabrir; editar y ajustar finales; cerrar el periodo; su nivel)
+    public const BOLETINES_NIVEL = 172;                 // "Gestión Académica — Ver registro de boletines (su nivel)" (registro y PDF de los cursos de su nivel)
+    public const BOLETINES_TODOS = 173;                 // "Gestión Académica — Ver registro de boletines (todos los niveles)"
     // Fase 3: lo que antes decidía un número de perfil (2026_11_10_110000_seed_opciones_roles).
     public const COORDINACION_NIVEL = 155;              // "Coordinación de nivel — Gestiona solo su nivel" (antes perfil 26; restrictiva)
     public const DIRECCION_ADMINISTRATIVA = 156;        // "Dirección administrativa — Gestiona los niveles administrativos" (antes perfil 7; restrictiva)
@@ -108,7 +113,7 @@ final class Permiso
     public const ADMISIONES_PSICOLOGA_BACHILLERATO = 169; // "Admisiones — Psicóloga de bachillerato" (antes 25)
     public const ADMISIONES_GESTION_PERSONAL = 170;     // "Admisiones — Gestionar inscripciones como personal" (antes nombres "administrador"/"admisiones")
     public const HIKVISION_GRUPO_PROFESORES = 171;      // "Asistencia — Grupo Profesores en las terminales" (antes perfiles 3, 13, 14 y 20 en GROUP_ID_POR_PERFIL)
-    public const FOTOS_CURSO_GESTIONAR = 172;           // "Fotos del curso — Ver y borrar las de todos los cursos" (publicar es autoservicio del docente)
+    public const FOTOS_CURSO_GESTIONAR = 174;           // "Fotos del curso — Ver y borrar las de todos los cursos" (publicar es autoservicio del docente)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

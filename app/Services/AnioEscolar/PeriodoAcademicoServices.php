@@ -224,6 +224,18 @@ class PeriodoAcademicoServices extends Service
                 ];
             }
 
+            // Los referentes y sus notas apuntan al periodo sin FK (periodo_academico es MyISAM):
+            // borrarlo los dejaría huérfanos. Las notas cuelgan de los referentes.
+            if (\App\Models\GestionAcademica\Referente::whereIn('id_periodo_academico', $ids_periodo_academico)->exists()
+                || \App\Models\GestionAcademica\ObservacionGeneral::whereIn('id_periodo_academico', $ids_periodo_academico)->exists()
+                || \App\Models\GestionAcademica\ValoracionDescriptiva::whereIn('id_periodo_academico', $ids_periodo_academico)->exists()) {
+                return [
+                    'error' => true,
+                    'message' => 'No se puede eliminar un periodo que ya tiene referentes o notas registradas. Desactívalo en su lugar.',
+                    'data' => []
+                ];
+            }
+
             $eliminados = PeriodoAcademico::whereIn('id', $ids_periodo_academico)->delete();
 
             if ($eliminados === 0) {

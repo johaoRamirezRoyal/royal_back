@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Fotos del curso (portal para padres): un docente publica fotos de una clase o actividad y los
  * acudientes las ven en la semana de su hijo durante el año escolar de la publicación. Sin
- * aprobación previa; el autor (o quien tenga la opción 172) la borra. Las fotos son archivos
+ * aprobación previa; el autor (o quien tenga la opción 174) la borra. Las fotos son archivos
  * privados (`fotos-curso/`, ver ArchivosPrivados).
  *
  * - Una publicación es de una asignatura (`id_asignatura`; null = actividad del curso, sin

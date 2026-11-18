@@ -30,7 +30,7 @@ class DocenteHorarioService extends Service
     // cambia aunque el nombre sí, así que es la comparación robusta — comparar por nombre
     // fue justo lo que rompió idsNivelAcademicoParaNivel() para esta BD (ver
     // 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria).
-    private const NIVEL_ID_BACHILLERATO_SECUNDARIA = 4;
+    public const NIVEL_ID_BACHILLERATO_SECUNDARIA = 4;
 
     public function __construct(
         private CargaAcademicaService $cargaAcademicaService,
@@ -156,8 +156,12 @@ class DocenteHorarioService extends Service
         }
     }
 
-    /** @return array<int, int> */
-    private function idsNivelAcademicoParaNivel(?\App\Models\Usuarios\Nivel $nivel): array
+    /**
+     * Pública y estática: también la usa NotasService para el nivel del coordinador / asistente.
+     *
+     * @return array<int, int>
+     */
+    public static function idsNivelAcademicoParaNivel(?\App\Models\Usuarios\Nivel $nivel): array
     {
         if (!$nivel?->id_nivel_academico) {
             return [];

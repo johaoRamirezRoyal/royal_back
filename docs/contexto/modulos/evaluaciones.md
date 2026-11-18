@@ -96,3 +96,9 @@ Encuestas de satisfacción **anónimas** por salón: un QR en el salón abre
   (no copia salones ni respuestas).
 - En el flujo público se ocultan las preguntas de opciones que no tienen opciones
   (`esRespondible()`), y no se exigen aunque sean obligatorias.
+- Resultados (`/{id}/resultados`, `/{id}/envios`, `/{id}/resultados/pdf`) comparten los
+  filtros `id_salon`, `id_reserva` y `id_pregunta` + `id_opcion` (`filtrarEnvios()`).
+  Este último es el filtro de "no conformidades": un filtro manual, sin marca en la
+  pregunta. El `id` + `created_at` de `encuestas_respuestas` identifica cada envío.
+- `encuestas:enviar-consolidado` corre a las 17:00 y envía el PDF por reserva de hoy al
+  responsable (`reservas.id_user`). Las reservas sin respuestas no reciben correo.

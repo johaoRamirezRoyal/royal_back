@@ -4,6 +4,7 @@ use App\Enums\TipoPerfil;
 use App\Http\Controllers\GestionAcademica\GestionAcademicaController;
 use App\Http\Controllers\GestionAcademica\ConsultaAsistenciaClaseController;
 use App\Http\Controllers\GestionAcademica\ActasEstudianteController;
+use App\Http\Controllers\GestionAcademica\NotasController;
 use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
 
@@ -519,4 +520,65 @@ Route::prefix('actas')->group(function () {
     Route::post('/', [ActasEstudianteController::class, 'store'])->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
     Route::put('/{id}', [ActasEstudianteController::class, 'update'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
     Route::delete('/{id}', [ActasEstudianteController::class, 'destroy'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::ACTAS_GESTIONAR]));
+});
+
+/**
+ * Notas cualitativas (NotasController; permisos en el controller y aquí). Ver
+ * docs/contexto/modulos/notas.md. Plan: ?id_curso=&id_periodo=  (id_periodo = periodo_academico.id)
+ * PUT  /notas/referentes   { id_curso, id_periodo, referentes: [{ id?, id_proposito, id_asignatura, descripcion, subreferentes?: [{ id?, descripcion }] }] }
+ * POST /notas/plan/estado  { id_curso, id_periodo, accion: enviar|aprobar|devolver|reabrir, comentario? }
+ */
+Route::prefix('/notas')->group(function () {
+    $escala = Permiso::ruta([Permiso::GESTION_ACADEMICA]);
+    $referentes = [Permiso::REFERENTES_GESTIONAR, Permiso::REFERENTES_APROBAR];
+
+    Route::get('/escalas', [NotasController::class, 'listarEscalas'])->middleware($escala);
+    Route::post('/escalas', [NotasController::class, 'crearEscala'])->middleware($escala);
+    // Antes de /escalas/{id}: reordena la escala (ids en el orden nuevo).
+    Route::put('/escalas/orden', [NotasController::class, 'ordenarEscalas'])->middleware($escala);
+    Route::put('/escalas/{id}', [NotasController::class, 'actualizarEscala'])->whereNumber('id')->middleware($escala);
+
+    // Propósitos (catálogo único) y método de calificación por nivel: 99.
+    Route::get('/propositos', [NotasController::class, 'listarPropositos'])->middleware($escala);
+    Route::post('/propositos', [NotasController::class, 'crearProposito'])->middleware($escala);
+    // Antes de /propositos/{id}: reordena (ids en el orden nuevo).
+    Route::put('/propositos/orden', [NotasController::class, 'ordenarPropositos'])->middleware($escala);
+    Route::put('/propositos/{id}', [NotasController::class, 'actualizarProposito'])->whereNumber('id')->middleware($escala);
+    Route::get('/metodos-nivel', [NotasController::class, 'listarMetodosNivel'])->middleware($escala);
+    Route::put('/metodos-nivel/{id}', [NotasController::class, 'cambiarMetodoNivel'])->whereNumber('id')->middleware($escala);
+
+    Route::put('/referentes', [NotasController::class, 'guardarReferentes'])->middleware(Permiso::ruta($referentes, [TipoPerfil::DOCENTE]));
+    Route::get('/referentes/grados', [NotasController::class, 'gradosReferentes'])->middleware(Permiso::ruta($referentes));
+    Route::get('/plan', [NotasController::class, 'verPlan'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
+    Route::post('/plan/estado', [NotasController::class, 'cambiarEstadoPlan'])->middleware(Permiso::ruta($referentes, [TipoPerfil::DOCENTE]));
+
+    // Calificación: el docente en sus asignaturas; el director de grupo y el coordinador ven el curso.
+    $docente = Permiso::ruta([], [TipoPerfil::DOCENTE]);
+    $aprueba = Permiso::ruta([Permiso::REFERENTES_APROBAR]);
+    Route::get('/mis-cursos', [NotasController::class, 'misCursos'])->middleware($docente);
+    Route::get('/planilla', [NotasController::class, 'planilla'])->middleware($docente);
+    Route::put('/planilla', [NotasController::class, 'guardarPlanilla'])->middleware($docente);
+    // Evaluación descriptiva (grados DESCRIPTIVA): textos por campo de cada propósito.
+    Route::get('/planilla-descriptiva', [NotasController::class, 'planillaDescriptiva'])->middleware($docente);
+    Route::put('/planilla-descriptiva', [NotasController::class, 'guardarPlanillaDescriptiva'])->middleware($docente);
+    Route::get('/cursos', [NotasController::class, 'filtrosCursos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
+    Route::get('/curso', [NotasController::class, 'vistaCurso'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]));
+    Route::put('/observaciones', [NotasController::class, 'guardarObservaciones'])->middleware($docente);
+    // Inasistencias y llegadas tarde del boletín a mano (solo donde no hay registros): director o 154.
+    Route::put('/asistencia-manual', [NotasController::class, 'guardarAsistenciaManual'])->middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR], [TipoPerfil::DOCENTE]));
+    Route::put('/ajuste', [NotasController::class, 'ajustar'])->middleware($aprueba);
+    Route::post('/cierre', [NotasController::class, 'cerrar'])->middleware($aprueba);
+    // Cierre general: todos los cursos cualitativos del nivel en el periodo.
+    Route::post('/cierre/nivel', [NotasController::class, 'cerrarNivel'])->middleware($aprueba);
+    Route::delete('/cierre', [NotasController::class, 'reabrirCierre'])->middleware($aprueba);
+
+    // Boletines (fotos guardadas al cerrar; el PDF lo arma el frontend): mismo acceso que /curso.
+    $veCurso = Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]);
+    // Registro de boletines: 172 (su nivel) y 173 (todos los niveles), además de los de arriba.
+    $registro = [Permiso::BOLETINES_NIVEL, Permiso::BOLETINES_TODOS];
+    Route::get('/boletines', [NotasController::class, 'boletinesCurso'])
+        ->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes, ...$registro], [TipoPerfil::DOCENTE]));
+    Route::get('/boletines/estudiante', [NotasController::class, 'boletinesEstudiante'])->middleware($veCurso);
+    // Registro de boletines (?id_periodo): cada curso del periodo con su cierre. 99/152/173 todos; 153/154/172 su nivel.
+    Route::get('/boletines/registro', [NotasController::class, 'registroBoletines'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes, ...$registro]));
 });
