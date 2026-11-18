@@ -80,7 +80,7 @@ diligencian cartas de recomendación de sus egresados aspirantes. Tiene dos cont
   Admisiones (perfil 9).
 - Estos ids estuvieron mal hardcodeados como 104/105 (que son de Compras) y se
   corrigieron el 2026-09-22. Ese mismo día se corrigió Acudientes
-  (`AcudientesAdminController`), que es **112** y no 106. La migración
+  (entonces `AcudientesAdminController`, hoy reemplazado por el módulo Acudientes, 175), que es **112** y no 106. La migración
   `2026_09_22_100832_restore_perfil_admisiones_...` restauró el permiso del perfil 9
   buscando la opción por nombre.
 

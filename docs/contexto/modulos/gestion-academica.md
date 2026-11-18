@@ -108,7 +108,9 @@ está en [`gestion-convivencial.md`](gestion-convivencial.md).
   `activo`, sino por fechas.
 - Un periodo con notas no se elimina (las notas lo referencian sin FK): se desactiva.
 
-## Vinculación Estudiante - Padre (`/vinculacion-acudientes`, opción 131)
+## Vinculación Estudiante - Padre (`/vinculacion-acudientes`, opción 131 o 175)
+
+La usa el módulo Acudientes (175, ver `acudientes.md`); la 131 sigue valiendo.
 
 No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
 `estudiantes_padres`, tabla legacy sin índice único.

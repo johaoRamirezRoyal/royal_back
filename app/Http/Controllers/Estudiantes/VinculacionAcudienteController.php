@@ -26,7 +26,8 @@ class VinculacionAcudienteController extends Controller
     // Id real confirmado contra cron_opciones tras correr
     // 2026_09_23_100000_seed_opcion_vinculacion_estudiante_padre (insertGetId — no
     // asumir el literal en otra BD, ver drift documentado en AGENTS.md).
-    private const OPCION_VINCULACION = Permiso::VINCULACION_ACUDIENTES;
+    // La 175 (módulo Acudientes) reemplaza a la 131; las dos dan acceso mientras conviven.
+    private const OPCIONES = [Permiso::VINCULACION_ACUDIENTES, Permiso::ACUDIENTES];
 
 
     public function __construct(
@@ -37,7 +38,7 @@ class VinculacionAcudienteController extends Controller
 
     public function index(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 
@@ -59,7 +60,7 @@ class VinculacionAcudienteController extends Controller
     /** Búsqueda paginada de estudiantes activos por nombre/documento y curso(s). */
     public function buscarEstudiantes(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 
@@ -83,7 +84,7 @@ class VinculacionAcudienteController extends Controller
 
     public function estudiantes(Request $request, int $idAcudiente)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 
@@ -102,7 +103,7 @@ class VinculacionAcudienteController extends Controller
      */
     public function acudientes(Request $request, int $idEstudiante)
     {
-        if (! $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if (! $this->sinAcceso($request, ...self::OPCIONES)) {
             return $this->success('Datos obtenidos satisfactoriamente', $this->vinculacionService->acudientesVinculados($idEstudiante));
         }
 
@@ -124,7 +125,7 @@ class VinculacionAcudienteController extends Controller
 
     public function vincular(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 
@@ -145,7 +146,7 @@ class VinculacionAcudienteController extends Controller
     /** Vinculación masiva: multipart `archivo` (.xlsx/.xls/.csv) — ver VinculacionAcudienteService::importarExcel. */
     public function importar(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 
@@ -164,7 +165,7 @@ class VinculacionAcudienteController extends Controller
 
     public function desvincular(Request $request)
     {
-        if ($rechazo = $this->sinAcceso($request, self::OPCION_VINCULACION)) {
+        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
             return $rechazo;
         }
 

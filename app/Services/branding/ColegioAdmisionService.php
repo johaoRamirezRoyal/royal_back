@@ -123,6 +123,13 @@ class ColegioAdmisionService extends Service
         return $colegio && in_array($colegio->connection, BasesDatosService::connectionsConUsuarios(), true) ? $colegio : null;
     }
 
+    /** El colegio (activo) de la base que atiende la petición, con su marca: el enlace del portal
+     * para padres que se le envía a un acudiente. null si esa base no tiene colegio en /colegios. */
+    public function colegioDeLaSesion(): ?ColegioAdmision
+    {
+        return ColegioAdmision::with('marca')->where('connection', config('database.default'))->where('activo', true)->orderBy('id')->first();
+    }
+
     /** @return array{nombre: ?string, descripcion: ?string, color: ?string, logo: ?string, imagen: ?string, logo_secundario: ?string, tipo_calendario: string} */
     public function resolverBrandingPorSlug(?string $slug): ?array
     {

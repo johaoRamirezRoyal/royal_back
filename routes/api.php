@@ -331,9 +331,10 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/instituciones-admin.php';
     });
 
-    // ACUDIENTES (gestión admin de los acudientes auto-registrados vía Admisiones)
-    Route::prefix('/acudientes-admin')->group(function () {
-        require __DIR__ . '/api/acudientes-admin.php';
+    // ACUDIENTES (opción 175): crear, editar, estado y acceso al portal para padres. Reemplaza
+    // /acudientes-admin (opción 112, solo listaba los de Admisiones y cambiaba su estado).
+    Route::prefix('/acudientes')->group(function () {
+        require __DIR__ . '/api/acudientes.php';
     });
 
     // VINCULACIÓN ESTUDIANTE - PADRE (estudiantes_padres, opción 131)

@@ -326,9 +326,9 @@ class UsuariosServices
     }
 
     /**
-     * Listado paginado de acudientes (perfil 6, auto-registrados vía el flujo público de
-     * Admisiones — ver AdmissionsController::familyRegister) para el módulo de gestión en
-     * AcudientesAdminController. A diferencia de mostrarUsuariosPaginados (que EXCLUYE
+     * Listado paginado de acudientes (tipo ACUDIENTE: los que crea el colegio y los que se
+     * auto-registran en Admisiones) para el módulo Acudientes (AcudientesController) y la
+     * vinculación de hijos. A diferencia de mostrarUsuariosPaginados (que EXCLUYE
      * perfil 6 a propósito, ver whereNotIn más arriba), acá se filtra directo a ese
      * perfil — no se puede simplemente quitar la exclusión de aquel método porque el
      * resto de sus consumidores (el módulo /users) sigue necesitando que se excluya.
@@ -379,6 +379,8 @@ class UsuariosServices
                 ->when($estado, function ($query, $estado) {
                     $query->where('estado', $estado);
                 })
+                // Hijos vinculados (activos): el módulo Acudientes los muestra en la lista.
+                ->addSelect(['hijos_count' => EstudiantesPadre::selectRaw('COUNT(*)')->whereColumn('id_acudiente', 'usuarios.id_user')->where('activo', 1)])
                 ->orderBy($sort, $dir)
                 ->paginate($perPage);
 
