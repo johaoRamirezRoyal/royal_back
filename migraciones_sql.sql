@@ -886,3 +886,13 @@ alter table `academico_asistencia_manual` add constraint `academico_asistencia_m
 alter table `academico_asistencia_manual` add constraint `academico_asistencia_manual_id_usuario_foreign` foreign key (`id_usuario`) references `usuarios` (`id_user`);
 alter table `academico_asistencia_manual` add unique `uq_asistencia_manual`(`id_estudiante`, `id_periodo_academico`);
 alter table `academico_asistencia_manual` add index `ix_asistencia_manual_curso_periodo`(`id_curso`, `id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_18_110000_seed_opciones_registro_boletines.php
+-- Registro de boletines (módulo 14): 172 = ver el registro y descargar los boletines de su nivel;
+-- 173 = de todos los niveles. No se otorgan a ningún perfil; se asignan desde /permisos.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 172, 'Gestión Académica — Ver registro de boletines (su nivel)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 172);
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 173, 'Gestión Académica — Ver registro de boletines (todos los niveles)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 173);

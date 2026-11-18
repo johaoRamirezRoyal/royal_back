@@ -908,6 +908,14 @@ class NotasService extends Service
             && ($actor['niveles'] === null || in_array($curso->id_nivel, $actor['niveles'], true));
     }
 
+    /** ¿El curso es de alguno de esos niveles académicos? (null = todos.) Para la opción 172. */
+    public function cursoEnNiveles(?array $niveles, int $idCurso): bool
+    {
+        $curso = Cursos::find($idCurso, ['id', 'id_nivel']);
+
+        return $curso && ($niveles === null || in_array($curso->id_nivel, $niveles, true));
+    }
+
     private static function cierreDe(int $idCurso, int $idPeriodo): ?CierrePeriodo
     {
         return CierrePeriodo::with('usuario:id_user,nombre,apellido')->where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->first();

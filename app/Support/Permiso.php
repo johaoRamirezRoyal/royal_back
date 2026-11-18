@@ -92,6 +92,8 @@ final class Permiso
     public const NOTAS_CONSULTAR = 152;                 // "Gestión Académica — Consultar notas" (solo lectura, cualquier curso)
     public const REFERENTES_GESTIONAR = 153;            // "Gestión Académica — Gestionar referentes" (editar los de todas las asignaturas, grados de su nivel; enviar lo hace cada docente)
     public const REFERENTES_APROBAR = 154;              // "Gestión Académica — Aprobar referentes" (aprobar, también directo, devolver y reabrir; editar y ajustar finales; cerrar el periodo; su nivel)
+    public const BOLETINES_NIVEL = 172;                 // "Gestión Académica — Ver registro de boletines (su nivel)" (registro y PDF de los cursos de su nivel)
+    public const BOLETINES_TODOS = 173;                 // "Gestión Académica — Ver registro de boletines (todos los niveles)"
     // Fase 3: lo que antes decidía un número de perfil (2026_11_10_110000_seed_opciones_roles).
     public const COORDINACION_NIVEL = 155;              // "Coordinación de nivel — Gestiona solo su nivel" (antes perfil 26; restrictiva)
     public const DIRECCION_ADMINISTRATIVA = 156;        // "Dirección administrativa — Gestiona los niveles administrativos" (antes perfil 7; restrictiva)

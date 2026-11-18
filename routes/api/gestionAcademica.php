@@ -574,8 +574,11 @@ Route::prefix('/notas')->group(function () {
 
     // Boletines (fotos guardadas al cerrar; el PDF lo arma el frontend): mismo acceso que /curso.
     $veCurso = Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes], [TipoPerfil::DOCENTE]);
-    Route::get('/boletines', [NotasController::class, 'boletinesCurso'])->middleware($veCurso);
+    // Registro de boletines: 172 (su nivel) y 173 (todos los niveles), además de los de arriba.
+    $registro = [Permiso::BOLETINES_NIVEL, Permiso::BOLETINES_TODOS];
+    Route::get('/boletines', [NotasController::class, 'boletinesCurso'])
+        ->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes, ...$registro], [TipoPerfil::DOCENTE]));
     Route::get('/boletines/estudiante', [NotasController::class, 'boletinesEstudiante'])->middleware($veCurso);
-    // Registro de boletines (?id_periodo): cada curso del periodo con su cierre. 99/152 todos; 153/154 su nivel.
-    Route::get('/boletines/registro', [NotasController::class, 'registroBoletines'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes]));
+    // Registro de boletines (?id_periodo): cada curso del periodo con su cierre. 99/152/173 todos; 153/154/172 su nivel.
+    Route::get('/boletines/registro', [NotasController::class, 'registroBoletines'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...$referentes, ...$registro]));
 });

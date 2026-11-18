@@ -29,6 +29,9 @@ class NotasController extends Controller implements HasMiddleware
 {
     private const REFERENTES = [Permiso::REFERENTES_GESTIONAR, Permiso::REFERENTES_APROBAR];
 
+    /** Registro de boletines: 172 su nivel, 173 todos los niveles. */
+    private const BOLETINES = [Permiso::BOLETINES_NIVEL, Permiso::BOLETINES_TODOS];
+
     public static function middleware(): array
     {
         return [
@@ -39,12 +42,15 @@ class NotasController extends Controller implements HasMiddleware
             ]),
             new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
             new Middleware(Permiso::ruta(self::REFERENTES), only: ['gradosReferentes']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesCurso', 'boletinesEstudiante']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES], [TipoPerfil::DOCENTE]), only: ['verPlan', 'vistaCurso', 'boletinesEstudiante']),
+            // Las fotos del curso también las bajan 172 (su nivel) y 173 (todos) desde el Registro de boletines.
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES, ...self::BOLETINES], [TipoPerfil::DOCENTE]), only: ['boletinesCurso']),
             // Asistencia del boletín a mano: el director (tipo Docente) o 154; el service afina.
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR], [TipoPerfil::DOCENTE]), only: ['guardarAsistenciaManual']),
             new Middleware(Permiso::ruta([], [TipoPerfil::DOCENTE]), only: ['misCursos', 'planilla', 'guardarPlanilla', 'planillaDescriptiva', 'guardarPlanillaDescriptiva', 'guardarObservaciones']),
             new Middleware(Permiso::ruta([Permiso::REFERENTES_APROBAR]), only: ['ajustar', 'cerrar', 'cerrarNivel', 'reabrirCierre']),
-            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos', 'registroBoletines']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES]), only: ['filtrosCursos']),
+            new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, ...self::REFERENTES, ...self::BOLETINES]), only: ['registroBoletines']),
         ];
     }
 
@@ -327,24 +333,33 @@ class NotasController extends Controller implements HasMiddleware
             || $this->service->dirige($actor['id'], $idCurso);
     }
 
+    /** Registro de boletines en todos los niveles: 99, 152 o 173. */
+    private static function boletinesDeTodos(Request $request): bool
+    {
+        return PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR, Permiso::BOLETINES_TODOS);
+    }
+
     /**
-     * ?id_periodo: registro de boletines del periodo (cada curso con su cierre o sin cerrar). 99/152
-     * ven todos los cursos; 153/154, los de su nivel.
+     * ?id_periodo: registro de boletines del periodo (cada curso con su cierre o sin cerrar). 99, 152
+     * y 173 ven todos los cursos; 153, 154 y 172, los de su nivel.
      */
     public function registroBoletines(Request $request)
     {
         $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
-        $todos = PermisosPerfil::tiene($request, Permiso::GESTION_ACADEMICA, Permiso::NOTAS_CONSULTAR);
 
-        return $this->apiResponse($this->service->registroBoletines($todos ? null : $this->actor($request)['niveles'], $q['id_periodo'] ?? null));
+        return $this->apiResponse($this->service->registroBoletines(self::boletinesDeTodos($request) ? null : $this->actor($request)['niveles'], $q['id_periodo'] ?? null));
     }
 
     /** ?id_curso&id_periodo: las fotos de boletín guardadas al cerrar (el PDF lo arma el frontend). */
     public function boletinesCurso(Request $request)
     {
         $q = $request->validate($this->reglasCursoPeriodo());
+        $actor = $this->actor($request);
+        // Desde el Registro de boletines: 173 cualquier curso; 172 los de su nivel.
+        $porRegistro = self::boletinesDeTodos($request)
+            || (PermisosPerfil::tiene($request, Permiso::BOLETINES_NIVEL) && $this->service->cursoEnNiveles($actor['niveles'], $q['id_curso']));
 
-        if (! $this->veCursoCompleto($request, $this->actor($request), $q['id_curso'])) {
+        if (! $porRegistro && ! $this->veCursoCompleto($request, $actor, $q['id_curso'])) {
             return $this->error('No tienes acceso a las notas de este curso', 403);
         }
 
