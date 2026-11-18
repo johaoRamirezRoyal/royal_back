@@ -896,3 +896,62 @@ INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 172, 'Gestión Académica — Ver registro de boletines (su nivel)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 172);
 INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
     SELECT 173, 'Gestión Académica — Ver registro de boletines (todos los niveles)', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 173);
+-- 2026_11_13_100000_add_index_correo_to_usuarios_table.php
+-- Índice en usuarios.correo (no único: los correos personales de los acudientes pueden
+-- repetirse entre colegios). El login busca por correo en cada base y leía la tabla completa.
+-- Se aplica en CADA base de colegio (mysql, sami_hebreo), solo si no existe.
+-- ---------------------------------------------------------------------------
+alter table `usuarios` add index `usuarios_correo_index`(`correo`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_13_110000_create_marcas_table.php  (base admin_management)
+-- Identidad de cada institución en una sola tabla `marcas` (nombre, lema, color, logo, logo
+-- secundario, imagen de fondo). marcas_dominio queda como dominio -> marca y colegios_admision
+-- como slug -> marca. Las columnas viejas de identidad se conservan (el código anterior las
+-- lee durante el despliegue) pero ya no se escriben; se borran en una migración aparte.
+-- ---------------------------------------------------------------------------
+create table `marcas` (`id` int unsigned not null auto_increment primary key, `nombre` varchar(190) not null, `descripcion` varchar(190) null, `color` varchar(7) null, `logo_path` varchar(255) null, `logo_public_id` varchar(255) null, `logo_secundario_path` varchar(255) null, `logo_secundario_public_id` varchar(255) null, `imagen_fondo_path` varchar(255) null, `imagen_fondo_public_id` varchar(255) null, `activo` tinyint(1) not null default '1', `fechareg` timestamp not null default CURRENT_TIMESTAMP, `fecha_updated` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `marcas_dominio` add `id_marca` int unsigned null after `dominio`;
+alter table `marcas_dominio` add constraint `marcas_dominio_id_marca_foreign` foreign key (`id_marca`) references `marcas` (`id`) on delete cascade;
+alter table `marcas_dominio` modify `logo_path` varchar(255) null;
+alter table `marcas_dominio` modify `logo_public_id` varchar(255) null;
+alter table `colegios_admision` add `id_marca` int unsigned null after `connection`;
+alter table `colegios_admision` add constraint `colegios_admision_id_marca_foreign` foreign key (`id_marca`) references `marcas` (`id`) on delete set null;
+alter table `colegios_admision` modify `nombre` varchar(190) null;
+-- Datos (en la migración se hace fila por fila, en PHP):
+-- 1) Por cada fila de marcas_dominio: INSERT en marcas con sus nombre/descripcion/color/logo/
+--    imagen de fondo y UPDATE marcas_dominio.id_marca.
+-- 2) Por cada colegio: si hay una marca con el mismo nombre (sin mayúsculas ni espacios), se
+--    enlaza y solo se llenan en la marca los campos vacíos con los del colegio (gana Marcas por
+--    dominio). Si no, se crea una marca con los valores del colegio.
+-- Resultado local: Royal School (id 1) = logo y color de royalschool.edu.co + logo secundario
+-- del colegio; Hebreo Union (id 2). colegios_admision royalschool -> 1.
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_14_100000_create_fotos_curso_tables.php
+-- Fotos del curso (portal para padres): un docente publica fotos de una clase o actividad y los
+-- acudientes las ven en la semana de su hijo durante el año escolar. Una publicación es de una
+-- asignatura (id_asignatura; null = actividad del curso) y puede ir a VARIOS cursos
+-- (fotos_curso_publicacion_curso): las fotos se suben una vez. Sin FK a curso ni a
+-- academico_asignatura (MyISAM en algunas bases) ni a usuarios (legacy). En CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `fotos_curso_publicaciones` (`id` bigint unsigned not null auto_increment primary key, `id_anio_escolar` int not null, `id_docente` int not null, `id_asignatura` int null, `fecha` date not null, `descripcion` varchar(500) null, `confirma_autorizacion` tinyint(1) not null default '0', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_publicaciones` add index `fotos_curso_publicaciones_id_anio_escolar_fecha_index`(`id_anio_escolar`, `fecha`);
+alter table `fotos_curso_publicaciones` add index `fotos_curso_publicaciones_id_docente_index`(`id_docente`);
+create table `fotos_curso_publicacion_curso` (`id_publicacion` bigint unsigned not null, `id_curso` int not null, primary key (`id_publicacion`, `id_curso`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_publicacion_curso` add constraint `fotos_curso_publicacion_curso_id_publicacion_foreign` foreign key (`id_publicacion`) references `fotos_curso_publicaciones` (`id`) on delete cascade;
+alter table `fotos_curso_publicacion_curso` add index `fotos_curso_publicacion_curso_id_curso_index`(`id_curso`);
+create table `fotos_curso_fotos` (`id` bigint unsigned not null auto_increment primary key, `id_publicacion` bigint unsigned not null, `ruta` varchar(255) not null, `orden` tinyint unsigned not null default '0', `created_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `fotos_curso_fotos` add constraint `fotos_curso_fotos_id_publicacion_foreign` foreign key (`id_publicacion`) references `fotos_curso_publicaciones` (`id`) on delete cascade;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_14_100100_seed_opcion_fotos_curso.php
+-- Opción 174 "Fotos del curso — Ver y borrar las de todos los cursos" (módulo 14, Gestión
+-- Académica): moderar. Publicar es autoservicio del docente del curso, sin opción. Se otorga
+-- por NOMBRE de perfil: coordinador, vicerrector, directivo docente.
+-- ---------------------------------------------------------------------------
+insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (174, 'Fotos del curso — Ver y borrar las de todos los cursos', 14, 1, NOW());
+-- Por cada perfil cuyo nombre (minúsculas, espacios colapsados) sea coordinador, vicerrector o
+-- directivo docente, y que aún no la tenga:
+-- insert into `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) values (174, <id_perfil>, 1, NOW());
+-- Resultado local (sami_royal): perfiles 26 Coordinador, 12 Vicerrector y 20 Directivo Docente.

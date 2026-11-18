@@ -21,13 +21,16 @@ class PasswordRestoreEmail extends Mailable
     /**
      * Create a new message instance.
      */
-    public function __construct(Usuario $user, string $token)
+    public function __construct(Usuario $user, string $token, ?string $colegio = null)
     {
         $this->name = $user->nombre;
         $this->email = $user->correo;
         $this->url = config('app.frontend_url') . "/password/restore?" . http_build_query([
             'token' => $token,
-            'email' => $this->email
+            'email' => $this->email,
+            // Portal para padres: el restablecimiento vuelve a la base de ese colegio. Sin
+            // colegio (null), http_build_query omite el parámetro.
+            'colegio' => $colegio,
         ]);
     }
 

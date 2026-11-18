@@ -1,0 +1,80 @@
+{
+  "uid": "k6-omnia",
+  "title": "k6 — OMNIA",
+  "tags": ["k6", "carga"],
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Peticiones",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [{ "refId": "A", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT sum(\"value\") FROM \"http_reqs\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none" }
+    },
+    {
+      "type": "stat",
+      "title": "Latencia p95 (todas)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [{ "refId": "A", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT percentile(\"value\", 95) FROM \"http_req_duration\" WHERE $timeFilter" }],
+      "fieldConfig": { "defaults": { "unit": "ms", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 500 }, { "color": "red", "value": 1000 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Errores",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [{ "refId": "A", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT mean(\"value\") * 100 FROM \"http_req_failed\" WHERE $timeFilter" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Usuarios virtuales (máx.)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [{ "refId": "A", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT max(\"value\") FROM \"vus\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Usuarios virtuales y peticiones por segundo",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [
+        { "refId": "A", "alias": "usuarios virtuales", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT max(\"value\") FROM \"vus\" WHERE $timeFilter GROUP BY time(1s) fill(none)" },
+        { "refId": "B", "alias": "peticiones/s", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT sum(\"value\") FROM \"http_reqs\" WHERE $timeFilter GROUP BY time(1s) fill(0)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Errores (%) en el tiempo",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0 } },
+      "targets": [{ "refId": "A", "alias": "errores", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT mean(\"value\") * 100 FROM \"http_req_failed\" WHERE $timeFilter GROUP BY time(5s) fill(none)" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latencia p95 por endpoint",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [{ "refId": "A", "alias": "$tag_name", "rawQuery": true, "resultFormat": "time_series", "query": "SELECT percentile(\"value\", 95) FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time(5s), \"name\" fill(none)" }]
+    },
+    {
+      "type": "table",
+      "title": "Resumen por endpoint (todo el rango)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 21 },
+      "datasource": { "type": "influxdb", "uid": "k6influx" },
+      "targets": [{ "refId": "A", "rawQuery": true, "resultFormat": "table", "query": "SELECT count(\"value\") AS \"peticiones\", median(\"value\") AS \"p50 ms\", percentile(\"value\", 95) AS \"p95 ms\", max(\"value\") AS \"máx ms\" FROM \"http_req_duration\" WHERE $timeFilter GROUP BY \"name\"" }],
+      "fieldConfig": { "defaults": { "decimals": 0 } },
+      "transformations": [{ "id": "organize", "options": { "excludeByName": { "Time": true } } }]
+    }
+  ]
+}

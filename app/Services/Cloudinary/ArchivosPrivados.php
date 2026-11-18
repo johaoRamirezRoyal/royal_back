@@ -26,6 +26,8 @@ final class ArchivosPrivados
         // Cartas de recomendación de los jardines: salud, terapias y disciplina de menores.
         . '|Instituciones/CartasRecomendacion)/'
         . '|(^|/)carnets/[^/]+$'
+        // Fotos del curso del portal para padres: menores en clase.
+        . '|(^|/)fotos-curso/[^/]+$'
         // Firmas y sellos fijos de royal-school (la firma de la directora en el V°B° de inventario,
         // el sello del paz y salvo de biblioteca); los logos siguen públicos.
         . '|(^|/)royal-school/(firma[^/]*|paz-salvo/sello[^/]*)$#';
@@ -71,12 +73,12 @@ final class ArchivosPrivados
     }
 
     /**
-     * Fotos de carnet: se ven en listas, así que van firmadas directo al CDN y no pasan por
-     * Laravel. Todo lo demás privado es un documento (ver paraCliente y DocumentoController).
+     * Fotos de carnet y del curso: se ven en listas, así que van firmadas directo al CDN y no
+     * pasan por Laravel. Todo lo demás privado es un documento (ver paraCliente y DocumentoController).
      */
     public static function esFoto(string $publicId): bool
     {
-        return (bool) preg_match('#(^|/)carnets/[^/]+$#', $publicId);
+        return (bool) preg_match('#(^|/)(carnets|fotos-curso)/[^/]+$#', $publicId);
     }
 
     /**

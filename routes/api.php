@@ -341,6 +341,16 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/vinculacion-acudientes.php';
     });
 
+    // PORTAL PARA PADRES (autoservicio del acudiente: solo sus hijos)
+    Route::prefix('/portal-padres')->group(function () {
+        require __DIR__ . '/api/portalPadres.php';
+    });
+
+    // FOTOS DEL CURSO (las publica el docente del curso; los padres las ven en el portal)
+    Route::prefix('/fotos-curso')->group(function () {
+        require __DIR__ . '/api/fotosCurso.php';
+    });
+
     // CARNETS INSTITUCIONALES (opción 144; /carnets/mio es autoservicio)
     Route::prefix('/carnets')->group(function () {
         require __DIR__ . '/api/carnets.php';

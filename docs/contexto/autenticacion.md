@@ -25,6 +25,41 @@
 - `AuthServices` es delgado: solo cubre el registro y los dispositivos confiables. El
   resto (login, check, tokens) sigue en `AuthController`/`JwtService`.
 
+## Login multi-colegio y portal para padres
+
+- `AuthServices::resolverUsuarioMultiTenant` busca el correo base por base
+  (`connectionsConUsuarios`). El correo **no es único** entre bases (los acudientes usan
+  gmail, hotmail...): si la contraseña o el estado no coinciden en una, sigue con la siguiente.
+- `POST /auth/login` acepta `colegio` (slug de `colegios_admision`, el portal para padres
+  `/:colegio/padres` del frontend): busca solo en la base de ese colegio (404 si el slug no
+  existe) y responde 403 si el usuario no es de tipo ACUDIENTE.
+- `usuarios.correo` tiene índice (`2026_11_13_100000_add_index_correo_to_usuarios_table`, en
+  todas las bases con usuarios).
+- Marcas: la identidad vive en `marcas` (`2026_11_13_110000_create_marcas_table`).
+  `marcas_dominio` = dominio → marca y `colegios_admision` = slug → marca (`id_marca`).
+  CRUD en `MarcaService`/`MarcaController` (`/branding/marcas`, con sus `dominios[]`);
+  `MarcaDominioService` solo resuelve. El branding por slug sale de `colegio->marca`. Las
+  columnas de identidad viejas de las dos tablas siguen ahí sin usarse; se borran aparte.
+- Marca: si el dominio del correo no tiene marca, `MarcaDominioService::resolverPorCorreo`
+  usa la del colegio de la base de la sesión (`colegios_admision.connection`). Sin sesión
+  (vista previa del login, comandos) no hay respaldo.
+- Recuperar contraseña (`/auth/password/restore`, `validate-token`, `update-password`) acepta
+  el mismo `colegio`: cambia a la base de ese colegio, no exige `@royalschool.edu.co` y el
+  enlace del correo lleva `colegio` (`PasswordRestore` → `PasswordRestoreEmail`). Sin slug,
+  igual que antes: base por defecto y solo correo institucional.
+- Portal para padres (`PortalPadresController`, solo tipo ACUDIENTE; un id de estudiante se
+  valida contra `estudiantes_padres` activo y responde 404 si no es su hijo):
+  - `GET /portal-padres/hijos`: hijos activos (id, nombre, apellido, curso; sin documento).
+  - `GET /portal-padres/hijos/{id}/semana`: `llegadas` (historial completo; el listado del
+    acudiente en `/llegadas-tarde` deja solo la última por hijo) y `asistencias` (excepciones en
+    clases dictadas).
+  - No devuelven documento, observaciones, la nota libre del personal (`observacion`), soportes
+    ni correos.
+- El slug del portal se valida en un solo lugar: `ColegioAdmisionService::colegioConUsuarios`
+  (colegio activo cuya base tiene usuarios), que usan el login y recuperar contraseña.
+- `UsuarioResource` trae `imagen_marca` (foto de la marca para el friso del portal).
+- Cambio completo y despliegue: [`../PORTAL_PADRES_Y_MARCAS_2026_11_13.md`](../PORTAL_PADRES_Y_MARCAS_2026_11_13.md).
+
 ## Intentos fallidos (`LimitarIntentosFallidos`, alias `intentos`)
 
 Middleware para rutas que piden contraseña: `->middleware('intentos:5,15')` = 5 fallos
