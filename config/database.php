@@ -112,6 +112,25 @@ return [
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
+        'sami_play' => [
+            'driver' => 'mysql',
+            'url' => env('DB_PLAY_URL'),
+            'host' => env('DB_PLAY_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_PLAY_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_PLAY_DATABASE', 'sami_hebreo'),
+            'username' => env('DB_PLAY_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('DB_PLAY_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => 'InnoDB',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
 
         'mariadb' => [
             'driver' => 'mariadb',
