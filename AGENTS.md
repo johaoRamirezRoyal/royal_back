@@ -16,6 +16,9 @@ composer run test    # config:clear + php artisan test (tests/Unit, tests/Featur
 php artisan serve    # localhost:8000
 php artisan schedule:work            # el scheduler en local (composer run dev no lo corre)
 php artisan cache:clear && php artisan route:clear && php artisan config:clear
+# Pruebas de carga (k6 + Grafana en Docker): ver tests/carga/README.md
+docker compose -f tests/carga/docker-compose.yml up -d
+k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
 ```
 
 ## Reglas fijas
@@ -131,9 +134,14 @@ esta tabla.
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 | [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, escala de desempeños, propósitos, referentes por grado y asignatura (con subreferentes), envío por asignatura y aprobación (opciones 152–154), periodos pasados y registro fuera de plazo, evaluación descriptiva, planilla, asistencia del boletín (a mano), cierre y boletín, registro de boletines (172–173), plazo de corrección, migraciones |
 | [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
+| [`modulos/fotos-curso.md`](docs/contexto/modulos/fotos-curso.md) | fotos de clases y actividades que publican los docentes para el portal para padres |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con
 pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS_MIDDLEWARE_2026_10_20.md`,
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
-`GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md` y `whatsapp-llegadas-tarde.md`.
+`GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md`, `PORTAL_PADRES_Y_MARCAS_2026_11_13.md`
+(portal para padres, login por colegio y marcas unificadas: qué se cambió, deploy y pendientes),
+`PRUEBAS_CARGA_2026_11_16.md` (prueba de estrés del portal con k6 y Grafana: resultados,
+hallazgos y pendientes), `FOTOS_CURSO_2026_11_14.md` (fotos del curso, carrusel y calendario del portal: qué se cambió,
+deploy y pendientes) y `whatsapp-llegadas-tarde.md`.

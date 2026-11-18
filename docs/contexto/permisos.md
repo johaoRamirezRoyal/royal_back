@@ -156,6 +156,14 @@ con `--aplicar`.
   - Volver a correr migraciones `seed_opcion_*` sobre un dump importado creó 19 opciones
     duplicadas (126–145) que se borraron el 2026-09-16; 146/147 se renumeraron a 127/128.
     Si un id no cuadra, sospecha primero de eso.
+  - **Una BD local puede tener los ids de `cron_opciones` desfasados de producción** (pasó el
+    2026-11-14 en `sami_royal`: desde la 97 no coincidían y la 131 o la 102 no existían). Los ids
+    correctos son los de producción, que son los de `App\Support\Permiso`. Para dejarla igual:
+    pide a producción `cron_opciones` y `cron_permisos`, respalda las dos tablas locales
+    (`CREATE TABLE … LIKE` + `INSERT … SELECT`), reemplaza las opciones hasta la última id de
+    producción con las de producción y carga sus permisos; conserva las opciones (y sus permisos)
+    que solo existen en la rama, que sus migraciones vuelven a sembrar en el despliegue.
+    Comprueba al final que cada constante de `Permiso` exista en `cron_opciones`.
 - Antes de cerrar un cambio, revisa quién tiene la opción hoy:
   ```
   php artisan tinker --execute="foreach (DB::table('cron_permisos as p')->join('perfiles as pf','pf.id_perfil','=','p.id_perfil')->where('p.id_opcion',N)->where('p.activo',1)->pluck('pf.nombre') as \$n) echo \$n . PHP_EOL;"

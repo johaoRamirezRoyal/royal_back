@@ -21,6 +21,7 @@ class ArchivosPrivadosTest extends TestCase
             'historia-clinica/firmas/f',
             'royal/usuarios/firmas/firma',
             'royal/carnets/uuid',
+            'royal/fotos-curso/uuid',
             'royal/certificados/uuid',
             'royal/gestion-humana/cursos-altura/uuid',
             'royal/formacion/certificados/uuid',
@@ -51,6 +52,15 @@ class ArchivosPrivadosTest extends TestCase
         ] as $id) {
             $this->assertFalse(ArchivosPrivados::esPrivado($id), $id);
         }
+    }
+
+    /** Las fotos de carnet y del curso van firmadas al CDN (se ven en listas); el resto privado, por el proxy. */
+    public function test_fotos_firmadas_y_documentos_por_proxy(): void
+    {
+        $this->assertTrue(ArchivosPrivados::esFoto('royal/carnets/uuid'));
+        $this->assertTrue(ArchivosPrivados::esFoto('royal/fotos-curso/uuid'));
+        $this->assertFalse(ArchivosPrivados::esFoto('royal/certificados/uuid'));
+        $this->assertFalse(ArchivosPrivados::esFoto('royal/Admisiones/documentos/1/cedula'));
     }
 
     /** Con ese public_id se borra de Cloudinary la firma reemplazada (UsuariosServices). */
