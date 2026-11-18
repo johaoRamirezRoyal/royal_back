@@ -134,6 +134,7 @@ esta tabla.
 | [`modulos/carnets.md`](docs/contexto/modulos/carnets.md) | carnets institucionales: impresión, fotos, entregas y carnet digital |
 | [`modulos/notas.md`](docs/contexto/modulos/notas.md) | notas: método por nivel, escala de desempeños, propósitos, referentes por grado y asignatura (con subreferentes), envío por asignatura y aprobación (opciones 152–154), periodos pasados y registro fuera de plazo, evaluación descriptiva, planilla, asistencia del boletín (a mano), cierre y boletín, registro de boletines (172–173), plazo de corrección, migraciones |
 | [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
+| [`modulos/acudientes.md`](docs/contexto/modulos/acudientes.md) | acudientes (opción 175): crear, editar, estado, enviar acceso al portal para padres |
 | [`modulos/fotos-curso.md`](docs/contexto/modulos/fotos-curso.md) | fotos de clases y actividades que publican los docentes para el portal para padres |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados

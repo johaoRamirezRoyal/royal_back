@@ -955,3 +955,17 @@ insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) 
 -- directivo docente, y que aún no la tenga:
 -- insert into `cron_permisos` (`id_opcion`, `id_perfil`, `activo`, `fechareg`) values (174, <id_perfil>, 1, NOW());
 -- Resultado local (sami_royal): perfiles 26 Coordinador, 12 Vicerrector y 20 Directivo Docente.
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_18_120000_seed_opcion_acudientes.php
+-- Opción 175 «Acudientes — Crear y gestionar» (módulo 14): reemplaza la 112 (Acudientes de
+-- Admisiones) y la 131 (Vinculación Estudiante - Padre). Se otorga a los perfiles que tienen
+-- alguna de las dos. Se aplica en CADA base de colegio. Falla si el id 175 ya está ocupado.
+-- ---------------------------------------------------------------------------
+INSERT INTO cron_opciones (id, nombre, id_modulo, activo, fechareg)
+    SELECT 175, 'Acudientes — Crear y gestionar', 14, 1, NOW() FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM cron_opciones WHERE id = 175);
+INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
+    SELECT DISTINCT 175, p.id_perfil, 1, NOW() FROM cron_permisos p
+    WHERE p.id_opcion IN (112, 131) AND p.activo = 1
+      AND NOT EXISTS (SELECT 1 FROM cron_permisos x WHERE x.id_opcion = 175 AND x.id_perfil = p.id_perfil);
+-- Resultado local (sami_royal): perfiles 1 Super Admin y 9 Admisiones.
