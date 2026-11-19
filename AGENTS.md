@@ -77,6 +77,14 @@ k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
 
 ## Convenciones de código
 
+- **Ponytail siempre activo.** Al empezar cualquier tarea de código (escribir, corregir,
+  refactorizar, revisar, elegir dependencias), invoca la skill `ponytail:ponytail` (nivel
+  `full`) antes de tocar archivos. Para revisar un cambio usa `ponytail:ponytail-review`
+  junto con `revision-codigo`. Los atajos deliberados se marcan con un comentario
+  `shortcut:` que diga su límite y cómo mejorarlo (`/ponytail-debt` los lista). Sin el
+  plugin, aplica igual su regla: entender el problema completo y luego el cambio más chico
+  que lo resuelva entero (reusar lo del repo → Laravel/PHP → paquete instalado → código
+  nuevo mínimo), sin abstracciones ni paquetes de Composer que nadie pidió.
 - Capas: ruta (`routes/api/<modulo>.php`, incluida en `routes/api.php`) → controller
   (`app/Http/Controllers/<Modulo>/`) → service (`app/Services/<modulo>/`) → modelo
   (`app/Models/<Modulo>/`). Las carpetas de services mezclan mayúscula y minúscula:
@@ -146,3 +154,10 @@ pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS
 `PRUEBAS_CARGA_2026_11_16.md` (prueba de estrés del portal con k6 y Grafana: resultados,
 hallazgos y pendientes), `FOTOS_CURSO_2026_11_14.md` (fotos del curso, carrusel y calendario del portal: qué se cambió,
 deploy y pendientes) y `whatsapp-llegadas-tarde.md`.
+
+Skills propias (`.claude/skills/`):
+- `sql-optimization`: medir con query log y `EXPLAIN`, índices vía migración en todas las
+  conexiones, trampas de MyISAM y tablas legacy. Complementa a `laravel-best-practices`,
+  que cubre los patrones de Eloquent.
+- `revision-codigo`: lista de revisión con las trampas de este repo; se usa junto con
+  `/code-review` (la general de Claude Code). Si agregas una regla o trampa aquí, súmala allá.

@@ -10,7 +10,7 @@
     <div class="code-box">
         <p class="code-label">Código de verificación</p>
         <p class="code-number">{{ $verificationCode }}</p>
-        <p class="code-expiry">Válido por 5 minutos</p>
+        <p class="code-expiry">Válido por {{ $minutos ?? 15 }} minutos</p>
     </div>
 
     <p class="note">Si no realizaste esta solicitud, puedes ignorar este mensaje. Nadie más puede usar

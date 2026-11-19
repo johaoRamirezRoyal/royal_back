@@ -34,6 +34,12 @@ class AdmissionsController extends Controller
 {
     use HasAuthCookie;
 
+    /** Minutos que vale el código de verificación que llega al correo del acudiente (registro e inicio de sesión). */
+    public const MINUTOS_CODIGO_CORREO = 15;
+
+    /** Minutos que espera un inicio de sesión pendiente del código (más que el código, para poder reenviarlo). */
+    private const MINUTOS_LOGIN_PENDIENTE = 30;
+
     protected AdmisionesServices $admisiones_services;
 
     protected CloudinaryService $cloudinary_service;
@@ -97,13 +103,14 @@ class AdmissionsController extends Controller
         Cache::put("verificacion_{$token}", [
             'code' => $code,
             'email' => $email,
-        ], now()->addMinutes(5));
+        ], now()->addMinutes(self::MINUTOS_CODIGO_CORREO));
 
-        Cache::put("email_token_{$email}", $token, now()->addMinutes(5));
+        Cache::put("email_token_{$email}", $token, now()->addMinutes(self::MINUTOS_CODIGO_CORREO));
 
         $this->mail_service->sendView($email, 'Verifica tu correo — Admisiones Royal School', 'emails.sendRequestEmail', [
             'verificationCode' => $code,
             'email'           => $email,
+            'minutos'         => self::MINUTOS_CODIGO_CORREO,
         ]);
 
         Log::info("Enviando correo de verificacion a {$email}");
@@ -396,12 +403,13 @@ class AdmissionsController extends Controller
         $token = Str::random(64);
         $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
 
-        Cache::put("admisiones_login_pending_{$token}", ['id' => $usuario->id_user], now()->addMinutes(15));
-        Cache::put("admisiones_login_otp_{$token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
+        Cache::put("admisiones_login_pending_{$token}", ['id' => $usuario->id_user], now()->addMinutes(self::MINUTOS_LOGIN_PENDIENTE));
+        Cache::put("admisiones_login_otp_{$token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(self::MINUTOS_CODIGO_CORREO));
 
         $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — Admisiones Royal School', 'emails.sendAcudienteLoginOtp', [
             'verificationCode' => $code,
             'nombre' => $usuario->nombre,
+            'minutos' => self::MINUTOS_CODIGO_CORREO,
         ]);
 
         Log::info("Login desde IP nueva para acudiente {$usuario->id_user}, verificación enviada");
@@ -445,11 +453,12 @@ class AdmissionsController extends Controller
 
         $code = str_pad((string) random_int(0, 99999), 5, '0', STR_PAD_LEFT);
 
-        Cache::put("admisiones_login_otp_{$request->token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(5));
+        Cache::put("admisiones_login_otp_{$request->token}", ['code' => $code, 'id' => $usuario->id_user], now()->addMinutes(self::MINUTOS_CODIGO_CORREO));
 
         $this->mail_service->sendView($usuario->correo, 'Nuevo inicio de sesión — Admisiones Royal School', 'emails.sendAcudienteLoginOtp', [
             'verificationCode' => $code,
             'nombre' => $usuario->nombre,
+            'minutos' => self::MINUTOS_CODIGO_CORREO,
         ]);
 
         return $this->success('Código reenviado');
