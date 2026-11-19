@@ -14,6 +14,7 @@ use App\Services\Usuarios\UsuariosServices;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CursosController extends Controller
 {
@@ -40,6 +41,32 @@ class CursosController extends Controller
         }
 
         return $this->apiResponse($this->cursos->listarGrados());
+    }
+
+    /** GET /api/cursos/niveles-academicos — catálogo con sus grados y cursos activos (Configuración académica, 99). */
+    public function nivelesAcademicos(Request $request): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, Permiso::GESTION_ACADEMICA)) {
+            return $rechazo;
+        }
+
+        return $this->apiResponse($this->cursos->listarNivelesAcademicos());
+    }
+
+    /** POST /api/cursos/niveles-academicos y PUT .../{id}: crear o renombrar (99). No se borran. */
+    public function guardarNivelAcademico(Request $request, ?int $id = null): JsonResponse
+    {
+        if ($rechazo = $this->sinAcceso($request, Permiso::GESTION_ACADEMICA)) {
+            return $rechazo;
+        }
+        $data = $request->validate([
+            'nombre' => ['required', 'string', 'max:50', Rule::unique('nivel_academico', 'nombre')->ignore($id)],
+        ], [
+            'nombre.required' => 'El nombre del nivel es obligatorio',
+            'nombre.unique' => 'Ya existe un nivel académico con ese nombre',
+        ]);
+
+        return $this->apiResponse($this->cursos->guardarNivelAcademico(trim($data['nombre']), $id));
     }
 
     /** POST /api/cursos/grados y PUT /api/cursos/grados/{id}: solo Configuración académica (99). */

@@ -6,6 +6,7 @@ use App\Enums\TipoPerfil;
 use App\Models\Usuarios\Perfil;
 use App\Models\Areas\Cursos;
 use App\Models\Areas\Grado;
+use App\Models\Usuarios\NivelAcademico;
 use App\Models\Usuarios\Usuario;
 use App\Services\AnioEscolar\AnioEscolarServices;
 use App\Support\Permiso;
@@ -60,6 +61,44 @@ class CursosServices
                     + ['cursos' => Cursos::where('id_grado', $g->id)->where('activo', 1)->count()]);
 
             return ['error' => false, 'message' => 'Grados', 'data' => $grados];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Niveles académicos con su método de calificación y cuántos grados y cursos activos tienen. */
+    public function listarNivelesAcademicos(): array
+    {
+        try {
+            $grados = Grado::whereNotNull('id_nivel_academico')->selectRaw('id_nivel_academico, count(*) as n')->groupBy('id_nivel_academico')->pluck('n', 'id_nivel_academico');
+            $cursos = Cursos::where('activo', 1)->whereNotNull('id_nivel')->selectRaw('id_nivel, count(*) as n')->groupBy('id_nivel')->pluck('n', 'id_nivel');
+            $data = NivelAcademico::orderBy('id')->get(['id', 'nombre', 'metodo_calificacion'])
+                ->map(fn (NivelAcademico $n) => $n->only(['id', 'nombre', 'metodo_calificacion']) + [
+                    'grados' => (int) ($grados[$n->id] ?? 0),
+                    'cursos' => (int) ($cursos[$n->id] ?? 0),
+                ]);
+
+            return ['error' => false, 'message' => 'Niveles académicos', 'data' => $data];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Crea o renombra un nivel académico. No se borran: grados, cursos, esquemas de horario, escala
+     * y permisos por nivel lo referencian por id (y hay código que usa los ids 3 y 4).
+     */
+    public function guardarNivelAcademico(string $nombre, ?int $id = null): array
+    {
+        try {
+            $nivel = $id ? NivelAcademico::find($id) : new NivelAcademico();
+            if (! $nivel) {
+                return ['error' => true, 'message' => 'No se encontró el nivel académico', 'status' => 404];
+            }
+            $nivel->nombre = $nombre;
+            $nivel->save();
+
+            return ['error' => false, 'message' => $id ? 'Nivel académico actualizado' : 'Nivel académico creado', 'data' => $nivel];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
