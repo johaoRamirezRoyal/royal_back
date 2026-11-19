@@ -1,6 +1,6 @@
 ---
 name: sql-optimization
-description: "Optimización de consultas SQL/MySQL en este backend (Laravel 12, MySQL con tablas legacy y MyISAM, varias conexiones por colegio). Úsala cuando un endpoint esté lento, al revisar o escribir consultas pesadas (reportes, listados grandes, agregados, DB::raw/selectRaw/whereRaw), al diagnosticar N+1, al leer un EXPLAIN o al proponer o crear índices. Para patrones de Eloquent (eager loading, chunk, withCount, subconsultas) remite a laravel-best-practices (rules/db-performance.md y rules/advanced-queries.md)."
+description: "Optimización de consultas SQL en este backend (Laravel 12, MariaDB 10.4 —driver mysql— con tablas legacy y MyISAM, varias conexiones por colegio). Úsala cuando un endpoint esté lento, al revisar o escribir consultas pesadas (reportes, listados grandes, agregados, DB::raw/selectRaw/whereRaw), al diagnosticar N+1, al leer un EXPLAIN o al proponer o crear índices. Para patrones de Eloquent (eager loading, chunk, withCount, subconsultas) remite a laravel-best-practices (rules/db-performance.md y rules/advanced-queries.md)."
 ---
 
 # Optimización de SQL en Royal Backend
@@ -8,7 +8,7 @@ description: "Optimización de consultas SQL/MySQL en este backend (Laravel 12, 
 Primero **medir**, luego cambiar y volver a medir. Nada de índices ni reescrituras "por si
 acaso". Los patrones de Eloquent ya están en `laravel-best-practices`
 (`rules/db-performance.md`, `rules/advanced-queries.md`): esta skill cubre lo que es propio
-de esta base y de MySQL.
+de esta base y de MariaDB (local: 10.4.32; confirma la de producción con `SELECT VERSION()`).
 
 ## Lo que hace distinta a esta base
 
@@ -42,7 +42,7 @@ de esta base y de MySQL.
    Muchas consultas casi iguales = N+1. Una sola que tarda = índice o forma de la consulta.
 2. **El SQL real**: `$query->toRawSql()` (Laravel 12).
 3. **El plan**: `DB::select('EXPLAIN ' . $query->toRawSql())` o, mejor,
-   `EXPLAIN ANALYZE` (MySQL 8.0.18+) en tinker. Ignora el tiempo de `php artisan serve`:
+   `ANALYZE SELECT ...` en tinker (sintaxis de MariaDB: ejecuta la consulta y agrega `r_rows`/`r_filtered` reales; `EXPLAIN ANALYZE` es de MySQL 8 y aquí falla). Ignora el tiempo de `php artisan serve`:
    atiende una petición a la vez (ver `docs/PRUEBAS_CARGA_2026_11_16.md`).
 4. **Bajo carga**: k6 en `tests/carga/` y comparar contra la tabla del documento anterior.
 

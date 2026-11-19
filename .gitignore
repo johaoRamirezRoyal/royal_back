@@ -58,3 +58,6 @@ coverage/
 # All migrations archive
 ./database/all_migrations.sql
 migraciones_sql.sql
+
+# Ajustes personales de Claude Code
+.claude/settings.local.json
