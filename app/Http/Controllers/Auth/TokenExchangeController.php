@@ -75,6 +75,9 @@ class TokenExchangeController extends Controller
         $userId = $adminPayload->get('user_id');
         $user   = Usuario::findOrFail($userId);
 
+        // Acaba de leer el token del admin: sin vaciar, el nuevo heredaría sus claims (ver JwtService::generateToken).
+        JWTAuth::factory()->emptyClaims();
+
         $admisionesToken = JWTAuth::claims([
             'system'       => 'admissions',
             // Las peticiones de admisiones de este token van a la base de su colegio.
