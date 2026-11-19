@@ -50,7 +50,7 @@ class LlaveMaestraService
     }
 
     /**
-     * @return array{id_user: int, connection: string, generado_por: int}|string|null null si la
+     * @return array{id_user: int, connection: string, generado_por: int, llave_id: int}|string|null null si la
      * llave no existe, ya se usó, está expirada o fue revocada; SESION_ABIERTA si la cuenta
      * destino ya tiene una sesión por llave abierta (la llave no se consume).
      */
@@ -67,9 +67,12 @@ class LlaveMaestraService
 
         // Cache::add es atómico: dos canjes simultáneos para la misma cuenta no abren dos sesiones.
         // ponytail: dura lo mismo que el JWT (no hay refresh); se libera antes en logout.
+        // Guarda el id de la llave: el token lleva el mismo id (claim llave_maestra_id) y
+        // sesionVigente() los compara, así un token de una sesión ya cerrada no revive
+        // cuando otra llave abre una sesión nueva en la misma cuenta.
         if (!Cache::add(
             $this->claveSesion($llave->connection_objetivo, $llave->id_user_objetivo),
-            true,
+            $llave->id,
             now()->addMinutes((int) config('jwt.ttl'))
         )) {
             return self::SESION_ABIERTA;
@@ -81,13 +84,53 @@ class LlaveMaestraService
             'id_user' => $llave->id_user_objetivo,
             'connection' => $llave->connection_objetivo,
             'generado_por' => $llave->generado_por,
+            'llave_id' => $llave->id,
         ];
     }
 
-    /** Libera la cuenta para otro canje: logout de una sesión por llave, o canje que no llegó a emitir token. */
-    public function cerrarSesion(string $connection, int $idUser): void
+    /**
+     * Libera la cuenta para otro canje: logout de una sesión por llave, canje que no llegó a
+     * emitir token, o cierre desde administración. Con $llaveId solo la libera si la sesión
+     * abierta es la de esa llave (el logout de un token viejo no cierra la sesión de otro).
+     */
+    public function cerrarSesion(string $connection, int $idUser, ?int $llaveId = null): void
     {
-        Cache::forget($this->claveSesion($connection, $idUser));
+        if ($llaveId === null || $this->sesionVigente($connection, $idUser, $llaveId)) {
+            Cache::forget($this->claveSesion($connection, $idUser));
+        }
+    }
+
+    /**
+     * true si el token de una sesión por llave sigue valiendo (lo consulta JwtFromCookie en
+     * cada petición). Sin $llaveId (token emitido antes de que existiera el claim) basta con
+     * que la cuenta tenga una sesión abierta; con él, tiene que ser la de esa misma llave.
+     */
+    public function sesionVigente(string $connection, int $idUser, ?int $llaveId): bool
+    {
+        $abierta = Cache::get($this->claveSesion($connection, $idUser));
+
+        // (int): el store de Redis devuelve los números como string. `true` = marca de antes del claim.
+        return $abierta !== null && ($llaveId === null || ($abierta !== true && (int) $abierta === $llaveId));
+    }
+
+    /** Cierre desde administración. false si esa llave no tiene una sesión abierta. */
+    public function cerrarSesionDeLlave(int $id): bool
+    {
+        $llave = LlaveMaestra::whereNotNull('usado_en')->find($id);
+
+        if (!$llave || !$this->sesionVigente($llave->connection_objetivo, $llave->id_user_objetivo, $this->idSesion($llave))) {
+            return false;
+        }
+
+        Cache::forget($this->claveSesion($llave->connection_objetivo, $llave->id_user_objetivo));
+
+        return true;
+    }
+
+    /** Id con el que se compara la marca: null si la marca es de antes del claim (valor `true`). */
+    private function idSesion(LlaveMaestra $llave): ?int
+    {
+        return Cache::get($this->claveSesion($llave->connection_objetivo, $llave->id_user_objetivo)) === true ? null : $llave->id;
     }
 
     private function claveSesion(string $connection, int $idUser): string
@@ -98,6 +141,22 @@ class LlaveMaestraService
     public function listar(): Collection
     {
         return LlaveMaestra::orderByDesc('created_at')->get();
+    }
+
+    /**
+     * Llaves canjeadas cuya sesión sigue abierta: la marca de caché de redimir() existe (se
+     * borra en logout y vence con el JWT). Solo la última canjeada por cuenta, porque esa
+     * marca es por cuenta y no por llave.
+     */
+    public function sesionesAbiertas(): Collection
+    {
+        return LlaveMaestra::whereNotNull('usado_en')
+            ->where('usado_en', '>', now()->subMinutes((int) config('jwt.ttl')))
+            ->orderByDesc('usado_en')
+            ->get()
+            ->unique(fn (LlaveMaestra $llave) => "{$llave->connection_objetivo}:{$llave->id_user_objetivo}")
+            ->filter(fn (LlaveMaestra $llave) => $this->sesionVigente($llave->connection_objetivo, $llave->id_user_objetivo, $this->idSesion($llave)))
+            ->values();
     }
 
     /** true si se revocó; false si la llave no existe o ya estaba usada/expirada (nada

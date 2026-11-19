@@ -523,6 +523,8 @@ class AuthController extends Controller
             ->withCookie('token', $this->jwt->generateToken($usuario, $connection, [
                 'via_llave_maestra' => true,
                 'generado_por' => $resultado['generado_por'],
+                // Ata el token a esta sesión: ver LlaveMaestraService::sesionVigente.
+                'llave_maestra_id' => $resultado['llave_id'],
             ]));
     }
 
@@ -666,7 +668,11 @@ class AuthController extends Controller
             try {
                 $payload = $this->jwt->getPayload($token);
                 if (! empty($payload['via_llave_maestra'])) {
-                    $this->llaveMaestra->cerrarSesion($payload['db_connection'], (int) $payload['user_id']);
+                    $this->llaveMaestra->cerrarSesion(
+                        $payload['db_connection'],
+                        (int) $payload['user_id'],
+                        isset($payload['llave_maestra_id']) ? (int) $payload['llave_maestra_id'] : null
+                    );
                 }
             } catch (\Exception $e) {
                 // Token vencido: su marca de sesión en caché ya venció con él.
