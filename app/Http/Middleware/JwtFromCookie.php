@@ -3,11 +3,13 @@
 namespace App\Http\Middleware;
 
 use App\Services\AdminManagement\BasesDatosService;
+use App\Services\AdminManagement\LlaveMaestraService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Token;
 
 class JwtFromCookie
 {
@@ -85,7 +87,54 @@ class JwtFromCookie
             ]);
         }
 
+        $this->cortarSesionDeLlaveCerrada($request);
+
         return $next($request);
+    }
+
+    /**
+     * Una sesión por llave maestra cerrada (logout o cierre desde administración, ver
+     * LlaveMaestraService::sesionVigente) deja de autenticar aunque su JWT no haya vencido:
+     * se invalida y se quita el header, y auth:api responde 401. Lee el token con el mismo
+     * parser que el guard (header, ?token=, campo token o cookie), así no se salta mandándolo
+     * por otro lado.
+     */
+    private function cortarSesionDeLlaveCerrada(Request $request): void
+    {
+        $token = JWTAuth::parser()->setRequest($request)->parseToken();
+
+        if (! $token) {
+            return;
+        }
+
+        try {
+            // Sin revisar la lista negra (eso ya lo hace el guard): corre en cada petición.
+            $payload = JWTAuth::manager()->decode(new Token($token), false);
+        } catch (\Exception $e) {
+            return;
+        }
+
+        if (! $payload->get('via_llave_maestra')) {
+            return;
+        }
+
+        $llaveId = $payload->get('llave_maestra_id');
+
+        if (app(LlaveMaestraService::class)->sesionVigente(
+            (string) ($payload->get('db_connection') ?? 'mysql'),
+            (int) $payload->get('user_id'),
+            $llaveId === null ? null : (int) $llaveId
+        )) {
+            return;
+        }
+
+        try {
+            JWTAuth::setToken($token)->invalidate();
+        } catch (\Exception $e) {
+            // Ya en la lista negra: igual se quita el header.
+        }
+
+        $request->headers->remove('Authorization');
     }
 
     /**
