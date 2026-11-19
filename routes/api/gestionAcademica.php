@@ -543,6 +543,9 @@ Route::prefix('/notas')->group(function () {
     Route::post('/propositos', [NotasController::class, 'crearProposito'])->middleware($escala);
     // Antes de /propositos/{id}: reordena (ids en el orden nuevo).
     Route::put('/propositos/orden', [NotasController::class, 'ordenarPropositos'])->middleware($escala);
+    // Título de cada propósito en el boletín: NOMBRE o DESCRIPCION (una opción para toda la institución).
+    Route::get('/propositos/titulo-boletin', [NotasController::class, 'tituloPropositoBoletin'])->middleware($escala);
+    Route::put('/propositos/titulo-boletin', [NotasController::class, 'cambiarTituloPropositoBoletin'])->middleware($escala);
     Route::put('/propositos/{id}', [NotasController::class, 'actualizarProposito'])->whereNumber('id')->middleware($escala);
     Route::get('/metodos-nivel', [NotasController::class, 'listarMetodosNivel'])->middleware($escala);
     Route::put('/metodos-nivel/{id}', [NotasController::class, 'cambiarMetodoNivel'])->whereNumber('id')->middleware($escala);

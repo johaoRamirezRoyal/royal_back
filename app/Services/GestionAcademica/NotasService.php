@@ -3,6 +3,7 @@
 namespace App\Services\GestionAcademica;
 
 use App\Enums\TipoPerfil;
+use App\Models\AnioEscolar\ConfiguracionAcademica;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\AsistenciaManual;
@@ -41,7 +42,10 @@ use Throwable;
  */
 class NotasService extends Service
 {
-    private const SOLO_DIRECTOR_DESCRIPTIVA = 'En los grados descriptivos solo califica el director de grupo del curso.';
+    /** Qué texto del propósito sale como título en el boletín (configuracion_academica.titulo_proposito_boletin). */
+    public const TITULOS_PROPOSITO = ['NOMBRE', 'DESCRIPCION'];
+
+    private const SOLO_DIRECTOR_DESCRIPTIVA ='En los grados descriptivos solo califica el director de grupo del curso.';
 
     public function __construct(private AnioEscolarServices $anios) {}
 
@@ -102,6 +106,25 @@ class NotasService extends Service
     }
 
     // ─── Propósitos y método por nivel (Configuración académica, 99) ─────────
+
+    /** NOMBRE (por defecto) o DESCRIPCION: se aplica al generar el PDF, también a boletines ya cerrados. */
+    public static function tituloPropositoBoletin(): string
+    {
+        return ConfiguracionAcademica::whereKey(1)->value('titulo_proposito_boletin') ?? 'NOMBRE';
+    }
+
+    public function cambiarTituloPropositoBoletin(string $titulo): array
+    {
+        try {
+            ConfiguracionAcademica::whereKey(1)->update(['titulo_proposito_boletin' => $titulo]);
+
+            return ['error' => false, 'message' => $titulo === 'DESCRIPCION'
+                ? 'El boletín mostrará la descripción de cada propósito como título'
+                : 'El boletín mostrará el nombre de cada propósito como título', 'data' => ['titulo' => $titulo]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
 
     /** Propósitos con sus campos de evaluación descriptiva (activos e inactivos, en orden). */
     public function listarPropositos(): array
@@ -1919,7 +1942,7 @@ class NotasService extends Service
                 ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
                 ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
                 ->values();
-            $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos'))];
+            $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos')), 'titulo_proposito' => self::tituloPropositoBoletin()];
 
             return ['error' => false, 'message' => 'Boletines del curso', 'data' => $data];
         } catch (Throwable $e) {
@@ -1944,7 +1967,7 @@ class NotasService extends Service
                     'cerrado_at' => $b->datos['cerrado_at'] ?? null,
                     'datos' => $b->datos,
                 ])->values();
-            $data = ['historial' => $historial, 'firmas' => (object) self::firmasDirectores($historial->pluck('datos'))];
+            $data = ['historial' => $historial, 'firmas' => (object) self::firmasDirectores($historial->pluck('datos')), 'titulo_proposito' => self::tituloPropositoBoletin()];
 
             return ['error' => false, 'message' => 'Boletines del estudiante', 'data' => $data];
         } catch (Throwable $e) {

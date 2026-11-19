@@ -225,6 +225,7 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 |---|---|
 | `GET/POST /escalas`, `PUT /escalas/{id}`, `PUT /escalas/orden` | 99 |
 | `GET/POST /propositos`, `PUT /propositos/{id}`, `PUT /propositos/orden` (ruta antes de `{id}`) | 99 |
+| `GET/PUT /propositos/titulo-boletin` `{ titulo: NOMBRE\|DESCRIPCION }` | 99. Qué sale como título de cada propósito en el boletín (`configuracion_academica.titulo_proposito_boletin`, migración `2026_11_19_100000`); `GET /boletines` y `/boletines/estudiante` lo devuelven como `titulo_proposito` y el PDF lo aplica al imprimir (también a boletines ya cerrados) |
 | `GET /metodos-nivel`, `PUT /metodos-nivel/{id}` `{ metodo }` | 99 |
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
 | `PUT /referentes`, `POST /plan/estado` `{ accion: enviar\|retirar\|aprobar\|devolver\|reabrir, id_asignatura? (enviar/retirar), comentario? }` | docente con carga en el grado o 153/154 de su nivel; el service valida estado, plazo (solo a docentes) y asignaturas |

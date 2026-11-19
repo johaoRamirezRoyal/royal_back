@@ -969,3 +969,10 @@ INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
     WHERE p.id_opcion IN (112, 131) AND p.activo = 1
       AND NOT EXISTS (SELECT 1 FROM cron_permisos x WHERE x.id_opcion = 175 AND x.id_perfil = p.id_perfil);
 -- Resultado local (sami_royal): perfiles 1 Super Admin y 9 Admisiones.
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_19_100000_add_titulo_proposito_boletin_to_configuracion_academica_table.php
+-- Qué texto del propósito sale como título en el boletín de notas: NOMBRE (por defecto) o
+-- DESCRIPCION. Se elige en Configuración académica → Propósitos.
+-- ---------------------------------------------------------------------------
+alter table `configuracion_academica` add `titulo_proposito_boletin` enum('NOMBRE', 'DESCRIPCION') not null default 'NOMBRE' after `tipo_calendario`;

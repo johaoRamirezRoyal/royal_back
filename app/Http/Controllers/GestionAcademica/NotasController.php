@@ -37,7 +37,7 @@ class NotasController extends Controller implements HasMiddleware
         return [
             new Middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]), only: [
                 'listarEscalas', 'crearEscala', 'actualizarEscala', 'ordenarEscalas',
-                'listarPropositos', 'crearProposito', 'actualizarProposito', 'ordenarPropositos',
+                'listarPropositos', 'crearProposito', 'actualizarProposito', 'ordenarPropositos', 'tituloPropositoBoletin', 'cambiarTituloPropositoBoletin',
                 'listarMetodosNivel', 'cambiarMetodoNivel',
             ]),
             new Middleware(Permiso::ruta(self::REFERENTES, [TipoPerfil::DOCENTE]), only: ['guardarReferentes', 'cambiarEstadoPlan']),
@@ -160,6 +160,20 @@ class NotasController extends Controller implements HasMiddleware
         ]);
 
         return $this->apiResponse($this->service->ordenar(Proposito::class, $body['ids']));
+    }
+
+    /** Qué sale como título de cada propósito en el boletín: NOMBRE o DESCRIPCION. */
+    public function tituloPropositoBoletin()
+    {
+        return $this->apiResponse(['error' => false, 'message' => 'Título del propósito en el boletín', 'data' => ['titulo' => NotasService::tituloPropositoBoletin()]]);
+    }
+
+    /** { titulo: NOMBRE | DESCRIPCION } */
+    public function cambiarTituloPropositoBoletin(Request $request)
+    {
+        $body = $request->validate(['titulo' => ['required', Rule::in(NotasService::TITULOS_PROPOSITO)]]);
+
+        return $this->apiResponse($this->service->cambiarTituloPropositoBoletin($body['titulo']));
     }
 
     public function listarMetodosNivel()

@@ -12,5 +12,6 @@ class ConfiguracionAcademica extends Model
 
     protected $fillable = [
         'tipo_calendario',
+        'titulo_proposito_boletin',
     ];
 }
