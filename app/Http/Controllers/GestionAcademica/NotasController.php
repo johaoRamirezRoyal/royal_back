@@ -305,7 +305,12 @@ class NotasController extends Controller implements HasMiddleware
             'estudiantes.*.textos' => ['present', 'array'],
             'estudiantes.*.textos.*.id_campo' => ['required', 'integer'],
             'estudiantes.*.textos.*.texto' => ['present', 'nullable', 'string', 'max:3000'],
-        ], ['estudiantes.*.textos.*.texto.max' => 'Un texto no puede superar los 3000 caracteres.']);
+            // Observación general del director (opcional): la misma del boletín.
+            'estudiantes.*.observacion' => ['sometimes', 'nullable', 'string', 'max:3000'],
+        ], [
+            'estudiantes.*.textos.*.texto.max' => 'Un texto no puede superar los 3000 caracteres.',
+            'estudiantes.*.observacion.max' => 'La observación general no puede superar los 3000 caracteres.',
+        ]);
 
         return $this->apiResponse($this->service->guardarPlanillaDescriptiva($request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['estudiantes']));
     }
@@ -319,7 +324,11 @@ class NotasController extends Controller implements HasMiddleware
             'estudiantes.*.notas' => ['present', 'array'],
             'estudiantes.*.notas.*.id_referente' => ['required', 'integer'],
             'estudiantes.*.notas.*.id_escala' => ['present', 'nullable', 'integer'],
-        ]);
+            // Observación interna por referente (opcional; no sale en el boletín).
+            'estudiantes.*.observaciones' => ['sometimes', 'array'],
+            'estudiantes.*.observaciones.*.id_referente' => ['required', 'integer'],
+            'estudiantes.*.observaciones.*.observacion' => ['present', 'nullable', 'string', 'max:2000'],
+        ], ['estudiantes.*.observaciones.*.observacion.max' => 'Una observación no puede superar los 2000 caracteres.']);
 
         return $this->apiResponse($this->service->guardarPlanilla(
             $request->user()->id_user, $body['id_curso'], $body['id_periodo'], $body['id_asignatura'], $body['estudiantes'],

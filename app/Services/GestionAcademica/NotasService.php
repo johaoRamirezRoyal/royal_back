@@ -11,6 +11,7 @@ use App\Models\GestionAcademica\Boletin;
 use App\Models\GestionAcademica\CierrePeriodo;
 use App\Models\GestionAcademica\EscalaValoracion;
 use App\Models\GestionAcademica\ObservacionGeneral;
+use App\Models\GestionAcademica\ObservacionReferente;
 use App\Models\Areas\Grado;
 use App\Models\GestionAcademica\Proposito;
 use App\Models\GestionAcademica\PropositoCampo;
@@ -973,6 +974,14 @@ class NotasService extends Service
     }
 
     /** id_estudiante → id_referente → { docente, ajuste, final, ajustado_por?, ajustado_at? } (final = ajuste ?? docente). */
+    /** id_estudiante → id_referente → observación interna (no va al boletín). */
+    private static function observacionesReferente(Collection $idsEstudiante, Collection $idsReferente): Collection
+    {
+        return ObservacionReferente::whereIn('id_estudiante', $idsEstudiante)->whereIn('id_referente', $idsReferente)
+            ->get(['id_estudiante', 'id_referente', 'observacion'])
+            ->groupBy('id_estudiante')->map(fn (Collection $o) => $o->pluck('observacion', 'id_referente'));
+    }
+
     private static function notasDe(Collection $idsEstudiante, Collection $idsReferente, bool $conAjustador = false): Collection
     {
         $notas = ValoracionReferente::whereIn('id_estudiante', $idsEstudiante)->whereIn('id_referente', $idsReferente)->get();
@@ -1081,6 +1090,7 @@ class NotasService extends Service
             $referentes = $this->referentesDe($curso->id_grado, $idPeriodo)->where('id_asignatura', $idAsignatura)->values();
             $estudiantes = $this->estudiantesDe($idCurso, $idPeriodo);
             $notas = self::notasDe($estudiantes->pluck('id_user'), self::idsDe($referentes));
+            $observaciones = self::observacionesReferente($estudiantes->pluck('id_user'), $referentes->pluck('id'));
 
             return ['error' => false, 'message' => 'Planilla', 'data' => [
                 'curso' => ['id' => $curso->id, 'nombre' => $curso->nombre],
@@ -1095,7 +1105,10 @@ class NotasService extends Service
                 'escala' => $this->escalaDelNivel($curso->id_nivel)->map->only(['id', 'nombre', 'abreviatura', 'descripcion', 'color'])->values(),
                 'propositos' => self::propositosDe($referentes),
                 'referentes' => $referentes,
-                'estudiantes' => $estudiantes->map(fn ($e) => $e + ['notas' => $notas->get($e['id_user'], collect())])->values(),
+                'estudiantes' => $estudiantes->map(fn ($e) => $e + [
+                    'notas' => $notas->get($e['id_user'], collect()),
+                    'observaciones' => $observaciones->get($e['id_user'], collect()),
+                ])->values(),
             ]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -1126,9 +1139,11 @@ class NotasService extends Service
     /**
      * Guarda las notas del docente en su asignatura. Por estudiante, una lista de { id_referente,
      * id_escala } (referentes o subreferentes de esa asignatura); id_escala null quita la nota del
-     * docente (si el coordinador la ajustó, el ajuste se conserva). Lo que no viene no se toca.
+     * docente (si el coordinador la ajustó, el ajuste se conserva). Con `observaciones`, la
+     * observación interna por referente (vacía la borra; no sale en el boletín). Lo que no viene
+     * no se toca.
      *
-     * @param  array<int, array{id_estudiante: int, notas: array<int, array{id_referente: int, id_escala: ?int}>}>  $estudiantes
+     * @param  array<int, array{id_estudiante: int, notas: array<int, array{id_referente: int, id_escala: ?int}>, observaciones?: array<int, array{id_referente: int, observacion: ?string}>}>  $estudiantes
      */
     public function guardarPlanilla(int $idDocente, int $idCurso, int $idPeriodo, int $idAsignatura, array $estudiantes): array
     {
@@ -1161,10 +1176,22 @@ class NotasService extends Service
                         return ['error' => true, 'message' => 'Un desempeño no corresponde a la escala de este nivel'];
                     }
                 }
+                foreach ($e['observaciones'] ?? [] as $o) {
+                    if (! $referentes->has($o['id_referente'])) {
+                        return ['error' => true, 'message' => 'Un referente no corresponde a esta asignatura, grado y periodo'];
+                    }
+                }
             }
 
             DB::transaction(function () use ($idDocente, $idCurso, $idPeriodo, $estudiantes) {
                 foreach ($estudiantes as $e) {
+                    foreach ($e['observaciones'] ?? [] as $o) {
+                        $clave = ['id_estudiante' => $e['id_estudiante'], 'id_referente' => $o['id_referente']];
+                        $texto = trim((string) ($o['observacion'] ?? ''));
+                        $texto === ''
+                            ? ObservacionReferente::where($clave)->delete()
+                            : ObservacionReferente::updateOrCreate($clave, ['id_periodo_academico' => $idPeriodo, 'id_curso' => $idCurso, 'observacion' => $texto, 'id_docente' => $idDocente]);
+                    }
                     foreach ($e['notas'] as $n) {
                         $v = ValoracionReferente::firstOrNew(['id_estudiante' => $e['id_estudiante'], 'id_referente' => $n['id_referente']]);
                         $idEscala = $n['id_escala'] ?? null;
@@ -1261,6 +1288,8 @@ class NotasService extends Service
         $notas = self::notasDe($estudiantes->pluck('id_user'), self::idsDe($referentes), true);
         $observaciones = ObservacionGeneral::whereIn('id_estudiante', $estudiantes->pluck('id_user'))
             ->where('id_periodo_academico', $periodo->id)->pluck('observacion', 'id_estudiante');
+        // Internas por referente: se ven en la vista del curso; fotoBoletin no las toma.
+        $internas = self::observacionesReferente($estudiantes->pluck('id_user'), $referentes->pluck('id'));
 
         // Quién califica cada asignatura en este curso (carga activa); puede ser más de uno.
         $docentes = self::consultaCarga()->join('usuarios as u', 'u.id_user', '=', 'da.id_docente')
@@ -1277,6 +1306,7 @@ class NotasService extends Service
             'estudiantes' => $estudiantes->map(fn ($e) => $e + [
                 'notas' => $notas->get($e['id_user'], collect()),
                 'observacion' => $observaciones[$e['id_user']] ?? null,
+                'observaciones_referente' => $internas->get($e['id_user'], collect()),
             ])->values(),
         ];
     }
@@ -1787,7 +1817,9 @@ class NotasService extends Service
      * Guarda los textos del director de grupo (único que califica un grado descriptivo). Por estudiante, una lista de { id_campo, texto }: un texto
      * vacío borra el de ese campo; lo que no viene no se toca.
      *
-     * @param  array<int, array{id_estudiante: int, textos: array<int, array{id_campo: int, texto: ?string}>}>  $estudiantes
+     * Con `observacion`, también la observación general del director (vacía la borra).
+     *
+     * @param  array<int, array{id_estudiante: int, textos: array<int, array{id_campo: int, texto: ?string}>, observacion?: ?string}>  $estudiantes
      */
     public function guardarPlanillaDescriptiva(int $idDocente, int $idCurso, int $idPeriodo, array $estudiantes): array
     {
@@ -1824,6 +1856,14 @@ class NotasService extends Service
                         $texto === ''
                             ? ValoracionDescriptiva::where($clave)->delete()
                             : ValoracionDescriptiva::updateOrCreate($clave, ['id_curso' => $idCurso, 'texto' => $texto, 'id_docente' => $idDocente]);
+                    }
+                    // La observación general del director (la misma del boletín y de Notas del curso).
+                    if (array_key_exists('observacion', $e)) {
+                        $clave = ['id_estudiante' => $e['id_estudiante'], 'id_periodo_academico' => $idPeriodo];
+                        $texto = trim((string) ($e['observacion'] ?? ''));
+                        $texto === ''
+                            ? ObservacionGeneral::where($clave)->delete()
+                            : ObservacionGeneral::updateOrCreate($clave, ['id_curso' => $idCurso, 'observacion' => $texto, 'id_docente' => $idDocente]);
                     }
                 }
             });
