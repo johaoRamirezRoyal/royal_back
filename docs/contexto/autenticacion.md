@@ -108,7 +108,30 @@ contraseña (para soporte).
   devuelve `SESION_ABIERTA`, no consume la llave y el canje responde 409. `logout` la libera
   si el token tenía `via_llave_maestra`. Si la sesión se pierde sin logout (borrar cookies),
   la cuenta queda bloqueada para otra llave hasta que venza el TTL; para liberarla a mano,
-  `Cache::forget` de esa clave.
+  `Cache::forget` de esa clave o «Cerrar sesión» en la página de sesiones.
+- **Sesiones en curso y cerrarlas**: `GET /llaves-maestras/sesiones` lista las llaves cuya
+  marca sigue en caché; `DELETE /llaves-maestras/sesiones/{id}` la borra. La marca guarda el
+  id de la llave y el token el claim `llave_maestra_id`; `JwtFromCookie::cortarSesionCerrada`
+  los compara en cada petición y, si no coinciden, invalida el token y quita el header (401).
+  Lee el token con el mismo parser que el guard.
+- **El JWT solo se acepta en el header `Authorization`** (`AppServiceProvider` deja solo
+  `AuthHeaders` en el parser de tymon; `JwtFromCookie` arma el header desde la cookie). Un
+  token en `?token=` o en un campo `token` del cuerpo ya no autentica.
+  Limpiar la caché cierra estas sesiones.
+
+## Máximo de dispositivos por cuenta (`SesionesActivasService`)
+
+- Login normal del sistema general: máximo `SesionesActivasService::MAXIMO` (4) sesiones a la
+  vez por cuenta. Al entrar en una de más, se cierra la más antigua.
+- `JwtService::generateToken` le pone a cada token un claim `sid` y lo registra en caché
+  (`sesiones_activas:{connection}:{id_user}` = `activas` y `cerradas`, con lock). Los tokens
+  de llave maestra y de admisiones no llevan `sid` ni cuentan.
+- `JwtFromCookie::cortarSesionCerrada` corta un token cuyo `sid` está en `cerradas`;
+  `logout` lo quita de `activas`.
+- Vive en caché porque el deploy por FTP no corre migraciones. Solo se rechaza lo que está en
+  `cerradas`, así que limpiar la caché no saca a nadie: solo reinicia el conteo (y una sesión
+  ya cerrada vuelve a servir hasta que venza).
+- Prueba: `tests/Feature/Auth/SesionesActivasTest.php`.
 
 ## Página de acceso en el navegador (`PaginaAccesoNavegador`)
 
