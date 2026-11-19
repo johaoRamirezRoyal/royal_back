@@ -110,13 +110,13 @@ class NotasService extends Service
     /** NOMBRE (por defecto) o DESCRIPCION: se aplica al generar el PDF, también a boletines ya cerrados. */
     public static function tituloPropositoBoletin(): string
     {
-        return ConfiguracionAcademica::whereKey(1)->value('titulo_proposito_boletin') ?? 'NOMBRE';
+        return ConfiguracionAcademica::whereKey(AnioEscolarServices::ID_CONFIG)->value('titulo_proposito_boletin') ?? 'NOMBRE';
     }
 
     public function cambiarTituloPropositoBoletin(string $titulo): array
     {
         try {
-            ConfiguracionAcademica::whereKey(1)->update(['titulo_proposito_boletin' => $titulo]);
+            ConfiguracionAcademica::whereKey(AnioEscolarServices::ID_CONFIG)->update(['titulo_proposito_boletin' => $titulo]);
 
             return ['error' => false, 'message' => $titulo === 'DESCRIPCION'
                 ? 'El boletín mostrará la descripción de cada propósito como título'

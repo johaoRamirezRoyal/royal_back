@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 class AnioEscolarServices extends Service
 {
     // Fila única de configuración (ver migración create_configuracion_academica_table).
-    private const ID_CONFIG = 1;
+    /** Fila única de configuracion_academica (también la usa NotasService). */
+    public const ID_CONFIG = 1;
 
     public function obtenerAniosEscolares()
     {
