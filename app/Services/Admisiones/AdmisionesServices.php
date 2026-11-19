@@ -1761,7 +1761,7 @@ class AdmisionesServices extends Service
             }
 
             $firmaPsicologa = $estado_cita === 'ATENDIDA' && ! $firmaManual
-                ? Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->first()
+                ? Firma::where('id_user', $cita->id_psicologa)->where('activo', 1)->whereNotNull('url')->first()
                 : null;
 
             if ($estado_cita === 'ATENDIDA' && ! $firmaManual && ! $firmaPsicologa) {
@@ -1912,6 +1912,7 @@ class AdmisionesServices extends Service
             // Para saber, al marcar una cita como atendida, si hace falta subir una firma a mano.
             $conFirma = Firma::whereIn('id_user', $citas->pluck('id_psicologa')->unique())
                 ->where('activo', 1)
+                ->whereNotNull('url')
                 ->pluck('id_user')
                 ->all();
             $citas->each(fn ($cita) => $cita->setAttribute('psicologa_tiene_firma', in_array($cita->id_psicologa, $conFirma)));
