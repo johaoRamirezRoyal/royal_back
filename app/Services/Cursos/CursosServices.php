@@ -72,9 +72,19 @@ class CursosServices
             if (! $grado) {
                 return ['error' => true, 'message' => 'No se encontró el grado', 'status' => 404];
             }
-            $grado->fill($data)->save();
+            // El nivel del curso es copia del de su grado (lo filtran permisos, notas, listados): se
+            // actualiza con él. Los cursos sin grado (Egresado…) conservan el suyo.
+            $movidos = DB::transaction(function () use ($grado, $data) {
+                $grado->fill($data)->save();
 
-            return ['error' => false, 'message' => $id ? 'Grado actualizado' : 'Grado creado', 'data' => $grado];
+                // Un grado que queda sin nivel no les quita el suyo a sus cursos.
+                return $grado->wasChanged('id_nivel_academico') && $grado->id_nivel_academico !== null
+                    ? Cursos::where('id_grado', $grado->id)->update(['id_nivel' => $grado->id_nivel_academico])
+                    : 0;
+            });
+            $aviso = $movidos ? " y {$movidos} " . ($movidos === 1 ? 'curso pasó' : 'cursos pasaron') . ' a su nuevo nivel' : '';
+
+            return ['error' => false, 'message' => ($id ? 'Grado actualizado' : 'Grado creado') . $aviso, 'data' => $grado];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
