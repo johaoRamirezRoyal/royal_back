@@ -683,6 +683,7 @@ class UsuariosServices
             }
 
             $nueva = [
+                'id_user' => $id_user,
                 'nombre' => $file->getClientOriginalName(),
                 'url' => $resultado['data']['url'],
                 'activo' => 1,
