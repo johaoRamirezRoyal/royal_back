@@ -1249,7 +1249,8 @@ class NotasService extends Service
 
     /**
      * Vista de un curso en un periodo (director de grupo, 153/154 del nivel, 99, 152: el
-     * controller decide el acceso). `puede`: observar (director, en plazo y sin cierre), ajustar y
+     * controller decide el acceso). `puede`: observar (director, en plazo y sin cierre), calificar
+     * (director: ids de sus asignaturas con carga, en plazo, plan aprobado y sin cierre), ajustar y
      * cerrar (154 del nivel, plan aprobado y sin cierre), reabrir_cierre (154 del nivel, cerrado).
      */
     public function vistaCurso(array $actor, int $idCurso, int $idPeriodo): array
@@ -1285,6 +1286,10 @@ class NotasService extends Service
                 'es_director' => $esDirector,
                 'puede' => [
                     'observar' => $esDirector && self::periodoEditable($periodo) && ! $cierre,
+                    // Ids de asignatura: el director califica aquí las suyas (con carga); se guardan con PUT /planilla.
+                    'calificar' => $esDirector && ! $descriptivo && self::periodoEditable($periodo) && $estado === ReferentePlan::APROBADO && ! $cierre
+                        ? $this->asignaturasConCarga($actor['id'], $idCurso)->values()
+                        : [],
                     // Descriptiva: no hay desempeños que ajustar ni plan que aprobar.
                     'ajustar' => ! $descriptivo && $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
                     'cerrar' => $aprueba && ($descriptivo || $estado === ReferentePlan::APROBADO) && ! $cierre,
@@ -1294,6 +1299,8 @@ class NotasService extends Service
                 ],
                 // Toda la escala (también inactiva): una nota vieja puede usar un desempeño que ya se desactivó.
                 'escala' => EscalaValoracion::orderBy('orden')->get(['id', 'nombre', 'abreviatura', 'descripcion', 'color', 'activo']),
+                // Los que se pueden elegir al calificar o ajustar (los que valida el guardado).
+                'escala_nivel' => $this->escalaDelNivel($curso->id_nivel)->pluck('id'),
             ] + $datos];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];

@@ -232,7 +232,7 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
 | `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y carga en el curso (cualquier asignatura) |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
-| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
+| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no). `puede.calificar`: ids de las asignaturas del director con carga (en plazo, plan aprobado, sin cierre), que califica desde ahí con `PUT /planilla`; `escala_nivel`: ids que valida el guardado |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /asistencia-manual` `{ id_curso, id_periodo, estudiantes: [{ id_estudiante, inasistencias\|null, llegadas_tarde\|null }] }` | tipo Docente o 154; el service exige el director del curso en plazo o 154 de su nivel, sin cierre |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
