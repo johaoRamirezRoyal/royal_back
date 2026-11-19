@@ -42,7 +42,7 @@ class Firma extends Model
      */
     public static function contenidoActiva(?int $idUser): ?string
     {
-        $url = $idUser ? self::where('id_user', $idUser)->where('activo', 1)->value('url') : null;
+        $url = $idUser ? self::where('id_user', $idUser)->where('activo', 1)->whereNotNull('url')->value('url') : null;
         if (! $url) {
             return null;
         }

@@ -656,7 +656,7 @@ class UsuariosServices
     public function verFirmaUsuario(int $id_user): array
     {
         try {
-            $firma = Firma::where('id_user', $id_user)->where('activo', 1)->first();
+            $firma = Firma::where('id_user', $id_user)->where('activo', 1)->whereNotNull('url')->first();
 
             return [
                 'error' => false,
@@ -692,8 +692,9 @@ class UsuariosServices
 
             // Solo la activa: las inactivas son firmas subidas a mano para una historia clínica
             // (AdmisionesServices::actualizarEstadoCitaPsicologia) o firmas reemplazadas que
-            // siguen firmando una historia, y no deben pisarse.
-            $anterior = Firma::where('id_user', $id_user)->where('activo', 1)->first();
+            // siguen firmando una historia, y no deben pisarse. Y solo con url: las activas sin url
+            // son del sistema anterior, que sigue leyendo la tabla, y tampoco se pisan.
+            $anterior = Firma::where('id_user', $id_user)->where('activo', 1)->whereNotNull('url')->first();
             $urlABorrar = null;
 
             if (! $anterior) {
