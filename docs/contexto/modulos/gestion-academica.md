@@ -128,9 +128,19 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
 
 ## Cursos y estudiantes (`/cursos`, opción 145)
 
+- **Niveles académicos** (`nivel_academico`, modelo `NivelAcademico`): `GET /cursos/niveles-academicos`
+  (con método, grados y cursos activos), `POST`/`PUT /cursos/niveles-academicos[/{id}]` `{ nombre }`
+  (único), todo con 99 (`CursosServices::listarNivelesAcademicos` / `guardarNivelAcademico`). Solo
+  crear y renombrar: **no se borran** (grados, cursos, esquemas, escala y permisos por nivel los
+  usan por id, y `DocenteHorarioService` y `CrearEstudianteRequest` usan los ids 3 y 4). Antes del
+  2026-11-19 eran un catálogo fijo de la migración `2026_08_25_010000`.
 - **Grados** (`academico_grado`, modelo `Grado`: nombre, nivel académico opcional, orden, activo):
   catálogo editable en Configuración académica → Grados (`GET /cursos/grados` con 145 o 99;
-  `POST`/`PUT /cursos/grados[/{id}]` con 99). No se borran: se desactivan. La migración
+  `POST`/`PUT /cursos/grados[/{id}]` con 99). No se borran: se desactivan. **`curso.id_nivel` es
+  copia del nivel del grado** (lo leen permisos por nivel, notas, listados y filtros; los cursos
+  sin grado, como Egresado, lo necesitan): `CursoRequest` lo impone al guardar un curso y
+  `guardarGrado`, al cambiar el nivel de un grado, lo actualiza en todos sus cursos (en la misma
+  transacción; si el grado queda sin nivel, los cursos conservan el suyo). La migración
   `2026_11_06_120000_create_academico_grado_table` precargó Párvulos … Undécimo y asignó a cada
   curso el grado cuya palabra encabeza su nombre; los demás quedaron sin grado.
 - **`curso.id_grado`** (nullable, sin FK: curso es MyISAM en algunas BD). Se edita en el modal.

@@ -183,7 +183,8 @@ Modelo del colegio: el "Boletín Descriptivo" (Word de ejemplo de Pre-Jardín, p
   orden). Un campo que no viene se borra, o se **desactiva** si ya tiene textos. `GET /propositos`
   trae `campos[]`.
 - **Textos** (`academico_valoracion_descriptiva`, unique estudiante + campo + periodo): los escribe
-  **cualquier docente con carga en el curso** (cualquier asignatura), en plazo y sin cierre
+  **solo el director de grupo del curso** (desde 2026-11-19; antes, cualquier docente con carga; un
+  curso descriptivo ya no sale en `mis-cursos` a quien no lo dirige), en plazo y sin cierre
   (`planillaDescriptiva` / `guardarPlanillaDescriptiva`, `GET|PUT /planilla-descriptiva`). Texto
   vacío = se borra. El director escribe las observaciones generales como siempre.
 - `GET /mis-cursos` trae `tipo_evaluacion` por curso; `GET /planilla` (por asignatura) rechaza un
@@ -224,15 +225,16 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 |---|---|
 | `GET/POST /escalas`, `PUT /escalas/{id}`, `PUT /escalas/orden` | 99 |
 | `GET/POST /propositos`, `PUT /propositos/{id}`, `PUT /propositos/orden` (ruta antes de `{id}`) | 99 |
+| `GET/PUT /propositos/titulo-boletin` `{ titulo: NOMBRE\|DESCRIPCION }` | 99. Qué sale como título de cada propósito en el boletín (`configuracion_academica.titulo_proposito_boletin`, migración `2026_11_19_100000`); `GET /boletines` y `/boletines/estudiante` lo devuelven como `titulo_proposito` y el PDF lo aplica al imprimir (también a boletines ya cerrados) |
 | `GET /metodos-nivel`, `PUT /metodos-nivel/{id}` `{ metodo }` | 99 |
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
 | `PUT /referentes`, `POST /plan/estado` `{ accion: enviar\|retirar\|aprobar\|devolver\|reabrir, id_asignatura? (enviar/retirar), comentario? }` | docente con carga en el grado o 153/154 de su nivel; el service valida estado, plazo (solo a docentes) y asignaturas |
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
 | `GET /mis-cursos` | tipo Docente: `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
-| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y carga en el curso (cualquier asignatura) |
+| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y director de grupo del curso |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
-| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
+| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no). `puede.calificar`: ids de las asignaturas del director con carga (en plazo, plan aprobado, sin cierre), que califica desde ahí con `PUT /planilla`; `escala_nivel`: ids que valida el guardado |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /asistencia-manual` `{ id_curso, id_periodo, estudiantes: [{ id_estudiante, inasistencias\|null, llegadas_tarde\|null }] }` | tipo Docente o 154; el service exige el director del curso en plazo o 154 de su nivel, sin cierre |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |

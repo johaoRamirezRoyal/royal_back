@@ -3,6 +3,7 @@
 namespace App\Services\GestionAcademica;
 
 use App\Enums\TipoPerfil;
+use App\Models\AnioEscolar\ConfiguracionAcademica;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\AsistenciaManual;
@@ -41,6 +42,11 @@ use Throwable;
  */
 class NotasService extends Service
 {
+    /** Qué texto del propósito sale como título en el boletín (configuracion_academica.titulo_proposito_boletin). */
+    public const TITULOS_PROPOSITO = ['NOMBRE', 'DESCRIPCION'];
+
+    private const SOLO_DIRECTOR_DESCRIPTIVA ='En los grados descriptivos solo califica el director de grupo del curso.';
+
     public function __construct(private AnioEscolarServices $anios) {}
 
     // ─── Escala ─────────────────────────────────────────────────
@@ -100,6 +106,25 @@ class NotasService extends Service
     }
 
     // ─── Propósitos y método por nivel (Configuración académica, 99) ─────────
+
+    /** NOMBRE (por defecto) o DESCRIPCION: se aplica al generar el PDF, también a boletines ya cerrados. */
+    public static function tituloPropositoBoletin(): string
+    {
+        return ConfiguracionAcademica::whereKey(AnioEscolarServices::ID_CONFIG)->value('titulo_proposito_boletin') ?? 'NOMBRE';
+    }
+
+    public function cambiarTituloPropositoBoletin(string $titulo): array
+    {
+        try {
+            ConfiguracionAcademica::whereKey(AnioEscolarServices::ID_CONFIG)->update(['titulo_proposito_boletin' => $titulo]);
+
+            return ['error' => false, 'message' => $titulo === 'DESCRIPCION'
+                ? 'El boletín mostrará la descripción de cada propósito como título'
+                : 'El boletín mostrará el nombre de cada propósito como título', 'data' => ['titulo' => $titulo]];
+        } catch (Throwable $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
 
     /** Propósitos con sus campos de evaluación descriptiva (activos e inactivos, en orden). */
     public function listarPropositos(): array
@@ -981,7 +1006,8 @@ class NotasService extends Service
 
     /**
      * Cursos cualitativos del docente y los periodos del año: los que dirige (`es_director`) y
-     * aquellos en que tiene carga activa, con las asignaturas que califica en cada uno.
+     * aquellos en que tiene carga activa, con las asignaturas que califica en cada uno. Un curso
+     * de grado descriptivo solo sale a su director (es el único que lo califica).
      */
     public function misCursos(int $idDocente): array
     {
@@ -993,6 +1019,7 @@ class NotasService extends Service
                 ->groupBy('id_curso');
 
             $cursos = self::cursosCualitativos(fn ($q) => $q->where(fn ($q) => $q->where('id_director', $idDocente)->orWhereIn('id', $carga->keys())))
+                ->filter(fn (Cursos $c) => (int) $c->id_director === $idDocente || ! self::esDescriptivo($c))
                 ->map(fn (Cursos $c) => [
                     'id_curso' => $c->id,
                     'curso' => $c->nombre,
@@ -1249,7 +1276,8 @@ class NotasService extends Service
 
     /**
      * Vista de un curso en un periodo (director de grupo, 153/154 del nivel, 99, 152: el
-     * controller decide el acceso). `puede`: observar (director, en plazo y sin cierre), ajustar y
+     * controller decide el acceso). `puede`: observar (director, en plazo y sin cierre), calificar
+     * (director: ids de sus asignaturas con carga, en plazo, plan aprobado y sin cierre), ajustar y
      * cerrar (154 del nivel, plan aprobado y sin cierre), reabrir_cierre (154 del nivel, cerrado).
      */
     public function vistaCurso(array $actor, int $idCurso, int $idPeriodo): array
@@ -1285,6 +1313,10 @@ class NotasService extends Service
                 'es_director' => $esDirector,
                 'puede' => [
                     'observar' => $esDirector && self::periodoEditable($periodo) && ! $cierre,
+                    // Ids de asignatura: el director califica aquí las suyas (con carga); se guardan con PUT /planilla.
+                    'calificar' => $esDirector && ! $descriptivo && self::periodoEditable($periodo) && $estado === ReferentePlan::APROBADO && ! $cierre
+                        ? $this->asignaturasConCarga($actor['id'], $idCurso)->values()
+                        : [],
                     // Descriptiva: no hay desempeños que ajustar ni plan que aprobar.
                     'ajustar' => ! $descriptivo && $aprueba && $estado === ReferentePlan::APROBADO && ! $cierre,
                     'cerrar' => $aprueba && ($descriptivo || $estado === ReferentePlan::APROBADO) && ! $cierre,
@@ -1294,6 +1326,8 @@ class NotasService extends Service
                 ],
                 // Toda la escala (también inactiva): una nota vieja puede usar un desempeño que ya se desactivó.
                 'escala' => EscalaValoracion::orderBy('orden')->get(['id', 'nombre', 'abreviatura', 'descripcion', 'color', 'activo']),
+                // Los que se pueden elegir al calificar o ajustar (los que valida el guardado).
+                'escala_nivel' => $this->escalaDelNivel($curso->id_nivel)->pluck('id'),
             ] + $datos];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -1706,8 +1740,8 @@ class NotasService extends Service
     }
 
     /**
-     * Planilla descriptiva de un curso para el docente: con carga en el curso (cualquier
-     * asignatura). `editable`: en plazo y sin cierre.
+     * Planilla descriptiva de un curso: solo la califica su director de grupo. `editable`: en
+     * plazo y sin cierre.
      */
     public function planillaDescriptiva(int $idDocente, int $idCurso, int $idPeriodo): array
     {
@@ -1723,8 +1757,8 @@ class NotasService extends Service
             if (! self::esDescriptivo($curso)) {
                 return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
             }
-            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
-                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            if ((int) $curso->id_director !== $idDocente) {
+                return ['error' => true, 'message' => self::SOLO_DIRECTOR_DESCRIPTIVA];
             }
             $cerrado = self::cierreDe($idCurso, $idPeriodo) !== null;
 
@@ -1743,7 +1777,7 @@ class NotasService extends Service
     }
 
     /**
-     * Guarda los textos del docente. Por estudiante, una lista de { id_campo, texto }: un texto
+     * Guarda los textos del director de grupo (único que califica un grado descriptivo). Por estudiante, una lista de { id_campo, texto }: un texto
      * vacío borra el de ese campo; lo que no viene no se toca.
      *
      * @param  array<int, array{id_estudiante: int, textos: array<int, array{id_campo: int, texto: ?string}>}>  $estudiantes
@@ -1759,8 +1793,8 @@ class NotasService extends Service
             if (! self::esDescriptivo($curso)) {
                 return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
             }
-            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
-                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            if (! $this->dirige($idDocente, $idCurso)) {
+                return ['error' => true, 'message' => self::SOLO_DIRECTOR_DESCRIPTIVA];
             }
             $campos = PropositoCampo::pluck('id')->flip();
             $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
@@ -1908,7 +1942,7 @@ class NotasService extends Service
                 ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
                 ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
                 ->values();
-            $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos'))];
+            $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos')), 'titulo_proposito' => self::tituloPropositoBoletin()];
 
             return ['error' => false, 'message' => 'Boletines del curso', 'data' => $data];
         } catch (Throwable $e) {
@@ -1933,7 +1967,7 @@ class NotasService extends Service
                     'cerrado_at' => $b->datos['cerrado_at'] ?? null,
                     'datos' => $b->datos,
                 ])->values();
-            $data = ['historial' => $historial, 'firmas' => (object) self::firmasDirectores($historial->pluck('datos'))];
+            $data = ['historial' => $historial, 'firmas' => (object) self::firmasDirectores($historial->pluck('datos')), 'titulo_proposito' => self::tituloPropositoBoletin()];
 
             return ['error' => false, 'message' => 'Boletines del estudiante', 'data' => $data];
         } catch (Throwable $e) {

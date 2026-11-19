@@ -13,6 +13,10 @@ Route::get('/all', [CursosController::class, 'findAll']);
 Route::get('/grados', [CursosController::class, 'grados'])->middleware(Permiso::ruta([Permiso::CURSOS, Permiso::GESTION_ACADEMICA]));
 Route::post('/grados', [CursosController::class, 'guardarGrado'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 Route::put('/grados/{id}', [CursosController::class, 'guardarGrado'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+// Catálogo de niveles académicos (Configuración académica, 99): crear y renombrar; no se borran.
+Route::get('/niveles-academicos', [CursosController::class, 'nivelesAcademicos'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::post('/niveles-academicos', [CursosController::class, 'guardarNivelAcademico'])->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
+Route::put('/niveles-academicos/{id}', [CursosController::class, 'guardarNivelAcademico'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::GESTION_ACADEMICA]));
 
 // Avisos de cierre de año en la página de inicio: promoción (145) o periodos (99).
 Route::get('/avisos-cierre', [CursosController::class, 'avisosCierreAnio'])->middleware(Permiso::ruta([Permiso::CURSOS, Permiso::GESTION_ACADEMICA]));
