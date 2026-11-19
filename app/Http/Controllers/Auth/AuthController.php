@@ -278,8 +278,11 @@ class AuthController extends Controller
         $sinVerificacion = app()->environment('local') && ! config('auth.device_otp');
 
         if ($sinVerificacion || ($deviceToken && $this->service_auth->dispositivoEsConfiable($connection, $usuario->id_user, $deviceToken))) {
-            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla)
-            $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
+            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla). Los acudientes no
+            // usan SAMI: no se le manda su contraseña.
+            if (! $usuario->esTipo(TipoPerfil::ACUDIENTE)) {
+                $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
+            }
 
             return response()
                 ->json(['Message' => 'Login Exitoso'])

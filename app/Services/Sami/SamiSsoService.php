@@ -9,8 +9,13 @@ use Illuminate\Support\Facades\Log;
 
 class SamiSsoService
 {
-    public function iniciarSesion(int $userId, string $username, string $password): void
+    public function iniciarSesion(int $userId, ?string $username, string $password): void
     {
+        // Sin usuario de SAMI no hay sesión que abrir.
+        if (blank($username)) {
+            return;
+        }
+
         try {
             $response = Http::asForm()
                 ->withOptions(['allow_redirects' => false])
