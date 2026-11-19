@@ -23,6 +23,11 @@ class JwtService
         // La llave maestra tiene su propio control (LlaveMaestraService) y no ocupa lugar.
         $sid = empty($extraClaims['via_llave_maestra']) ? Str::random(32) : null;
 
+        // tymon guarda en su factory compartida los claims de todo token que lee en la petición
+        // (JwtFromCookie lee la cookie anterior): sin vaciarla, el token nuevo heredaba
+        // `via_llave_maestra` de una sesión vieja y quedaba cerrado desde el primer request.
+        JWTAuth::factory()->emptyClaims();
+
         $token = JWTAuth::claims(array_merge([
             'active' => true,
             'system' => 'general',
@@ -48,6 +53,8 @@ class JwtService
      * viene ninguna, mismo default que JwtFromCookie usa para un token sin el claim. */
     public function generateAdmissionsToken(Authenticatable $user, string $connection = 'mysql'): string
     {
+        JWTAuth::factory()->emptyClaims(); // ver generateToken
+
         return JWTAuth::claims([
             'active' => true,
             'system' => 'admissions',
