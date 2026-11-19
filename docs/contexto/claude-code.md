@@ -41,6 +41,18 @@ Ninguno tiene `Edit`/`Write`. Corren en su propio contexto y devuelven un inform
 Las reglas de `AGENTS.md` funcionan sin los plugins; `log-analyzer` usa Headroom si está y si
 no, `grep`/`tail`. Ningún archivo compartido los exige.
 
+## Recomendado: desactivar Vercel en este repo
+
+Si tienes el plugin de Vercel, desactívalo aquí: OMNIA no usa Vercel y el plugin carga unas 45
+descripciones de skills y un texto largo en cada sesión. En tu `.claude/settings.local.json`
+(personal; no se commitea) agrega:
+
+```json
+"enabledPlugins": { "vercel@claude-plugins-official": false }
+```
+
+Solo aplica a este repo (sigue activo en tus otros proyectos) y a las sesiones nuevas.
+
 ## Personal (nunca en Git)
 
 - `.claude/settings.local.json`: permisos aprobados y plugins activados solo para ti (está en
