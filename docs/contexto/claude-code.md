@@ -58,9 +58,3 @@ Solo aplica a este repo (sigue activo en tus otros proyectos) y a las sesiones n
 - `.claude/settings.local.json`: permisos aprobados y plugins activados solo para ti (está en
   `.gitignore`).
 - `~/.claude/`: plugins de usuario, memoria automática y ajustes globales.
-
-## Mind Palace
-
-No está instalado ni existe en los marketplaces configurados. Para conservar contexto entre
-sesiones se usa lo que ya hay: `docs/contexto/` (compartido) y la memoria automática de
-Claude Code (personal).
