@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Usuarios\Usuario;
+use App\Services\Auth\SesionesActivasService;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Str;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class JwtService
@@ -17,7 +19,11 @@ class JwtService
 
         $user->loadMissing('perfilRelacion');
 
-        return JWTAuth::claims(array_merge([
+        // Login normal: cuenta para el máximo de dispositivos (ver SesionesActivasService).
+        // La llave maestra tiene su propio control (LlaveMaestraService) y no ocupa lugar.
+        $sid = empty($extraClaims['via_llave_maestra']) ? Str::random(32) : null;
+
+        $token = JWTAuth::claims(array_merge([
             'active' => true,
             'system' => 'general',
             'db_connection' => $connection,
@@ -26,7 +32,13 @@ class JwtService
             'apellido' => $user->apellido,
             'correo' => $user->correo,
             'perfil' => $user->perfilRelacion?->nombre ?? $user->perfil,
-        ], $extraClaims))->fromUser($user);
+        ], $sid ? ['sid' => $sid] : [], $extraClaims))->fromUser($user);
+
+        if ($sid) {
+            app(SesionesActivasService::class)->registrar($connection, (int) $user->id_user, $sid);
+        }
+
+        return $token;
     }
 
     /** `$connection` viene del colegio resuelto por ResolveColegioAdmision para esta

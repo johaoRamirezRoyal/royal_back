@@ -10,6 +10,7 @@ use App\Http\Traits\HasAuthCookie;
 use App\Models\Usuarios\Usuario;
 use App\Services\AdminManagement\LlaveMaestraService;
 use App\Services\Auth\AuthServices;
+use App\Services\Auth\SesionesActivasService;
 use App\Services\branding\ColegioAdmisionService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\JwtService;
@@ -673,6 +674,8 @@ class AuthController extends Controller
                         (int) $payload['user_id'],
                         isset($payload['llave_maestra_id']) ? (int) $payload['llave_maestra_id'] : null
                     );
+                } elseif (isset($payload['sid'])) {
+                    app(SesionesActivasService::class)->quitar($payload['db_connection'], (int) $payload['user_id'], (string) $payload['sid']);
                 }
             } catch (\Exception $e) {
                 // Token vencido: su marca de sesión en caché ya venció con él.

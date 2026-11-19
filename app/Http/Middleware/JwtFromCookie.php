@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Services\AdminManagement\BasesDatosService;
 use App\Services\AdminManagement\LlaveMaestraService;
+use App\Services\Auth\SesionesActivasService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -87,19 +88,19 @@ class JwtFromCookie
             ]);
         }
 
-        $this->cortarSesionDeLlaveCerrada($request);
+        $this->cortarSesionCerrada($request);
 
         return $next($request);
     }
 
     /**
-     * Una sesión por llave maestra cerrada (logout o cierre desde administración, ver
-     * LlaveMaestraService::sesionVigente) deja de autenticar aunque su JWT no haya vencido:
-     * se invalida y se quita el header, y auth:api responde 401. Lee el token con el mismo
-     * parser que el guard (header, ?token=, campo token o cookie), así no se salta mandándolo
-     * por otro lado.
+     * Una sesión cerrada deja de autenticar aunque su JWT no haya vencido: por llave maestra
+     * (logout o cierre desde administración, ver LlaveMaestraService::sesionVigente) o por
+     * entrar en más dispositivos de los permitidos (ver SesionesActivasService). Se invalida y
+     * se quita el header, y auth:api responde 401. Lee el token con el mismo parser que el
+     * guard (solo el header, ver AppServiceProvider), así no se salta mandándolo por otro lado.
      */
-    private function cortarSesionDeLlaveCerrada(Request $request): void
+    private function cortarSesionCerrada(Request $request): void
     {
         $token = JWTAuth::parser()->setRequest($request)->parseToken();
 
@@ -114,17 +115,19 @@ class JwtFromCookie
             return;
         }
 
-        if (! $payload->get('via_llave_maestra')) {
-            return;
+        $connection = (string) ($payload->get('db_connection') ?? 'mysql');
+        $idUser = (int) $payload->get('user_id');
+
+        if ($payload->get('via_llave_maestra')) {
+            $llaveId = $payload->get('llave_maestra_id');
+            $cerrada = ! app(LlaveMaestraService::class)->sesionVigente($connection, $idUser, $llaveId === null ? null : (int) $llaveId);
+        } else {
+            // Sin sid: token de admisiones o emitido antes del máximo de dispositivos.
+            $sid = $payload->get('sid');
+            $cerrada = $sid !== null && app(SesionesActivasService::class)->cerrada($connection, $idUser, (string) $sid);
         }
 
-        $llaveId = $payload->get('llave_maestra_id');
-
-        if (app(LlaveMaestraService::class)->sesionVigente(
-            (string) ($payload->get('db_connection') ?? 'mysql'),
-            (int) $payload->get('user_id'),
-            $llaveId === null ? null : (int) $llaveId
-        )) {
+        if (! $cerrada) {
             return;
         }
 
