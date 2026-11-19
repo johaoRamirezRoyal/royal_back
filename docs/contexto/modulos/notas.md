@@ -282,9 +282,17 @@ referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no
    cierre del periodo por curso y boletines (foto JSON). En `sami_royal` se corrió con `migrate`.
 5. `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`: `academico_grado.tipo_evaluacion`,
    campos por propósito y textos descriptivos. En `sami_royal` se corrió con `migrate` (2026-11-17).
+6. `2026_11_05_120400_create_academico_referente_envio_table`: envío de referentes por asignatura.
+7. `2026_11_18_100000_create_academico_asistencia_manual_table`: inasistencias y llegadas tarde del
+   boletín escritas a mano.
+8. `2026_11_18_110000_seed_opciones_registro_boletines`: opciones 172 y 173.
+9. `2026_11_19_100000_add_titulo_proposito_boletin_to_configuracion_academica_table`: título del
+   propósito en el boletín (`NOMBRE` | `DESCRIPCION`).
 
-La rama no está en producción, así que las migraciones se reescriben en vez de apilar correcciones.
-El 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
+Todas las tablas de notas son `engine = InnoDB` (en producción el motor por defecto es MyISAM y
+las FK fallaban con errno 150). **Desde que las 1–6 están en producción, un cambio va en una
+migración nueva**; ya no se reescriben las existentes. Hasta entonces sí se reescribían:
+el 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
 aplicó a mano (sin `migrate:rollback`, porque el `down()` del seed viejo borraba los permisos de las
 opciones 149 y 150, que ya son de otros módulos): se borraron las tablas viejas y las columnas
 `tipo_unidad`/`calificador`, se corrió `down()` + `up()` de la nueva y se restauraron la escala, el
