@@ -41,6 +41,8 @@ use Throwable;
  */
 class NotasService extends Service
 {
+    private const SOLO_DIRECTOR_DESCRIPTIVA = 'En los grados descriptivos solo califica el director de grupo del curso.';
+
     public function __construct(private AnioEscolarServices $anios) {}
 
     // ─── Escala ─────────────────────────────────────────────────
@@ -981,7 +983,8 @@ class NotasService extends Service
 
     /**
      * Cursos cualitativos del docente y los periodos del año: los que dirige (`es_director`) y
-     * aquellos en que tiene carga activa, con las asignaturas que califica en cada uno.
+     * aquellos en que tiene carga activa, con las asignaturas que califica en cada uno. Un curso
+     * de grado descriptivo solo sale a su director (es el único que lo califica).
      */
     public function misCursos(int $idDocente): array
     {
@@ -993,6 +996,7 @@ class NotasService extends Service
                 ->groupBy('id_curso');
 
             $cursos = self::cursosCualitativos(fn ($q) => $q->where(fn ($q) => $q->where('id_director', $idDocente)->orWhereIn('id', $carga->keys())))
+                ->filter(fn (Cursos $c) => (int) $c->id_director === $idDocente || ! self::esDescriptivo($c))
                 ->map(fn (Cursos $c) => [
                     'id_curso' => $c->id,
                     'curso' => $c->nombre,
@@ -1713,8 +1717,8 @@ class NotasService extends Service
     }
 
     /**
-     * Planilla descriptiva de un curso para el docente: con carga en el curso (cualquier
-     * asignatura). `editable`: en plazo y sin cierre.
+     * Planilla descriptiva de un curso: solo la califica su director de grupo. `editable`: en
+     * plazo y sin cierre.
      */
     public function planillaDescriptiva(int $idDocente, int $idCurso, int $idPeriodo): array
     {
@@ -1730,8 +1734,8 @@ class NotasService extends Service
             if (! self::esDescriptivo($curso)) {
                 return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
             }
-            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
-                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            if ((int) $curso->id_director !== $idDocente) {
+                return ['error' => true, 'message' => self::SOLO_DIRECTOR_DESCRIPTIVA];
             }
             $cerrado = self::cierreDe($idCurso, $idPeriodo) !== null;
 
@@ -1750,7 +1754,7 @@ class NotasService extends Service
     }
 
     /**
-     * Guarda los textos del docente. Por estudiante, una lista de { id_campo, texto }: un texto
+     * Guarda los textos del director de grupo (único que califica un grado descriptivo). Por estudiante, una lista de { id_campo, texto }: un texto
      * vacío borra el de ese campo; lo que no viene no se toca.
      *
      * @param  array<int, array{id_estudiante: int, textos: array<int, array{id_campo: int, texto: ?string}>}>  $estudiantes
@@ -1766,8 +1770,8 @@ class NotasService extends Service
             if (! self::esDescriptivo($curso)) {
                 return ['error' => true, 'message' => 'Este curso se evalúa por referentes: usa la planilla por asignatura.'];
             }
-            if ($this->asignaturasConCarga($idDocente, $idCurso)->isEmpty()) {
-                return ['error' => true, 'message' => 'No tienes carga académica en este curso.'];
+            if (! $this->dirige($idDocente, $idCurso)) {
+                return ['error' => true, 'message' => self::SOLO_DIRECTOR_DESCRIPTIVA];
             }
             $campos = PropositoCampo::pluck('id')->flip();
             $alumnos = $this->estudiantesDe($idCurso, $idPeriodo)->pluck('id_user')->flip();
