@@ -77,14 +77,21 @@ k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
 
 ## Convenciones de código
 
-- **Ponytail siempre activo.** Al empezar cualquier tarea de código (escribir, corregir,
-  refactorizar, revisar, elegir dependencias), invoca la skill `ponytail:ponytail` (nivel
-  `full`) antes de tocar archivos. Para revisar un cambio usa `ponytail:ponytail-review`
-  junto con `revision-codigo`. Los atajos deliberados se marcan con un comentario
-  `shortcut:` que diga su límite y cómo mejorarlo (`/ponytail-debt` los lista). Sin el
-  plugin, aplica igual su regla: entender el problema completo y luego el cambio más chico
-  que lo resuelva entero (reusar lo del repo → Laravel/PHP → paquete instalado → código
-  nuevo mínimo), sin abstracciones ni paquetes de Composer que nadie pidió.
+- **El cambio más chico que resuelva todo.** Entiende el problema completo y luego reusa lo
+  del repo → Laravel/PHP → paquete instalado → código nuevo mínimo, sin abstracciones ni
+  paquetes de Composer que nadie pidió. Un atajo deliberado lleva un comentario `shortcut:`
+  con su límite y cuándo mejorarlo. Si tienes el plugin Ponytail, invoca `ponytail:ponytail`
+  al empezar una tarea de código y `ponytail:ponytail-review` al revisar.
+- **Contexto mínimo.** Busca (`grep`/`glob`) antes de abrir archivos y lee solo los que toca
+  la tarea; nada de auditorías globales para cambios chicos. Un archivo grande
+  (`storage/logs/laravel.log` pesa decenas de MB, `migraciones_sql.sql`, JSON/CSV) nunca se
+  lee entero: mide, busca y lee el rango; con el plugin Headroom, `headroom:headroom` (en
+  Windows su script corre con `py`).
+- **Agentes** (`.claude/agents/`, todos de solo lectura): `laravel-reviewer` (revisar un
+  cambio mediano o grande), `database-analyst` (consultas e índices; nunca escribe en la
+  base), `security-auditor` (auth, permisos, vulnerabilidades) y `log-analyzer` (logs y
+  archivos grandes). Lo chico lo resuelve el agente principal; no encadenes delegaciones.
+  Instalación y qué es personal: [`docs/contexto/claude-code.md`](docs/contexto/claude-code.md).
 - Capas: ruta (`routes/api/<modulo>.php`, incluida en `routes/api.php`) → controller
   (`app/Http/Controllers/<Modulo>/`) → service (`app/Services/<modulo>/`) → modelo
   (`app/Models/<Modulo>/`). Las carpetas de services mezclan mayúscula y minúscula:
@@ -131,6 +138,7 @@ esta tabla.
 | [`autenticacion.md`](docs/contexto/autenticacion.md) | JWT, cookies, middlewares de sistema, OTP de dispositivo, llave maestra |
 | [`infraestructura.md`](docs/contexto/infraestructura.md) | mapa de rutas, archivos y miniaturas, Cloudinary, FileStorage, logo de PDFs, documentos pdfmake (`DocumentoPdfService`, requiere Node), correo, config, Boost |
 | [`convenciones.md`](docs/contexto/convenciones.md) | plantillas de código y cómo crear un módulo nuevo |
+| [`claude-code.md`](docs/contexto/claude-code.md) | agentes, skills, MCP de Boost y plugins de Claude Code: qué es compartido, qué es personal y qué instalar |
 | [`modulos/asistencia-hikvision.md`](docs/contexto/modulos/asistencia-hikvision.md) | terminales Hikvision, webhook de marcaciones, asistencia de trabajadores, QR de portería, escaneo de carnets |
 | [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos y catálogo de grados (`curso.id_grado`), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
 | [`modulos/gestion-convivencial.md`](docs/contexto/modulos/gestion-convivencial.md) | Observaciones, Registro de actas |
