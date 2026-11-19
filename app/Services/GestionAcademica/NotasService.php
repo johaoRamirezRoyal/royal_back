@@ -1262,10 +1262,17 @@ class NotasService extends Service
         $observaciones = ObservacionGeneral::whereIn('id_estudiante', $estudiantes->pluck('id_user'))
             ->where('id_periodo_academico', $periodo->id)->pluck('observacion', 'id_estudiante');
 
+        // Quién califica cada asignatura en este curso (carga activa); puede ser más de uno.
+        $docentes = self::consultaCarga()->join('usuarios as u', 'u.id_user', '=', 'da.id_docente')
+            ->where('c.id_curso', $curso->id)->distinct()->get(['da.id_asignatura', 'u.nombre', 'u.apellido'])
+            ->groupBy('id_asignatura')
+            ->map(fn ($filas) => $filas->map(fn ($u) => trim(preg_replace('/\s+/', ' ', "{$u->nombre} {$u->apellido}")))->implode(', '));
+
         return [
             'propositos' => self::propositosDe($referentes),
             'asignaturas' => DB::table('academico_asignatura')->whereIn('id', $referentes->pluck('id_asignatura')->unique())
-                ->orderBy('nombre')->get(['id', 'nombre']),
+                ->orderBy('nombre')->get(['id', 'nombre'])
+                ->map(fn ($a) => ['id' => $a->id, 'nombre' => $a->nombre, 'docente' => $docentes[$a->id] ?? null]),
             'referentes' => $referentes,
             'estudiantes' => $estudiantes->map(fn ($e) => $e + [
                 'notas' => $notas->get($e['id_user'], collect()),
