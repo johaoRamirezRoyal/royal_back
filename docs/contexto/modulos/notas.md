@@ -125,6 +125,13 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   `{ id_referente, id_escala }`: `null` quita la del docente (si hay ajuste, la fila se conserva con
   el ajuste); lo que no viene no se toca. El final de un referente lo elige el docente: no se calcula
   de los subreferentes.
+- **Observación interna por referente** (`academico_observacion_referente`, modelo
+  `ObservacionReferente`, 2026-11-19): texto del docente por estudiante y referente, **no sale en el
+  boletín** (`fotoBoletin` arma sus campos uno a uno y no la toma). Tabla aparte de las valoraciones:
+  quitar la nota no la borra. Viaja en `PUT /planilla` (`estudiantes.*.observaciones: [{ id_referente,
+  observacion }]`, opcional; vacía la borra; el referente tiene que ser de esa asignatura) y sale en
+  `GET /planilla` (`estudiantes[].observaciones`) y en la vista del curso
+  (`estudiantes[].observaciones_referente`, solo lectura).
 - **Estudiantes** (`estudiantesDe`): activos que hoy están en el curso, más los que ya tienen nota u
   observación en él en ese periodo aunque se hayan movido (`en_curso: false`).
 - **Ajuste del coordinador** (`ajustar`, 154 del nivel del curso): cambia el final de un
@@ -232,7 +239,7 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
 | `GET /mis-cursos` | tipo Docente: `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
-| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y director de grupo del curso |
+| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y director de grupo del curso. El PUT acepta `estudiantes.*.observacion` (opcional): la observación general del director (`ObservacionGeneral`, la del boletín), en la misma transacción que los textos |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
 | `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no). `puede.calificar`: ids de las asignaturas del director con carga (en plazo, plan aprobado, sin cierre), que califica desde ahí con `PUT /planilla`; `escala_nivel`: ids que valida el guardado; `asignaturas[].docente`: quién la califica en el curso (carga activa, varios separados por coma) |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
@@ -288,6 +295,8 @@ referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no
 8. `2026_11_18_110000_seed_opciones_registro_boletines`: opciones 172 y 173.
 9. `2026_11_19_100000_add_titulo_proposito_boletin_to_configuracion_academica_table`: título del
    propósito en el boletín (`NOMBRE` | `DESCRIPCION`).
+10. `2026_11_19_110000_create_academico_observacion_referente_table`: observación interna por
+    estudiante y referente.
 
 Todas las tablas de notas son `engine = InnoDB` (en producción el motor por defecto es MyISAM y
 las FK fallaban con errno 150). **Desde que las 1–6 están en producción, un cambio va en una
