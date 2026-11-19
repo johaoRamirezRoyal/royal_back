@@ -6,6 +6,7 @@ use App\Events\PasswordRestore;
 use App\Http\Controllers\Controller;
 use App\Models\PasswordResetTokens;
 use App\Models\Usuarios\Usuario;
+use App\Services\AdminManagement\BasesDatosService;
 use App\Services\branding\ColegioAdmisionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -28,10 +29,14 @@ class PasswordResetController extends Controller
     }
 
     /** Fija la base del colegio del slug, si viene. Devuelve el slug, un 404 si no existe o
-     * null sin slug. */
+     * null sin slug. Sin slug (personal), la base sale del dominio institucional del correo. */
     private function usarBaseDelColegio(Request $request): string|JsonResponse|null
     {
         if (! $request->filled('colegio')) {
+            if ($base = BasesDatosService::connectionDeCorreo((string) $request->input('email'))) {
+                config(['database.default' => $base]);
+            }
+
             return null;
         }
 
@@ -54,7 +59,7 @@ class PasswordResetController extends Controller
         }
 
         $request->validate([
-            'email' => 'required|email|exists:usuarios,correo|min:10|max:140' . ($slug ? '' : '|ends_with:@royalschool.edu.co'),
+            'email' => 'required|email|exists:usuarios,correo|min:10|max:140' . ($slug ? '' : '|ends_with:' . BasesDatosService::arrobasDeLaSesion()),
         ],
             [
                 'email.required' => 'El correo es un campo obligatorio.',

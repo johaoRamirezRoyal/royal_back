@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Usuarios;
 
+use App\Services\AdminManagement\BasesDatosService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -55,7 +56,7 @@ class RegistrarUsuarioRequest extends FormRequest
             "correo" => [
                 'required',
                 'email',
-                'ends_with:@royalschool.edu.co',
+                'ends_with:' . BasesDatosService::arrobasDeLaSesion(),
                 Rule::unique('usuarios', 'correo'),
             ],
 
@@ -128,7 +129,7 @@ class RegistrarUsuarioRequest extends FormRequest
 
             'correo.required' => 'El correo es obligatorio',
             'correo.email' => 'El correo no es válido',
-            'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
+            'correo.ends_with' => 'El correo debe ser institucional (' . str_replace(',', ' o ', BasesDatosService::arrobasDeLaSesion()) . ')',
             'correo.unique' => 'El correo ya está registrado',
 
             'pass.required' => 'La contraseña es obligatoria',

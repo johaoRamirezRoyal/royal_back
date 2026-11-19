@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
 use App\Models\Usuarios\Usuario;
+use App\Services\AdminManagement\BasesDatosService;
 use App\Services\AdminManagement\LlaveMaestraService;
 use App\Services\Auth\AuthServices;
 use App\Services\Auth\SesionesActivasService;
@@ -111,10 +112,12 @@ class AuthController extends Controller
             $googleUser = $provider->stateless()->user();
             $frontendUrl = config('app.frontend_url');
 
-            // Validar dominio institucional
-            if (! str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')) {
+            // El dominio institucional decide el colegio: su base es donde se busca o crea.
+            $connection = BasesDatosService::connectionDeCorreo($googleUser->getEmail());
+            if (! $connection) {
                 return redirect("{$frontendUrl}/?error=dominio_invalido");
             }
+            config(['database.default' => $connection]);
 
             $usuarioResult = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
 
@@ -152,7 +155,7 @@ class AuthController extends Controller
                 return redirect("{$frontendUrl}/?error=usuario_inactivo");
             }
 
-            return redirect("{$frontendUrl}/home")->withCookie('token', $this->jwt->generateToken($userModel));
+            return redirect("{$frontendUrl}/home")->withCookie('token', $this->jwt->generateToken($userModel, $connection));
 
         } catch (\Exception $e) {
             $frontendUrl = config('app.frontend_url');
@@ -167,7 +170,7 @@ class AuthController extends Controller
             'documento' => 'required|numeric|unique:usuarios,documento',
             'nombre' => 'required|string',
             'apellido' => 'nullable|string',
-            'correo' => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'correo' => 'required|email|ends_with:' . BasesDatosService::arrobasDeLaSesion() . '|unique:usuarios,correo',
             'user' => 'required|string|unique:usuarios,user',
             'pass' => 'required|string|min:6',
             'perfil' => 'required|integer',

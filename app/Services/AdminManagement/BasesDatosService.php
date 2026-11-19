@@ -163,6 +163,34 @@ class BasesDatosService extends Service
         return array_key_exists($connection, self::CONNECTIONS);
     }
 
+    /**
+     * Dominios de los correos institucionales (Google Workspace) de cada colegio y su base:
+     * entrar con Google y crear/editar usuarios del personal. Colegio o dominio nuevo = su línea.
+     */
+    private const BASE_POR_DOMINIO = [
+        'royalschool.edu.co' => 'mysql',
+        'playandlearn.edu.co' => 'sami_play',
+        'colegiohebreounion.edu.co' => 'sami_hebreo',
+    ];
+
+    /** Base del colegio de un correo institucional; null si el dominio no es de ninguno. */
+    public static function connectionDeCorreo(string $correo): ?string
+    {
+        return self::BASE_POR_DOMINIO[mb_strtolower(substr(strrchr($correo, '@') ?: '', 1))] ?? null;
+    }
+
+    /** Dominios institucionales de una base (los del colegio en el que se crea un usuario). */
+    public static function dominiosDe(string $connection): array
+    {
+        return array_keys(self::BASE_POR_DOMINIO, $connection, true);
+    }
+
+    /** "@dominio" del colegio de la petición, separados por coma: para la regla `ends_with`. */
+    public static function arrobasDeLaSesion(): string
+    {
+        return implode(',', array_map(fn (string $d) => "@{$d}", self::dominiosDe(config('database.default'))));
+    }
+
     /** Connections que representan un tenant real con su propia tabla `usuarios` — usado por
      * el login multi-tenant (AuthServices::resolverUsuarioMultiTenant) para saber en qué
      * bases buscar credenciales. Excluye `admin_management`, que es transversal (marcas por

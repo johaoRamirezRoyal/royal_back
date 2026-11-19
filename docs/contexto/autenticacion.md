@@ -45,8 +45,17 @@
   (vista previa del login, comandos) no hay respaldo.
 - Recuperar contraseña (`/auth/password/restore`, `validate-token`, `update-password`) acepta
   el mismo `colegio`: cambia a la base de ese colegio, no exige `@royalschool.edu.co` y el
-  enlace del correo lleva `colegio` (`PasswordRestore` → `PasswordRestoreEmail`). Sin slug,
-  igual que antes: base por defecto y solo correo institucional.
+  enlace del correo lleva `colegio` (`PasswordRestore` → `PasswordRestoreEmail`). Sin slug
+  (personal), la base sale del dominio institucional del correo y solo acepta esos dominios.
+- **Dominios institucionales** (Google Workspace): un solo mapa dominio → base,
+  `BasesDatosService::BASE_POR_DOMINIO` (`royalschool.edu.co` → `mysql`,
+  `playandlearn.edu.co` → `sami_play`, `colegiohebreounion.edu.co` → `sami_hebreo`). Lo usan:
+  - Entrar con Google (`callbackGoogle`): el dominio decide la base donde se busca o se crea el
+    usuario, y el token lleva esa base. Un dominio fuera del mapa → `?error=dominio_invalido`.
+  - Crear/editar usuarios (`RegistrarUsuarioRequest`, `ActualizarUsuarioRequest`,
+    `AuthController::register`) y recuperar contraseña sin slug: `ends_with` con los dominios del
+    colegio de la sesión (`arrobasDeLaSesion`).
+  - Colegio o dominio nuevo = su línea en el mapa (y su connection en `CONNECTIONS`).
 - Portal para padres (`PortalPadresController`, solo tipo ACUDIENTE; un id de estudiante se
   valida contra `estudiantes_padres` activo y responde 404 si no es su hijo):
   - `GET /portal-padres/hijos`: hijos activos (id, nombre, apellido, curso; sin documento).
