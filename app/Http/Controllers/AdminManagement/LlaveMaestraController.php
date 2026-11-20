@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Usuarios\Usuario;
 use App\Services\AdminManagement\LlaveMaestraService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use App\Support\Permiso;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -36,13 +37,37 @@ class LlaveMaestraController extends Controller implements HasMiddleware
 
     public function index()
     {
-        $llaves = $this->service->listar();
+        return response()->json(['error' => false, 'data' => $this->serializar($this->service->listar())]);
+    }
 
+    /** Sesiones abiertas con llave que siguen en curso (ver LlaveMaestraService::sesionesAbiertas). */
+    public function sesiones()
+    {
+        $ttl = (int) config('jwt.ttl');
+
+        $data = $this->serializar($this->service->sesionesAbiertas())
+            ->map(fn (array $fila) => $fila + ['vence_en' => $fila['usado_en']->copy()->addMinutes($ttl)]);
+
+        return response()->json(['error' => false, 'data' => $data]);
+    }
+
+    /** Cierra la sesión abierta con la llave $id: su siguiente petición recibe 401 (ver JwtFromCookie). */
+    public function cerrarSesion(int $id)
+    {
+        if (!$this->service->cerrarSesionDeLlave($id)) {
+            return $this->error('Esa sesión ya no está abierta.', 404);
+        }
+
+        return $this->success('Sesión cerrada correctamente');
+    }
+
+    private function serializar(Collection $llaves): Collection
+    {
         // Resueltos por connection para no repetir la misma consulta por cada fila —
         // el volumen de este historial es chico (una acción manual, no algo masivo).
         $usuariosPorConnection = [];
 
-        $data = $llaves->map(function ($llave) use (&$usuariosPorConnection) {
+        return $llaves->map(function ($llave) use (&$usuariosPorConnection) {
             $connection = $llave->connection_objetivo;
             $usuariosPorConnection[$connection] ??= [];
 
@@ -68,8 +93,6 @@ class LlaveMaestraController extends Controller implements HasMiddleware
                 'created_at' => $llave->created_at,
             ];
         });
-
-        return response()->json(['error' => false, 'data' => $data]);
     }
 
     public function generar(Request $request)

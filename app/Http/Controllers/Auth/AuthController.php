@@ -8,8 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
 use App\Models\Usuarios\Usuario;
+use App\Services\AdminManagement\BasesDatosService;
 use App\Services\AdminManagement\LlaveMaestraService;
 use App\Services\Auth\AuthServices;
+use App\Services\Auth\SesionesActivasService;
 use App\Services\branding\ColegioAdmisionService;
 use App\Services\branding\MarcaDominioService;
 use App\Services\JwtService;
@@ -110,10 +112,12 @@ class AuthController extends Controller
             $googleUser = $provider->stateless()->user();
             $frontendUrl = config('app.frontend_url');
 
-            // Validar dominio institucional
-            if (! str_ends_with($googleUser->getEmail(), '@royalschool.edu.co')) {
+            // El dominio institucional decide el colegio: su base es donde se busca o crea.
+            $connection = BasesDatosService::connectionDeCorreo($googleUser->getEmail());
+            if (! $connection) {
                 return redirect("{$frontendUrl}/?error=dominio_invalido");
             }
+            config(['database.default' => $connection]);
 
             $usuarioResult = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
 
@@ -151,7 +155,7 @@ class AuthController extends Controller
                 return redirect("{$frontendUrl}/?error=usuario_inactivo");
             }
 
-            return redirect("{$frontendUrl}/home")->withCookie('token', $this->jwt->generateToken($userModel));
+            return redirect("{$frontendUrl}/home")->withCookie('token', $this->jwt->generateToken($userModel, $connection));
 
         } catch (\Exception $e) {
             $frontendUrl = config('app.frontend_url');
@@ -166,7 +170,7 @@ class AuthController extends Controller
             'documento' => 'required|numeric|unique:usuarios,documento',
             'nombre' => 'required|string',
             'apellido' => 'nullable|string',
-            'correo' => 'required|email|ends_with:@royalschool.edu.co|unique:usuarios,correo',
+            'correo' => 'required|email|ends_with:' . BasesDatosService::arrobasDeLaSesion() . '|unique:usuarios,correo',
             'user' => 'required|string|unique:usuarios,user',
             'pass' => 'required|string|min:6',
             'perfil' => 'required|integer',
@@ -277,8 +281,11 @@ class AuthController extends Controller
         $sinVerificacion = app()->environment('local') && ! config('auth.device_otp');
 
         if ($sinVerificacion || ($deviceToken && $this->service_auth->dispositivoEsConfiable($connection, $usuario->id_user, $deviceToken))) {
-            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla)
-            $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
+            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla). Los acudientes no
+            // usan SAMI: no se le manda su contraseña.
+            if (! $usuario->esTipo(TipoPerfil::ACUDIENTE)) {
+                $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
+            }
 
             return response()
                 ->json(['Message' => 'Login Exitoso'])
@@ -523,6 +530,8 @@ class AuthController extends Controller
             ->withCookie('token', $this->jwt->generateToken($usuario, $connection, [
                 'via_llave_maestra' => true,
                 'generado_por' => $resultado['generado_por'],
+                // Ata el token a esta sesión: ver LlaveMaestraService::sesionVigente.
+                'llave_maestra_id' => $resultado['llave_id'],
             ]));
     }
 
@@ -666,7 +675,13 @@ class AuthController extends Controller
             try {
                 $payload = $this->jwt->getPayload($token);
                 if (! empty($payload['via_llave_maestra'])) {
-                    $this->llaveMaestra->cerrarSesion($payload['db_connection'], (int) $payload['user_id']);
+                    $this->llaveMaestra->cerrarSesion(
+                        $payload['db_connection'],
+                        (int) $payload['user_id'],
+                        isset($payload['llave_maestra_id']) ? (int) $payload['llave_maestra_id'] : null
+                    );
+                } elseif (isset($payload['sid'])) {
+                    app(SesionesActivasService::class)->quitar($payload['db_connection'], (int) $payload['user_id'], (string) $payload['sid']);
                 }
             } catch (\Exception $e) {
                 // Token vencido: su marca de sesión en caché ya venció con él.

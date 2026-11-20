@@ -45,8 +45,17 @@
   (vista previa del login, comandos) no hay respaldo.
 - Recuperar contraseña (`/auth/password/restore`, `validate-token`, `update-password`) acepta
   el mismo `colegio`: cambia a la base de ese colegio, no exige `@royalschool.edu.co` y el
-  enlace del correo lleva `colegio` (`PasswordRestore` → `PasswordRestoreEmail`). Sin slug,
-  igual que antes: base por defecto y solo correo institucional.
+  enlace del correo lleva `colegio` (`PasswordRestore` → `PasswordRestoreEmail`). Sin slug
+  (personal), la base sale del dominio institucional del correo y solo acepta esos dominios.
+- **Dominios institucionales** (Google Workspace): un solo mapa dominio → base,
+  `BasesDatosService::BASE_POR_DOMINIO` (`royalschool.edu.co` → `mysql`,
+  `playandlearn.edu.co` → `sami_play`, `colegiohebreounion.edu.co` → `sami_hebreo`). Lo usan:
+  - Entrar con Google (`callbackGoogle`): el dominio decide la base donde se busca o se crea el
+    usuario, y el token lleva esa base. Un dominio fuera del mapa → `?error=dominio_invalido`.
+  - Crear/editar usuarios (`RegistrarUsuarioRequest`, `ActualizarUsuarioRequest`,
+    `AuthController::register`) y recuperar contraseña sin slug: `ends_with` con los dominios del
+    colegio de la sesión (`arrobasDeLaSesion`).
+  - Colegio o dominio nuevo = su línea en el mapa (y su connection en `CONNECTIONS`).
 - Portal para padres (`PortalPadresController`, solo tipo ACUDIENTE; un id de estudiante se
   valida contra `estudiantes_padres` activo y responde 404 si no es su hijo):
   - `GET /portal-padres/hijos`: hijos activos (id, nombre, apellido, curso; sin documento).
@@ -108,7 +117,30 @@ contraseña (para soporte).
   devuelve `SESION_ABIERTA`, no consume la llave y el canje responde 409. `logout` la libera
   si el token tenía `via_llave_maestra`. Si la sesión se pierde sin logout (borrar cookies),
   la cuenta queda bloqueada para otra llave hasta que venza el TTL; para liberarla a mano,
-  `Cache::forget` de esa clave.
+  `Cache::forget` de esa clave o «Cerrar sesión» en la página de sesiones.
+- **Sesiones en curso y cerrarlas**: `GET /llaves-maestras/sesiones` lista las llaves cuya
+  marca sigue en caché; `DELETE /llaves-maestras/sesiones/{id}` la borra. La marca guarda el
+  id de la llave y el token el claim `llave_maestra_id`; `JwtFromCookie::cortarSesionCerrada`
+  los compara en cada petición y, si no coinciden, invalida el token y quita el header (401).
+  Lee el token con el mismo parser que el guard.
+- **El JWT solo se acepta en el header `Authorization`** (`AppServiceProvider` deja solo
+  `AuthHeaders` en el parser de tymon; `JwtFromCookie` arma el header desde la cookie). Un
+  token en `?token=` o en un campo `token` del cuerpo ya no autentica.
+  Limpiar la caché cierra estas sesiones.
+
+## Máximo de dispositivos por cuenta (`SesionesActivasService`)
+
+- Login normal del sistema general: máximo `SesionesActivasService::MAXIMO` (4) sesiones a la
+  vez por cuenta. Al entrar en una de más, se cierra la más antigua.
+- `JwtService::generateToken` le pone a cada token un claim `sid` y lo registra en caché
+  (`sesiones_activas:{connection}:{id_user}` = `activas` y `cerradas`, con lock). Los tokens
+  de llave maestra y de admisiones no llevan `sid` ni cuentan.
+- `JwtFromCookie::cortarSesionCerrada` corta un token cuyo `sid` está en `cerradas`;
+  `logout` lo quita de `activas`.
+- Vive en caché porque el deploy por FTP no corre migraciones. Solo se rechaza lo que está en
+  `cerradas`, así que limpiar la caché no saca a nadie: solo reinicia el conteo (y una sesión
+  ya cerrada vuelve a servir hasta que venza).
+- Prueba: `tests/Feature/Auth/SesionesActivasTest.php`.
 
 ## Página de acceso en el navegador (`PaginaAccesoNavegador`)
 

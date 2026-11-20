@@ -3,11 +3,14 @@
 namespace App\Http\Middleware;
 
 use App\Services\AdminManagement\BasesDatosService;
+use App\Services\AdminManagement\LlaveMaestraService;
+use App\Services\Auth\SesionesActivasService;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Token;
 
 class JwtFromCookie
 {
@@ -85,7 +88,56 @@ class JwtFromCookie
             ]);
         }
 
+        $this->cortarSesionCerrada($request);
+
         return $next($request);
+    }
+
+    /**
+     * Una sesión cerrada deja de autenticar aunque su JWT no haya vencido: por llave maestra
+     * (logout o cierre desde administración, ver LlaveMaestraService::sesionVigente) o por
+     * entrar en más dispositivos de los permitidos (ver SesionesActivasService). Se invalida y
+     * se quita el header, y auth:api responde 401. Lee el token con el mismo parser que el
+     * guard (solo el header, ver AppServiceProvider), así no se salta mandándolo por otro lado.
+     */
+    private function cortarSesionCerrada(Request $request): void
+    {
+        $token = JWTAuth::parser()->setRequest($request)->parseToken();
+
+        if (! $token) {
+            return;
+        }
+
+        try {
+            // Sin revisar la lista negra (eso ya lo hace el guard): corre en cada petición.
+            $payload = JWTAuth::manager()->decode(new Token($token), false);
+        } catch (\Exception $e) {
+            return;
+        }
+
+        $connection = (string) ($payload->get('db_connection') ?? 'mysql');
+        $idUser = (int) $payload->get('user_id');
+
+        if ($payload->get('via_llave_maestra')) {
+            $llaveId = $payload->get('llave_maestra_id');
+            $cerrada = ! app(LlaveMaestraService::class)->sesionVigente($connection, $idUser, $llaveId === null ? null : (int) $llaveId);
+        } else {
+            // Sin sid: token de admisiones o emitido antes del máximo de dispositivos.
+            $sid = $payload->get('sid');
+            $cerrada = $sid !== null && app(SesionesActivasService::class)->cerrada($connection, $idUser, (string) $sid);
+        }
+
+        if (! $cerrada) {
+            return;
+        }
+
+        try {
+            JWTAuth::setToken($token)->invalidate();
+        } catch (\Exception $e) {
+            // Ya en la lista negra: igual se quita el header.
+        }
+
+        $request->headers->remove('Authorization');
     }
 
     /**

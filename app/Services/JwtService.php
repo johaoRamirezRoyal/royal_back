@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Usuarios\Usuario;
+use App\Services\Auth\SesionesActivasService;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Str;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class JwtService
@@ -17,7 +19,16 @@ class JwtService
 
         $user->loadMissing('perfilRelacion');
 
-        return JWTAuth::claims(array_merge([
+        // Login normal: cuenta para el máximo de dispositivos (ver SesionesActivasService).
+        // La llave maestra tiene su propio control (LlaveMaestraService) y no ocupa lugar.
+        $sid = empty($extraClaims['via_llave_maestra']) ? Str::random(32) : null;
+
+        // tymon guarda en su factory compartida los claims de todo token que lee en la petición
+        // (JwtFromCookie lee la cookie anterior): sin vaciarla, el token nuevo heredaba
+        // `via_llave_maestra` de una sesión vieja y quedaba cerrado desde el primer request.
+        JWTAuth::factory()->emptyClaims();
+
+        $token = JWTAuth::claims(array_merge([
             'active' => true,
             'system' => 'general',
             'db_connection' => $connection,
@@ -26,7 +37,13 @@ class JwtService
             'apellido' => $user->apellido,
             'correo' => $user->correo,
             'perfil' => $user->perfilRelacion?->nombre ?? $user->perfil,
-        ], $extraClaims))->fromUser($user);
+        ], $sid ? ['sid' => $sid] : [], $extraClaims))->fromUser($user);
+
+        if ($sid) {
+            app(SesionesActivasService::class)->registrar($connection, (int) $user->id_user, $sid);
+        }
+
+        return $token;
     }
 
     /** `$connection` viene del colegio resuelto por ResolveColegioAdmision para esta
@@ -36,6 +53,8 @@ class JwtService
      * viene ninguna, mismo default que JwtFromCookie usa para un token sin el claim. */
     public function generateAdmissionsToken(Authenticatable $user, string $connection = 'mysql'): string
     {
+        JWTAuth::factory()->emptyClaims(); // ver generateToken
+
         return JWTAuth::claims([
             'active' => true,
             'system' => 'admissions',

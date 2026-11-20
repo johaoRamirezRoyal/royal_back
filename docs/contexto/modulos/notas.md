@@ -125,6 +125,13 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   `{ id_referente, id_escala }`: `null` quita la del docente (si hay ajuste, la fila se conserva con
   el ajuste); lo que no viene no se toca. El final de un referente lo elige el docente: no se calcula
   de los subreferentes.
+- **Observación interna por referente** (`academico_observacion_referente`, modelo
+  `ObservacionReferente`, 2026-11-19): texto del docente por estudiante y referente, **no sale en el
+  boletín** (`fotoBoletin` arma sus campos uno a uno y no la toma). Tabla aparte de las valoraciones:
+  quitar la nota no la borra. Viaja en `PUT /planilla` (`estudiantes.*.observaciones: [{ id_referente,
+  observacion }]`, opcional; vacía la borra; el referente tiene que ser de esa asignatura) y sale en
+  `GET /planilla` (`estudiantes[].observaciones`) y en la vista del curso
+  (`estudiantes[].observaciones_referente`, solo lectura).
 - **Estudiantes** (`estudiantesDe`): activos que hoy están en el curso, más los que ya tienen nota u
   observación en él en ese periodo aunque se hayan movido (`en_curso: false`).
 - **Ajuste del coordinador** (`ajustar`, 154 del nivel del curso): cambia el final de un
@@ -183,7 +190,8 @@ Modelo del colegio: el "Boletín Descriptivo" (Word de ejemplo de Pre-Jardín, p
   orden). Un campo que no viene se borra, o se **desactiva** si ya tiene textos. `GET /propositos`
   trae `campos[]`.
 - **Textos** (`academico_valoracion_descriptiva`, unique estudiante + campo + periodo): los escribe
-  **cualquier docente con carga en el curso** (cualquier asignatura), en plazo y sin cierre
+  **solo el director de grupo del curso** (desde 2026-11-19; antes, cualquier docente con carga; un
+  curso descriptivo ya no sale en `mis-cursos` a quien no lo dirige), en plazo y sin cierre
   (`planillaDescriptiva` / `guardarPlanillaDescriptiva`, `GET|PUT /planilla-descriptiva`). Texto
   vacío = se borra. El director escribe las observaciones generales como siempre.
 - `GET /mis-cursos` trae `tipo_evaluacion` por curso; `GET /planilla` (por asignatura) rechaza un
@@ -224,15 +232,16 @@ Años escolares y periodos académicos (validación de fechas, cruces): ver `ges
 |---|---|
 | `GET/POST /escalas`, `PUT /escalas/{id}`, `PUT /escalas/orden` | 99 |
 | `GET/POST /propositos`, `PUT /propositos/{id}`, `PUT /propositos/orden` (ruta antes de `{id}`) | 99 |
+| `GET/PUT /propositos/titulo-boletin` `{ titulo: NOMBRE\|DESCRIPCION }` | 99. Qué sale como título de cada propósito en el boletín (`configuracion_academica.titulo_proposito_boletin`, migración `2026_11_19_100000`); `GET /boletines` y `/boletines/estudiante` lo devuelven como `titulo_proposito` y el PDF lo aplica al imprimir (también a boletines ya cerrados) |
 | `GET /metodos-nivel`, `PUT /metodos-nivel/{id}` `{ metodo }` | 99 |
 | `GET /plan?id_curso&id_periodo` | docente con carga en el grado, 153/154 de su nivel, 99 o 152 (solo lectura) |
 | `PUT /referentes`, `POST /plan/estado` `{ accion: enviar\|retirar\|aprobar\|devolver\|reabrir, id_asignatura? (enviar/retirar), comentario? }` | docente con carga en el grado o 153/154 de su nivel; el service valida estado, plazo (solo a docentes) y asignaturas |
 | `GET /referentes/grados?id_periodo=` | 153 / 154 (grados del nivel con cursos, directores, cantidad de referentes, estado y `alcance`) |
 | `GET /mis-cursos` | tipo Docente: `cursos[] { id_curso, curso, grado, es_director, asignaturas[] { id, nombre } }` y `periodos` |
 | `GET /planilla?id_curso&id_periodo&id_asignatura`, `PUT /planilla` | perfiles docente; el service exige carga en esa asignatura y curso |
-| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y carga en el curso (cualquier asignatura) |
+| `GET /planilla-descriptiva?id_curso&id_periodo`, `PUT /planilla-descriptiva` | perfiles docente; grado DESCRIPTIVA y director de grupo del curso. El PUT acepta `estudiantes.*.observacion` (opcional): la observación general del director (`ObservacionGeneral`, la del boletín), en la misma transacción que los textos |
 | `GET /cursos` | 99, 152 (todos los cursos cualitativos) o 153/154 (los de su nivel), con `periodos` |
-| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no) |
+| `GET /curso?id_curso&id_periodo` | director del curso, 153/154 de su nivel, 99 o 152 (403 si no). `puede.calificar`: ids de las asignaturas del director con carga (en plazo, plan aprobado, sin cierre), que califica desde ahí con `PUT /planilla`; `escala_nivel`: ids que valida el guardado; `asignaturas[].docente`: quién la califica en el curso (carga activa, varios separados por coma) |
 | `PUT /observaciones` | perfiles docente; el service exige ser el director del curso |
 | `PUT /asistencia-manual` `{ id_curso, id_periodo, estudiantes: [{ id_estudiante, inasistencias\|null, llegadas_tarde\|null }] }` | tipo Docente o 154; el service exige el director del curso en plazo o 154 de su nivel, sin cierre |
 | `PUT /ajuste`, `POST /cierre`, `DELETE /cierre` | 154; el service exige el nivel del curso |
@@ -280,9 +289,19 @@ referentes". En producción el 149 y el 150 ya son de otros módulos: por eso no
    cierre del periodo por curso y boletines (foto JSON). En `sami_royal` se corrió con `migrate`.
 5. `2026_11_05_120300_create_academico_evaluacion_descriptiva_tables`: `academico_grado.tipo_evaluacion`,
    campos por propósito y textos descriptivos. En `sami_royal` se corrió con `migrate` (2026-11-17).
+6. `2026_11_05_120400_create_academico_referente_envio_table`: envío de referentes por asignatura.
+7. `2026_11_18_100000_create_academico_asistencia_manual_table`: inasistencias y llegadas tarde del
+   boletín escritas a mano.
+8. `2026_11_18_110000_seed_opciones_registro_boletines`: opciones 172 y 173.
+9. `2026_11_19_100000_add_titulo_proposito_boletin_to_configuracion_academica_table`: título del
+   propósito en el boletín (`NOMBRE` | `DESCRIPCION`).
+10. `2026_11_19_110000_create_academico_observacion_referente_table`: observación interna por
+    estudiante y referente.
 
-La rama no está en producción, así que las migraciones se reescriben en vez de apilar correcciones.
-El 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
+Todas las tablas de notas son `engine = InnoDB` (en producción el motor por defecto es MyISAM y
+las FK fallaban con errno 150). **Desde que las 1–6 están en producción, un cambio va en una
+migración nueva**; ya no se reescriben las existentes. Hasta entonces sí se reescribían:
+el 2026-11-13 la 120000 pasó de dimensiones/logros a propósitos/referentes. En `sami_royal` local se
 aplicó a mano (sin `migrate:rollback`, porque el `down()` del seed viejo borraba los permisos de las
 opciones 149 y 150, que ya son de otros módulos): se borraron las tablas viejas y las columnas
 `tipo_unidad`/`calificador`, se corrió `down()` + `up()` de la nueva y se restauraron la escala, el

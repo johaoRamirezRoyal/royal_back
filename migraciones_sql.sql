@@ -969,3 +969,22 @@ INSERT INTO cron_permisos (id_opcion, id_perfil, activo, fechareg)
     WHERE p.id_opcion IN (112, 131) AND p.activo = 1
       AND NOT EXISTS (SELECT 1 FROM cron_permisos x WHERE x.id_opcion = 175 AND x.id_perfil = p.id_perfil);
 -- Resultado local (sami_royal): perfiles 1 Super Admin y 9 Admisiones.
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_19_100000_add_titulo_proposito_boletin_to_configuracion_academica_table.php
+-- Qué texto del propósito sale como título en el boletín de notas: NOMBRE (por defecto) o
+-- DESCRIPCION. Se elige en Configuración académica → Propósitos.
+-- ---------------------------------------------------------------------------
+alter table `configuracion_academica` add `titulo_proposito_boletin` enum('NOMBRE', 'DESCRIPCION') not null default 'NOMBRE' after `tipo_calendario`;
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_19_110000_create_academico_observacion_referente_table.php
+-- Observación interna del docente por estudiante y referente: no sale en el boletín. Aparte de
+-- las valoraciones (quitar la nota no la borra). Sin FK a periodo/curso (MyISAM en algunas BD).
+-- ---------------------------------------------------------------------------
+create table `academico_observacion_referente` (`id` int not null auto_increment, `id_estudiante` int not null, `id_referente` int not null, `id_periodo_academico` int not null, `id_curso` int not null, `observacion` text not null, `id_docente` int not null, `created_at` timestamp null, `updated_at` timestamp null, primary key (`id`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `academico_observacion_referente` add constraint `academico_observacion_referente_id_estudiante_foreign` foreign key (`id_estudiante`) references `usuarios` (`id_user`) on delete cascade;
+alter table `academico_observacion_referente` add constraint `academico_observacion_referente_id_referente_foreign` foreign key (`id_referente`) references `academico_referente` (`id`) on delete cascade;
+alter table `academico_observacion_referente` add constraint `academico_observacion_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
+alter table `academico_observacion_referente` add unique `uq_observacion_referente`(`id_estudiante`, `id_referente`);
+alter table `academico_observacion_referente` add index `ix_observacion_referente_curso_periodo`(`id_curso`, `id_periodo_academico`);

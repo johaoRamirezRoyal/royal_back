@@ -28,6 +28,8 @@ Route::prefix('logs-dominio')->group(function () {
 
 Route::prefix('llaves-maestras')->group(function () {
     Route::get('/', [LlaveMaestraController::class, 'index']);
+    Route::get('/sesiones', [LlaveMaestraController::class, 'sesiones']);
+    Route::delete('/sesiones/{id}', [LlaveMaestraController::class, 'cerrarSesion']);
     Route::post('/', [LlaveMaestraController::class, 'generar']);
     Route::delete('/{id}', [LlaveMaestraController::class, 'revocar']);
 });

@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Usuarios;
 
 use Illuminate\Contracts\Validation\ValidationRule;
+use App\Services\AdminManagement\BasesDatosService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -54,7 +55,7 @@ class ActualizarUsuarioRequest extends FormRequest
 
             "correo" => [
                 'email',
-                'ends_with:@royalschool.edu.co',
+                'ends_with:' . BasesDatosService::arrobasDeLaSesion(),
                 'unique:usuarios,correo',
             ],
 
@@ -97,7 +98,7 @@ class ActualizarUsuarioRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'correo.ends_with' => 'El correo debe ser institucional (@royalschool.edu.co)',
+            'correo.ends_with' => 'El correo debe ser institucional (' . str_replace(',', ' o ', BasesDatosService::arrobasDeLaSesion()) . ')',
             'documento.unique' => 'El documento ya está registrado a un usuario',
             'id_nivel_2.different' => 'El segundo nivel debe ser distinto al nivel principal',
             'id_nivel_2.exists' => 'El segundo nivel seleccionado no existe',

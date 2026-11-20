@@ -18,6 +18,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
+use Tymon\JWTAuth\Http\Parser\AuthHeaders;
+use Tymon\JWTAuth\Http\Parser\Parser;
 use App\Services\AdminManagement\BasesDatosService;
 
 class AppServiceProvider extends ServiceProvider
@@ -35,6 +37,11 @@ class AppServiceProvider extends ServiceProvider
 
         // JWTService
         $this->app->singleton(JwtService::class);
+
+        // El JWT solo se lee del header Authorization (JwtFromCookie lo arma desde la cookie).
+        // tymon también lo aceptaba en ?token= y en un campo `token` del cuerpo: un token en la
+        // URL queda en los logs y el historial, y el cuerpo choca con el `token` de los OTP.
+        $this->app->extend('tymon.jwt.parser', fn (Parser $parser) => $parser->setChain([new AuthHeaders]));
 
         // HistoriaClinicaService
         $this->app->singleton(HistoriaClinicaService::class);

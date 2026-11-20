@@ -3,7 +3,7 @@
 namespace App\Services\Acudientes;
 
 use App\Enums\TipoPerfil;
-use App\Mail\GenericMail;
+use App\Mail\AccesoPortalPadresMail;
 use App\Models\PasswordResetTokens;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
@@ -97,16 +97,13 @@ class AcudientesService extends Service
 
             $frontend = rtrim(config('app.frontend_url'), '/');
             $url = "{$frontend}/password/restore?" . http_build_query(['token' => $token, 'email' => $acudiente->correo, 'colegio' => $colegio->slug]);
-            $nombreColegio = $colegio->marca?->nombre ?? 'el colegio';
-
-            $enviado = $this->correo->send($acudiente->correo, new GenericMail(
-                "Tu acceso al portal para padres de {$nombreColegio}",
-                "Hola, {$acudiente->nombre}.\n\n{$nombreColegio} te dio acceso al portal para padres, donde ves la semana de tus hijos: "
-                . "llegadas tarde, asistencia a clases y fotos del curso.\n\n"
-                . "Con el botón creas tu contraseña. El enlace vence en " . self::DIAS_ENLACE_ACCESO . " días.\n\n"
-                . "Después entras siempre por {$frontend}/{$colegio->slug}/padres con tu correo {$acudiente->correo}.",
+            $enviado = $this->correo->send($acudiente->correo, new AccesoPortalPadresMail(
+                $acudiente->nombre,
+                $acudiente->correo,
                 $url,
-                'Crear mi contraseña',
+                "{$frontend}/{$colegio->slug}/padres",
+                self::DIAS_ENLACE_ACCESO,
+                $colegio,
             ));
 
             if (! $enviado) {
