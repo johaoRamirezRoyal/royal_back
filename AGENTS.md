@@ -140,7 +140,7 @@ esta tabla.
 | [`convenciones.md`](docs/contexto/convenciones.md) | plantillas de código y cómo crear un módulo nuevo |
 | [`claude-code.md`](docs/contexto/claude-code.md) | agentes, skills, MCP de Boost y plugins de Claude Code: qué es compartido, qué es personal y qué instalar |
 | [`modulos/asistencia-hikvision.md`](docs/contexto/modulos/asistencia-hikvision.md) | terminales Hikvision, webhook de marcaciones, asistencia de trabajadores, QR de portería, escaneo de carnets |
-| [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos, niveles académicos (crear y renombrar) y catálogo de grados (`curso.id_grado`; el nivel del grado se copia a sus cursos), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
+| [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos, niveles académicos (crear, renombrar y nivel de usuario ↔ nivel académico N:M) y catálogo de grados (`curso.id_grado`; el nivel del grado se copia a sus cursos), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
 | [`modulos/gestion-convivencial.md`](docs/contexto/modulos/gestion-convivencial.md) | Observaciones, Registro de actas |
 | [`modulos/noticias.md`](docs/contexto/modulos/noticias.md) | Noticias, cumpleaños, correos de distribución, rate-limit |
 | [`modulos/compras.md`](docs/contexto/modulos/compras.md) | proveedores, solicitudes, agregar al inventario |

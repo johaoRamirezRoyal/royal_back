@@ -72,10 +72,12 @@ class CursosServices
         try {
             $grados = Grado::whereNotNull('id_nivel_academico')->selectRaw('id_nivel_academico, count(*) as n')->groupBy('id_nivel_academico')->pluck('n', 'id_nivel_academico');
             $cursos = Cursos::where('activo', 1)->whereNotNull('id_nivel')->selectRaw('id_nivel, count(*) as n')->groupBy('id_nivel')->pluck('n', 'id_nivel');
-            $data = NivelAcademico::orderBy('id')->get(['id', 'nombre', 'metodo_calificacion'])
+            $data = NivelAcademico::with('nivelesUsuario:id,nombre')->orderBy('id')->get(['id', 'nombre', 'metodo_calificacion'])
                 ->map(fn (NivelAcademico $n) => $n->only(['id', 'nombre', 'metodo_calificacion']) + [
                     'grados' => (int) ($grados[$n->id] ?? 0),
                     'cursos' => (int) ($cursos[$n->id] ?? 0),
+                    // Niveles de usuario que lo abarcan (los docentes, coordinadores… de esos niveles ven sus cursos).
+                    'niveles' => $n->nivelesUsuario->map(fn ($u) => ['id' => (int) $u->id, 'nombre' => $u->nombre])->values(),
                 ]);
 
             return ['error' => false, 'message' => 'Niveles académicos', 'data' => $data];
@@ -87,16 +89,22 @@ class CursosServices
     /**
      * Crea o renombra un nivel académico. No se borran: grados, cursos, esquemas de horario, escala
      * y permisos por nivel lo referencian por id (y hay código que usa los ids 3 y 4).
+     * `$niveles` (ids de `nivel`): los niveles de usuario que lo abarcan; null = no se tocan.
      */
-    public function guardarNivelAcademico(string $nombre, ?int $id = null): array
+    public function guardarNivelAcademico(string $nombre, ?int $id = null, ?array $niveles = null): array
     {
         try {
             $nivel = $id ? NivelAcademico::find($id) : new NivelAcademico();
             if (! $nivel) {
                 return ['error' => true, 'message' => 'No se encontró el nivel académico', 'status' => 404];
             }
-            $nivel->nombre = $nombre;
-            $nivel->save();
+            DB::transaction(function () use ($nivel, $nombre, $niveles) {
+                $nivel->nombre = $nombre;
+                $nivel->save();
+                if ($niveles !== null) {
+                    $nivel->nivelesUsuario()->sync($niveles);
+                }
+            });
 
             return ['error' => false, 'message' => $id ? 'Nivel académico actualizado' : 'Nivel académico creado', 'data' => $nivel];
         } catch (Throwable $e) {

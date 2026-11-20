@@ -126,11 +126,21 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
 ## Cursos y estudiantes (`/cursos`, opción 145)
 
 - **Niveles académicos** (`nivel_academico`, modelo `NivelAcademico`): `GET /cursos/niveles-academicos`
-  (con método, grados y cursos activos), `POST`/`PUT /cursos/niveles-academicos[/{id}]` `{ nombre }`
-  (único), todo con 99 (`CursosServices::listarNivelesAcademicos` / `guardarNivelAcademico`). Solo
+  (con método, grados, cursos activos y `niveles`: los niveles de usuario que lo abarcan),
+  `POST`/`PUT /cursos/niveles-academicos[/{id}]` `{ nombre, niveles?: id_nivel[] }` (nombre único;
+  `niveles` sin enviar no cambia), todo con 99 (`CursosServices::listarNivelesAcademicos` / `guardarNivelAcademico`). Solo
   crear y renombrar: **no se borran** (grados, cursos, esquemas, escala y permisos por nivel los
-  usan por id, y `DocenteHorarioService` y `CrearEstudianteRequest` usan los ids 3 y 4). Antes del
+  usan por id, y `CrearEstudianteRequest` usa el 4 de respaldo). Antes del
   2026-11-19 eran un catálogo fijo de la migración `2026_08_25_010000`.
+- **Nivel de usuario ↔ nivel académico, N:M** (`nivel_nivel_academico`, migración
+  `2026_11_20_110000`; relación `NivelAcademico::nivelesUsuario`): un `nivel` (Preescolar, Primaria,
+  Secundaria…) abarca varios niveles académicos (Preescolar → Prejardín y Educación preescolar). Es lo
+  que lee `DocenteHorarioService::idsNivelAcademicoParaNivel` (horarios del docente; y
+  `NotasService::nivelesDeUsuario`: coordinadores, asistentes, permisos 153/154/172 por nivel), lo
+  que filtra `GET /usuarios/niveles?solo_academicos=1` y lo que usa `CrearEstudianteRequest` para el
+  nivel de un estudiante nuevo. Reemplazó el caso fijo Secundaria (4) → Básica secundaria (3) del
+  código. `nivel.id_nivel_academico` queda como dato heredado (no lo lee nada nuevo).
+  Un nivel académico sin niveles de usuario no lo ve ningún docente ni coordinador por nivel.
 - **Grados** (`academico_grado`, modelo `Grado`: nombre, nivel académico opcional, orden, activo):
   catálogo editable en Configuración académica → Grados (`GET /cursos/grados` con 145 o 99;
   `POST`/`PUT /cursos/grados[/{id}]` con 99). No se borran: se desactivan. **`curso.id_nivel` es

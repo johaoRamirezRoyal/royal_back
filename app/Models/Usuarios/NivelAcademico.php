@@ -2,6 +2,7 @@
 namespace App\Models\Usuarios;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class NivelAcademico extends Model
@@ -33,5 +34,11 @@ class NivelAcademico extends Model
     public function niveles(): HasMany
     {
         return $this->hasMany(Nivel::class, 'id_nivel_academico');
+    }
+
+    /** Niveles de usuario (`nivel`) que abarcan este nivel académico: el puente N:M (ver nivel_nivel_academico). */
+    public function nivelesUsuario(): BelongsToMany
+    {
+        return $this->belongsToMany(Nivel::class, 'nivel_nivel_academico', 'id_nivel_academico', 'id_nivel');
     }
 }

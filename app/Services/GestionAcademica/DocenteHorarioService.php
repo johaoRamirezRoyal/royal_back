@@ -11,6 +11,7 @@ use App\Models\GestionAcademica\HorarioClase;
 use App\Models\Usuarios\Usuario;
 use App\Services\Service;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -22,16 +23,6 @@ use Illuminate\Support\Str;
  */
 class DocenteHorarioService extends Service
 {
-    // Fila de `nivel` (tabla legada sin migración propia — nada garantiza que su nombre se
-    // mantenga estable) que agrupa 6°-11° — históricamente un solo bucket, antes del split
-    // en dos niveles académicos reales (Educación básica secundaria/Media). En esta BD se
-    // llama "Secundaria"; en otras pudo quedar como "Bachillerato" tras un rename manual
-    // (ver 2026_08_25_020000_add_id_nivel_academico_to_nivel_table). El `id` de la fila no
-    // cambia aunque el nombre sí, así que es la comparación robusta — comparar por nombre
-    // fue justo lo que rompió idsNivelAcademicoParaNivel() para esta BD (ver
-    // 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria).
-    public const NIVEL_ID_BACHILLERATO_SECUNDARIA = 4;
-
     public function __construct(
         private CargaAcademicaService $cargaAcademicaService,
         private HorarioClaseService $horarioClaseService,
@@ -53,8 +44,8 @@ class DocenteHorarioService extends Service
             // viven en `nivel` (clasificación general del usuario), pero curso.id_nivel apunta
             // a nivel_academico desde
             // 2026_08_25_030000_migrate_curso_and_esquema_nivel_to_nivel_academico — hay que
-            // puentear por nivel.id_nivel_academico para comparar en la misma numeración. Sin
-            // nivel asignado (id_nivel=0 en usuarios) o sin id_nivel_academico vinculado se
+            // puentear por nivel_nivel_academico para comparar en la misma numeración. Sin
+            // nivel asignado (id_nivel=0 en usuarios) o sin nivel académico vinculado se
             // trata igual que "sin cursos", no como "todos los niveles" — fail-closed igual que
             // el resto del autoservicio. Un docente con `id_nivel_2` (ej. Primaria +
             // Bachillerato) ve los cursos de ambos, no solo el nivel principal.
@@ -163,24 +154,12 @@ class DocenteHorarioService extends Service
      */
     public static function idsNivelAcademicoParaNivel(?\App\Models\Usuarios\Nivel $nivel): array
     {
-        if (!$nivel?->id_nivel_academico) {
-            return [];
-        }
-
-        $ids = [$nivel->id_nivel_academico];
-
-        // El bucket de 6°-11° (ver NIVEL_ID_BACHILLERATO_SECUNDARIA) puentea 1:1 a
-        // nivel_academico Media vía su id_nivel_academico, pero un docente clasificado así
-        // históricamente pudo enseñar en cualquiera de los dos niveles académicos reales
-        // (Secundaria O Media), no solo el que esa FK 1:1 elige por defecto. `nivel` a
-        // propósito no tiene fila propia para Secundaria (ver conversación de diseño), así
-        // que no hay otro nivel.id_nivel_academico posible para representarlo — se agrega
-        // Secundaria (nivel_academico id 3) a mano solo en este caso puntual.
-        if ($nivel->id === self::NIVEL_ID_BACHILLERATO_SECUNDARIA) {
-            $ids[] = 3;
-        }
-
-        return $ids;
+        // Un nivel de usuario abarca uno o varios niveles académicos (Preescolar → Prejardín y
+        // Educación preescolar; Secundaria → Básica secundaria y Media): Configuración académica →
+        // Niveles académicos (tabla nivel_nivel_academico).
+        return $nivel
+            ? DB::table('nivel_nivel_academico')->where('id_nivel', $nivel->id)->pluck('id_nivel_academico')->map(fn ($id) => (int) $id)->all()
+            : [];
     }
 
     public function reservar(int $id_docente, int $id_curso, int $id_asignatura, int $id_franja_horaria, int $id_anio_escolar, ?string $descripcion = null): array

@@ -8,6 +8,7 @@ use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Models\Areas\Cursos;
 use App\Models\Usuarios\Nivel;
 use App\Services\Cursos\CursosServices;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Estudiante nuevo desde un curso: las mismas reglas que crear un usuario, pero el perfil, el
@@ -31,8 +32,9 @@ class CrearEstudianteRequest extends RegistrarUsuarioRequest
     }
 
     /**
-     * `nivel` (clasificación del usuario) a partir del nivel académico del curso. `nivel` no
-     * tiene fila para Básica secundaria (3): esos estudiantes van en "Secundaria", la de Media (4).
+     * `nivel` (clasificación del usuario) a partir del nivel académico del curso: el nivel de
+     * usuario que lo abarca (nivel_nivel_academico; Prejardín → Preescolar). Sin ninguno, el de
+     * Media (4), como antes.
      */
     private static function nivelDeUsuario(?int $idNivelAcademico): ?int
     {
@@ -40,7 +42,7 @@ class CrearEstudianteRequest extends RegistrarUsuarioRequest
             return null;
         }
 
-        return Nivel::where('id_nivel_academico', $idNivelAcademico)->value('id')
+        return DB::table('nivel_nivel_academico')->where('id_nivel_academico', $idNivelAcademico)->orderBy('id_nivel')->value('id_nivel')
             ?? Nivel::where('id_nivel_academico', 4)->value('id');
     }
 
