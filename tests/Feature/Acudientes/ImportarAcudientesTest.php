@@ -77,6 +77,13 @@ class ImportarAcudientesTest extends TestCase
         $this->assertTrue(\Illuminate\Support\Facades\Hash::check('9999000202', $nueva->getRawOriginal('pass')));
         $this->assertSame(2, EstudiantesPadre::where('id_acudiente', $nueva->id_user)->where('activo', 1)->count());
 
+        // Enviar el acceso deja la fecha (la lista muestra y filtra a quién ya se le envió).
+        $this->assertNull($nueva->acceso_portal_enviado_at);
+        $envio = app(AcudientesService::class)->enviarAccesoPortal($nueva->id_user);
+        if (! $envio['error']) {
+            $this->assertNotNull($nueva->fresh()->acceso_portal_enviado_at);
+        }
+
         $existente->refresh();
         $this->assertSame(['Viejo', '3009998877'], [$existente->nombre, $existente->telefono]);
 

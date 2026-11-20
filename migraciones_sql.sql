@@ -988,3 +988,19 @@ alter table `academico_observacion_referente` add constraint `academico_observac
 alter table `academico_observacion_referente` add constraint `academico_observacion_referente_id_docente_foreign` foreign key (`id_docente`) references `usuarios` (`id_user`);
 alter table `academico_observacion_referente` add unique `uq_observacion_referente`(`id_estudiante`, `id_referente`);
 alter table `academico_observacion_referente` add index `ix_observacion_referente_curso_periodo`(`id_curso`, `id_periodo_academico`);
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_20_100000_add_acceso_portal_enviado_to_usuarios_table.php
+-- Cuándo se le envió a un acudiente el correo de acceso al portal (módulo Acudientes: columna y
+-- filtro). Se aplica en CADA base de colegio (mysql, sami_hebreo, sami_play). Rellena los envíos
+-- ya hechos con los enlaces de acceso que siguen en password_reset_tokens (duran 7 días; los de
+-- recuperar contraseña, 60 minutos).
+-- ---------------------------------------------------------------------------
+ALTER TABLE `usuarios` ADD `acceso_portal_enviado_at` datetime NULL;
+UPDATE usuarios u
+  JOIN password_reset_tokens t ON t.email = u.correo
+  SET u.acceso_portal_enviado_at = t.created_at
+  WHERE u.acceso_portal_enviado_at IS NULL
+    AND t.created_at IS NOT NULL
+    AND TIMESTAMPDIFF(HOUR, t.created_at, t.expires_at) > 24
+    AND u.perfil IN (SELECT id_perfil FROM perfiles WHERE tipo = 'ACUDIENTE');

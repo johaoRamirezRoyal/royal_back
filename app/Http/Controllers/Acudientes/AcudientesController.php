@@ -28,7 +28,7 @@ class AcudientesController extends Controller
     ) {
     }
 
-    /** GET /api/acudientes?s=&estado=&solo_autoregistrados=&page=&per-page=&sort=&dir= */
+    /** GET /api/acudientes?s=&estado=&solo_autoregistrados=&acceso=enviado|sin_enviar&page=&per-page=&sort=&dir= */
     public function index(Request $request): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, Permiso::ACUDIENTES)) {
@@ -42,6 +42,7 @@ class AcudientesController extends Controller
             $request->input('sort', 'nombre'),
             $request->input('dir', 'asc'),
             $request->boolean('solo_autoregistrados'),
+            $request->input('acceso'),
         );
 
         return $response['error'] ? $this->error($response['message']) : $this->paginatedResponse($response);

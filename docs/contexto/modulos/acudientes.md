@@ -5,7 +5,9 @@
 eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
 
 - `GET /` — `UsuariosServices::mostrarAcudientesPaginados` (tipo ACUDIENTE, con `hijos_count` de
-  `estudiantes_padres` activos). `solo_autoregistrados=1` filtra `origen_registro='admisiones'`.
+  `estudiantes_padres` activos). `solo_autoregistrados=1` filtra `origen_registro='admisiones'`;
+  `acceso=enviado|sin_enviar` filtra por `usuarios.acceso_portal_enviado_at` (cuándo se le envió el
+  correo de acceso; también ordenable).
 - `POST /`, `PUT /{id}` — documento, nombre, apellido, correo (únicos documento y correo en
   `usuarios`), teléfono. Perfil `Perfil::idParaCrear(TipoPerfil::ACUDIENTE)`. **Contraseña inicial = número de
   documento sin puntos ni espacios** (`AcudientesService::nuevo`, bcrypt de 10 rondas: lo que la
@@ -33,7 +35,9 @@ eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
   `estadoContrasena`: `documento` (sigue con la inicial: se la recuerda y le pide cambiarla),
   `sin_contrasena` (pide crearla) o `propia` (ya tiene; el botón sirve si la olvidó). Si el hosting llega a su límite
   de correos por hora (`MailRateLimitException`, ver `noticias.md`) responde **429**: el envío en
-  lote del frontend se detiene ahí. Ese límite lo comparten todos los correos del sistema
+  lote del frontend se detiene ahí. Si el correo sale, guarda `acceso_portal_enviado_at = now()`
+  (migración `2026_11_20_100000_add_acceso_portal_enviado_to_usuarios_table`, en cada base de
+  colegio; rellena los envíos anteriores con los enlaces de 7 días de `password_reset_tokens`). Ese límite lo comparten todos los correos del sistema
   (códigos de inicio de sesión incluidos); por eso el frontend envía máximo 50 por lote y el
   backend corta en **100 accesos por hora por usuario** (`RateLimiter`, también 429, con su propio
   mensaje).
