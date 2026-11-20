@@ -3,79 +3,67 @@
 namespace Tests\Unit\GestionAcademica;
 
 use App\Models\Usuarios\Nivel;
-use App\Services\GestionAcademica\CargaAcademicaService;
 use App\Services\GestionAcademica\DocenteHorarioService;
-use App\Services\GestionAcademica\HorarioClaseService;
-use ReflectionMethod;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * Cubre idsNivelAcademicoParaNivel() en solitario (sin BD): la lógica de fusión de
- * id_nivel + id_nivel_2 de un docente ya se ejerce end-to-end vía verMenu(), pero eso
- * requiere fixtures de curso/asignatura/año escolar completos. Este test es la única
- * red de seguridad barata para la rama "Bachillerato agrega Secundaria" y para
- * "sin id_nivel_academico no cuenta".
+ * Cubre idsNivelAcademicoParaNivel(): los niveles académicos que abarca un nivel de usuario, según
+ * nivel_nivel_academico (N:M desde 2026-11-20; antes, nivel.id_nivel_academico + Secundaria → 3
+ * fijo en código). La fusión id_nivel + id_nivel_2 del docente se ejerce vía verMenu().
  */
 class DocenteHorarioServiceTest extends TestCase
 {
-    private function invoke(?Nivel $nivel): array
+    protected function setUp(): void
     {
-        $service = new DocenteHorarioService(
-            $this->createMock(CargaAcademicaService::class),
-            $this->createMock(HorarioClaseService::class),
-        );
-        $method = new ReflectionMethod(DocenteHorarioService::class, 'idsNivelAcademicoParaNivel');
-        $method->setAccessible(true);
+        parent::setUp();
+        Schema::create('nivel_nivel_academico', function (Blueprint $table) {
+            $table->integer('id_nivel');
+            $table->integer('id_nivel_academico');
+            $table->primary(['id_nivel', 'id_nivel_academico']);
+        });
+        DB::table('nivel_nivel_academico')->insert([
+            ['id_nivel' => 2, 'id_nivel_academico' => 1], // Preescolar → Educación preescolar
+            ['id_nivel' => 2, 'id_nivel_academico' => 5], // Preescolar → Prejardín
+            ['id_nivel' => 3, 'id_nivel_academico' => 2], // Primaria
+            ['id_nivel' => 4, 'id_nivel_academico' => 3], // Secundaria → Básica secundaria
+            ['id_nivel' => 4, 'id_nivel_academico' => 4], // Secundaria → Media
+        ]);
+    }
 
-        return $method->invoke($service, $nivel);
+    private function ids(?Nivel $nivel): array
+    {
+        $ids = DocenteHorarioService::idsNivelAcademicoParaNivel($nivel);
+        sort($ids);
+
+        return $ids;
+    }
+
+    private static function nivel(int $id): Nivel
+    {
+        return (new Nivel)->forceFill(['id' => $id]);
     }
 
     public function test_nivel_nulo_no_aporta_ids(): void
     {
-        $this->assertSame([], $this->invoke(null));
+        $this->assertSame([], $this->ids(null));
     }
 
-    public function test_nivel_sin_nivel_academico_no_aporta_ids(): void
+    public function test_nivel_sin_niveles_academicos_no_aporta_ids(): void
     {
-        $nivel = new Nivel(['id' => 8, 'nombre' => 'Egresado', 'id_nivel_academico' => null]);
-
-        $this->assertSame([], $this->invoke($nivel));
+        $this->assertSame([], $this->ids(self::nivel(8)));
     }
 
-    public function test_nivel_normal_aporta_su_propio_id(): void
+    public function test_nivel_con_uno_aporta_ese(): void
     {
-        $nivel = new Nivel(['id' => 3, 'nombre' => 'Primaria', 'id_nivel_academico' => 2]);
-
-        $this->assertSame([2], $this->invoke($nivel));
+        $this->assertSame([2], $this->ids(self::nivel(3)));
     }
 
-    /**
-     * El bucket de 6°-11° se identifica por id (4), no por nombre — ver
-     * NIVEL_ID_BACHILLERATO_SECUNDARIA. El nombre de esa fila varía según la BD
-     * (algunas quedaron como "Bachillerato", otras como "Secundaria", ver
-     * 2026_09_12_120000_backfill_id_nivel_academico_for_secundaria); el comportamiento
-     * debe ser el mismo sin importar cuál tenga.
-     */
-    public function test_id_4_aporta_media_y_secundaria_sin_importar_el_nombre(): void
+    public function test_nivel_con_varios_aporta_todos(): void
     {
-        $bachillerato = new Nivel(['id' => 4, 'nombre' => 'Bachillerato', 'id_nivel_academico' => 4]);
-        $secundaria = new Nivel(['id' => 4, 'nombre' => 'Secundaria', 'id_nivel_academico' => 4]);
-
-        $this->assertSame([4, 3], $this->invoke($bachillerato));
-        $this->assertSame([4, 3], $this->invoke($secundaria));
-    }
-
-    /**
-     * Regresión del bug real: antes de este fix la rama se activaba comparando
-     * `$nivel->nombre === 'Bachillerato'`, así que una fila con ESE nombre pero un id
-     * distinto de 4 (coincidencia de nombre en otra fila, o el id real difiere en otro
-     * entorno) hubiera agregado Secundaria igual, incorrectamente. Ahora no debe pasar:
-     * solo cuenta el id.
-     */
-    public function test_nombre_bachillerato_con_otro_id_no_aporta_secundaria(): void
-    {
-        $nivel = new Nivel(['id' => 99, 'nombre' => 'Bachillerato', 'id_nivel_academico' => 4]);
-
-        $this->assertSame([4], $this->invoke($nivel));
+        $this->assertSame([1, 5], $this->ids(self::nivel(2)));
+        $this->assertSame([3, 4], $this->ids(self::nivel(4)));
     }
 }

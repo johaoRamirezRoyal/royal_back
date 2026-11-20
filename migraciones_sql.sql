@@ -1004,3 +1004,19 @@ UPDATE usuarios u
     AND t.created_at IS NOT NULL
     AND TIMESTAMPDIFF(HOUR, t.created_at, t.expires_at) > 24
     AND u.perfil IN (SELECT id_perfil FROM perfiles WHERE tipo = 'ACUDIENTE');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_20_110000_create_nivel_nivel_academico_table.php
+-- Un nivel de usuario (`nivel`) abarca varios niveles académicos (Preescolar → Prejardín y
+-- Educación preescolar). Copia el puente 1:1 nivel.id_nivel_academico y Secundaria (4) →
+-- Básica secundaria (3), que antes estaba fijo en código. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `nivel_nivel_academico` (`id_nivel` int not null, `id_nivel_academico` int not null, primary key (`id_nivel`, `id_nivel_academico`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `nivel_nivel_academico` add index `nivel_nivel_academico_id_nivel_academico_index`(`id_nivel_academico`);
+alter table `nivel_nivel_academico` add constraint `nivel_nivel_academico_id_nivel_academico_foreign` foreign key (`id_nivel_academico`) references `nivel_academico` (`id`) on delete cascade;
+insert into nivel_nivel_academico (id_nivel, id_nivel_academico)
+  select id, id_nivel_academico from nivel where id_nivel_academico is not null;
+insert ignore into nivel_nivel_academico (id_nivel, id_nivel_academico)
+  select 4, 3 from dual where exists (select 1 from nivel where id = 4) and exists (select 1 from nivel_academico where id = 3);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_20_110000_create_nivel_nivel_academico_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_20_110000_create_nivel_nivel_academico_table');

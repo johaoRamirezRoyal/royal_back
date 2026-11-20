@@ -53,7 +53,10 @@ class CursosController extends Controller
         return $this->apiResponse($this->cursos->listarNivelesAcademicos());
     }
 
-    /** POST /api/cursos/niveles-academicos y PUT .../{id}: crear o renombrar (99). No se borran. */
+    /**
+     * POST /api/cursos/niveles-academicos y PUT .../{id}: crear o editar (99). No se borran.
+     * `niveles` (opcional): ids de `nivel` (niveles de usuario) que lo abarcan; sin enviar, no cambian.
+     */
     public function guardarNivelAcademico(Request $request, ?int $id = null): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, Permiso::GESTION_ACADEMICA)) {
@@ -61,12 +64,15 @@ class CursosController extends Controller
         }
         $data = $request->validate([
             'nombre' => ['required', 'string', 'max:50', Rule::unique('nivel_academico', 'nombre')->ignore($id)],
+            'niveles' => ['sometimes', 'array'],
+            'niveles.*' => ['integer', 'distinct', 'exists:nivel,id'],
         ], [
             'nombre.required' => 'El nombre del nivel es obligatorio',
             'nombre.unique' => 'Ya existe un nivel académico con ese nombre',
+            'niveles.*.exists' => 'Uno de los niveles de usuario no existe',
         ]);
 
-        return $this->apiResponse($this->cursos->guardarNivelAcademico(trim($data['nombre']), $id));
+        return $this->apiResponse($this->cursos->guardarNivelAcademico(trim($data['nombre']), $id, $data['niveles'] ?? null));
     }
 
     /** POST /api/cursos/grados y PUT /api/cursos/grados/{id}: solo Configuración académica (99). */

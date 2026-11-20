@@ -8,8 +8,8 @@ use App\Models\Usuarios\NivelAcademico;
 class NivelesServices
 {
     /**
-     * @param bool $soloAcademicos Si es true, solo trae niveles de `nivel` con
-     *   id_nivel_academico asignado (Preescolar/Primaria/Bachillerato — clasificación
+     * @param bool $soloAcademicos Si es true, solo trae niveles de `nivel` que abarcan algún
+     *   nivel académico (nivel_nivel_academico: Preescolar/Primaria/Bachillerato — clasificación
      *   general de usuario) — excluye las categorías no académicas (Administrativo/
      *   Acudiente/Operativo/Egresado, etc.). Nota: `nivel` no tiene fila para Secundaria
      *   (nunca la tuvo como categoría de usuario) — para elegir entre los 4 niveles
@@ -19,7 +19,7 @@ class NivelesServices
     public function mostrarTodosNiveles(bool $soloAcademicos = false){
         try{
             $niveles = Nivel::query()
-                ->when($soloAcademicos, fn ($q) => $q->whereNotNull('id_nivel_academico'))
+                ->when($soloAcademicos, fn ($q) => $q->whereIn('id', \Illuminate\Support\Facades\DB::table('nivel_nivel_academico')->select('id_nivel')))
                 ->get();
 
             return [
