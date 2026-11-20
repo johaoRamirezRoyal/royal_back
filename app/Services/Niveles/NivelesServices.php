@@ -48,4 +48,45 @@ class NivelesServices
             ];
         }
     }
+
+    /** Crea una fila de `nivel` (clasificación general de usuario). `activo` siempre true: se inactiva desde actualizarEstado(). */
+    public function crear(array $datos): array
+    {
+        try {
+            $nivel = Nivel::create([...$datos, 'activo' => true]);
+
+            return ['error' => false, 'message' => "Nivel \"{$nivel->nombre}\" creado.", 'data' => $nivel];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function actualizar(int $id, array $datos): array
+    {
+        $nivel = Nivel::find($id);
+
+        if (! $nivel) {
+            return ['error' => true, 'message' => 'El nivel no existe.'];
+        }
+
+        $nivel->update($datos);
+
+        return ['error' => false, 'message' => "Nivel \"{$nivel->nombre}\" actualizado.", 'data' => $nivel];
+    }
+
+    /**
+     * Activa o inactiva niveles. Nunca se borran: `activo` solo oculta el nivel de los
+     * selects de alta de usuario, no afecta a quienes ya lo tienen asignado.
+     *
+     * @param  array<int>  $ids
+     */
+    public function actualizarEstado(array $ids, bool $activo): array
+    {
+        Nivel::whereIn('id', $ids)->update(['activo' => $activo]);
+
+        return [
+            'error' => false,
+            'message' => $activo ? 'Nivel(es) activado(s).' : 'Nivel(es) inactivado(s).',
+        ];
+    }
 }

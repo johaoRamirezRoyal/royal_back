@@ -115,6 +115,7 @@ final class Permiso
     public const HIKVISION_GRUPO_PROFESORES = 171;      // "Asistencia — Grupo Profesores en las terminales" (antes perfiles 3, 13, 14 y 20 en GROUP_ID_POR_PERFIL)
     public const FOTOS_CURSO_GESTIONAR = 174;           // "Fotos del curso — Ver y borrar las de todos los cursos" (publicar es autoservicio del docente)
     public const ACUDIENTES = 175;                      // "Acudientes — Crear y gestionar" (crear, editar, vincular hijos, acceso al portal; reemplaza la 112 y la 131)
+    public const CATALOGOS_USUARIOS = 224;               // "Catálogos de usuarios — Perfiles y Niveles" (CRUD de perfiles y nivel; otorgada manualmente, sin grants automáticos)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

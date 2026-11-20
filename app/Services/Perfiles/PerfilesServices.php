@@ -39,4 +39,46 @@ class PerfilesServices
             'data' => ['id' => $perfil->id_perfil, 'tipo' => $perfil->tipo],
         ];
     }
+
+    /** Crea un perfil nuevo. `estado` siempre "activo": se inactiva desde actualizarEstado(). */
+    public function crear(array $datos): array
+    {
+        try {
+            $perfil = Perfil::create([...$datos, 'estado' => 'activo']);
+
+            return ['error' => false, 'message' => "Perfil \"{$perfil->nombre}\" creado.", 'data' => $perfil];
+        } catch (\Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
+    /** Edita nombre/tipo de un perfil. Super Admin no se toca (lo valida el controller). */
+    public function actualizar(int $idPerfil, array $datos): array
+    {
+        $perfil = Perfil::find($idPerfil);
+
+        if (! $perfil) {
+            return ['error' => true, 'message' => 'El perfil no existe.'];
+        }
+
+        $perfil->update($datos);
+
+        return ['error' => false, 'message' => "Perfil \"{$perfil->nombre}\" actualizado.", 'data' => $perfil];
+    }
+
+    /**
+     * Activa o inactiva perfiles. Nunca se borran: `estado` solo oculta el perfil de los
+     * selects de alta de usuario, no afecta a quienes ya lo tienen asignado.
+     *
+     * @param  array<int>  $ids
+     */
+    public function actualizarEstado(array $ids, string $estado): array
+    {
+        Perfil::whereIn('id_perfil', $ids)->update(['estado' => $estado]);
+
+        return [
+            'error' => false,
+            'message' => $estado === 'activo' ? 'Perfil(es) activado(s).' : 'Perfil(es) inactivado(s).',
+        ];
+    }
 }
