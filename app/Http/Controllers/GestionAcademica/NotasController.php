@@ -382,13 +382,12 @@ class NotasController extends Controller implements HasMiddleware
         $porRegistro = self::boletinesDeTodos($request)
             || (PermisosPerfil::tiene($request, Permiso::BOLETINES_NIVEL) && $this->service->cursoEnNiveles($actor['niveles'], $q['id_curso']));
 
-        $vistaPrevia = (bool) ($q['vista_previa'] ?? false);
-        // La vista previa muestra notas aún sin cerrar: solo quien ve el curso completo, no el Registro (172/173).
-        if (($vistaPrevia || ! $porRegistro) && ! $this->veCursoCompleto($request, $actor, $q['id_curso'])) {
+        // La vista previa (notas aún sin cerrar) también la descarga el Registro: decisión del colegio, 2026-11-20.
+        if (! $porRegistro && ! $this->veCursoCompleto($request, $actor, $q['id_curso'])) {
             return $this->error('No tienes acceso a las notas de este curso', 403);
         }
 
-        return $this->apiResponse($this->service->boletinesDelCurso($q['id_curso'], $q['id_periodo'], $vistaPrevia));
+        return $this->apiResponse($this->service->boletinesDelCurso($q['id_curso'], $q['id_periodo'], (bool) ($q['vista_previa'] ?? false)));
     }
 
     /** ?id_estudiante: su historial de boletines, solo de los cursos que quien pide puede ver. */
