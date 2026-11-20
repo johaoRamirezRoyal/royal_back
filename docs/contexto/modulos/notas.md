@@ -107,7 +107,9 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
     boletines y la descarga de las fotos del curso (`GET /boletines`); 172 en su nivel, 173 en
     todos. No dan acceso a Notas del curso ni a Referentes.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
-    `DocenteHorarioService::idsNivelAcademicoParaNivel`. Con la **99** (y Super Admin) vale para
+    `DocenteHorarioService::idsNivelAcademicoParaNivel` (tabla `nivel_nivel_academico`: un nivel de
+    usuario puede abarcar varios niveles académicos, ej. Preescolar → Prejardín y Educación
+    preescolar; ver gestion-academica.md). Con la **99** (y Super Admin) vale para
     todos los niveles. Usuario con 153/154 sin nivel = sin grados (fail-closed).
   - Las acciones van en `puede`; el frontend no las recalcula.
 - **Varios docentes en el mismo plan** (`aplanar` + `cambiosDeReferentes`, puras, test
