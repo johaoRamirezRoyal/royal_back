@@ -64,6 +64,10 @@ class ImportarAcudientesTest extends TestCase
 
         $this->assertSame([3, 1, 2], [$resumen['creados'], $resumen['actualizados'], $resumen['vinculados']]);
         $this->assertSame([5, 7], array_column($resumen['errores'], 'fila'));
+        // Cada vínculo nuevo sale con nombres, para revisar que el documento del hijo era el correcto.
+        $this->assertSame([2, 3], array_column($resumen['vinculos'], 'fila'));
+        $this->assertSame('Nueva Acudiente', $resumen['vinculos'][0]['acudiente']);
+        $this->assertNotSame('', $resumen['vinculos'][0]['estudiante']);
         $this->assertNull(Usuario::where('documento', '9999000205')->value('apellido'));
 
         $nueva = Usuario::where('documento', '9999000202')->first();

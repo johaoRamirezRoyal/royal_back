@@ -142,6 +142,7 @@ class AcudientesService extends Service
         }
 
         $resumen = ['creados' => 0, 'actualizados' => 0, 'vinculados' => 0, 'errores' => []];
+        $nuevos = [];
         // Una consulta por tipo para todo el archivo (no una por fila: REGEXP recorre `usuarios`).
         $acudientes = $this->idsPorDocumento(array_column($filas, 'documento'), TipoPerfil::ACUDIENTE);
         $estudiantes = $this->idsPorDocumento(array_column($filas, 'hijo'), TipoPerfil::ESTUDIANTE);
@@ -209,6 +210,7 @@ class AcudientesService extends Service
                     // «Ya vinculado» no es error: el archivo se puede volver a subir.
                     if (! $vinculo['error']) {
                         $resumen['vinculados']++;
+                        $nuevos[] = ['fila' => $fila['fila'], 'id_acudiente' => $acudiente->id_user, 'id_estudiante' => $hijos[0]];
                     }
                 }
             } catch (Exception $e) {
@@ -217,11 +219,36 @@ class AcudientesService extends Service
             }
         }
 
+        $resumen['vinculos'] = $this->detalleVinculos($nuevos);
+
         return [
             'error' => false,
             'message' => "Carga terminada: {$resumen['creados']} creado(s), {$resumen['actualizados']} actualizado(s), {$resumen['vinculados']} hijo(s) vinculado(s), " . count($resumen['errores']) . ' con error.',
             'data' => $resumen,
         ];
+    }
+
+    /**
+     * Cada vínculo nuevo con nombres y curso, para revisarlo: un documento mal escrito en la
+     * columna F puede coincidir con otro estudiante, y ese acudiente vería en el portal a un niño
+     * ajeno. Dos consultas para todo el archivo.
+     *
+     * @param  array<array{fila: int, id_acudiente: int, id_estudiante: int}>  $nuevos
+     */
+    private function detalleVinculos(array $nuevos): array
+    {
+        $personas = Usuario::with('cursoRelacion:id,nombre')
+            ->whereIn('id_user', array_merge(array_column($nuevos, 'id_acudiente'), array_column($nuevos, 'id_estudiante')))
+            ->get(['id_user', 'nombre', 'apellido', 'id_curso'])
+            ->keyBy('id_user');
+        $nombre = fn (?Usuario $u) => trim(preg_replace('/\s*\.$/', '', trim(($u?->nombre ?? '') . ' ' . ($u?->apellido ?? ''))));
+
+        return array_map(fn (array $v) => [
+            'fila' => $v['fila'],
+            'acudiente' => $nombre($personas->get($v['id_acudiente'])),
+            'estudiante' => $nombre($personas->get($v['id_estudiante'])),
+            'curso' => $personas->get($v['id_estudiante'])?->cursoRelacion?->nombre,
+        ], $nuevos);
     }
 
     /**

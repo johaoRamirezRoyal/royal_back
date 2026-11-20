@@ -171,7 +171,7 @@ pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS
 (portal para padres, login por colegio y marcas unificadas: qué se cambió, deploy y pendientes),
 `PRUEBAS_CARGA_2026_11_16.md` (prueba de estrés del portal con k6 y Grafana: resultados,
 hallazgos y pendientes), `FOTOS_CURSO_2026_11_14.md` (fotos del curso, carrusel y calendario del portal: qué se cambió,
-deploy y pendientes), `ACUDIENTES_Y_LOGIN_2026_11_20.md` (módulo Acudientes, creación masiva,
+deploy y pendientes), `ACUDIENTES_Y_LOGIN_2026_11_20.md` (módulo Acudientes, creación masiva, contraseña inicial con el documento,
 límite de correos, dominios institucionales por colegio y arreglos del login: qué se cambió,
 deploy y pendientes) y `whatsapp-llegadas-tarde.md`.
 

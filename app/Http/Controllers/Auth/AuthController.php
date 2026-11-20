@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Enums\TipoPerfil;
-use App\Models\Usuarios\Perfil;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Usuarios\UsuarioResource;
 use App\Http\Traits\HasAuthCookie;
@@ -112,7 +111,7 @@ class AuthController extends Controller
             $googleUser = $provider->stateless()->user();
             $frontendUrl = config('app.frontend_url');
 
-            // El dominio institucional decide el colegio: su base es donde se busca o crea.
+            // El dominio institucional decide el colegio: su base es donde se busca.
             $connection = BasesDatosService::connectionDeCorreo($googleUser->getEmail());
             if (! $connection) {
                 return redirect("{$frontendUrl}/?error=dominio_invalido");
@@ -121,34 +120,13 @@ class AuthController extends Controller
 
             $usuarioResult = $this->service_auth->buscarUsuarioPorEmail($googleUser->getEmail());
 
-            if ($usuarioResult && $usuarioResult['success']) {
-                // Usuario existente
-                $userModel = $usuarioResult['data'];
-            } else {
-                // Usuario nuevo
-                $data_usuario = [
-                    'documento' => null,
-                    'nombre' => $googleUser->getName(),
-                    'apellido' => null,
-                    'correo' => $googleUser->getEmail(),
-                    'telefono' => null,
-                    'asignatura' => null,
-                    'user' => $googleUser->getEmail(),
-                    'pass' => uniqid(), // Usuario::setPassAttribute la hashea
-                    'perfil' => Perfil::idParaCrear(TipoPerfil::OPERATIVO),
-                    'id_nivel' => 1,
-                    'fechareg' => now(),
-                    'estado' => 'activo',
-                ];
-
-                $result = $this->service_auth->registrarUsuario($data_usuario);
-
-                if (! $result['success']) {
-                    return redirect("{$frontendUrl}/?error=usuario_inactivo");
-                }
-
-                $userModel = $result['data'];
+            // Solo entra quien el colegio ya dio de alta. Antes, cualquier cuenta del dominio sin
+            // usuario se creaba sola con perfil Operativo (un estudiante con correo del colegio
+            // entraba como personal).
+            if (! ($usuarioResult['success'] ?? false)) {
+                return redirect("{$frontendUrl}/?error=usuario_no_registrado");
             }
+            $userModel = $usuarioResult['data'];
 
             // Validar estado
             if ($userModel->estado !== 'activo') {
@@ -281,9 +259,10 @@ class AuthController extends Controller
         $sinVerificacion = app()->environment('local') && ! config('auth.device_otp');
 
         if ($sinVerificacion || ($deviceToken && $this->service_auth->dispositivoEsConfiable($connection, $usuario->id_user, $deviceToken))) {
-            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla). Los acudientes no
-            // usan SAMI: no se le manda su contraseña.
-            if (! $usuario->esTipo(TipoPerfil::ACUDIENTE)) {
+            // 🔹 Iniciar sesión silenciosa en SAMI (no bloqueante si falla). SAMI es de Royal School
+            // (base `mysql`): al personal de los otros colegios no se le manda su contraseña allá.
+            // Los acudientes no usan SAMI.
+            if ($connection === 'mysql' && ! $usuario->esTipo(TipoPerfil::ACUDIENTE)) {
                 $this->samiSso->iniciarSesion($usuario->id_user, $usuario->user, $request->pass);
             }
 

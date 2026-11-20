@@ -50,8 +50,10 @@
 - **Dominios institucionales** (Google Workspace): un solo mapa dominio → base,
   `BasesDatosService::BASE_POR_DOMINIO` (`royalschool.edu.co` → `mysql`,
   `playandlearn.edu.co` → `sami_play`, `colegiohebreounion.edu.co` → `sami_hebreo`). Lo usan:
-  - Entrar con Google (`callbackGoogle`): el dominio decide la base donde se busca o se crea el
-    usuario, y el token lleva esa base. Un dominio fuera del mapa → `?error=dominio_invalido`.
+  - Entrar con Google (`callbackGoogle`): el dominio decide la base donde se busca el usuario, y
+    el token lleva esa base. Un dominio fuera del mapa → `?error=dominio_invalido`. **Solo entra
+    quien ya existe** → si no, `?error=usuario_no_registrado` (desde 2026-11-20; antes se creaba
+    solo con perfil Operativo y un estudiante con correo del colegio entraba como personal).
   - Crear/editar usuarios (`RegistrarUsuarioRequest`, `ActualizarUsuarioRequest`,
     `AuthController::register`) y recuperar contraseña sin slug: `ends_with` con los dominios del
     colegio de la sesión (`arrobasDeLaSesion`).
@@ -84,7 +86,9 @@ vez de `throttle` (que cuenta todas las peticiones, también las buenas).
 Solo aplica al login del sistema general; admisiones e instituciones tienen su propio OTP.
 
 - `login()` compara la cookie `device_token` (sha256 contra `dispositivos_confiables`).
-  - Si coincide, otorga la sesión como siempre, incluido el SSO silencioso a SAMI.
+  - Si coincide, otorga la sesión como siempre, incluido el SSO silencioso a SAMI. Ese SSO es
+    solo para la base `mysql` (SAMI es de Royal School) y nunca para acudientes: al personal de
+    los otros colegios no se le manda su contraseña a SAMI.
   - Si no, responde **200** con `data.requires_otp: true`, un token de pausa
     (`auth_login_pending_{token}`, 15 min) y un código de 5 dígitos
     (`auth_login_otp_{token}`, 5 min) enviado por correo.

@@ -10,6 +10,7 @@ use App\Services\Usuarios\UsuariosServices;
 use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 
 /**
@@ -88,12 +89,27 @@ class AcudientesController extends Controller
         return $response['error'] ? $this->error($response['message']) : $this->success($response['message']);
     }
 
-    /** POST /api/acudientes/{id}/acceso-portal: correo con el enlace para crear su contraseña. */
+    /**
+     * Máximo de correos de acceso por usuario del colegio y por hora. El frontend ya envía de a 50,
+     * pero sin esto cualquiera con la 175 (o un script con su sesión) podía gastar el cupo por hora
+     * del hosting, que es el mismo de los códigos de inicio de sesión de todos.
+     */
+    private const MAXIMO_ACCESOS_POR_HORA = 100;
+
+    /** POST /api/acudientes/{id}/acceso-portal: correo de acceso al portal para padres. */
     public function accesoPortal(Request $request, int $id): JsonResponse
     {
         if ($rechazo = $this->sinAcceso($request, Permiso::ACUDIENTES)) {
             return $rechazo;
         }
+
+        $clave = 'acudientes-acceso:' . config('database.default') . ':' . $request->user()->id_user;
+        if (RateLimiter::tooManyAttempts($clave, self::MAXIMO_ACCESOS_POR_HORA)) {
+            $minutos = (int) ceil(RateLimiter::availableIn($clave) / 60);
+
+            return $this->error("Llegaste al máximo de " . self::MAXIMO_ACCESOS_POR_HORA . " accesos enviados por hora. Intenta de nuevo en {$minutos} minuto(s).", 429);
+        }
+        RateLimiter::hit($clave, 3600);
 
         try {
             return $this->apiResponse($this->service->enviarAccesoPortal($id));
