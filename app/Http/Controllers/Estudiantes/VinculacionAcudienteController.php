@@ -143,26 +143,6 @@ class VinculacionAcudienteController extends Controller
         return $this->success($response['message'], $response['data']);
     }
 
-    /** Vinculación masiva: multipart `archivo` (.xlsx/.xls/.csv) — ver VinculacionAcudienteService::importarExcel. */
-    public function importar(Request $request)
-    {
-        if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {
-            return $rechazo;
-        }
-
-        $request->validate([
-            'archivo' => 'required|file|mimes:xlsx,xls,csv|max:5120',
-        ]);
-
-        $response = $this->vinculacionService->importarExcel($request->file('archivo')->getRealPath());
-
-        if ($response['error']) {
-            return $this->error($response['message'], 422);
-        }
-
-        return $this->success($response['message'], $response['data']);
-    }
-
     public function desvincular(Request $request)
     {
         if ($rechazo = $this->sinAcceso($request, ...self::OPCIONES)) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Acudientes;
 
+use App\Exceptions\MailRateLimitException;
 use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Services\Acudientes\AcudientesService;
@@ -52,7 +53,7 @@ class AcudientesController extends Controller
             return $rechazo;
         }
 
-        $datos = $request->validate($this->reglas(), $this->mensajes());
+        $datos = $request->validate(AcudientesService::reglas(), AcudientesService::mensajes());
 
         return $this->apiResponse($this->service->crear($datos, $request->user()->id_user));
     }
@@ -64,7 +65,7 @@ class AcudientesController extends Controller
             return $rechazo;
         }
 
-        $datos = $request->validate($this->reglas($id), $this->mensajes());
+        $datos = $request->validate(AcudientesService::reglas($id), AcudientesService::mensajes());
 
         return $this->apiResponse($this->service->actualizar($id, $datos));
     }
@@ -94,32 +95,28 @@ class AcudientesController extends Controller
             return $rechazo;
         }
 
-        return $this->apiResponse($this->service->enviarAccesoPortal($id));
+        try {
+            return $this->apiResponse($this->service->enviarAccesoPortal($id));
+        } catch (MailRateLimitException) {
+            // 429: el frontend detiene el envío en lote. El límite es por hora y lo comparten todos
+            // los correos del sistema (códigos de inicio de sesión incluidos).
+            return $this->error('El servidor de correo alcanzó su límite de envíos por hora. Intenta de nuevo más tarde.', 429);
+        }
     }
 
-    /** El documento y el correo no se repiten en la base (el login busca por correo). */
-    private function reglas(?int $id = null): array
+    /** POST /api/acudientes/importar { archivo }: carga masiva desde Excel (ver AcudientesService::importarExcel). */
+    public function importar(Request $request): JsonResponse
     {
-        return [
-            'documento' => ['required', 'string', 'max:50', Rule::unique('usuarios', 'documento')->ignore($id, 'id_user')],
-            'nombre' => ['required', 'string', 'max:100'],
-            'apellido' => ['required', 'string', 'max:100'],
-            'correo' => ['required', 'email', 'max:140', Rule::unique('usuarios', 'correo')->ignore($id, 'id_user')],
-            'telefono' => ['nullable', 'string', 'max:20'],
-        ];
-    }
+        if ($rechazo = $this->sinAcceso($request, Permiso::ACUDIENTES)) {
+            return $rechazo;
+        }
 
-    private function mensajes(): array
-    {
-        return [
-            'documento.required' => 'Escribe el número de documento.',
-            'documento.unique' => 'Ya existe una cuenta con este documento.',
-            'nombre.required' => 'Escribe los nombres.',
-            'apellido.required' => 'Escribe los apellidos.',
-            'correo.required' => 'Escribe el correo: con él entra al portal para padres.',
-            'correo.email' => 'El correo no tiene un formato válido.',
-            'correo.unique' => 'Ya existe una cuenta con este correo.',
-            'telefono.max' => 'El teléfono admite hasta 20 caracteres.',
-        ];
+        $request->validate(['archivo' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120']], [
+            'archivo.required' => 'Elige el archivo de Excel.',
+            'archivo.mimes' => 'El archivo debe ser de Excel (.xlsx, .xls) o .csv.',
+            'archivo.max' => 'El archivo pesa más de 5 MB.',
+        ]);
+
+        return $this->apiResponse($this->service->importarExcel($request->file('archivo')->getRealPath(), $request->user()->id_user));
     }
 }

@@ -17,4 +17,3 @@ Route::get('/estudiante/{idEstudiante}/acudientes', [VinculacionAcudienteControl
 Route::post('/', [VinculacionAcudienteController::class, 'vincular'])->middleware(Permiso::ruta([Permiso::VINCULACION_ACUDIENTES, Permiso::ACUDIENTES]));
 Route::delete('/', [VinculacionAcudienteController::class, 'desvincular'])->middleware(Permiso::ruta([Permiso::VINCULACION_ACUDIENTES, Permiso::ACUDIENTES]));
 // multipart: archivo (.xlsx/.xls/.csv) — col A documento acudiente, col B documento estudiante, fila 1 encabezados
-Route::post('/importar', [VinculacionAcudienteController::class, 'importar'])->middleware(Permiso::ruta([Permiso::VINCULACION_ACUDIENTES, Permiso::ACUDIENTES]));

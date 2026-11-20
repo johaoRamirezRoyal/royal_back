@@ -3,16 +3,22 @@
 namespace App\Services\Acudientes;
 
 use App\Enums\TipoPerfil;
+use App\Exceptions\MailRateLimitException;
 use App\Mail\AccesoPortalPadresMail;
 use App\Models\PasswordResetTokens;
 use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\branding\ColegioAdmisionService;
+use App\Services\Estudiantes\VinculacionAcudienteService;
 use App\Services\MailService;
 use App\Services\Service;
 use Exception;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 /**
  * Acudientes creados por el colegio (módulo /gestion-academica/acudientes): son `usuarios` de
@@ -25,24 +31,45 @@ class AcudientesService extends Service
     /** Días que dura el enlace de acceso al portal (el de recuperar contraseña dura 60 minutos). */
     public const DIAS_ENLACE_ACCESO = 7;
 
+    private const MAX_FILAS_IMPORTACION = 500;
+
     public function __construct(
         private ColegioAdmisionService $colegios,
         private MailService $correo,
+        private VinculacionAcudienteService $vinculacion,
     ) {
+    }
+
+    /** El documento y el correo no se repiten en la base (el login busca por correo). */
+    public static function reglas(?int $id = null): array
+    {
+        return [
+            'documento' => ['required', 'string', 'max:50', Rule::unique('usuarios', 'documento')->ignore($id, 'id_user')],
+            'nombre' => ['required', 'string', 'max:100'],
+            'apellido' => ['nullable', 'string', 'max:100'],
+            'correo' => ['required', 'email', 'max:140', Rule::unique('usuarios', 'correo')->ignore($id, 'id_user')],
+            'telefono' => ['nullable', 'string', 'max:20'],
+        ];
+    }
+
+    public static function mensajes(): array
+    {
+        return [
+            'documento.required' => 'Escribe el número de documento.',
+            'documento.unique' => 'Ya existe una cuenta con este documento.',
+            'nombre.required' => 'Escribe los nombres.',
+            'correo.required' => 'Escribe el correo: con él entra al portal para padres.',
+            'correo.email' => 'El correo no tiene un formato válido.',
+            'correo.unique' => 'Ya existe una cuenta con este correo.',
+            'telefono.max' => 'El teléfono admite hasta 20 caracteres.',
+        ];
     }
 
     /** @param array{documento: string, nombre: string, apellido: string, correo: string, telefono?: ?string} $datos */
     public function crear(array $datos, int $idUsuarioRegistra): array
     {
         try {
-            Usuario::create([
-                ...$this->limpiar($datos),
-                'perfil' => Perfil::idParaCrear(TipoPerfil::ACUDIENTE),
-                'estado' => 'activo',
-                // Inservible para entrar: el acudiente crea la suya con el enlace de acceso.
-                'pass' => Str::random(40),
-                'user_log' => $idUsuarioRegistra,
-            ]);
+            $this->nuevo($datos, $idUsuarioRegistra);
 
             return ['error' => false, 'message' => 'Acudiente creado', 'data' => null];
         } catch (Exception $e) {
@@ -64,6 +91,130 @@ class AcudientesService extends Service
         } catch (Exception $e) {
             return $this->sendError($e, 'Error al actualizar el acudiente');
         }
+    }
+
+    /**
+     * Carga masiva desde Excel (fila 1 = encabezados): A documento del acudiente, B nombres,
+     * C apellidos, D correo, E teléfono, F documento del hijo (opcional).
+     * - Documento nuevo: crea al acudiente (nombres y correo obligatorios; apellidos opcionales), sin enviarle
+     *   el acceso al portal: eso se hace después desde la lista.
+     * - Documento de un acudiente existente: actualiza solo las columnas que vengan llenas.
+     * - Con documento del hijo: lo vincula. Un acudiente con varios hijos va en varias filas.
+     * Cada fila se aplica sola; las que fallan se reportan y no detienen al resto.
+     */
+    public function importarExcel(string $ruta, int $idUsuarioRegistra): array
+    {
+        try {
+            $hoja = IOFactory::load($ruta)->getActiveSheet()->toArray(null, true, false, false);
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => 'No se pudo leer el archivo. Verifica que sea un Excel válido.', 'data' => null];
+        }
+
+        $filas = [];
+        foreach (array_slice($hoja, 1, null, true) as $i => $celdas) {
+            if (! array_filter($celdas, fn ($v) => $v !== null && trim((string) $v) !== '')) {
+                continue;
+            }
+
+            $filas[] = [
+                'fila' => $i + 1,
+                'documento' => $this->normalizarDocumento($celdas[0] ?? null),
+                'nombre' => trim((string) ($celdas[1] ?? '')),
+                'apellido' => trim((string) ($celdas[2] ?? '')),
+                'correo' => trim((string) ($celdas[3] ?? '')),
+                'telefono' => trim((string) ($celdas[4] ?? '')),
+                'hijo' => $this->normalizarDocumento($celdas[5] ?? null),
+            ];
+        }
+
+        if (! $filas) {
+            return ['error' => true, 'message' => 'El archivo no tiene filas para importar.', 'data' => null];
+        }
+        if (count($filas) > self::MAX_FILAS_IMPORTACION) {
+            return ['error' => true, 'message' => 'El archivo supera el máximo de ' . self::MAX_FILAS_IMPORTACION . ' filas.', 'data' => null];
+        }
+
+        $resumen = ['creados' => 0, 'actualizados' => 0, 'vinculados' => 0, 'errores' => []];
+        // Una consulta por tipo para todo el archivo (no una por fila: REGEXP recorre `usuarios`).
+        $acudientes = $this->idsPorDocumento(array_column($filas, 'documento'), TipoPerfil::ACUDIENTE);
+        $estudiantes = $this->idsPorDocumento(array_column($filas, 'hijo'), TipoPerfil::ESTUDIANTE);
+
+        foreach ($filas as $fila) {
+            $error = function (string $mensaje) use ($fila, &$resumen) {
+                $resumen['errores'][] = ['fila' => $fila['fila'], 'mensaje' => $mensaje];
+            };
+
+            try {
+                if ($fila['documento'] === '') {
+                    $error('Falta el documento del acudiente.');
+                    continue;
+                }
+
+                $ids = $acudientes[$fila['documento']] ?? [];
+                if (count($ids) > 1) {
+                    $error("Hay más de un acudiente con documento {$fila['documento']}; corrígelo a mano.");
+                    continue;
+                }
+
+                if ($ids) {
+                    $acudiente = Usuario::find($ids[0]);
+                    // Solo lo que venga en el archivo: una columna vacía no borra el dato.
+                    $cambios = array_filter(
+                        array_intersect_key($fila, array_flip(['nombre', 'apellido', 'correo', 'telefono'])),
+                        fn ($v) => $v !== '',
+                    );
+                    $reglas = array_intersect_key(self::reglas($acudiente->id_user), $cambios);
+                    $validacion = Validator::make($cambios, $reglas, self::mensajes());
+                    if ($validacion->fails()) {
+                        $error($validacion->errors()->first());
+                        continue;
+                    }
+                    if ($cambios) {
+                        if (isset($cambios['correo'])) {
+                            $cambios['correo'] = mb_strtolower($cambios['correo']);
+                        }
+                        $acudiente->update([...$cambios, 'fecha_editado' => now()]);
+                        $resumen['actualizados']++;
+                    }
+                } else {
+                    $datos = array_intersect_key($fila, array_flip(['documento', 'nombre', 'apellido', 'correo', 'telefono']));
+                    $validacion = Validator::make($datos, self::reglas(), self::mensajes());
+                    if ($validacion->fails()) {
+                        $error($validacion->errors()->first());
+                        continue;
+                    }
+                    $acudiente = $this->nuevo($datos, $idUsuarioRegistra);
+                    // Sus filas siguientes (otro hijo) ya lo encuentran.
+                    $acudientes[$fila['documento']] = [$acudiente->id_user];
+                    $resumen['creados']++;
+                }
+
+                if ($fila['hijo'] !== '') {
+                    $hijos = $estudiantes[$fila['hijo']] ?? [];
+                    if (count($hijos) !== 1) {
+                        $error($hijos
+                            ? "Hay más de un estudiante con documento {$fila['hijo']}; vincúlalo a mano."
+                            : "No existe un estudiante con documento {$fila['hijo']}.");
+                        continue;
+                    }
+
+                    $vinculo = $this->vinculacion->vincular($acudiente->id_user, $hijos[0]);
+                    // «Ya vinculado» no es error: el archivo se puede volver a subir.
+                    if (! $vinculo['error']) {
+                        $resumen['vinculados']++;
+                    }
+                }
+            } catch (Exception $e) {
+                $this->sendError($e, "Error en la fila {$fila['fila']} de la carga de acudientes");
+                $error('No se pudo guardar esta fila.');
+            }
+        }
+
+        return [
+            'error' => false,
+            'message' => "Carga terminada: {$resumen['creados']} creado(s), {$resumen['actualizados']} actualizado(s), {$resumen['vinculados']} hijo(s) vinculado(s), " . count($resumen['errores']) . ' con error.',
+            'data' => $resumen,
+        ];
     }
 
     /**
@@ -111,14 +262,60 @@ class AcudientesService extends Service
             }
 
             return ['error' => false, 'message' => "Acceso enviado a {$acudiente->correo}", 'data' => null];
+        } catch (MailRateLimitException $e) {
+            // Límite por hora del hosting: lo maneja el controller (429) para que el envío en lote se detenga.
+            throw $e;
         } catch (Exception $e) {
             return $this->sendError($e, 'Error al enviar el acceso al portal');
         }
     }
 
+    private function nuevo(array $datos, int $idUsuarioRegistra): Usuario
+    {
+        return Usuario::create([
+            ...$this->limpiar($datos),
+            'perfil' => Perfil::idParaCrear(TipoPerfil::ACUDIENTE),
+            'estado' => 'activo',
+            // Sin contraseña (null): Hash::check siempre da false, así que no se puede entrar hasta
+            // crearla con el enlace de acceso. Una al azar costaba un bcrypt (~0,3 s) por acudiente.
+            'user_log' => $idUsuarioRegistra,
+        ]);
+    }
+
     private function buscar(int $id): ?Usuario
     {
         return Usuario::where('id_user', $id)->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE))->first();
+    }
+
+    /**
+     * documento normalizado => [ids] de ese tipo (más de uno = documento repetido en la base),
+     * comparando sin espacios ni puntos (hay documentos guardados así).
+     *
+     * @return array<string, array<int>>
+     */
+    private function idsPorDocumento(array $documentos, TipoPerfil $tipo): array
+    {
+        $documentos = array_values(array_unique(array_filter($documentos)));
+        if (! $documentos) {
+            return [];
+        }
+
+        return Usuario::whereIn('perfil', Perfil::idsDeTipo($tipo))
+            ->whereIn(DB::raw("REGEXP_REPLACE(documento, '[^0-9A-Za-z]', '')"), $documentos)
+            ->get(['id_user', 'documento'])
+            ->groupBy(fn ($u) => $this->normalizarDocumento($u->documento))
+            ->map(fn ($grupo) => $grupo->pluck('id_user')->all())
+            ->all();
+    }
+
+    private function normalizarDocumento(mixed $valor): string
+    {
+        // Excel entrega los documentos numéricos como float (1048082892.0).
+        if (is_float($valor) && floor($valor) === $valor) {
+            $valor = number_format($valor, 0, '', '');
+        }
+
+        return preg_replace('/[^0-9A-Za-z]/', '', (string) $valor);
     }
 
     /** Recorta espacios y deja el correo en minúsculas (el login lo compara tal cual). */
@@ -127,7 +324,7 @@ class AcudientesService extends Service
         return [
             'documento' => trim($datos['documento']),
             'nombre' => trim($datos['nombre']),
-            'apellido' => trim($datos['apellido']),
+            'apellido' => filled($datos['apellido'] ?? null) ? trim($datos['apellido']) : null,
             'correo' => mb_strtolower(trim($datos['correo'])),
             'telefono' => filled($datos['telefono'] ?? null) ? trim($datos['telefono']) : null,
         ];

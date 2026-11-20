@@ -119,12 +119,9 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   `GET /{idAcudiente}/estudiantes` y `POST`/`DELETE /`.
 - Desvincular es **soft** (`activo=0`); volver a vincular reactiva la fila existente.
   `vincular` exige exactamente los perfiles 6 y 16.
-- `POST /importar` (xlsx/xls/csv, máximo 5 MB y 3000 filas; columna A = documento del
-  acudiente, columna B = documento del estudiante):
-  - Compara los documentos **normalizados** (`REGEXP_REPLACE`), porque hay documentos con
-    `\t`, `\r\n` o puntos.
-  - Un documento ambiguo se reporta, nunca se adivina.
-  - Las filas válidas se aplican aunque otras fallen.
+- La vinculación masiva desde Excel (`POST /importar`) se quitó el 2026-11-20: la cubre la
+  creación masiva de Acudientes (`POST /acudientes/importar`, ver `acudientes.md`), que crea o
+  actualiza al acudiente y vincula al hijo en la misma fila.
 
 ## Cursos y estudiantes (`/cursos`, opción 145)
 
