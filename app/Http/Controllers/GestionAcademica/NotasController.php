@@ -376,7 +376,7 @@ class NotasController extends Controller implements HasMiddleware
     /** ?id_curso&id_periodo: las fotos de boletín guardadas al cerrar (el PDF lo arma el frontend). */
     public function boletinesCurso(Request $request)
     {
-        $q = $request->validate($this->reglasCursoPeriodo());
+        $q = $request->validate($this->reglasCursoPeriodo() + ['vista_previa' => ['sometimes', 'boolean']]);
         $actor = $this->actor($request);
         // Desde el Registro de boletines: 173 cualquier curso; 172 los de su nivel.
         $porRegistro = self::boletinesDeTodos($request)
@@ -386,7 +386,7 @@ class NotasController extends Controller implements HasMiddleware
             return $this->error('No tienes acceso a las notas de este curso', 403);
         }
 
-        return $this->apiResponse($this->service->boletinesDelCurso($q['id_curso'], $q['id_periodo']));
+        return $this->apiResponse($this->service->boletinesDelCurso($q['id_curso'], $q['id_periodo'], (bool) ($q['vista_previa'] ?? false)));
     }
 
     /** ?id_estudiante: su historial de boletines, solo de los cursos que quien pide puede ver. */

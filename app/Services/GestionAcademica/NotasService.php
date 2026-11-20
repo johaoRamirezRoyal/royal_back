@@ -1539,6 +1539,34 @@ class NotasService extends Service
      */
     private function guardarCierre(array $actor, Cursos $curso, PeriodoAcademico $periodo): array
     {
+        $fecha = now();
+        // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
+        // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
+        $yaTienen = Boletin::where('id_periodo_academico', $periodo->id)->pluck('id_estudiante')->flip();
+        $fotos = $this->fotosDelCurso($curso, $periodo, $fecha)->reject(fn ($f, $id) => $yaTienen->has($id));
+
+        DB::transaction(function () use ($actor, $curso, $periodo, $fecha, $fotos) {
+            $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => $fecha]);
+            foreach ($fotos as $idEstudiante => $f) {
+                Boletin::create([
+                    'id_cierre' => $cierre->id, 'id_estudiante' => $idEstudiante, 'id_periodo_academico' => $periodo->id,
+                    'id_curso' => $curso->id, 'datos' => $f['datos'],
+                ]);
+            }
+        });
+
+        return ['boletines' => $fotos->count(), 'sin_nota' => (int) $fotos->sum('sin_nota')];
+    }
+
+    /**
+     * La foto del boletín de cada estudiante del curso en el periodo, tal como quedaría al cerrar
+     * en `$fecha`. La usan el cierre (la guarda) y la vista previa (no guarda nada).
+     *
+     * @return Collection<int, array{datos: array, sin_nota: int}> por id_user, en orden de lista.
+     *                                                             sin_nota: referentes sin desempeño (o campos sin texto)
+     */
+    private function fotosDelCurso(Cursos $curso, PeriodoAcademico $periodo, \DateTimeInterface $fecha): Collection
+    {
         $datos = $this->datosCurso($curso, $periodo);
         $datos['propositos'] = $datos['propositos']->toArray();
         $datos['asignaturas'] = $datos['asignaturas']->map(fn ($a) => (array) $a)->all();
@@ -1551,47 +1579,34 @@ class NotasService extends Service
             'inasistencias' => (int) ($asistencia[$e['id_user']]['inasistencias'] ?? 0),
             'llegadas_tarde' => (int) ($asistencia[$e['id_user']]['llegadas_tarde'] ?? 0),
         ]);
-        // ponytail: un estudiante que se cambió de curso a mitad de periodo puede salir en los
-        // dos cursos; su boletín es el del primero que se cierre (unique estudiante + periodo).
-        $yaTienen = Boletin::where('id_periodo_academico', $periodo->id)->pluck('id_estudiante')->flip();
-        $estudiantes = $datos['estudiantes']->reject(fn ($e) => $yaTienen->has($e['id_user']));
         $descriptivo = self::esDescriptivo($curso);
-        if ($descriptivo) {
-            // Lo que falta en un boletín descriptivo: campos sin texto.
-            $campos = collect($datos['propositos'])->flatMap(fn ($p) => collect($p['campos'])->pluck('id'));
-            $sinNota = $estudiantes->sum(fn ($e) => $campos->filter(fn ($id) => trim((string) ($e['textos'][$id] ?? '')) === '')->count());
-        } else {
-            $principales = collect($datos['referentes'])->pluck('id');
-            $sinNota = $estudiantes->sum(fn ($e) => $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count());
-        }
+        // Lo que falta: campos sin texto (descriptivo) o referentes sin desempeño final.
+        $campos = collect($datos['propositos'])->flatMap(fn ($p) => collect($p['campos'] ?? [])->pluck('id'));
+        $principales = collect($datos['referentes'] ?? [])->pluck('id');
+        $sinNota = fn ($e) => $descriptivo
+            ? $campos->filter(fn ($id) => trim((string) ($e['textos'][$id] ?? '')) === '')->count()
+            : $principales->filter(fn ($id) => ($e['notas']->get($id)['final'] ?? null) === null)->count();
 
-        DB::transaction(function () use ($actor, $curso, $periodo, $datos, $escala, $estudiantes, $descriptivo) {
-            $cierre = CierrePeriodo::create(['id_curso' => $curso->id, 'id_periodo_academico' => $periodo->id, 'id_usuario' => $actor['id'], 'fecha' => now()]);
-            $base = [
-                // REFERENTES o DESCRIPTIVA: qué documento pinta la foto.
-                'tipo' => $descriptivo ? Grado::DESCRIPTIVA : Grado::REFERENTES,
-                'curso' => $curso->nombre,
-                'grado' => $curso->grado?->nombre,
-                'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
-                'director' => self::nombreDe($curso->director),
-                // Para la firma del director (GET /boletines la trae aparte, como imagen).
-                'id_director' => $curso->id_director ? (int) $curso->id_director : null,
-                'anio' => DB::table('anio_escolar')->where('id', $periodo->id_anio_escolar)->get(['anio_inicio', 'anio_fin'])
-                    ->map(fn ($a) => "{$a->anio_inicio} - {$a->anio_fin}")->first(),
-                // La escala del nivel, en orden: la leyenda y las columnas del boletín.
-                'escala' => $this->escalaDelNivel($curso->id_nivel)->map(fn ($e) => ['nombre' => $e->nombre, 'abreviatura' => $e->abreviatura])->values()->all(),
-                'cerrado_at' => $cierre->fecha->toIso8601String(),
-            ];
-            foreach ($estudiantes as $e) {
-                Boletin::create([
-                    'id_cierre' => $cierre->id, 'id_estudiante' => $e['id_user'], 'id_periodo_academico' => $periodo->id,
-                    'id_curso' => $curso->id,
-                    'datos' => $descriptivo ? self::fotoDescriptiva($base, $datos, $e) : self::fotoBoletin($base, $datos, $e, $escala),
-                ]);
-            }
-        });
+        $base = [
+            // REFERENTES o DESCRIPTIVA: qué documento pinta la foto.
+            'tipo' => $descriptivo ? Grado::DESCRIPTIVA : Grado::REFERENTES,
+            'curso' => $curso->nombre,
+            'grado' => $curso->grado?->nombre,
+            'periodo' => ['id' => $periodo->id, 'nombre' => $periodo->nombre],
+            'director' => self::nombreDe($curso->director),
+            // Para la firma del director (GET /boletines la trae aparte, como imagen).
+            'id_director' => $curso->id_director ? (int) $curso->id_director : null,
+            'anio' => DB::table('anio_escolar')->where('id', $periodo->id_anio_escolar)->get(['anio_inicio', 'anio_fin'])
+                ->map(fn ($a) => "{$a->anio_inicio} - {$a->anio_fin}")->first(),
+            // La escala del nivel, en orden: la leyenda y las columnas del boletín.
+            'escala' => $this->escalaDelNivel($curso->id_nivel)->map(fn ($e) => ['nombre' => $e->nombre, 'abreviatura' => $e->abreviatura])->values()->all(),
+            'cerrado_at' => $fecha->format(DATE_ATOM),
+        ];
 
-        return ['boletines' => $estudiantes->count(), 'sin_nota' => (int) $sinNota];
+        return $datos['estudiantes']->mapWithKeys(fn ($e) => [$e['id_user'] => [
+            'datos' => $descriptivo ? self::fotoDescriptiva($base, $datos, $e) : self::fotoBoletin($base, $datos, $e, $escala),
+            'sin_nota' => $sinNota($e),
+        ]]);
     }
 
     /**
@@ -1982,13 +1997,28 @@ class NotasService extends Service
         }
     }
 
-    public function boletinesDelCurso(int $idCurso, int $idPeriodo): array
+    /**
+     * Las fotos guardadas al cerrar el curso en el periodo, o con `$vistaPrevia` las que quedarían
+     * si se cerrara ahora (nada se guarda).
+     */
+    public function boletinesDelCurso(int $idCurso, int $idPeriodo, bool $vistaPrevia = false): array
     {
+        if ($vistaPrevia && $error = $this->sinCualitativa($idCurso)) {
+            return $error;
+        }
         try {
-            $boletines = Boletin::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->get(['id_estudiante', 'datos'])
-                ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
-                ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
-                ->values();
+            if ($vistaPrevia) {
+                if (! $cp = self::cursoYPeriodo($idCurso, $idPeriodo)) {
+                    return ['error' => true, 'message' => 'Curso o periodo no encontrado'];
+                }
+                $boletines = $this->fotosDelCurso($cp[0], $cp[1], now())
+                    ->map(fn ($f, $id) => ['id_estudiante' => $id, 'datos' => $f['datos']])->values();
+            } else {
+                $boletines = Boletin::where('id_curso', $idCurso)->where('id_periodo_academico', $idPeriodo)->get(['id_estudiante', 'datos'])
+                    ->sortBy(fn (Boletin $b) => self::claveLista($b->datos))
+                    ->map(fn (Boletin $b) => ['id_estudiante' => $b->id_estudiante, 'datos' => $b->datos])
+                    ->values();
+            }
             $data = ['boletines' => $boletines, 'firmas' => (object) self::firmasDirectores($boletines->pluck('datos')), 'titulo_proposito' => self::tituloPropositoBoletin()];
 
             return ['error' => false, 'message' => 'Boletines del curso', 'data' => $data];
