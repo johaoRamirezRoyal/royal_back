@@ -1,4 +1,4 @@
-# Módulo Acudientes, correos institucionales y arreglos del login (2026-11-18 al 20)
+# Módulo Acudientes, contraseña inicial, correos institucionales y arreglos del login (2026-11-18 al 20)
 
 Cambio en `royal_back` y en el frontend (`S.A.M.I_frontend`). Las reglas vigentes están en
 [`contexto/modulos/acudientes.md`](contexto/modulos/acudientes.md) y
@@ -48,6 +48,23 @@ qué y qué falta hacer en el despliegue.
   ~2 min).
 - El frontend muestra una ventana de espera mientras el servidor procesa el archivo.
 
+### Contraseña inicial con el documento (`28da89f`)
+
+- **Por qué**: sin contraseña, el colegio no sabía si el acudiente ya podía entrar y el acudiente
+  dependía de que le llegara el correo. Ahora la cuenta sirve desde que se crea.
+- Al crear un acudiente (formulario o Excel) su contraseña es el **número de documento sin puntos
+  ni espacios** (`AcudientesService::nuevo`). Se guarda con 10 rondas de bcrypt en vez de 12: el
+  documento se adivina, así que lo que protege la cuenta es el código por correo de equipo nuevo y
+  el límite de intentos del login, no el costo del hash; con 12, el Excel de 500 filas tardaba ~2
+  min.
+- El correo de acceso elige su texto al enviarse (`estadoContrasena`, compara la contraseña
+  guardada con el documento):
+  - `documento`: le dice que su contraseña inicial es su documento y le pide cambiarla
+    («Cambiar mi contraseña»).
+  - `sin_contrasena`: le pide crearla («Crear mi contraseña»).
+  - `propia`: ya eligió una; el botón sirve si la olvidó («Crear una nueva contraseña»).
+- Probado: el acudiente nuevo entra con su documento (200) y no con otra clave (401).
+
 ### Límite de correos del hosting
 
 - El correo sale por el SMTP del hosting (cPanel/Exim), que limita los envíos **por hora** y ese
@@ -80,9 +97,28 @@ qué y qué falta hacer en el despliegue.
   personal de los otros colegios no podía recuperarla). Test: `DominiosInstitucionalesTest`.
 - `sami_play` solo existía en la rama `produccion`; `main` se puso al día con ella.
 
+### Auditoría de seguridad (2026-11-20)
+
+- **SAMI solo para Royal**: el login silencioso en SAMI (`sami.royalschool.edu.co`) mandaba el
+  usuario y la contraseña del personal de Play And Learn (`sami_play`) al SAMI de Royal. Ahora
+  solo corre con la base `mysql`.
+- **Google solo deja entrar a quien ya existe**: cualquier cuenta de los dominios del colegio sin
+  usuario se creaba sola con perfil Operativo (12 opciones de personal); al sumar los dominios de
+  Play And Learn y Hebreo Unión, el riesgo crecía. Ahora responde `?error=usuario_no_registrado`.
+- **Vínculos revisables en la creación masiva**: el resultado lista «acudiente → hijo · curso»
+  de cada vínculo nuevo; un documento de hijo mal escrito podía mostrarle a un acudiente los
+  datos de un niño ajeno sin que nadie lo notara.
+- **Máximo de 100 accesos por hora por usuario en el backend**: el tope de 50 era solo del
+  frontend; con la sesión de alguien con la 175 se podía gastar el cupo del hosting y dejar a todos
+  sin códigos de inicio de sesión.
+- Quedó bien: permisos de la 175 en ruta y controller, editar/estado/acceso solo sobre tipo
+  ACUDIENTE (no se puede tomar una cuenta del personal), las fórmulas del Excel no hacen
+  peticiones a internet (lista de dominios vacía en PhpSpreadsheet), el correo escapa los datos y
+  todo cambio queda en el registro de actividad.
+
 ## Despliegue
 
-1. En el servidor: `git pull` de `produccion` (último: `aab3406`). Si `git` avisa
+1. En el servidor: `git pull` de `produccion` (último: `28da89f`). Si `git` avisa
    `dubious ownership`, `git config --global --add safe.directory /home/omnia/app`.
 2. Migración `2026_11_18_120000_seed_opcion_acudientes` en **cada base de colegio**. Falla si el
    id 175 ya está ocupado. SQL puro al final de `migraciones_sql.sql`.
@@ -91,7 +127,7 @@ qué y qué falta hacer en el despliegue.
 4. Google: la app de OAuth (`GOOGLE_CLIENT_ID`) debe aceptar cuentas de `playandlearn.edu.co` y
    `colegiohebreounion.edu.co`; si está limitada al dominio de Royal, Google las rechaza antes de
    llegar a OMNIA.
-5. Frontend: se despliega con el push a `main` (último: `c51f339`).
+5. Frontend: se despliega con el push a `main` (último: `2d49e77`).
 
 ## Pendientes
 
@@ -100,9 +136,17 @@ qué y qué falta hacer en el despliegue.
   `grep -H MAX_EMAIL_PER_HOUR /var/cpanel/users/*`) y ajustar `MAXIMO_POR_ENVIO` (50) en
   `src/pages/Acudientes/parts/EnvioAcceso.parts.tsx`. Para cientos de envíos, el siguiente paso es
   una cola en el servidor que respete ese límite.
-- **SAMI y los otros colegios**: el login silencioso en SAMI usa siempre
-  `sami.royalschool.edu.co`, así que el personal de Play And Learn (`sami_play`) manda su usuario
-  y contraseña al SAMI de Royal (por eso el aviso «login rechazado por SAMI» en el log).
-  Restringirlo a la base `mysql`.
+- **Riesgos menores de la auditoría** (sin aplicar): avisar al correo anterior cuando se cambia el
+  correo de un acudiente (quien tiene la 175 podría quedarse con la cuenta), activar el `state` de
+  Socialite en el login con Google (hoy `stateless()`), y el consumo de memoria de un .xlsx muy
+  comprimido.
+- **Cambio de contraseña obligatorio**: el correo pide cambiar la contraseña inicial, pero nada lo
+  obliga. Si se quiere, el portal puede exigirlo en el primer ingreso (comparar con el documento,
+  como `estadoContrasena`).
+- **Acudientes creados en el módulo entre el 18 y el 20 de noviembre** (antes de `28da89f`): no
+  tienen el documento como contraseña; tienen una al azar (primeros días) o ninguna. El correo les
+  pide crearla («propia» o «sin contraseña»). Si se quiere uniformar, una migración puede ponerles
+  el documento a los que nunca han entrado (`ultima_conexion` null) y no se registraron en
+  Admisiones.
 - `/usuarios/importar` (creación masiva de personal) quedó sin botón y exige
   `@royalschool.edu.co`; decidir si se borra o se adapta a los dominios por colegio.

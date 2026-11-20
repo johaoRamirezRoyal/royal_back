@@ -16,7 +16,9 @@ eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
   filas): A documento, B nombres, C apellidos, D correo, E teléfono, F documento del hijo. Crea
   (mismas reglas que el formulario: `AcudientesService::reglas()`), o actualiza solo las columnas
   llenas si el documento ya es de un acudiente, y vincula al hijo con
-  `VinculacionAcudienteService::vincular` (ya vinculado no cuenta como error). Documentos
+  `VinculacionAcudienteService::vincular` (ya vinculado no cuenta como error). La respuesta trae
+  `vinculos` (fila, acudiente, estudiante, curso) para revisar cada vínculo nuevo: un documento de
+  hijo mal escrito puede coincidir con otro estudiante y ese acudiente vería a un niño ajeno. Documentos
   comparados sin espacios ni puntos (una consulta por tipo para todo el archivo). Los acudientes
   nuevos quedan con su documento como contraseña: un hash de ~60 ms por fila, 500 filas ≈ 40 s
   (`set_time_limit(180)`). No envía el acceso al portal. Test:
@@ -31,7 +33,9 @@ eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
   `sin_contrasena` (pide crearla) o `propia` (ya tiene; el botón sirve si la olvidó). Si el hosting llega a su límite
   de correos por hora (`MailRateLimitException`, ver `noticias.md`) responde **429**: el envío en
   lote del frontend se detiene ahí. Ese límite lo comparten todos los correos del sistema
-  (códigos de inicio de sesión incluidos); por eso el frontend envía máximo 50 por lote.
+  (códigos de inicio de sesión incluidos); por eso el frontend envía máximo 50 por lote y el
+  backend corta en **100 accesos por hora por usuario** (`RateLimiter`, también 429, con su propio
+  mensaje).
 - Hijos: `/vinculacion-acudientes` (ver `gestion-academica.md`) acepta la 131 **o** la 175.
 - Migración `2026_11_18_120000_seed_opcion_acudientes`: crea la 175 y la otorga a los perfiles con
   la 112 o la 131.
