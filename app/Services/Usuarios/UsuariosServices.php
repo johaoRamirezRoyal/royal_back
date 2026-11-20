@@ -338,9 +338,9 @@ class UsuariosServices
      * perfil — no se puede simplemente quitar la exclusión de aquel método porque el
      * resto de sus consumidores (el módulo /users) sigue necesitando que se excluya.
      */
-    public function mostrarAcudientesPaginados(int $perPage, ?string $busqueda, ?string $estado, string $sort = 'nombre', string $dir = 'asc', bool $soloAutoregistrados = false)
+    public function mostrarAcudientesPaginados(int $perPage, ?string $busqueda, ?string $estado, string $sort = 'nombre', string $dir = 'asc', bool $soloAutoregistrados = false, ?string $acceso = null)
     {
-        $sortable = ['nombre', 'apellido', 'documento', 'correo', 'estado', 'fechareg', 'ultima_conexion'];
+        $sortable = ['nombre', 'apellido', 'documento', 'correo', 'estado', 'fechareg', 'ultima_conexion', 'acceso_portal_enviado_at'];
         $sort = in_array($sort, $sortable, true) ? $sort : 'nombre';
         $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
 
@@ -358,6 +358,8 @@ class UsuariosServices
                 'ultima_conexion',
                 'fecha_editado',
                 'origen_registro',
+                // Cuándo se le envió el correo de acceso al portal (null = nunca).
+                'acceso_portal_enviado_at',
             ])
                 ->withCount('inscripciones')
                 ->whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ACUDIENTE))
@@ -384,6 +386,8 @@ class UsuariosServices
                 ->when($estado, function ($query, $estado) {
                     $query->where('estado', $estado);
                 })
+                ->when($acceso === 'enviado', fn ($query) => $query->whereNotNull('acceso_portal_enviado_at'))
+                ->when($acceso === 'sin_enviar', fn ($query) => $query->whereNull('acceso_portal_enviado_at'))
                 // Hijos vinculados (activos): el módulo Acudientes los muestra en la lista.
                 ->addSelect(['hijos_count' => EstudiantesPadre::selectRaw('COUNT(*)')->whereColumn('id_acudiente', 'usuarios.id_user')->where('activo', 1)])
                 ->orderBy($sort, $dir)

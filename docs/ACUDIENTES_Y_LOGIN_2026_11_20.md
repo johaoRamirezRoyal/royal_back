@@ -97,6 +97,17 @@ qué y qué falta hacer en el despliegue.
   personal de los otros colegios no podía recuperarla). Test: `DominiosInstitucionalesTest`.
 - `sami_play` solo existía en la rama `produccion`; `main` se puso al día con ella.
 
+### Saber a quién se le envió el acceso (2026-11-20)
+
+- Columna nueva `usuarios.acceso_portal_enviado_at`: se guarda al salir el correo de acceso. La
+  lista de Acudientes la muestra («Enviado · fecha» / «Sin enviar») y la filtra.
+- La migración rellena los envíos ya hechos con los enlaces que siguen en
+  `password_reset_tokens` (los de acceso duran 7 días; los de recuperar contraseña, 60 minutos).
+  Si después del envío se pidió recuperar la contraseña, ese envío no se recupera.
+- Por qué se enviaron 114 con el tope de 50: el 50 es por envío (se enviaron lotes de 30) y el
+  tope de 100 por hora del backend es del commit `206cb61`: depende de si ya estaba desplegado y
+  de que los envíos fueran en la misma hora y por el mismo usuario.
+
 ### Auditoría de seguridad (2026-11-20)
 
 - **SAMI solo para Royal**: el login silencioso en SAMI (`sami.royalschool.edu.co`) mandaba el
@@ -122,12 +133,14 @@ qué y qué falta hacer en el despliegue.
    `dubious ownership`, `git config --global --add safe.directory /home/omnia/app`.
 2. Migración `2026_11_18_120000_seed_opcion_acudientes` en **cada base de colegio**. Falla si el
    id 175 ya está ocupado. SQL puro al final de `migraciones_sql.sql`.
-3. Cada colegio necesita su fila activa en `/colegios` apuntando a su base y a una marca activa:
+3. Migración `2026_11_20_100000_add_acceso_portal_enviado_to_usuarios_table` (recorre todas las
+   bases de colegio; SQL puro al final de `migraciones_sql.sql`).
+4. Cada colegio necesita su fila activa en `/colegios` apuntando a su base y a una marca activa:
    de ahí salen el enlace del portal y el logo, color e imagen del correo de acceso.
-4. Google: la app de OAuth (`GOOGLE_CLIENT_ID`) debe aceptar cuentas de `playandlearn.edu.co` y
+5. Google: la app de OAuth (`GOOGLE_CLIENT_ID`) debe aceptar cuentas de `playandlearn.edu.co` y
    `colegiohebreounion.edu.co`; si está limitada al dominio de Royal, Google las rechaza antes de
    llegar a OMNIA.
-5. Frontend: se despliega con el push a `main` (último: `2d49e77`).
+6. Frontend: se despliega con el push a `main` (último: `2d49e77`).
 
 ## Pendientes
 

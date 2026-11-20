@@ -300,6 +300,9 @@ class AcudientesService extends Service
                 return ['error' => true, 'message' => 'No se pudo enviar el correo. Revisa la dirección e inténtalo de nuevo', 'data' => null];
             }
 
+            // Solo si el correo salió: la lista muestra y filtra a quién ya se le envió.
+            Usuario::whereKey($acudiente->id_user)->update(['acceso_portal_enviado_at' => now()]);
+
             return ['error' => false, 'message' => "Acceso enviado a {$acudiente->correo}", 'data' => null];
         } catch (MailRateLimitException $e) {
             // Límite por hora del hosting: lo maneja el controller (429) para que el envío en lote se detenga.
