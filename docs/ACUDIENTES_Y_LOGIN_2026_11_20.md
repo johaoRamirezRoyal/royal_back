@@ -21,12 +21,13 @@ qué y qué falta hacer en el despliegue.
 - `/gestion-academica/acudientes` (`AcudientesController` + `AcudientesService`,
   `routes/api/acudientes.php`). Reemplaza a los dos módulos anteriores: sus rutas redirigen aquí y
   salen del menú. `AcudientesAdminController` (`/acudientes-admin`) se eliminó.
-- Crear y editar (documento, nombres, apellidos opcionales, correo personal, teléfono). **El
-  colegio nunca escribe ni ve la contraseña**: la cuenta nace sin contraseña (`pass` null, no se
-  puede entrar) hasta que el acudiente la crea.
+- Crear y editar (documento, nombres, apellidos opcionales, correo personal, teléfono). **La
+  contraseña inicial es el número de documento** (sin puntos ni espacios); el colegio no la
+  escribe en ningún formulario.
 - **Enviar acceso al portal**: correo propio (`AccesoPortalPadresMail`, vista
-  `emails.accesoPortalPadres`) con la marca del colegio y un enlace de 7 días a crear contraseña
-  (misma página y tabla que recuperar contraseña). Por fila o en lote.
+  `emails.accesoPortalPadres`) con la marca del colegio y un enlace de 7 días (misma página y tabla que recuperar
+  contraseña). Si sigue con la contraseña inicial, el correo se la recuerda y le pide cambiarla;
+  si no tiene (cuentas anteriores), le pide crearla. Por fila o en lote.
 - Hijos: el modal usa `/vinculacion-acudientes`, que acepta la 131 o la 175.
 - Activar / desactivar, por fila o en lote.
 - Migración `2026_11_18_120000_seed_opcion_acudientes`: crea la 175 y la otorga a los perfiles
@@ -42,8 +43,9 @@ qué y qué falta hacer en el despliegue.
   endpoint `/usuarios/importar` queda sin botón. También se eliminó
   `/vinculacion-acudientes/importar`: lo cubre esta carga.
 - Rendimiento: 500 filas tardaban **175 s** (un bcrypt de ~0,3 s por contraseña al azar y dos
-  `REGEXP` sobre `usuarios` por fila). Sin contraseña y con una consulta por tipo para todo el
-  archivo: **~6 s**.
+  `REGEXP` sobre `usuarios` por fila). Con una consulta por tipo para todo el archivo y la
+  contraseña inicial con 10 rondas de bcrypt: **~40 s** (sin contraseña eran 6 s; con 12 rondas,
+  ~2 min).
 - El frontend muestra una ventana de espera mientras el servidor procesa el archivo.
 
 ### Límite de correos del hosting

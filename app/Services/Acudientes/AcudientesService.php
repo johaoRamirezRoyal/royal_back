@@ -15,6 +15,7 @@ use App\Services\Service;
 use Exception;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -30,6 +31,9 @@ class AcudientesService extends Service
 {
     /** Días que dura el enlace de acceso al portal (el de recuperar contraseña dura 60 minutos). */
     public const DIAS_ENLACE_ACCESO = 7;
+
+    /** Costo del hash de la contraseña inicial (el documento), ver nuevo(). */
+    private const RONDAS_CLAVE_INICIAL = 10;
 
     private const MAX_FILAS_IMPORTACION = 500;
 
@@ -104,6 +108,9 @@ class AcudientesService extends Service
      */
     public function importarExcel(string $ruta, int $idUsuarioRegistra): array
     {
+        // Cada acudiente nuevo cuesta un hash (~60 ms): 500 filas ≈ 35 s.
+        set_time_limit(180);
+
         try {
             $hoja = IOFactory::load($ruta)->getActiveSheet()->toArray(null, true, false, false);
         } catch (\Throwable $e) {
@@ -218,9 +225,10 @@ class AcudientesService extends Service
     }
 
     /**
-     * Envía al acudiente el enlace para crear su contraseña y entrar al portal de su colegio
-     * (/{slug}/padres). Usa el mismo token y la misma página que recuperar contraseña por colegio,
-     * pero el enlace dura DIAS_ENLACE_ACCESO días. Un enlace nuevo invalida el anterior.
+     * Envía al acudiente el acceso al portal de su colegio (/{slug}/padres): si sigue con la
+     * contraseña inicial (su documento), se lo dice y le pide cambiarla; si no tiene, le pide
+     * crearla. El enlace es el de recuperar contraseña por colegio, pero dura DIAS_ENLACE_ACCESO
+     * días. Un enlace nuevo invalida el anterior.
      */
     public function enviarAccesoPortal(int $id): array
     {
@@ -255,6 +263,7 @@ class AcudientesService extends Service
                 "{$frontend}/{$colegio->slug}/padres",
                 self::DIAS_ENLACE_ACCESO,
                 $colegio,
+                $this->estadoContrasena($acudiente),
             ));
 
             if (! $enviado) {
@@ -270,16 +279,47 @@ class AcudientesService extends Service
         }
     }
 
+    /**
+     * Contraseña inicial = número de documento, sin puntos ni espacios. El correo de acceso le
+     * pide cambiarla. Lo que la protege no es el costo del hash (el documento se adivina) sino el
+     * código por correo de equipo nuevo y el límite de intentos del login; por eso 10 rondas en vez
+     * de 12: con 12, 500 filas del Excel tardaban ~2 min (con 10, ~35 s).
+     */
     private function nuevo(array $datos, int $idUsuarioRegistra): Usuario
     {
-        return Usuario::create([
+        $acudiente = Usuario::create([
             ...$this->limpiar($datos),
             'perfil' => Perfil::idParaCrear(TipoPerfil::ACUDIENTE),
             'estado' => 'activo',
-            // Sin contraseña (null): Hash::check siempre da false, así que no se puede entrar hasta
-            // crearla con el enlace de acceso. Una al azar costaba un bcrypt (~0,3 s) por acudiente.
             'user_log' => $idUsuarioRegistra,
         ]);
+
+        // Por la consulta y no por el modelo: setPassAttribute volvería a hashear el hash.
+        Usuario::whereKey($acudiente->id_user)->update([
+            'pass' => Hash::make(self::claveDeDocumento($acudiente->documento), ['rounds' => self::RONDAS_CLAVE_INICIAL]),
+        ]);
+
+        return $acudiente;
+    }
+
+    private static function claveDeDocumento(?string $documento): string
+    {
+        return preg_replace('/[^0-9A-Za-z]/', '', (string) $documento);
+    }
+
+    /**
+     * Qué dice el correo de acceso: `documento` (sigue con la contraseña inicial, debe cambiarla),
+     * `sin_contrasena` (nunca tuvo, debe crearla) o `propia` (ya eligió una).
+     */
+    private function estadoContrasena(Usuario $acudiente): string
+    {
+        $pass = $acudiente->getRawOriginal('pass');
+
+        return match (true) {
+            blank($pass) => 'sin_contrasena',
+            Hash::check(self::claveDeDocumento($acudiente->documento), $pass) => 'documento',
+            default => 'propia',
+        };
     }
 
     private function buscar(int $id): ?Usuario

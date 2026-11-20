@@ -8,9 +8,10 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 
 /**
- * Correo con el enlace para que un acudiente cree su contraseña del portal para padres
- * (AcudientesService::enviarAccesoPortal). Lleva la marca del colegio: nombre, logo, color e
- * imagen de fondo; sin marca activa, la de OMNIA.
+ * Correo de acceso al portal para padres (AcudientesService::enviarAccesoPortal). Según
+ * `$contrasena`: `documento` (entra con su documento y se le pide cambiarlo), `sin_contrasena`
+ * (debe crearla) o `propia` (ya tiene; el botón sirve si la olvidó). Lleva la marca del colegio:
+ * nombre, logo, color e imagen de fondo; sin marca activa, la de OMNIA.
  */
 class AccesoPortalPadresMail extends Mailable
 {
@@ -29,6 +30,7 @@ class AccesoPortalPadresMail extends Mailable
         public string $urlPortal,
         public int $diasVigencia,
         ColegioAdmision $colegioAdmision,
+        public string $contrasena = 'sin_contrasena',
     ) {
         $marca = $colegioAdmision->marca?->activo ? $colegioAdmision->marca : null;
 

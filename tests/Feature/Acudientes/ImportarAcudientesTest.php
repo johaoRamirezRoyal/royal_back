@@ -69,6 +69,8 @@ class ImportarAcudientesTest extends TestCase
         $nueva = Usuario::where('documento', '9999000202')->first();
         $this->assertSame('nueva.carga@prueba.test', $nueva->correo);
         $this->assertTrue($nueva->esTipo(TipoPerfil::ACUDIENTE));
+        // Contraseña inicial = documento sin puntos (en el Excel venía como número).
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('9999000202', $nueva->getRawOriginal('pass')));
         $this->assertSame(2, EstudiantesPadre::where('id_acudiente', $nueva->id_user)->where('activo', 1)->count());
 
         $existente->refresh();

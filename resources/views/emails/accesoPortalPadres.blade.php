@@ -63,32 +63,58 @@
                                 </tr>
                             </table>
 
-                            <p style="margin:0 0 18px; font-size:16px; line-height:1.6; color:#334155;">
-                                Para empezar, crea tu contraseña con el botón. Solo tú la vas a conocer.
-                            </p>
+                            @php
+                                // documento: entra con su documento y debe cambiarlo · sin_contrasena: debe crearla · propia: ya tiene una
+                                $textoBoton = match ($contrasena) {
+                                    'documento' => 'Cambiar mi contraseña',
+                                    'propia' => 'Crear una nueva contraseña',
+                                    default => 'Crear mi contraseña',
+                                };
+                            @endphp
+
+                            {{-- Datos para entrar --}}
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; border:1px solid #d9e7df; border-radius:10px;">
+                                <tr>
+                                    <td style="padding:16px 18px; font-size:14px; line-height:1.7; color:#334155;">
+                                        <strong style="color:#0f172a;">Tus datos para entrar</strong><br>
+                                        Portal: <a href="{{ $urlPortal }}" target="_blank" style="color:{{ $color }}; font-weight:600; word-break:break-all;">{{ $urlPortal }}</a><br>
+                                        Usuario: <span style="font-weight:600; color:#0f172a; word-break:break-all;">{{ $correo }}</span>
+                                        @if($contrasena === 'documento')
+                                            <br>Contraseña inicial: <span style="font-weight:600; color:#0f172a;">tu número de documento</span>, sin puntos ni espacios
+                                        @endif
+                                    </td>
+                                </tr>
+                            </table>
+
+                            @if($contrasena === 'documento')
+                                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:#fff7e6; border-radius:10px;">
+                                    <tr>
+                                        <td style="padding:14px 18px; font-size:15px; line-height:1.6; color:#7a4b00;">
+                                            <strong>Cambia esa contraseña por una tuya.</strong> Tu número de documento lo conocen otras personas: por tu seguridad y la de tus hijos, cámbiala con el botón de abajo.
+                                        </td>
+                                    </tr>
+                                </table>
+                            @elseif($contrasena === 'propia')
+                                <p style="margin:0 0 18px; font-size:16px; line-height:1.6; color:#334155;">
+                                    Ya tienes una contraseña: entra con ella. Si no la recuerdas, crea una nueva con el botón.
+                                </p>
+                            @else
+                                <p style="margin:0 0 18px; font-size:16px; line-height:1.6; color:#334155;">
+                                    Para empezar, crea tu contraseña con el botón. Solo tú la vas a conocer.
+                                </p>
+                            @endif
 
                             {{-- Botón --}}
                             <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px;">
                                 <tr>
                                     <td style="background-color:{{ $color }}; border-radius:8px;">
-                                        <a href="{{ $urlCrear }}" target="_blank" style="display:inline-block; padding:14px 28px; color:#ffffff; text-decoration:none; font-weight:700; font-size:16px;">Crear mi contraseña</a>
+                                        <a href="{{ $urlCrear }}" target="_blank" style="display:inline-block; padding:14px 28px; color:#ffffff; text-decoration:none; font-weight:700; font-size:16px;">{{ $textoBoton }}</a>
                                     </td>
                                 </tr>
                             </table>
                             <p style="margin:0 0 28px; font-size:13px; color:#64748b;">
                                 El enlace vence en {{ $diasVigencia }} días. Si vence, pide en el colegio que te lo envíen de nuevo.
                             </p>
-
-                            {{-- Datos para entrar después --}}
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px; border:1px solid #d9e7df; border-radius:10px;">
-                                <tr>
-                                    <td style="padding:16px 18px; font-size:14px; line-height:1.7; color:#334155;">
-                                        <strong style="color:#0f172a;">Después, entra siempre por aquí</strong><br>
-                                        Portal: <a href="{{ $urlPortal }}" target="_blank" style="color:{{ $color }}; font-weight:600; word-break:break-all;">{{ $urlPortal }}</a><br>
-                                        Usuario: <span style="font-weight:600; color:#0f172a; word-break:break-all;">{{ $correo }}</span>
-                                    </td>
-                                </tr>
-                            </table>
 
                             <p style="margin:0 0 28px; font-size:13px; line-height:1.6; color:#64748b;">
                                 Si el botón no funciona, copia este enlace en tu navegador:<br>
