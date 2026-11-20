@@ -212,7 +212,9 @@ Modelo del colegio: el "Boletín Descriptivo" (Word de ejemplo de Pre-Jardín, p
   grado descriptivo). La foto (`fotoDescriptiva`, pura, test `FotoDescriptivaTest`) lleva
   `tipo: "DESCRIPTIVA"` y, por propósito, `campos: [{ nombre, texto|null }]`, con la misma cabecera
   de la foto por referentes. Todas las fotos llevan ahora `tipo` (`REFERENTES` en las de
-  referentes). El aviso del cierre cuenta los campos sin texto.
+  referentes). El aviso del cierre cuenta los campos sin texto. La foto guarda todos los campos
+  (también los vacíos); el PDF del frontend omite los campos sin texto y los propósitos sin ninguno
+  lleno (2026-11-20), así que no hace falta volver a cerrar para que un boletín viejo salga así.
 - **Referentes**: `GET /referentes/grados` trae `tipo_evaluacion` por grado (la página no muestra
   plan para los descriptivos).
 - ponytail: cambiar el tipo de un grado que ya tiene referentes o textos no está bloqueado; lo que
