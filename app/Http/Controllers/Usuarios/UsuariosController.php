@@ -3,19 +3,20 @@
 namespace App\Http\Controllers\Usuarios;
 
 use App\Enums\TipoPerfil;
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
-use App\Models\Usuarios\Perfil;
 use App\Http\Requests\Usuarios\ActualizarUsuarioRequest;
 use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Http\Resources\Usuarios\UsuarioInscripcionResource;
+use App\Models\Usuarios\Perfil;
 use App\Services\Niveles\NivelesServices;
 use App\Services\Perfiles\PerfilesServices;
 use App\Services\Usuarios\PermisosPerfil;
 use App\Services\Usuarios\UsuariosServices;
+use App\Support\Permiso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
+use Illuminate\Validation\Rule;
 
 class UsuariosController extends Controller
 {
@@ -390,5 +391,26 @@ class UsuariosController extends Controller
         }
 
         return response()->json(['firma_url' => $response['firma_url']]);
+    }
+
+    // POST /usuarios/importar — creación masiva desde Excel, ver UsuariosServices::importarExcel.
+    public function importarUsuarios(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_USUARIOS)) {
+            return $rechazo;
+        }
+
+        $request->validate([
+            'archivo' => 'required|file|mimes:xlsx,xls,csv|max:5120',
+            'perfil' => ['required', 'integer', Rule::exists('perfiles', 'id_perfil')],
+        ]);
+
+        $response = $this->service_usuarios->importarExcel(
+            $request->file('archivo')->getRealPath(),
+            (int) $request->perfil,
+            $request->user()->id_user,
+        );
+
+        return response()->json($response);
     }
 }

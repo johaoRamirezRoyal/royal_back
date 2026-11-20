@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Usuarios\UsuariosController;
-use Illuminate\Support\Facades\Route;
 use App\Support\Permiso;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/firma', [UsuariosController::class, 'verFirma']);
 Route::post('/firma', [UsuariosController::class, 'subirFirma']);
@@ -59,3 +59,6 @@ Route::post('/', [UsuariosController::class, 'agregarUsuario'])->middleware(Perm
 }
  */
 Route::get('inscripcionesUsuarios', [UsuariosController::class, 'mostrarUsuariosConInscripciones']);
+
+// Creación masiva: multipart `archivo` (.xlsx/.xls/.csv) + `perfil` — ver UsuariosServices::importarExcel.
+Route::post('/importar', [UsuariosController::class, 'importarUsuarios'])->middleware(Permiso::ruta([Permiso::USUARIOS]));

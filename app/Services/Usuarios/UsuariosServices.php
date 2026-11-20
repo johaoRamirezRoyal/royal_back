@@ -2,24 +2,29 @@
 
 namespace App\Services\Usuarios;
 
-use App\Services\Usuarios\PermisosPerfil;
-use App\Support\Permiso;
 use App\Enums\TipoPerfil;
-use App\Models\Usuarios\Perfil;
+use App\Http\Requests\Usuarios\RegistrarUsuarioRequest;
 use App\Mail\NuevoUsuarioMail;
+use App\Models\Areas\Cursos;
 use App\Models\Estudiantes\EstudiantesPadre;
-use App\Models\PerfilUsuario\InfoAdicionalUsuario;
 use App\Models\HistoriaClinica\HceObservacionesFirmas;
+use App\Models\PerfilUsuario\InfoAdicionalUsuario;
 use App\Models\Usuarios\Firma;
+use App\Models\Usuarios\Nivel;
+use App\Models\Usuarios\Perfil;
 use App\Models\Usuarios\Usuario;
 use App\Services\Cloudinary\CloudinaryService;
 use App\Services\MailService;
+use App\Support\Permiso;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class UsuariosServices
 {
@@ -127,7 +132,7 @@ class UsuariosServices
      * true: ya quedaron registrados en el dispositivo de asistencia.
      * false: se eliminaron del dispositivo (o nunca llegaron a registrarse).
      *
-     * @param array<int> $idsUsuarios
+     * @param  array<int>  $idsUsuarios
      */
     public function actualizarAsistenciaRegistrada(array $idsUsuarios, bool $registrado): void
     {
@@ -419,6 +424,7 @@ class UsuariosServices
 
             if (! in_array((int) $usuario->perfil, $perfilesEstudiante, true)) {
                 $usuario->acudientes = null;
+
                 continue;
             }
 
@@ -675,7 +681,7 @@ class UsuariosServices
             $resultado = $this->cloudinaryService->uploadFile(
                 $file,
                 CloudinaryService::carpetaColegio('usuarios/firmas'),
-                "firma_{$id_user}_" . Str::lower(Str::random(8))
+                "firma_{$id_user}_".Str::lower(Str::random(8))
             );
 
             if ($resultado['error']) {
@@ -724,5 +730,175 @@ class UsuariosServices
         } catch (\Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
+    }
+
+    // ponytail: correo de bienvenida va síncrono por fila (igual que agregarUsuario en el
+    // alta individual) — con archivos grandes esto es lento; si se vuelve un problema,
+    // encolar NuevoUsuarioMail. Mientras tanto el límite de filas de abajo lo acota.
+    private const MAX_FILAS_IMPORTACION_USUARIOS = 500;
+
+    /**
+     * Creación/actualización masiva desde Excel: columna A documento, B nombre,
+     * C apellido, D correo, E teléfono (opcional), F nivel (nombre, ver `nivel.nombre`),
+     * G curso (nombre, opcional); fila 1 = encabezados. El perfil es fijo para todo el
+     * archivo (se elige antes de subir, no es columna). Documento ya existente => actualiza
+     * en vez de crear (sin tocar la contraseña ni el username). Contraseña y usuario de un
+     * usuario nuevo = su documento. Cada fila se reporta por separado; las válidas se
+     * aplican aunque otras fallen.
+     */
+    public function importarExcel(string $ruta, int $perfil, int $userLog): array
+    {
+        try {
+            $hoja = IOFactory::load($ruta)->getActiveSheet()->toArray(null, true, false, false);
+        } catch (\Throwable $e) {
+            return ['error' => true, 'message' => 'No se pudo leer el archivo. Verifica que sea un Excel válido.', 'data' => []];
+        }
+
+        $filas = [];
+        foreach (array_slice($hoja, 1, null, true) as $i => $celdas) {
+            if (! array_filter($celdas, fn ($v) => $v !== null && $v !== '')) {
+                continue;
+            }
+
+            $filas[] = [
+                'fila' => $i + 1,
+                'documento' => $this->normalizarDocumentoImportacion($celdas[0] ?? null),
+                'nombre' => trim((string) ($celdas[1] ?? '')),
+                'apellido' => trim((string) ($celdas[2] ?? '')) ?: null,
+                'correo' => strtolower(trim((string) ($celdas[3] ?? ''))),
+                'telefono' => trim((string) ($celdas[4] ?? '')) ?: null,
+                'nivel' => trim((string) ($celdas[5] ?? '')),
+                'curso' => trim((string) ($celdas[6] ?? '')) ?: null,
+            ];
+        }
+
+        if (count($filas) === 0) {
+            return ['error' => true, 'message' => 'El archivo no tiene filas para importar.', 'data' => []];
+        }
+
+        if (count($filas) > self::MAX_FILAS_IMPORTACION_USUARIOS) {
+            return ['error' => true, 'message' => 'El archivo supera el máximo de '.self::MAX_FILAS_IMPORTACION_USUARIOS.' filas.', 'data' => []];
+        }
+
+        $nivelesPorNombre = Nivel::pluck('id', 'nombre')
+            ->mapWithKeys(fn ($id, $nombre) => [mb_strtolower(trim((string) $nombre)) => $id]);
+        $cursosPorNombre = Cursos::pluck('id', 'nombre')
+            ->mapWithKeys(fn ($id, $nombre) => [mb_strtolower(trim((string) $nombre)) => $id]);
+        $usuariosExistentes = Usuario::whereIn('documento', array_column($filas, 'documento'))
+            ->get(['id_user', 'documento'])
+            ->keyBy('documento');
+
+        $resumen = ['creados' => 0, 'actualizados' => 0, 'errores' => []];
+
+        foreach ($filas as $fila) {
+            $error = function (string $mensaje) use ($fila, &$resumen) {
+                $resumen['errores'][] = [
+                    'fila' => $fila['fila'],
+                    'documento' => $fila['documento'],
+                    'nombre' => $fila['nombre'],
+                    'mensaje' => $mensaje,
+                ];
+            };
+
+            $idNivel = null;
+            if ($fila['nivel'] !== '') {
+                $idNivel = $nivelesPorNombre->get(mb_strtolower($fila['nivel']));
+                if ($idNivel === null) {
+                    $error("El nivel \"{$fila['nivel']}\" no existe.");
+
+                    continue;
+                }
+            }
+
+            $idCurso = null;
+            if ($fila['curso']) {
+                $idCurso = $cursosPorNombre->get(mb_strtolower($fila['curso']));
+                if ($idCurso === null) {
+                    $error("El curso \"{$fila['curso']}\" no existe.");
+
+                    continue;
+                }
+            }
+
+            $existente = $usuariosExistentes->get($fila['documento']);
+
+            $dataBase = [
+                'documento' => $fila['documento'],
+                'nombre' => $fila['nombre'],
+                'apellido' => $fila['apellido'],
+                'correo' => $fila['correo'],
+                'perfil' => $perfil,
+                'id_nivel' => $idNivel,
+                'id_curso' => $idCurso,
+                'telefono' => $fila['telefono'],
+            ];
+
+            if ($existente) {
+                $reglas = (new RegistrarUsuarioRequest)->rules();
+                unset($reglas['pass'], $reglas['user']);
+                $reglas['documento'] = ['required', 'numeric', 'digits_between:5,16'];
+                $reglas['correo'] = [
+                    'required',
+                    'email',
+                    'ends_with:@royalschool.edu.co',
+                    Rule::unique('usuarios', 'correo')->ignore($existente->id_user, 'id_user'),
+                ];
+
+                $validator = Validator::make($dataBase, $reglas, (new RegistrarUsuarioRequest)->messages());
+                if ($validator->fails()) {
+                    $error($validator->errors()->first());
+
+                    continue;
+                }
+
+                $dataBase['fecha_editado'] = now();
+                $respuesta = $this->actualizarUsuarios($existente->id_user, $dataBase);
+                if ($respuesta['error']) {
+                    $error($respuesta['message'] ?? 'No se pudo actualizar.');
+
+                    continue;
+                }
+
+                $resumen['actualizados']++;
+            } else {
+                $data = $dataBase + ['user' => $fila['documento']];
+
+                $validator = Validator::make($data, (new RegistrarUsuarioRequest)->rules(), (new RegistrarUsuarioRequest)->messages());
+                if ($validator->fails()) {
+                    $error($validator->errors()->first());
+
+                    continue;
+                }
+
+                $data['pass'] = $fila['documento'];
+                $data['fechareg'] = now();
+                $data['user_log'] = $userLog;
+
+                $respuesta = $this->agregarUsuario($data);
+                if ($respuesta['error']) {
+                    $error($respuesta['message'] ?? 'No se pudo crear.');
+
+                    continue;
+                }
+
+                $resumen['creados']++;
+            }
+        }
+
+        return [
+            'error' => false,
+            'message' => "Importación finalizada: {$resumen['creados']} creado(s), {$resumen['actualizados']} actualizado(s), ".count($resumen['errores']).' con error.',
+            'data' => $resumen,
+        ];
+    }
+
+    private function normalizarDocumentoImportacion(mixed $valor): string
+    {
+        // Excel entrega documentos numéricos como float (1048082892.0).
+        if (is_float($valor) && floor($valor) === $valor) {
+            $valor = number_format($valor, 0, '', '');
+        }
+
+        return preg_replace('/[^0-9A-Za-z]/', '', (string) $valor);
     }
 }
