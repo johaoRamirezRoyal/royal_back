@@ -176,6 +176,12 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   `GET /referentes/grados` trae además `id_nivel` y `cursos_cerrados` por grado.
 - **Reabrir el cierre** (`reabrirCierre`, 154 del nivel): borra el cierre y sus boletines (en
   cascada); al cerrar de nuevo se generan otra vez.
+- **Fotos del boletín** (`fotosDelCurso($curso, $periodo, $fecha)`, 2026-11-20): arma la foto de cada
+  estudiante (por id_user, en orden de lista) y cuánto le falta (`sin_nota`), sin guardar nada.
+  `guardarCierre` la usa y guarda las fotos (salvo las de quien ya tiene boletín en el periodo).
+- **Vista previa** (`GET /boletines?vista_previa=1`, mismo acceso que `GET /boletines`): con el
+  periodo abierto, las fotos tal como quedarían si se cerrara ahora (`fotosDelCurso` con `now()`).
+  No guarda nada; el frontend la pinta con la marca de agua "VISTA PREVIA".
 
 ## Evaluación descriptiva (2026-11-17)
 
