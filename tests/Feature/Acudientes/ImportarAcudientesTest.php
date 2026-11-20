@@ -80,10 +80,12 @@ class ImportarAcudientesTest extends TestCase
         $existente->refresh();
         $this->assertSame(['Viejo', '3009998877'], [$existente->nombre, $existente->telefono]);
 
-        // Volver a subir el mismo archivo no duplica nada.
+        // Volver a subir los mismos datos (otra fila del mismo acudiente) no duplica nada ni cuenta
+        // como actualizado, aunque el correo venga con otras mayúsculas.
         $otraVez = $this->importar([
             ['Documento', 'Nombres', 'Apellidos', 'Correo', 'Teléfono', 'Documento del hijo'],
-            ['9999000202', '', '', '', '', $hijos[0]->documento],
+            ['9999000202', 'Nueva', 'Acudiente', 'NUEVA.carga@prueba.test', '3001112233', $hijos[0]->documento],
+            ['9999000202', '', '', '', '', $hijos[1]->documento],
         ]);
         $this->assertSame([0, 0, 0, []], [$otraVez['creados'], $otraVez['actualizados'], $otraVez['vinculados'], $otraVez['errores']]);
     }
