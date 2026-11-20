@@ -104,7 +104,8 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   - 153 y 154 editan y reabren también en un **periodo pasado** (ver "Plazos"); el plazo solo
     limita a los docentes.
   - Opciones **172** / **173** "Ver registro de boletines" (2026-11-18): solo el Registro de
-    boletines y la descarga de las fotos del curso (`GET /boletines`); 172 en su nivel, 173 en
+    boletines y la descarga de las fotos del curso (`GET /boletines`, también la vista previa
+    `vista_previa=1` de un curso sin cerrar, desde el 2026-11-20); 172 en su nivel, 173 en
     todos. No dan acceso a Notas del curso ni a Referentes.
   - Nivel = `usuarios.id_nivel` / `id_nivel_2` → `nivel_academico` con
     `DocenteHorarioService::idsNivelAcademicoParaNivel` (tabla `nivel_nivel_academico`: un nivel de
