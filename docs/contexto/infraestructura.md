@@ -93,6 +93,12 @@ aquí, porque se desactualiza (la tabla anterior no tenía la mitad).
     `config:cache`.
   - Sube hasta 20 archivos de 10 MB a `royal/<directorio>` y sobrescribe por nombre.
   - Lo usa el script externo `script_liberacion`, que **no** actualiza la BD.
+- **`POST /api/deploy/migrar-colegios`** (`MigrarColegiosController`) mismo patrón: sin
+  JWT, header `X-Deploy-Token` contra `DEPLOY_MIGRACION_TOKEN` (vacía = 404). Corre
+  `php artisan migrate:colegios --force`, que migra la base de cada colegio
+  (`BasesDatosService::connectionsConUsuarios()`). Lo dispara el workflow de deploy
+  (`.github/workflows/deploy.yml`) después de subir por FTP, porque ese hosting no tiene
+  SSH.
 
 ## Archivos privados en Cloudinary
 

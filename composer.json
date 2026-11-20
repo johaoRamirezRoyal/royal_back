@@ -57,6 +57,9 @@
             "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
+        "migrate-colegios": [
+            "@php artisan migrate:colegios --force"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

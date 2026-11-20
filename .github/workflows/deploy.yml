@@ -7,9 +7,15 @@
 #   FTP_URL       ej. ftp.royalschool.edu.co (o ftp://host/ruta si no es la raíz de la cuenta)
 #   FTP_USER
 #   FTP_PASSWORD
+#   DEPLOY_MIGRAR_URL       ej. https://api.royalschool.edu.co/api/deploy/migrar-colegios
+#   DEPLOY_MIGRACION_TOKEN  mismo valor que DEPLOY_MIGRACION_TOKEN en el .env de producción
 #
 # vendor/ y .env no están en git → no se suben; si cambia composer.lock hay que
 # actualizar vendor/ en el servidor a mano, igual que antes.
+#
+# El último paso dispara `migrate:colegios` (migra Royal, Sami Hebreo y Sami Play) a
+# través de un endpoint propio, porque este hosting no tiene SSH — ver
+# MigrarColegiosController.
 
 name: Deploy producción
 
@@ -42,3 +48,10 @@ jobs:
           FTP_URL: ${{ secrets.FTP_URL }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+
+      - name: Migrar todas las bases (migrate:colegios vía endpoint, sin SSH)
+        run: |
+          curl -sf -X POST "$DEPLOY_URL" -H "X-Deploy-Token: $DEPLOY_TOKEN"
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_MIGRAR_URL }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_MIGRACION_TOKEN }}

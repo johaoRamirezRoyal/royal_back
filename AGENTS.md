@@ -37,6 +37,15 @@ k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
   - No admiten FK: un `Schema::create` con FK hacia una de ellas falla con `errno: 150`.
     Antes de crear la FK, consulta `information_schema.TABLES`.
   - Valida todo antes de escribir.
+- **Cada institución tiene su propia base** (connections `mysql`, `sami_hebreo`,
+  `sami_play` en `config/database.php`; lista centralizada en
+  `BasesDatosService::connectionsConUsuarios()`). Una migración no se da por aplicada
+  con un solo `php artisan migrate`: corre `php artisan migrate:colegios` (o `composer
+  run migrate-colegios`), que la aplica en la base de cada colegio. En producción (FTP,
+  sin SSH) esto lo dispara el workflow de deploy contra
+  `POST /api/deploy/migrar-colegios` (`MigrarColegiosController`, token
+  `DEPLOY_MIGRACION_TOKEN`). Las migraciones de `admin_management` declaran su propia
+  `$connection` en la clase, así que ese loop no las duplica.
 - **Toda migración nueva se registra en `migraciones_sql.sql`**: al final del archivo va
   el SQL real de su `up()`, con un encabezado `-- ---` con el nombre del archivo y una
   línea de qué hace y por qué. Para obtenerlo sin aplicarla:
@@ -47,8 +56,8 @@ k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
   foreach (\$q as \$x) { echo \$x['query'] . ';' . PHP_EOL; }"
   ```
   Con `insertGetId`, reescribe esa parte con `SET @v = LAST_INSERT_ID();` y anota al final
-  los ids reales. Ese archivo es solo documentación: nunca se ejecuta y no reemplaza a
-  `migrate`.
+  los ids reales. Ese archivo es solo bitácora/auditoría del DDL: nunca se ejecuta y no
+  reemplaza a `migrate:colegios`.
 - **No hardcodees correos**: los destinatarios internos salen de
   `Mails::GRUPO->recipients()` (`correos_institucionales`). Ver
   [`docs/contexto/infraestructura.md`](docs/contexto/infraestructura.md).
@@ -121,10 +130,11 @@ k6 run -o influxdb=http://localhost:8086/k6 tests/carga/portal-padres.js
 - `CLAUDE.md` tiene un bloque `<laravel-boost-guidelines>` que reescribe
   `boost:update`: no lo edites a mano. Si contradice una convención de este archivo, gana
   la de este archivo.
-- **Pendiente**: los comandos programados (`asistencia:cerrar-vencidas`,
-  `periodos:desactivar-vencidos`, `anio-escolar:cerrar-abrir`,
-  `periodos-administrativos:sincronizar-en-curso`) solo usan la conexión por
-  defecto y no recorren todos los colegios (`mysql`, `sami_hebreo`).
+- Los comandos programados (`asistencia:cerrar-vencidas`, `periodos:desactivar-vencidos`,
+  `anio-escolar:cerrar-abrir`, `periodos-administrativos:sincronizar-en-curso`) ya
+  recorren todos los colegios vía el trait `EnCadaColegio`
+  (`app/Console/Commands/Concerns/EnCadaColegio.php`). Un comando nuevo que deba tocar
+  cada colegio reutiliza ese trait, no un loop manual.
 
 ## Contexto por tema (`docs/contexto/`)
 

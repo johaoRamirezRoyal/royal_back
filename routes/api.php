@@ -1,10 +1,18 @@
 <?php
 
 use App\Http\Controllers\Admissions\AdmissionsController;
+use App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController;
+use App\Http\Controllers\BannerInformativoController;
+use App\Http\Controllers\Biblioteca\BibliotecaController;
 use App\Http\Controllers\Branding\ColegioAdmisionController;
+use App\Http\Controllers\Deploy\MigrarColegiosController;
+use App\Http\Controllers\Documentos\DocumentoController;
+use App\Http\Controllers\Encuestas\EncuestasController;
 use App\Http\Controllers\Hikvision\HikvisionController;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Migracion\MigracionCloudinaryController;
+use App\Http\Middleware\OlvidarEmpleadosHikvision;
 use App\Support\Permiso;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return response()->json([
@@ -23,52 +31,56 @@ Route::post('/pushNotification/{tenant?}', [HikvisionController::class, 'testNot
 
 // Migración de archivos a Cloudinary (sin JWT: header X-Migracion-Token, ver
 // MigracionCloudinaryController; con MIGRACION_API_TOKEN vacío responde 404).
-Route::post('/migracion/cloudinary', [App\Http\Controllers\Migracion\MigracionCloudinaryController::class, 'subir']);
+Route::post('/migracion/cloudinary', [MigracionCloudinaryController::class, 'subir']);
+
+// Dispara `migrate:colegios` desde el workflow de deploy (sin JWT: header X-Deploy-Token,
+// ver MigrarColegiosController; con DEPLOY_MIGRACION_TOKEN vacío responde 404).
+Route::post('/deploy/migrar-colegios', [MigrarColegiosController::class, 'ejecutar']);
 
 // RUTAS PÚBLICAS (sin token)
 Route::group(['prefix' => 'auth'], function () {
-    require __DIR__ . '/api/auth.php';
+    require __DIR__.'/api/auth.php';
 });
 
 // Banner informativo público (sin token — se lee desde el login y desde el sistema
 // general ya autenticado, ver App\Http\Controllers\BannerInformativoController).
-Route::get('/banner-informativo', [App\Http\Controllers\BannerInformativoController::class, 'obtener']);
-Route::get('/banners-modulo', [App\Http\Controllers\BannerInformativoController::class, 'porModulo']);
+Route::get('/banner-informativo', [BannerInformativoController::class, 'obtener']);
+Route::get('/banners-modulo', [BannerInformativoController::class, 'porModulo']);
 
 // QR de asistencia escaneado sin sesión: canjea el token (~90 s) por un pase que sobrevive al
 // login. No marca nada; la marcación sigue pidiendo sesión (AsistenciaGestionController::paseQr).
-Route::post('/asistencia-gestion/qr/pase', [App\Http\Controllers\AsistenciaGestion\AsistenciaGestionController::class, 'paseQr'])->middleware('throttle:asistencia-pase');
+Route::post('/asistencia-gestion/qr/pase', [AsistenciaGestionController::class, 'paseQr'])->middleware('throttle:asistencia-pase');
 
 // Encuesta pública por salón (sin token — se accede vía QR físico pegado en el salón,
 // anónima, cualquiera con el link puede responder). El token identifica el salón, no su
 // id — ver EncuestasServices::obtenerEncuestaPublica/responderPublica.
-Route::get('/encuestas/publica/{token}', [App\Http\Controllers\Encuestas\EncuestasController::class, 'obtenerEncuestaPublica']);
-Route::get('/encuestas/publica/{token}/reservas-hoy', [App\Http\Controllers\Encuestas\EncuestasController::class, 'reservasHoySalon']);
-Route::post('/encuestas/publica/{token}/responder', [App\Http\Controllers\Encuestas\EncuestasController::class, 'responderPublica']);
+Route::get('/encuestas/publica/{token}', [EncuestasController::class, 'obtenerEncuestaPublica']);
+Route::get('/encuestas/publica/{token}/reservas-hoy', [EncuestasController::class, 'reservasHoySalon']);
+Route::post('/encuestas/publica/{token}/responder', [EncuestasController::class, 'responderPublica']);
 
 // Imágenes de biblioteca. Con sesión (la cookie viaja en <img src>): sin ella, cualquiera leía
 // por nombre los archivos del disco de uploads, privados incluidos (ver ArchivosPrivados).
-Route::get('/biblioteca/imagen/{carpeta}/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
+Route::get('/biblioteca/imagen/{carpeta}/{filename}', [BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '.+')
     ->middleware('auth:api');
 // Archivos en la raíz del disco de uploads (ej. fotos de perfil)
-Route::get('/biblioteca/imagen/{filename}', [App\Http\Controllers\Biblioteca\BibliotecaController::class, 'verImagenBiblioteca'])
+Route::get('/biblioteca/imagen/{filename}', [BibliotecaController::class, 'verImagenBiblioteca'])
     ->where('filename', '^[^/]+$')
     ->middleware('auth:api');
 
 // Cualquier archivo del disco de uploads (privado): /api/public/{directorio/opcional/archivo}
-Route::get('/public/{ruta}', [App\Http\Controllers\Documentos\DocumentoController::class, 'verPublico'])
+Route::get('/public/{ruta}', [DocumentoController::class, 'verPublico'])
     ->where('ruta', '.+')
     ->middleware('auth:api');
 
 // Documento privado que llegó en un JSON (ArchivosPrivados::paraCliente): pasa por Laravel, con sesión.
-Route::get('/privado/{token}/{nombre}', [App\Http\Controllers\Documentos\DocumentoController::class, 'privado'])
+Route::get('/privado/{token}/{nombre}', [DocumentoController::class, 'privado'])
     ->where(['token' => '[A-Za-z0-9_-]+', 'nombre' => '.+'])
     ->middleware('auth:api');
 
 // Documentos del storage público (disponible para cualquier módulo autenticado)
 Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
-    Route::get('/', [App\Http\Controllers\Documentos\DocumentoController::class, 'descargar']);
+    Route::get('/', [DocumentoController::class, 'descargar']);
 });
 
 // ENDPOINTS COMPARTIDOS: accesibles para system:admissions y system:general
@@ -77,7 +89,7 @@ Route::middleware(['auth:api'])->prefix('/documentos')->group(function () {
 Route::middleware(['auth:api', 'inscripcion.acudiente'])->prefix('/compartido')->group(function () {
 
     Route::put('/inscripcion/estado', [AdmissionsController::class, 'actualizarEstadoDeInscripcionAspirante']);
-    
+
     Route::get('/estadosIncripcion', [AdmissionsController::class, 'mostrarTodosLosEstadosDeInscripcion']);
 
     Route::group(['prefix' => 'anio-academico'], function () {
@@ -86,7 +98,7 @@ Route::middleware(['auth:api', 'inscripcion.acudiente'])->prefix('/compartido')-
 
     // HISTORIA CLÍNICA
     Route::prefix('/historia-clinica')->group(function () {
-        require __DIR__ . '/api/historiaClinica.php';
+        require __DIR__.'/api/historiaClinica.php';
     });
 
     Route::put('/inscripcion', [AdmissionsController::class, 'actualizarDatosInscripcion']);
@@ -149,12 +161,12 @@ Route::group(['prefix' => 'institucion'], function () {
 Route::middleware(['auth:api', 'system:admissions'])->group(function () {
     // ADMISIONES (un acudiente solo toca sus propias inscripciones)
     Route::prefix('/admisiones')->middleware('inscripcion.acudiente')->group(function () {
-        require __DIR__ . '/api/admisiones.php';
+        require __DIR__.'/api/admisiones.php';
     });
 
     // TIPOS DE DOCUMENTOS
     Route::prefix('/admisiones/tipos-documentos')->group(function () {
-        require __DIR__ . '/api/TipoDocumentos.php';
+        require __DIR__.'/api/TipoDocumentos.php';
     });
 });
 
@@ -163,32 +175,32 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // AUTH
     Route::group(['prefix' => 'auth'], function () {
-        require __DIR__ . '/api/auth-protected.php';
+        require __DIR__.'/api/auth-protected.php';
     });
 
     // PERFIL USUARIO (antes de usuarios para no matchear contra /usuarios/{id})
     Route::prefix('/info-perfil')->group(function () {
-        require __DIR__ . '/api/perfilUsuario.php';
+        require __DIR__.'/api/perfilUsuario.php';
     });
 
     // USUARIOS
     Route::group(['prefix' => 'usuarios'], function () {
-        require __DIR__ . '/api/usuarios.php';
+        require __DIR__.'/api/usuarios.php';
     });
 
     // CURSOS
     Route::group(['prefix' => 'cursos'], function () {
-        require __DIR__ . '/api/cursos.php';
+        require __DIR__.'/api/cursos.php';
     });
 
     // PERMISOS
     Route::prefix('permisos')->group(function () {
-        require __DIR__ . '/api/permisos.php';
+        require __DIR__.'/api/permisos.php';
     });
 
     // AREAS
     Route::prefix('areas')->group(function () {
-        require __DIR__ . '/api/areas.php';
+        require __DIR__.'/api/areas.php';
     });
 
     // BLOQUES (Áreas Comunes)
@@ -203,12 +215,12 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // INVENTARIO
     Route::prefix('inventario')->group(function () {
-        require __DIR__ . '/api/inventario.php';
+        require __DIR__.'/api/inventario.php';
     });
 
     // INDICADORES DE GESTIÓN (mantenimiento Sistemas / Operativos)
     Route::prefix('indicadores-gestion')->group(function () {
-        require __DIR__ . '/api/indicadoresGestion.php';
+        require __DIR__.'/api/indicadoresGestion.php';
     });
 
     // PRÉSTAMOS
@@ -234,7 +246,7 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // CATEGORIAS
     Route::prefix('categorias')->group(function () {
-        require __DIR__ . '/api/categorias.php';
+        require __DIR__.'/api/categorias.php';
     });
 
     // PROVEEDORES (Proceso de compra)
@@ -250,8 +262,8 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
     // HIKVISION
     // OlvidarEmpleadosHikvision: toda escritura (no-GET) borra la caché de /getList.
     // Enrolar/eliminar en los terminales: 63 Control de acceso, 2 Usuarios (alta/baja), Super Admin (Terminales).
-    Route::prefix('/hikvision')->middleware([Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::USUARIOS], [Permiso::PERFIL_SUPER_ADMIN]), \App\Http\Middleware\OlvidarEmpleadosHikvision::class])->group(function () {
-        require __DIR__ . '/api/hikvision.php';
+    Route::prefix('/hikvision')->middleware([Permiso::ruta([Permiso::ASISTENCIA_TRABAJADORES, Permiso::USUARIOS], [Permiso::PERFIL_SUPER_ADMIN]), OlvidarEmpleadosHikvision::class])->group(function () {
+        require __DIR__.'/api/hikvision.php';
     });
 
     // BIBLIOTECA
@@ -261,138 +273,138 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
 
     // TIPOS DE DOCUMENTOS
     Route::prefix('/tipos-documentos')->group(function () {
-        require __DIR__ . '/api/TipoDocumentos.php';
+        require __DIR__.'/api/TipoDocumentos.php';
     });
-    //LLEGADAS TARDE
-    Route::prefix("/llegadas-tarde")->group(function () {
-        require __DIR__ . '/api/llegadasTarde.php';
+    // LLEGADAS TARDE
+    Route::prefix('/llegadas-tarde')->group(function () {
+        require __DIR__.'/api/llegadasTarde.php';
     });
 
     // GESTIÓN ACADÉMICA
     Route::prefix('/gestion-academica')->group(function () {
-        require __DIR__ . '/api/gestionAcademica.php';
+        require __DIR__.'/api/gestionAcademica.php';
     });
 
     // GESTIÓN CONVIVENCIAL
     Route::prefix('/gestion-convivencial')->group(function () {
-        require __DIR__ . '/api/gestionConvivencial.php';
+        require __DIR__.'/api/gestionConvivencial.php';
     });
 
     // DOCUMENTOS VARIOS
     Route::prefix('/documentos-varios')->group(function () {
-        require __DIR__ . '/api/documentosVarios.php';
+        require __DIR__.'/api/documentosVarios.php';
     });
 
     // ASISTENCIA TRABAJADORES
     Route::prefix('/asistencia-gestion')->group(function () {
-        require __DIR__ . '/api/asistenciaGestion.php';
+        require __DIR__.'/api/asistenciaGestion.php';
     });
 
     // ENFERMERÍA
     Route::prefix('/enfermeria')->group(function () {
-        require __DIR__ . '/api/enfermeria.php';
+        require __DIR__.'/api/enfermeria.php';
     });
 
     // CERTIFICADOS (Gestión Humana)
     Route::prefix('/certificados')->group(function () {
-        require __DIR__ . '/api/certificados.php';
+        require __DIR__.'/api/certificados.php';
     });
 
     // CAPACITACIÓN INSTITUCIONAL (Gestión Humana)
     Route::prefix('/capacitaciones')->group(function () {
-        require __DIR__ . '/api/capacitaciones.php';
+        require __DIR__.'/api/capacitaciones.php';
     });
 
     // RECURSOS — Listado Maestro de documentos (Gestión Humana)
     Route::prefix('/recursos')->group(function () {
-        require __DIR__ . '/api/recursos.php';
+        require __DIR__.'/api/recursos.php';
     });
 
     // TRÁMITES Y SERVICIOS (Gestión Humana)
     Route::prefix('/tramites')->group(function () {
-        require __DIR__ . '/api/tramites.php';
+        require __DIR__.'/api/tramites.php';
     });
 
     // PERMISOS Y LICENCIAS INSTITUCIONALES (Gestión Humana) — no confundir con
     // /permisos, el módulo de administración de cron_opciones/cron_permisos.
     Route::prefix('/permisos-licencias')->group(function () {
-        require __DIR__ . '/api/permisosLicencias.php';
+        require __DIR__.'/api/permisosLicencias.php';
     });
 
     // CURSOS DE TRABAJO EN ALTURAS (Gestión Humana) — también el permiso de alturas en PDF
     // de los mantenimientos de Áreas Comunes y los trabajos en altura (trabajos_altura).
     Route::prefix('/cursos-altura')->group(function () {
-        require __DIR__ . '/api/cursosAltura.php';
+        require __DIR__.'/api/cursosAltura.php';
     });
 
     // INSTITUCIONES (gestión admin — no confundir con /api/institucion/* público, la
     // autenticación NIT de las propias instituciones)
     Route::prefix('/instituciones-admin')->group(function () {
-        require __DIR__ . '/api/instituciones-admin.php';
+        require __DIR__.'/api/instituciones-admin.php';
     });
 
     // ACUDIENTES (opción 175): crear, editar, estado y acceso al portal para padres. Reemplaza
     // /acudientes-admin (opción 112, solo listaba los de Admisiones y cambiaba su estado).
     Route::prefix('/acudientes')->group(function () {
-        require __DIR__ . '/api/acudientes.php';
+        require __DIR__.'/api/acudientes.php';
     });
 
     // VINCULACIÓN ESTUDIANTE - PADRE (estudiantes_padres, opción 131)
     Route::prefix('/vinculacion-acudientes')->group(function () {
-        require __DIR__ . '/api/vinculacion-acudientes.php';
+        require __DIR__.'/api/vinculacion-acudientes.php';
     });
 
     // PORTAL PARA PADRES (autoservicio del acudiente: solo sus hijos)
     Route::prefix('/portal-padres')->group(function () {
-        require __DIR__ . '/api/portalPadres.php';
+        require __DIR__.'/api/portalPadres.php';
     });
 
     // FOTOS DEL CURSO (las publica el docente del curso; los padres las ven en el portal)
     Route::prefix('/fotos-curso')->group(function () {
-        require __DIR__ . '/api/fotosCurso.php';
+        require __DIR__.'/api/fotosCurso.php';
     });
 
     // CARNETS INSTITUCIONALES (opción 144; /carnets/mio es autoservicio)
     Route::prefix('/carnets')->group(function () {
-        require __DIR__ . '/api/carnets.php';
+        require __DIR__.'/api/carnets.php';
     });
 
     // MODULOS (métricas de módulos más visitados — Home)
     Route::prefix('/modulos')->group(function () {
-        require __DIR__ . '/api/modulos.php';
+        require __DIR__.'/api/modulos.php';
     });
 
     // LOGS DE ACTIVIDAD (auditoría escrita por LogActividadMiddleware) — solo Super Admin, como la página.
     Route::prefix('/logs-actividad')->middleware(Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN]))->group(function () {
-        require __DIR__ . '/api/logsActividad.php';
+        require __DIR__.'/api/logsActividad.php';
     });
 
     // EVALUACIONES DE CALIDAD DE SERVICIOS
     Route::prefix('/evaluaciones')->group(function () {
-        require __DIR__ . '/api/evaluaciones.php';
+        require __DIR__.'/api/evaluaciones.php';
     });
 
     // ENCUESTAS POR SALÓN VÍA QR (administración, Gestión Humana)
     Route::prefix('/encuestas')->group(function () {
-        require __DIR__ . '/api/encuestas.php';
+        require __DIR__.'/api/encuestas.php';
     });
 
     // AÑO ESCOLAR Y PERIODOS (módulo administrativo — opción propia, ver
     // 2026_09_09_130000_seed_opcion_anio_escolar_periodos)
     Route::prefix('/administrativo')->group(function () {
-        require __DIR__ . '/api/administrativo.php';
+        require __DIR__.'/api/administrativo.php';
     });
 
     // BRANDING (logo por dominio de correo — Super Admin únicamente, y solo accesible para
     // los correos de la allowlist de administración, ver RestrictToAdminEmails)
     Route::prefix('/branding')->middleware(['admin.access', Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN])])->group(function () {
-        require __DIR__ . '/api/branding.php';
+        require __DIR__.'/api/branding.php';
     });
 
     // ADMINISTRACIÓN TRANSVERSAL (bases de datos vinculadas, logs por dominio — todo en la
     // base admin_management, Super Admin únicamente, y solo accesible para los correos de
     // la allowlist de administración, ver RestrictToAdminEmails)
     Route::prefix('/admin-management')->middleware(['admin.access', Permiso::ruta([], [Permiso::PERFIL_SUPER_ADMIN])])->group(function () {
-        require __DIR__ . '/api/adminManagement.php';
+        require __DIR__.'/api/adminManagement.php';
     });
 });
