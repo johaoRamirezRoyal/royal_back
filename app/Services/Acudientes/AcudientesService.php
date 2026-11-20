@@ -166,10 +166,13 @@ class AcudientesService extends Service
 
                 if ($ids) {
                     $acudiente = Usuario::find($ids[0]);
-                    // Solo lo que venga en el archivo: una columna vacía no borra el dato.
+                    // Solo lo que venga en el archivo y sea distinto de lo guardado: una columna vacía
+                    // no borra el dato, y repetir los mismos datos (otra fila del mismo acudiente,
+                    // por otro hijo) no cuenta como «actualizado».
                     $cambios = array_filter(
                         array_intersect_key($fila, array_flip(['nombre', 'apellido', 'correo', 'telefono'])),
-                        fn ($v) => $v !== '',
+                        fn ($v, $campo) => $v !== '' && $this->normalizarCampo($campo, $v) !== $this->normalizarCampo($campo, $acudiente->$campo),
+                        ARRAY_FILTER_USE_BOTH,
                     );
                     $reglas = array_intersect_key(self::reglas($acudiente->id_user), $cambios);
                     $validacion = Validator::make($cambios, $reglas, self::mensajes());
@@ -373,6 +376,14 @@ class AcudientesService extends Service
             ->groupBy(fn ($u) => $this->normalizarDocumento($u->documento))
             ->map(fn ($grupo) => $grupo->pluck('id_user')->all())
             ->all();
+    }
+
+    /** Para comparar el Excel con lo guardado: sin espacios de más y el correo sin mayúsculas. */
+    private function normalizarCampo(string $campo, mixed $valor): string
+    {
+        $texto = trim((string) $valor);
+
+        return $campo === 'correo' ? mb_strtolower($texto) : $texto;
     }
 
     private function normalizarDocumento(mixed $valor): string

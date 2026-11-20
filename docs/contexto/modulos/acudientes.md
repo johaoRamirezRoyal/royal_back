@@ -15,7 +15,8 @@ eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
 - `POST /importar` — creación masiva desde Excel (`AcudientesService::importarExcel`, máximo 500
   filas): A documento, B nombres, C apellidos, D correo, E teléfono, F documento del hijo. Crea
   (mismas reglas que el formulario: `AcudientesService::reglas()`), o actualiza solo las columnas
-  llenas si el documento ya es de un acudiente, y vincula al hijo con
+  llenas y distintas de lo guardado si el documento ya es de un acudiente (repetir los mismos datos
+  no cuenta como actualizado), y vincula al hijo con
   `VinculacionAcudienteService::vincular` (ya vinculado no cuenta como error). La respuesta trae
   `vinculos` (fila, acudiente, estudiante, curso) para revisar cada vínculo nuevo: un documento de
   hijo mal escrito puede coincidir con otro estudiante y ese acudiente vería a un niño ajeno. Documentos
