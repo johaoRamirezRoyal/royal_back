@@ -7,8 +7,8 @@ decisiones, el plan de las etapas siguientes, el despliegue y los pendientes est
 `docs/contexto/modulos/cafeteria.md` en el repo del frontend (layout y navegación propios en
 `/cafeteria`).
 
-Estado (2026-11-22): **etapa 1 hecha**: estructura y personal. Siguen catálogo, presupuesto,
-compras e inventario. Ventas, caja y billetera son de una etapa posterior.
+Estado (2026-11-22): **etapas 1 y 2 hechas**: estructura y personal; catálogo y proveedores.
+Siguen presupuesto, compras e inventario. Ventas, caja y billetera son de una etapa posterior.
 
 ## Decisiones que aplican a todo el módulo
 
@@ -125,17 +125,82 @@ Código: `EstructuraCafeteriaService` + `EstructuraCafeteriaController` y
 | `GET /personal/candidatos?s=` | 177 | Personal activo que se puede asignar (máx. 20) |
 | `PUT /personal/{id}/finalizar` `{fecha_fin?}`, `PUT /personal/{id}/revocar` | 177 | Terminar una asignación |
 
+## Etapa 2: catálogo (opción 178) y proveedores y productos (opción 179)
+
+Tablas: `caf_categorias_productos` (jerárquica), `caf_unidades_medida` (con UND, KG, G, L y ML
+sembradas), `caf_conversiones_unidades` (con KG→G y L→ML), `caf_productos`,
+`caf_precios_productos` y `caf_proveedor_productos`.
+
+Código: `CatalogoCafeteriaService` + `CatalogoCafeteriaController` (178) y
+`ProveedoresCafeteriaService` + `ProveedoresCafeteriaController` (179).
+
+### Reglas
+
+- **Códigos del sistema**: categoría `CAT-001`, producto `PRD-0001` (el SKU del modelo; cuatro
+  cifras con `crearConConsecutivo(..., ancho: 4)`) y unidad, de su abreviatura (`LB`; si se
+  repite, `LB_2`). Ninguno se edita.
+- **Categorías**: el padre existe, está activo y no es la misma categoría ni una de sus
+  descendientes. No se desactiva una categoría con productos o subcategorías activas. El padre
+  solo se valida si cambia o si la categoría se reactiva: una subcategoría archivada bajo un
+  padre inactivo se puede seguir editando.
+- **Unidades**: decimales de 0 a 3 (como las columnas de cantidad). No se desactiva una que
+  sea la unidad base de un producto activo.
+- **Conversiones**: 1 origen = `factor` destino, factor > 0, unidades distintas y activas.
+  **Una por par de unidades**, en cualquier sentido (si existe KG→G, no se crea G→KG). Al editar
+  solo cambian el factor y `activa`.
+- **Productos**: `tipo_producto` (`TipoProducto`: REVENTA, PREPARADO, MATERIA_PRIMA, INSUMO)
+  sugiere `es_vendible` y `controla_inventario`, pero se guardan aparte. **Se vende, controla
+  inventario o ambas**. Una categoría o unidad inactiva no se elige de nuevo, pero un producto
+  que ya la tenía se puede editar. `codigo_barras` es opcional y único.
+- **Precios** (`id_punto_venta` NULL = general; uno por punto lo reemplaza en ese punto):
+  - Solo de productos activos y vendibles, y de puntos de cafeterías no cerradas.
+  - **Empiezan hoy o después**: el pasado no se reescribe (las ventas lo van a necesitar).
+  - Las vigencias del mismo producto y alcance no se cruzan. **Un precio nuevo cierra el abierto
+    anterior** el día antes de empezar; cualquier otro cruce es 422. Si el nuevo tiene fin (una
+    promoción), **el anterior vuelve a regir el día después**: se crea su continuación abierta,
+    con el mismo valor (si no, el producto quedaría sin precio). El bloqueo del producto
+    (`lockForUpdate`) ordena los precios simultáneos: un UNIQUE con NULL no lo garantiza en MySQL.
+  - **Borrar** solo un precio que aún no empieza. El precio que terminaba justo el día antes se
+    alarga hasta donde llegaba el borrado: si el borrado no tenía fin, vuelve a quedar abierto;
+    si era una promoción, llega hasta su fin y la continuación sigue después.
+- **Proveedores** (179): el de Compras, activo y de tipo PROVEEDOR; el nombre sale de
+  `proveedor_detalle.nombre` o, si no tiene ficha, del usuario. Un vínculo por proveedor y
+  producto. **Un solo preferido por producto** (marcar uno desmarca a los demás); un vínculo
+  inactivo deja de ser preferido. Proveedor y producto de un vínculo no se cambian.
+
+### Endpoints de la etapa 2 (`/api/cafeteria`)
+
+| Método y ruta | Opción | Qué hace |
+|---|---|---|
+| `GET /catalogo/catalogos` | 178 o 179 | Categorías, unidades, conversiones, tipos (con sus marcas sugeridas) y puntos de venta de cafeterías no cerradas |
+| `GET /productos?s=&id_categoria=&tipo_producto=&activo=` | 178 o 179 | Lista con `precio_general` vigente hoy |
+| `POST /productos`, `GET/PUT /productos/{id}` | 178 | Crear, ver (con precios y proveedores) y editar |
+| `POST /productos/{id}/precios` `{id_punto_venta?, precio, vigencia_desde, vigencia_hasta?}` | 178 | Nuevo precio |
+| `DELETE /precios/{id}` | 178 | Borrar un precio que aún no empieza |
+| `POST /categorias`, `PUT /categorias/{id}` | 178 | Categorías (la lista sale en `/catalogo/catalogos`) |
+| `POST /unidades`, `PUT /unidades/{id}` | 178 | Unidades de medida |
+| `POST /conversiones`, `PUT /conversiones/{id}` | 178 | Conversiones (al editar, solo factor y `activa`) |
+| `GET /proveedores?s=` | 179 | Proveedores activos de Compras con `productos_count` |
+| `GET /proveedores/{id}/productos` | 179 | El proveedor y los productos que ofrece |
+| `POST /proveedor-productos`, `PUT /proveedor-productos/{id}` | 179 | Agregar un producto a un proveedor y editar sus condiciones |
+
 ### Pruebas
 
-`tests/Feature/Cafeteria/` (20 pruebas) corre contra la base del `.env` dentro de una
-transacción y se salta si faltan las migraciones. **Un usuario autenticado por prueba**: el guard
+`tests/Feature/Cafeteria/` (33 pruebas: 20 de la etapa 1 y 13 del catálogo) corre contra la
+base del `.env` dentro de una transacción y se salta si faltan las migraciones. **Un usuario autenticado por prueba**: el guard
 JWT conserva al primer usuario que se autentica en la prueba, aunque cambie el token; por eso
 la prueba de acceso y la del Super Admin van separadas.
 
 ## Pendientes
 
-- Repetir en `sami_hebreo` y `sami_play` las comprobaciones de la validación (ids 16/176/177
-  libres, `dias_semana` InnoDB) y migrar ahí.
+- Repetir en `sami_hebreo` y `sami_play` las comprobaciones de la validación (ids 16 y 176 a
+  179 libres, `dias_semana` InnoDB) y migrar ahí.
+- **Tras un `migrate` que falla, no uses `migrate:rollback --step`**: la migración fallida no
+  queda registrada y el rollback deshace las anteriores (pasó el 2026-11-22 en local y borró los
+  datos de prueba de la etapa 1). Borra a mano solo las tablas a medias y vuelve a migrar.
+- Catálogo: los precios por punto no validan que el punto esté activo (se puede programar el
+  precio de un punto en mantenimiento). Cambiar la unidad base de un producto se permite: al
+  llegar inventario (etapa 5) habrá que bloquearlo si tiene movimientos.
 - El frontend ya consume la etapa 1 (rama `feat/cafeteria` del frontend; ver su
   `docs/contexto/modulos/cafeteria.md`), verificado en el navegador con Super Admin.
 - Revisión del 2026-11-22, menores sin corregir:
@@ -143,5 +208,5 @@ la prueba de acceso y la del Super Admin van separadas.
   - `crearPuntoVenta`/`crearTerminal` no bloquean la cafetería frente a un cierre simultáneo
     (muy improbable).
   - El buscador de `candidatos` no escapa `%` ni `_`.
-- Etapas siguientes: catálogo (2), presupuesto (3), compras y recepción (4), inventario (5).
+- Etapas siguientes: presupuesto (3), compras y recepción (4), inventario (5).
   Antes de la 4 hay que decidir quién aprueba (C6 en la validación).

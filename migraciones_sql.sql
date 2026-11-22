@@ -1108,3 +1108,52 @@ insert into `cron_opciones` (`id`, `nombre`, `activo`, `fechareg`, `id_modulo`) 
 insert into `cron_opciones` (`id`, `nombre`, `activo`, `fechareg`, `id_modulo`) values (177, 'Cafetería — Personal', 1, NOW(), 16);
 SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
 INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100500_seed_modulo_y_opciones_cafeteria', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100500_seed_modulo_y_opciones_cafeteria');
+
+-- 2026_11_22_110000_create_caf_categorias_y_unidades_tables.php
+-- Cafetería, etapa 2: categorías (jerárquicas), unidades de medida (siembra UND, KG, G, L, ML) y conversiones (KG→G, L→ML).
+create table `caf_categorias_productos` (`id` bigint unsigned not null auto_increment primary key, `id_categoria_padre` bigint unsigned null, `codigo` varchar(30) not null, `nombre` varchar(120) not null, `descripcion` text null, `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_categorias_productos` add constraint `caf_categorias_productos_id_categoria_padre_foreign` foreign key (`id_categoria_padre`) references `caf_categorias_productos` (`id`) on delete restrict;
+alter table `caf_categorias_productos` add unique `caf_categorias_productos_codigo_unique`(`codigo`);
+create table `caf_unidades_medida` (`id` bigint unsigned not null auto_increment primary key, `codigo` varchar(30) not null, `nombre` varchar(60) not null, `abreviatura` varchar(12) not null, `precision_decimal` tinyint unsigned not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_unidades_medida` add unique `caf_unidades_medida_codigo_unique`(`codigo`);
+create table `caf_conversiones_unidades` (`id` bigint unsigned not null auto_increment primary key, `id_unidad_origen` bigint unsigned not null, `id_unidad_destino` bigint unsigned not null, `factor_conversion` decimal(18, 6) not null, `activa` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_conversiones_unidades` add constraint `caf_conversiones_unidades_id_unidad_origen_foreign` foreign key (`id_unidad_origen`) references `caf_unidades_medida` (`id`) on delete restrict;
+alter table `caf_conversiones_unidades` add constraint `caf_conversiones_unidades_id_unidad_destino_foreign` foreign key (`id_unidad_destino`) references `caf_unidades_medida` (`id`) on delete restrict;
+alter table `caf_conversiones_unidades` add unique `uq_caf_conversion_unidades`(`id_unidad_origen`, `id_unidad_destino`);
+insert into `caf_unidades_medida` (`abreviatura`, `activo`, `codigo`, `created_at`, `nombre`, `precision_decimal`, `updated_at`) values ('und', 1, 'UND', NOW(), 'Unidad', 0, NOW()), ('kg', 1, 'KG', NOW(), 'Kilogramo', 3, NOW()), ('g', 1, 'G', NOW(), 'Gramo', 0, NOW()), ('L', 1, 'L', NOW(), 'Litro', 3, NOW()), ('mL', 1, 'ML', NOW(), 'Mililitro', 0, NOW());
+insert into `caf_conversiones_unidades` (`id_unidad_origen`, `id_unidad_destino`, `factor_conversion`, `activa`, `created_at`, `updated_at`) select o.id, d.id, 1000, 1, NOW(), NOW() from `caf_unidades_medida` o join `caf_unidades_medida` d on (o.codigo = 'KG' and d.codigo = 'G') or (o.codigo = 'L' and d.codigo = 'ML');
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_110000_create_caf_categorias_y_unidades_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_110000_create_caf_categorias_y_unidades_tables');
+
+-- 2026_11_22_110100_create_caf_productos_y_precios_tables.php
+-- Cafetería, etapa 2: productos (código PRD-0001 del sistema) y precios con vigencia (general o por punto de venta).
+create table `caf_productos` (`id` bigint unsigned not null auto_increment primary key, `id_categoria` bigint unsigned not null, `id_unidad_base` bigint unsigned not null, `codigo` varchar(30) not null, `codigo_barras` varchar(60) null, `nombre` varchar(150) not null, `descripcion` text null, `tipo_producto` varchar(20) not null, `controla_inventario` tinyint(1) not null default '1', `es_vendible` tinyint(1) not null default '1', `activo` tinyint(1) not null default '1', `creado_por` int not null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_productos` add constraint `caf_productos_id_categoria_foreign` foreign key (`id_categoria`) references `caf_categorias_productos` (`id`) on delete restrict;
+alter table `caf_productos` add constraint `caf_productos_id_unidad_base_foreign` foreign key (`id_unidad_base`) references `caf_unidades_medida` (`id`) on delete restrict;
+alter table `caf_productos` add unique `caf_productos_codigo_unique`(`codigo`);
+alter table `caf_productos` add unique `caf_productos_codigo_barras_unique`(`codigo_barras`);
+alter table `caf_productos` add index `caf_productos_tipo_producto_index`(`tipo_producto`);
+alter table `caf_productos` add index `caf_productos_creado_por_index`(`creado_por`);
+create table `caf_precios_productos` (`id` bigint unsigned not null auto_increment primary key, `id_producto` bigint unsigned not null, `id_punto_venta` bigint unsigned null, `precio` decimal(14, 2) not null, `vigencia_desde` date not null, `vigencia_hasta` date null, `creado_por` int not null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_precios_productos` add constraint `caf_precios_productos_id_producto_foreign` foreign key (`id_producto`) references `caf_productos` (`id`) on delete restrict;
+alter table `caf_precios_productos` add constraint `caf_precios_productos_id_punto_venta_foreign` foreign key (`id_punto_venta`) references `caf_puntos_venta` (`id`) on delete restrict;
+alter table `caf_precios_productos` add index `idx_caf_precios_vigencia`(`id_producto`, `id_punto_venta`, `vigencia_desde`, `vigencia_hasta`);
+alter table `caf_precios_productos` add index `caf_precios_productos_creado_por_index`(`creado_por`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_110100_create_caf_productos_y_precios_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_110100_create_caf_productos_y_precios_tables');
+
+-- 2026_11_22_110200_create_caf_proveedor_productos_table.php
+-- Cafetería, etapa 2: qué productos ofrece cada proveedor de Compras (id_proveedor = usuarios.id_user, sin FK).
+create table `caf_proveedor_productos` (`id` bigint unsigned not null auto_increment primary key, `id_proveedor` int not null, `id_producto` bigint unsigned not null, `codigo_producto_proveedor` varchar(60) null, `precio_referencia` decimal(14, 2) null, `cantidad_minima` decimal(14, 3) null, `es_preferido` tinyint(1) not null default '0', `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_proveedor_productos` add constraint `caf_proveedor_productos_id_producto_foreign` foreign key (`id_producto`) references `caf_productos` (`id`) on delete restrict;
+alter table `caf_proveedor_productos` add unique `caf_proveedor_productos_id_proveedor_id_producto_unique`(`id_proveedor`, `id_producto`);
+alter table `caf_proveedor_productos` add index `caf_proveedor_productos_id_proveedor_index`(`id_proveedor`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_110200_create_caf_proveedor_productos_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_110200_create_caf_proveedor_productos_table');
+
+-- 2026_11_22_110300_seed_opciones_catalogo_cafeteria.php
+-- Cafetería, etapa 2: opciones 178 (Catálogo) y 179 (Proveedores y productos) del módulo 16. Falla si los ids están ocupados por otra cosa: revisa antes.
+insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (178, 'Cafetería — Catálogo', 16, 1, NOW());
+insert into `cron_opciones` (`id`, `nombre`, `id_modulo`, `activo`, `fechareg`) values (179, 'Cafetería — Proveedores y productos', 16, 1, NOW());
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_110300_seed_opciones_catalogo_cafeteria', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_110300_seed_opciones_catalogo_cafeteria');

@@ -1,4 +1,4 @@
-# Módulo de cafetería: modelo, etapa 1 (estructura y personal) y frontend (2026-11-21 al 22)
+# Módulo de cafetería: modelo, etapas 1 (estructura y personal) y 2 (catálogo) y frontend (2026-11-21 al 22)
 
 Cambio en `royal_back` y en el frontend (`frontend-New_S.A.M.I`), los dos en la rama
 `feat/cafeteria`. Las reglas vigentes están en
@@ -133,6 +133,28 @@ transacción. Todas pasan. La suite completa tiene 37 fallos **previos**, idént
 - la columna `terminos` de otra rama;
 - `sami_hebreo` y `sami_play` no existen en local.
 
+### Etapa 2: catálogo (178) y proveedores y productos (179)
+
+Hecha el 2026-11-22, en las mismas ramas. Reglas y endpoints en
+[`contexto/modulos/cafeteria.md`](contexto/modulos/cafeteria.md#etapa-2-catálogo-opción-178-y-proveedores-y-productos-opción-179).
+- **Migraciones** `2026_11_22_110000` … `110300`: categorías, unidades (con 5 sembradas) y
+  conversiones (con 2); productos y precios; productos por proveedor; opciones 178 y 179.
+- **Decisiones nuevas:**
+  - Los productos llevan código del sistema `PRD-0001` (cuatro cifras: serán muchos) y la
+    unidad, uno sacado de su abreviatura.
+  - Los precios empiezan hoy o después, y uno nuevo cierra el abierto anterior. Así se cambia un
+    precio sin editar el que ya rigió, y las ventas tendrán siempre el precio de su día. Una
+    promoción (precio con fin) deja que el anterior vuelva a regir al día siguiente.
+  - Proveedores: el de Compras (C1). Solo se agrega `caf_proveedor_productos`, con un preferido
+    por producto.
+- **Incidente en local:** la primera migración falló porque el nombre automático del índice
+  único de conversiones pasaba de 64 caracteres (ahora se llama `uq_caf_conversion_unidades`).
+  Después de ese fallo se corrió `migrate:rollback --step=4`, que deshizo las cuatro últimas
+  migraciones **de la etapa 1** (la fallida no estaba registrada). Se perdieron los datos de
+  prueba locales de almacenes, personal, horarios y los permisos 176/177 de `sami_royal`. No
+  afecta otro entorno. Lección en `contexto/modulos/cafeteria.md` (Pendientes).
+- **Pruebas:** 13 nuevas (33 en total), todas pasan.
+
 ## Qué cambió en el frontend
 
 Detalle en `docs/contexto/modulos/cafeteria.md` del frontend y en su `DESIGN.md`.
@@ -159,32 +181,33 @@ Detalle en `docs/contexto/modulos/cafeteria.md` del frontend y en su `DESIGN.md`
 ## Despliegue
 
 1. **Antes de migrar, en cada base de colegio** (`mysql`, `sami_hebreo`, `sami_play`…):
-   - Confirma que el módulo 16 y las opciones 176 y 177 estén libres o ya tengan esos nombres:
+   - Confirma que el módulo 16 y las opciones 176 a 179 estén libres o ya tengan esos nombres:
      `SELECT id, nombre FROM cron_modulos WHERE id = 16;` y
-     `SELECT id, nombre FROM cron_opciones WHERE id IN (176, 177);`.
+     `SELECT id, nombre FROM cron_opciones WHERE id BETWEEN 176 AND 179;`.
    - Confirma que `dias_semana` exista y sea InnoDB.
-2. **Migraciones `2026_11_22_100000` … `2026_11_22_100500` en cada base:**
+2. **Migraciones `2026_11_22_100000` … `2026_11_22_110300` en cada base** (etapas 1 y 2):
    `php artisan migrate --database=<connection>`.
    - Las de tablas no recorren las bases solas: se corren por base, como pide
      `contexto/permisos.md`.
    - El SQL puro está al final de `migraciones_sql.sql`.
-3. **Permisos:** en cada colegio, otorga la 176 y/o la 177 en `/permisos` a los perfiles que
-   administrarán la cafetería. Sin eso, solo el Super Admin la ve (fail-closed).
+3. **Permisos:** en cada colegio, otorga en `/permisos` la 176, 177, 178 o 179 a los perfiles
+   que administrarán cada parte de la cafetería. Sin eso, solo el Super Admin la ve (fail-closed).
 4. **Frontend:** se despliega con la rama `feat/cafeteria` fusionada. No requiere variables de
    entorno nuevas.
 
 ## Pendientes
 
-- **Commit y fusión** de las dos ramas `feat/cafeteria` (aún sin commits).
-- **Probar con un perfil** que tenga solo la 176 o solo la 177, para ver el menú y las rutas
-  filtradas.
+- **Fusión** de las dos ramas `feat/cafeteria`.
+- **Probar con un perfil** que tenga una sola de las opciones (176, 177, 178 o 179), para ver
+  el menú y las rutas filtradas.
+- **Recrear en local** datos de prueba de la etapa 1 (almacenes, horarios, personal) perdidos
+  en el incidente de la etapa 2.
 - **Etapas siguientes del backend:**
-  - catálogo (2): categorías, unidades, conversiones, productos, precios y productos por proveedor;
   - presupuesto (3);
   - compras y recepción (4), que necesita decidir antes **C6**;
   - inventario (5).
-  Cada etapa crea sus opciones (propuesta: 178 Catálogo, 179 Proveedores y productos, 180
-  Solicitar compras, 181 Aprobar solicitudes y órdenes, 182 Órdenes y recepciones, 183 Ver
+  Cada etapa crea sus opciones (178 Catálogo y 179 Proveedores y productos ya existen;
+  propuesta para las demás: 180 Solicitar compras, 181 Aprobar solicitudes y órdenes, 182 Órdenes y recepciones, 183 Ver
   inventario, 184 Transferencias y ajustes, 185 Aprobar ajustes, 186 Presupuesto) y la sección
   correspondiente del frontend con su receta.
 - **Menores de la revisión, sin corregir:**

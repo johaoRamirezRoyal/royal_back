@@ -152,7 +152,7 @@ esta tabla.
 | [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
 | [`modulos/acudientes.md`](docs/contexto/modulos/acudientes.md) | acudientes (opción 175): crear, editar, estado, enviar acceso al portal para padres |
 | [`modulos/fotos-curso.md`](docs/contexto/modulos/fotos-curso.md) | fotos de clases y actividades que publican los docentes para el portal para padres |
-| [`modulos/cafeteria.md`](docs/contexto/modulos/cafeteria.md) | cafetería (módulo 16, tablas `caf_*`): decisiones del modelo, etapa 1 (estructura 176 y personal 177), reglas, endpoints, pruebas y pendientes |
+| [`modulos/cafeteria.md`](docs/contexto/modulos/cafeteria.md) | cafetería (módulo 16, tablas `caf_*`): decisiones del modelo, etapa 1 (estructura 176 y personal 177), etapa 2 (catálogo 178: categorías, unidades, productos y precios con vigencia; proveedores y productos 179), reglas, endpoints, pruebas y pendientes |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con

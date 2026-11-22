@@ -117,6 +117,8 @@ final class Permiso
     public const ACUDIENTES = 175;                      // "Acudientes — Crear y gestionar" (crear, editar, vincular hijos, acceso al portal; reemplaza la 112 y la 131)
     public const CAFETERIA_ESTRUCTURA = 176;            // "Cafetería — Estructura" (cafeterías, puntos de venta, terminales, horarios, almacenes y funciones del personal)
     public const CAFETERIA_PERSONAL = 177;              // "Cafetería — Personal" (asignar personal a las cafeterías)
+    public const CAFETERIA_CATALOGO = 178;              // "Cafetería — Catálogo" (categorías, unidades, conversiones, productos y precios)
+    public const CAFETERIA_PROVEEDORES = 179;           // "Cafetería — Proveedores y productos" (qué productos ofrece cada proveedor de Compras)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás
