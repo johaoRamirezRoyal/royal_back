@@ -1020,3 +1020,91 @@ insert ignore into nivel_nivel_academico (id_nivel, id_nivel_academico)
   select 4, 3 from dual where exists (select 1 from nivel where id = 4) and exists (select 1 from nivel_academico where id = 3);
 SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
 INSERT INTO migrations (migration, batch) SELECT '2026_11_20_110000_create_nivel_nivel_academico_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_20_110000_create_nivel_nivel_academico_table');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100000_create_caf_cafeterias_table.php
+-- Cafetería, etapa 1: cafeterías de la institución (estado BORRADOR/ACTIVA/SUSPENDIDA/CERRADA).
+-- Sin id de institución (la base del colegio ya lo separa) ni id_sede (OMNIA no tiene sedes).
+-- Usuarios como int sin FK, igual que el resto de tablas que referencian usuarios. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `caf_cafeterias` (`id` bigint unsigned not null auto_increment primary key, `codigo` varchar(30) not null, `nombre` varchar(120) not null, `descripcion` text null, `estado` varchar(20) not null default 'BORRADOR', `creado_por` int not null, `actualizado_por` int null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_cafeterias` add unique `caf_cafeterias_codigo_unique`(`codigo`);
+alter table `caf_cafeterias` add index `caf_cafeterias_estado_index`(`estado`);
+alter table `caf_cafeterias` add index `caf_cafeterias_creado_por_index`(`creado_por`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100000_create_caf_cafeterias_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100000_create_caf_cafeterias_table');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100100_create_caf_puntos_venta_y_terminales_tables.php
+-- Cafetería, etapa 1: puntos de venta de cada cafetería y terminales (cajas lógicas) de cada punto.
+-- Código único por cafetería / por punto; identificador_dispositivo único. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `caf_puntos_venta` (`id` bigint unsigned not null auto_increment primary key, `id_cafeteria` bigint unsigned not null, `codigo` varchar(30) not null, `nombre` varchar(120) not null, `tipo` varchar(20) not null, `ubicacion` varchar(200) null, `estado` varchar(20) not null default 'ACTIVO', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_puntos_venta` add constraint `caf_puntos_venta_id_cafeteria_foreign` foreign key (`id_cafeteria`) references `caf_cafeterias` (`id`) on delete restrict;
+alter table `caf_puntos_venta` add unique `caf_puntos_venta_id_cafeteria_codigo_unique`(`id_cafeteria`, `codigo`);
+create table `caf_terminales_venta` (`id` bigint unsigned not null auto_increment primary key, `id_punto_venta` bigint unsigned not null, `codigo` varchar(30) not null, `nombre` varchar(120) not null, `identificador_dispositivo` varchar(120) null, `estado` varchar(20) not null default 'ACTIVO', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_terminales_venta` add constraint `caf_terminales_venta_id_punto_venta_foreign` foreign key (`id_punto_venta`) references `caf_puntos_venta` (`id`) on delete restrict;
+alter table `caf_terminales_venta` add unique `caf_terminales_venta_id_punto_venta_codigo_unique`(`id_punto_venta`, `codigo`);
+alter table `caf_terminales_venta` add unique `caf_terminales_venta_identificador_dispositivo_unique`(`identificador_dispositivo`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100100_create_caf_puntos_venta_y_terminales_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100100_create_caf_puntos_venta_y_terminales_tables');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100200_create_caf_almacenes_tables.php
+-- Cafetería, etapa 1: almacenes (id_cafeteria NULL = central) y de cuáles se abastece cada punto.
+-- predeterminado_clave (columna generada) + UNIQUE: un solo almacén predeterminado por punto. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `caf_almacenes` (`id` bigint unsigned not null auto_increment primary key, `id_cafeteria` bigint unsigned null, `codigo` varchar(30) not null, `nombre` varchar(120) not null, `tipo` varchar(20) not null, `descripcion` varchar(255) null, `estado` varchar(20) not null default 'ACTIVO', `creado_por` int not null, `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_almacenes` add constraint `caf_almacenes_id_cafeteria_foreign` foreign key (`id_cafeteria`) references `caf_cafeterias` (`id`) on delete restrict;
+alter table `caf_almacenes` add unique `caf_almacenes_codigo_unique`(`codigo`);
+alter table `caf_almacenes` add index `caf_almacenes_creado_por_index`(`creado_por`);
+create table `caf_puntos_venta_almacenes` (`id_punto_venta` bigint unsigned not null, `id_almacen` bigint unsigned not null, `es_predeterminado` tinyint(1) not null default '0', `predeterminado_clave` bigint unsigned as (IF(es_predeterminado, id_punto_venta, NULL)) stored, primary key (`id_punto_venta`, `id_almacen`)) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_puntos_venta_almacenes` add constraint `caf_puntos_venta_almacenes_id_punto_venta_foreign` foreign key (`id_punto_venta`) references `caf_puntos_venta` (`id`) on delete cascade;
+alter table `caf_puntos_venta_almacenes` add constraint `caf_puntos_venta_almacenes_id_almacen_foreign` foreign key (`id_almacen`) references `caf_almacenes` (`id`) on delete restrict;
+alter table `caf_puntos_venta_almacenes` add unique `uq_caf_pva_predeterminado`(`predeterminado_clave`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100200_create_caf_almacenes_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100200_create_caf_almacenes_tables');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100300_create_caf_personal_tables.php
+-- Cafetería, etapa 1: funciones del personal (roles operativos, no dan permisos de la API) y
+-- asignaciones de personal a cada cafetería, con vigencia y estado. Siembra 4 funciones. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `caf_roles_operativos` (`id` bigint unsigned not null auto_increment primary key, `codigo` varchar(30) not null, `nombre` varchar(80) not null, `descripcion` text null, `activo` tinyint(1) not null default '1', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_roles_operativos` add unique `caf_roles_operativos_codigo_unique`(`codigo`);
+create table `caf_asignaciones_personal` (`id` bigint unsigned not null auto_increment primary key, `id_cafeteria` bigint unsigned not null, `id_user` int not null, `id_rol_operativo` bigint unsigned not null, `asignado_por` int not null, `fecha_inicio` date not null, `fecha_fin` date null, `estado` varchar(20) not null default 'ACTIVA', `created_at` timestamp null, `updated_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_asignaciones_personal` add constraint `caf_asignaciones_personal_id_cafeteria_foreign` foreign key (`id_cafeteria`) references `caf_cafeterias` (`id`) on delete restrict;
+alter table `caf_asignaciones_personal` add constraint `caf_asignaciones_personal_id_rol_operativo_foreign` foreign key (`id_rol_operativo`) references `caf_roles_operativos` (`id`) on delete restrict;
+alter table `caf_asignaciones_personal` add index `caf_asignaciones_personal_id_cafeteria_id_user_estado_index`(`id_cafeteria`, `id_user`, `estado`);
+alter table `caf_asignaciones_personal` add index `caf_asignaciones_personal_id_user_index`(`id_user`);
+insert into `caf_roles_operativos` (`activo`, `codigo`, `created_at`, `descripcion`, `nombre`, `updated_at`) values (1, 'COORDINADOR', NOW(), 'Coordina la operación de la cafetería.', 'Coordinador', NOW()), (1, 'CAJERO', NOW(), 'Atiende el punto de venta y cobra.', 'Cajero', NOW()), (1, 'ALMACENISTA', NOW(), 'Recibe mercancía y controla el inventario.', 'Almacenista', NOW()), (1, 'COCINA', NOW(), 'Prepara los productos.', 'Cocina', NOW());
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100300_create_caf_personal_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100300_create_caf_personal_tables');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100400_create_caf_horarios_tables.php
+-- Cafetería, etapa 1: horarios de cada cafetería y de cada punto, con FK al catálogo dias_semana
+-- (1 = lunes … 7 = domingo). Las franjas que se cruzan las impide el service. Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+create table `caf_horarios_cafeteria` (`id` bigint unsigned not null auto_increment primary key, `id_cafeteria` bigint unsigned not null, `id_dia_semana` int not null, `hora_apertura` time not null, `hora_cierre` time not null, `activo` tinyint(1) not null default '1') default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_horarios_cafeteria` add constraint `caf_horarios_cafeteria_id_cafeteria_foreign` foreign key (`id_cafeteria`) references `caf_cafeterias` (`id`) on delete cascade;
+alter table `caf_horarios_cafeteria` add constraint `caf_horarios_cafeteria_id_dia_semana_foreign` foreign key (`id_dia_semana`) references `dias_semana` (`id`);
+alter table `caf_horarios_cafeteria` add index `caf_horarios_cafeteria_id_cafeteria_id_dia_semana_index`(`id_cafeteria`, `id_dia_semana`);
+create table `caf_horarios_punto_venta` (`id` bigint unsigned not null auto_increment primary key, `id_punto_venta` bigint unsigned not null, `id_dia_semana` int not null, `hora_apertura` time not null, `hora_cierre` time not null, `activo` tinyint(1) not null default '1') default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `caf_horarios_punto_venta` add constraint `caf_horarios_punto_venta_id_punto_venta_foreign` foreign key (`id_punto_venta`) references `caf_puntos_venta` (`id`) on delete cascade;
+alter table `caf_horarios_punto_venta` add constraint `caf_horarios_punto_venta_id_dia_semana_foreign` foreign key (`id_dia_semana`) references `dias_semana` (`id`);
+alter table `caf_horarios_punto_venta` add index `caf_horarios_punto_venta_id_punto_venta_id_dia_semana_index`(`id_punto_venta`, `id_dia_semana`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100400_create_caf_horarios_tables', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100400_create_caf_horarios_tables');
+
+-- ---------------------------------------------------------------------------
+-- 2026_11_22_100500_seed_modulo_y_opciones_cafeteria.php
+-- Módulo 16 «Cafetería» y opciones 176 (Estructura) y 177 (Personal), con id explícito.
+-- No se otorgan: el Super Admin las tiene todas; cada colegio decide en /permisos.
+-- Falla si el id está ocupado por otra cosa (la migración lo comprueba; este SQL no). Se aplica en CADA base de colegio.
+-- ---------------------------------------------------------------------------
+insert into `cron_modulos` (`id`, `nombre`, `activo`, `fechareg`) values (16, 'Cafetería', 1, NOW());
+insert into `cron_opciones` (`id`, `nombre`, `activo`, `fechareg`, `id_modulo`) values (176, 'Cafetería — Estructura', 1, NOW(), 16);
+insert into `cron_opciones` (`id`, `nombre`, `activo`, `fechareg`, `id_modulo`) values (177, 'Cafetería — Personal', 1, NOW(), 16);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_22_100500_seed_modulo_y_opciones_cafeteria', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_22_100500_seed_modulo_y_opciones_cafeteria');

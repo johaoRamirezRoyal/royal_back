@@ -115,6 +115,8 @@ final class Permiso
     public const HIKVISION_GRUPO_PROFESORES = 171;      // "Asistencia — Grupo Profesores en las terminales" (antes perfiles 3, 13, 14 y 20 en GROUP_ID_POR_PERFIL)
     public const FOTOS_CURSO_GESTIONAR = 174;           // "Fotos del curso — Ver y borrar las de todos los cursos" (publicar es autoservicio del docente)
     public const ACUDIENTES = 175;                      // "Acudientes — Crear y gestionar" (crear, editar, vincular hijos, acceso al portal; reemplaza la 112 y la 131)
+    public const CAFETERIA_ESTRUCTURA = 176;            // "Cafetería — Estructura" (cafeterías, puntos de venta, terminales, horarios, almacenes y funciones del personal)
+    public const CAFETERIA_PERSONAL = 177;              // "Cafetería — Personal" (asignar personal a las cafeterías)
 
     /**
      * Opciones que QUITAN capacidades en vez de darlas. Super Admin tiene todas las demás

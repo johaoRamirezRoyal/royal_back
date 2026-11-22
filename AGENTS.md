@@ -152,6 +152,7 @@ esta tabla.
 | [`modulos/reservas.md`](docs/contexto/modulos/reservas.md) | reservas de salones: estados, salones con autorización del responsable |
 | [`modulos/acudientes.md`](docs/contexto/modulos/acudientes.md) | acudientes (opción 175): crear, editar, estado, enviar acceso al portal para padres |
 | [`modulos/fotos-curso.md`](docs/contexto/modulos/fotos-curso.md) | fotos de clases y actividades que publican los docentes para el portal para padres |
+| [`modulos/cafeteria.md`](docs/contexto/modulos/cafeteria.md) | cafetería (módulo 16, tablas `caf_*`): decisiones del modelo, etapa 1 (estructura 176 y personal 177), reglas, endpoints, pruebas y pendientes |
 
 Otros documentos en `docs/`: `ARCHIVOS_PRIVADOS_CLOUDINARY_2026_11_03.md` (archivos privados
 en Cloudinary: qué se cambió, deploy y pendientes), `DOCUMENTOS_PDFMAKE_2026_11_12.md` (PDFs con
@@ -159,6 +160,8 @@ pdfmake en navegador y servidor: qué se migró, deploy y pendientes), `PERMISOS
 `HIKVISION_TERMINALES_2026_10_26.md` (terminales del `.env` a la BD),
 `GESTION_ACADEMICA_HORARIOS_DOCENTE_2026_08_24.md`, `PORTAL_PADRES_Y_MARCAS_2026_11_13.md`
 (portal para padres, login por colegio y marcas unificadas: qué se cambió, deploy y pendientes),
+`CAFETERIA_2026_11_22.md` (módulo de cafetería: validación del modelo relacional, decisiones,
+etapa 1 de estructura y personal, revisión, frontend, despliegue y pendientes),
 `PRUEBAS_CARGA_2026_11_16.md` (prueba de estrés del portal con k6 y Grafana: resultados,
 hallazgos y pendientes), `FOTOS_CURSO_2026_11_14.md` (fotos del curso, carrusel y calendario del portal: qué se cambió,
 deploy y pendientes), `ACUDIENTES_Y_LOGIN_2026_11_20.md` (módulo Acudientes, creación masiva, contraseña inicial con el documento,

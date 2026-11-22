@@ -342,6 +342,11 @@ Route::middleware(['auth:api', 'system:general'])->group(function () {
         require __DIR__ . '/api/vinculacion-acudientes.php';
     });
 
+    // CAFETERÍA (módulo 16): etapa 1, estructura (176) y personal (177).
+    Route::prefix('/cafeteria')->group(function () {
+        require __DIR__ . '/api/cafeteria.php';
+    });
+
     // PORTAL PARA PADRES (autoservicio del acudiente: solo sus hijos)
     Route::prefix('/portal-padres')->group(function () {
         require __DIR__ . '/api/portalPadres.php';
