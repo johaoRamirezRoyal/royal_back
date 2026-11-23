@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Schema;
  * es el catálogo `dias_semana` (1 = lunes … 7 = domingo), el mismo de los horarios
  * académicos. Un día puede tener varias franjas (mañana y tarde); el service impide que se
  * crucen.
+ *
+ * id_dia_semana sin FK: `dias_semana` es MyISAM (y su id, tinyint), así que MySQL rechaza la llave
+ * (errno 150). HorariosRequest valida que el día exista.
  */
 return new class extends Migration
 {
@@ -23,7 +26,6 @@ return new class extends Migration
             $table->time('hora_cierre');
             $table->boolean('activo')->default(true);
 
-            $table->foreign('id_dia_semana')->references('id')->on('dias_semana');
             $table->index(['id_cafeteria', 'id_dia_semana']);
         });
 
@@ -36,7 +38,6 @@ return new class extends Migration
             $table->time('hora_cierre');
             $table->boolean('activo')->default(true);
 
-            $table->foreign('id_dia_semana')->references('id')->on('dias_semana');
             $table->index(['id_punto_venta', 'id_dia_semana']);
         });
     }
