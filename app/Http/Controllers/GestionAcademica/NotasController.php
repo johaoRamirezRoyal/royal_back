@@ -226,12 +226,12 @@ class NotasController extends Controller implements HasMiddleware
         ));
     }
 
-    /** Grados del nivel de quien gestiona referentes, con el estado de cada plan. ?id_periodo= */
+    /** Grados del nivel de quien gestiona referentes, con el estado de cada plan. ?id_anio=&id_periodo= */
     public function gradosReferentes(Request $request)
     {
-        $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
+        $q = $request->validate(['id_periodo' => ['nullable', 'integer'], 'id_anio' => ['nullable', 'integer']]);
 
-        return $this->apiResponse($this->service->gradosDelNivel($this->actor($request), $q['id_periodo'] ?? null));
+        return $this->apiResponse($this->service->gradosDelNivel($this->actor($request), $q['id_periodo'] ?? null, $q['id_anio'] ?? null));
     }
 
     /**

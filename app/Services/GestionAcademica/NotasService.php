@@ -233,6 +233,27 @@ class NotasService extends Service
             ->map(fn (PeriodoAcademico $p) => ['id' => $p->id, 'nombre' => $p->nombre, 'editable' => self::periodoEditable($p)]);
     }
 
+    /**
+     * Año escolar y periodo para una página que deja elegir otros años (Registro de boletines,
+     * Referentes): `$idAnio`, o el del `$idPeriodo`, o el vigente; un periodo que no es de ese año se
+     * cambia por el primero editable o el último. `anios` = los años con periodos, más reciente primero.
+     *
+     * @return array{anios: Collection, id_anio: ?int, vigente: ?int, periodos: Collection, id_periodo: ?int}
+     */
+    private function anioYPeriodo(?int $idPeriodo, ?int $idAnio): array
+    {
+        $vigente = ($this->anios->obtenerUltimoAnioEscolar()['data'] ?? null)?->id;
+        $idAnio ??= ($idPeriodo ? PeriodoAcademico::whereKey($idPeriodo)->value('id_anio_escolar') : null) ?? $vigente;
+        $periodos = $this->periodosDelAnio($idAnio);
+        if (! $periodos->contains('id', $idPeriodo)) {
+            $idPeriodo = ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
+        }
+        $anios = Anio::whereIn('id', PeriodoAcademico::select('id_anio_escolar'))->orderByDesc('anio_inicio')->get(['id', 'anio_inicio', 'anio_fin'])
+            ->map(fn (Anio $a) => ['id' => $a->id, 'nombre' => "{$a->anio_inicio} - {$a->anio_fin}", 'vigente' => $a->id === $vigente])->values();
+
+        return ['anios' => $anios, 'id_anio' => $idAnio, 'vigente' => $vigente, 'periodos' => $periodos, 'id_periodo' => $idPeriodo];
+    }
+
     /** Carga académica activa (c) con su docente y asignatura (da) activos. Cada uso agrega su filtro. */
     private static function consultaCarga(): Builder
     {
@@ -832,13 +853,13 @@ class NotasService extends Service
     /**
      * Grados cualitativos del nivel de quien gestiona (o todos, con niveles null), con sus cursos,
      * directores de grupo, cantidad de referentes (sin contar subreferentes) y estado del plan en el
-     * periodo. Para la página de Referentes (153/154).
+     * periodo. Para la página de Referentes (153/154). `$idAnio`: ver otro año escolar (solo
+     * consulta: en un año pasado no se cierra el periodo del nivel).
      */
-    public function gradosDelNivel(array $actor, ?int $idPeriodo): array
+    public function gradosDelNivel(array $actor, ?int $idPeriodo, ?int $idAnio = null): array
     {
         try {
-            $periodos = $this->periodosDelAnio();
-            $idPeriodo ??= ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
+            ['anios' => $anios, 'id_anio' => $idAnio, 'vigente' => $vigente, 'periodos' => $periodos, 'id_periodo' => $idPeriodo] = $this->anioYPeriodo($idPeriodo, $idAnio);
 
             $cursos = self::cursosCualitativos(fn ($q) => $q->when($actor['niveles'] !== null, fn ($q) => $q->whereIn('id_nivel', $actor['niveles'] ?: [0])));
             $estados = $idPeriodo ? ReferentePlan::where('id_periodo_academico', $idPeriodo)->pluck('estado', 'id_grado') : collect();
@@ -881,13 +902,15 @@ class NotasService extends Service
 
             return ['error' => false, 'message' => 'Grados del nivel', 'data' => [
                 'grados' => $data,
+                'anios' => $anios,
+                'id_anio' => $idAnio,
                 'periodos' => $periodos,
                 'id_periodo' => $idPeriodo,
                 // Para que la página explique bien una lista vacía: todos los niveles (99 / Super
                 // Admin), los del usuario, o ninguno (usuario sin nivel).
                 'alcance' => $actor['niveles'] === null ? 'todos' : ($actor['niveles'] ? 'nivel' : 'sin_nivel'),
                 // 154: puede cerrar el periodo en todos los cursos de un nivel (POST /cierre/nivel).
-                'puede_cerrar' => (bool) $actor['aprueba'],
+                'puede_cerrar' => (bool) $actor['aprueba'] && $idAnio === $vigente,
             ]];
         } catch (Throwable $e) {
             return ['error' => true, 'message' => $e->getMessage()];
@@ -1963,15 +1986,7 @@ class NotasService extends Service
     public function registroBoletines(?array $niveles, ?int $idPeriodo, ?int $idAnio = null): array
     {
         try {
-            $vigente = ($this->anios->obtenerUltimoAnioEscolar()['data'] ?? null)?->id;
-            $idAnio ??= ($idPeriodo ? PeriodoAcademico::whereKey($idPeriodo)->value('id_anio_escolar') : null) ?? $vigente;
-            $periodos = $this->periodosDelAnio($idAnio);
-            // Un periodo de otro año no vale: el primero editable o el último del año elegido.
-            if (! $periodos->contains('id', $idPeriodo)) {
-                $idPeriodo = ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
-            }
-            $anios = Anio::whereIn('id', PeriodoAcademico::select('id_anio_escolar'))->orderByDesc('anio_inicio')->get(['id', 'anio_inicio', 'anio_fin'])
-                ->map(fn (Anio $a) => ['id' => $a->id, 'nombre' => "{$a->anio_inicio} - {$a->anio_fin}", 'vigente' => $a->id === $vigente])->values();
+            ['anios' => $anios, 'id_anio' => $idAnio, 'vigente' => $vigente, 'periodos' => $periodos, 'id_periodo' => $idPeriodo] = $this->anioYPeriodo($idPeriodo, $idAnio);
             $enNivel = fn ($q) => $q->when($niveles !== null, fn ($q) => $q->whereIn('id_nivel', $niveles ?: [0]));
 
             $cierres = $idPeriodo
