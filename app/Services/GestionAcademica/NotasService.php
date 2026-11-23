@@ -945,8 +945,9 @@ class NotasService extends Service
     }
 
     /**
-     * Estudiantes activos que hoy están en el curso, más los que ya tienen nota u observación en él
-     * en ese periodo aunque se hayan movido (en_curso = false), por apellido.
+     * Estudiantes activos que hoy están en el curso, más los activos que ya tienen nota u
+     * observación en él en ese periodo aunque se hayan movido (en_curso = false), por apellido.
+     * Un estudiante inactivo nunca aparece, aunque ya tenga notas cargadas en el periodo.
      */
     private function estudiantesDe(int $idCurso, int $idPeriodo): Collection
     {
@@ -956,8 +957,9 @@ class NotasService extends Service
             ->unique();
 
         return Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
+            ->where('estado', 'activo')
             ->where(fn ($q) => $q
-                ->where(fn ($q) => $q->where('id_curso', $idCurso)->where('estado', 'activo'))
+                ->where('id_curso', $idCurso)
                 ->orWhereIn('id_user', $conAlgo))
             ->orderBy('apellido')->orderBy('nombre')
             ->get(['id_user', 'user', 'nombre', 'apellido', 'documento', 'foto_carnet', 'id_curso', 'estado'])

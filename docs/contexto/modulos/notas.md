@@ -135,8 +135,9 @@ desempeños: academico_escala_valoracion ──< academico_escala_valoracion_niv
   observacion }]`, opcional; vacía la borra; el referente tiene que ser de esa asignatura) y sale en
   `GET /planilla` (`estudiantes[].observaciones`) y en la vista del curso
   (`estudiantes[].observaciones_referente`, solo lectura).
-- **Estudiantes** (`estudiantesDe`): activos que hoy están en el curso, más los que ya tienen nota u
-  observación en él en ese periodo aunque se hayan movido (`en_curso: false`).
+- **Estudiantes** (`estudiantesDe`): activos que hoy están en el curso, más los activos que ya tienen
+  nota u observación en él en ese periodo aunque se hayan movido (`en_curso: false`). Un estudiante
+  inactivo nunca aparece, aunque ya tenga notas cargadas en el periodo.
 - **Ajuste del coordinador** (`ajustar`, 154 del nivel del curso): cambia el final de un
   **referente** (no de un subreferente); guarda quién y cuándo, y el valor del docente queda en
   `id_escala_docente`. `id_escala: null` quita el ajuste. Con el plan aprobado y hasta el cierre, **sin
