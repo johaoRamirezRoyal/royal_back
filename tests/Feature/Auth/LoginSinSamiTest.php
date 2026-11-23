@@ -54,5 +54,7 @@ class LoginSinSamiTest extends TestCase
             ->assertOk();
 
         Http::assertNothingSent();
+        // El login del sistema general guarda la última conexión (el módulo Acudientes la muestra).
+        $this->assertNotNull($acudiente->fresh()->ultima_conexion);
     }
 }

@@ -41,6 +41,10 @@ class JwtService
 
         if ($sid) {
             app(SesionesActivasService::class)->registrar($connection, (int) $user->id_user, $sid);
+            // Todo login del sistema general pasa por aquí (contraseña, código de equipo nuevo,
+            // Google). La llave maestra no: es soporte entrando, no el usuario. Antes solo
+            // Admisiones la guardaba y el módulo Acudientes mostraba «Nunca» a quien sí entraba.
+            Usuario::on($connection)->whereKey($user->id_user)->update(['ultima_conexion' => now(), 'ultima_ip' => request()->ip()]);
         }
 
         return $token;

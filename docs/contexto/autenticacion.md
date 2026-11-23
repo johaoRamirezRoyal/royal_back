@@ -15,6 +15,9 @@
 - `JwtService` es un singleton (`generateToken($user, $system, $extraClaims)`,
   `generateAdmissionsToken`, `refreshToken`, `invalidateToken`, `getPayload`,
   `authenticate`).
+- `generateToken` guarda `usuarios.ultima_conexion` y `ultima_ip` en todo login del sistema
+  general (contraseña, código de equipo nuevo, Google), salvo con llave maestra (es soporte, no el
+  usuario). Antes del 2026-11-23 solo lo hacía Admisiones y el módulo Acudientes mostraba «Nunca».
 - Las cookies se crean con el trait `HasAuthCookie`:
   `makeCookie($token, $nombre, $minutes = 1 día)`.
 - `config/jwt.php`: `ttl` 60 min, `refresh_ttl` 14 días.
