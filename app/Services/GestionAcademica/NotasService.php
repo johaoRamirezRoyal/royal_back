@@ -329,6 +329,27 @@ class NotasService extends Service
             ->filter(fn (Cursos $c) => self::esCursoCualitativo($c))->values());
     }
 
+    /**
+     * En un año pasado, los cursos activos de hoy no bastan: suma los ya inactivos que cerraron en el
+     * periodo y, por cada grado con plan o referentes que hoy no tiene ningún curso, su curso más
+     * reciente (con él se abre su plan). Un curso viejo de otro año no entra en el conteo de cerrados.
+     */
+    private function conCursosDelPasado(Collection $cursos, callable $enNivel, Collection $idsCerrados, Collection $idsGrado): Collection
+    {
+        $consulta = fn () => $enNivel(Cursos::with(['grado:id,nombre,tipo_evaluacion', 'nivel:id,nombre,metodo_calificacion', 'director:id_user,nombre,apellido'])
+            ->whereNotNull('id_grado'));
+        $columnas = ['id', 'nombre', 'id_nivel', 'id_grado', 'id_director', 'activo'];
+
+        $todos = $cursos->concat($consulta()->whereIn('id', $idsCerrados)->whereNotIn('id', $cursos->pluck('id'))->get($columnas));
+        $sinCurso = $idsGrado->unique()->diff($todos->pluck('id_grado'));
+        if ($sinCurso->isNotEmpty()) {
+            $todos = $todos->concat($consulta()->whereIn('id_grado', $sinCurso)->orderByDesc('id')->get($columnas)->unique('id_grado'));
+        }
+
+        // esCursoCualitativo exige activo: aquí los inactivos valen, solo se mira el método del nivel.
+        return Cursos::ordenarPorGrado($todos->filter(fn (Cursos $c) => NivelAcademico::califCualitativa($c->nivel?->metodo_calificacion))->values());
+    }
+
     // ─── Plan de referentes (estado y seguimiento) ──────────────
     //
     // Los referentes son del grado (todos sus cursos los comparten). Cada docente con carga en
@@ -861,12 +882,16 @@ class NotasService extends Service
         try {
             ['anios' => $anios, 'id_anio' => $idAnio, 'vigente' => $vigente, 'periodos' => $periodos, 'id_periodo' => $idPeriodo] = $this->anioYPeriodo($idPeriodo, $idAnio);
 
-            $cursos = self::cursosCualitativos(fn ($q) => $q->when($actor['niveles'] !== null, fn ($q) => $q->whereIn('id_nivel', $actor['niveles'] ?: [0])));
+            $enNivel = fn ($q) => $q->when($actor['niveles'] !== null, fn ($q) => $q->whereIn('id_nivel', $actor['niveles'] ?: [0]));
+            $cursos = self::cursosCualitativos($enNivel);
             $estados = $idPeriodo ? ReferentePlan::where('id_periodo_academico', $idPeriodo)->pluck('estado', 'id_grado') : collect();
             $cantidad = $idPeriodo
                 ? Referente::where('id_periodo_academico', $idPeriodo)->whereNull('id_padre')->selectRaw('id_grado, count(*) as n')->groupBy('id_grado')->pluck('n', 'id_grado')
                 : collect();
             $cerrados = $idPeriodo ? CierrePeriodo::where('id_periodo_academico', $idPeriodo)->pluck('id_curso')->flip() : collect();
+            if ($idPeriodo && $idAnio !== $vigente) {
+                $cursos = $this->conCursosDelPasado($cursos, $enNivel, $cerrados->keys(), $estados->keys()->merge($cantidad->keys()));
+            }
             // Envío por asignatura: las asignaturas con carga en cada grado y las ya enviadas.
             $conCarga = self::consultaCarga()
                 ->join('curso as cu', 'cu.id', '=', 'c.id_curso')
