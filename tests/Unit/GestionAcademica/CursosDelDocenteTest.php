@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 /**
  * CargaAcademicaService::obtenerCursosDocente es la única fuente de "los cursos del docente"
- * (Observaciones, Actas, Métricas de asistencia y Mis llegadas tarde). Tablas legacy creadas a
+ * (Observaciones, Actas y Métricas de asistencia). Tablas legacy creadas a
  * mano en sqlite en memoria, solo con las columnas que usa la consulta.
  */
 class CursosDelDocenteTest extends TestCase

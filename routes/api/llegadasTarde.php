@@ -33,8 +33,9 @@ Route::post('/escanear', [LlegadasTardeController::class, 'escanearCarnet'])->mi
  *                                              filtra, se listan TODOS sus períodos.
  *   id_alumno            (int, opcional)    — filtrar por alumno (historial completo)
  *   fecha                (Y-m-d, opcional)  — filtrar por día exacto. Sin la opción 99
- *                                              (acceso completo) se ignora: siempre se
- *                                              fuerza hoy.
+ *                                              (acceso completo) se ignora: se fuerza hoy
+ *                                              con la 101; el Docente no filtra por fecha
+ *                                              (ve todo el colegio en solo lectura).
  * Cada registro trae total_llegadas_tarde_periodo: cuántas (no revocadas) lleva ESE
  * alumno en SU período (id_periodo_academico de la fila), y periodo_academico con
  * id/nombre/fecha_inicio/fecha_fin/activo del período en que se registró.

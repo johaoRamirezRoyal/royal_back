@@ -80,7 +80,7 @@ y qué autoservicio tiene.
 - **DOCENTE:** director de grupo de un curso (`CursoRequest`, `CursosServices`), docentes en
   Actas, Observaciones y Consulta de asistencias; autoservicio (`tipo:DOCENTE` en las rutas de
   gestión académica, convivencial, cursos y vinculación): Mi horario, Asistencia de clases,
-  Mi curso, sus llegadas tarde, observaciones y actas propias.
+  Mi curso, observaciones y actas propias, y todas las llegadas tarde del colegio (solo lectura).
 - **ESTUDIANTE:** estudiantes de un curso, toma de asistencia (las requests solo aceptan
   estudiantes), Llegadas tarde, Observaciones, Actas, Consulta de asistencias, Vinculación,
   carnets de estudiante; perfil al crear un estudiante (`CrearEstudianteRequest`).
