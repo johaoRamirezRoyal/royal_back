@@ -4,6 +4,7 @@ namespace App\Services\GestionAcademica;
 
 use App\Enums\TipoPerfil;
 use App\Models\AnioEscolar\ConfiguracionAcademica;
+use App\Models\AnioEscolar\Anio;
 use App\Models\AnioEscolar\PeriodoAcademico;
 use App\Models\Areas\Cursos;
 use App\Models\GestionAcademica\AsistenciaManual;
@@ -217,18 +218,18 @@ class NotasService extends Service
     }
 
     /**
-     * Periodos del año escolar vigente. No filtra por `activo`: el cron
+     * Periodos del año escolar vigente (o de `$idAnio`). No filtra por `activo`: el cron
      * periodos:desactivar-vencidos los apaga al pasar fecha_fin, y aún pueden estar en
      * su plazo de corrección.
      */
-    private function periodosDelAnio(): Collection
+    private function periodosDelAnio(?int $idAnio = null): Collection
     {
-        $anio = $this->anios->obtenerUltimoAnioEscolar()['data'] ?? null;
-        if (! $anio) {
+        $idAnio ??= ($this->anios->obtenerUltimoAnioEscolar()['data'] ?? null)?->id;
+        if (! $idAnio) {
             return collect();
         }
 
-        return PeriodoAcademico::where('id_anio_escolar', $anio->id)->orderBy('fecha_inicio')->get()
+        return PeriodoAcademico::where('id_anio_escolar', $idAnio)->orderBy('fecha_inicio')->get()
             ->map(fn (PeriodoAcademico $p) => ['id' => $p->id, 'nombre' => $p->nombre, 'editable' => self::periodoEditable($p)]);
     }
 
@@ -1956,12 +1957,21 @@ class NotasService extends Service
      * Registro de boletines de un periodo: cada curso cualitativo (de los niveles de quien pide; null
      * = todos) con su cierre (fecha, quién, cuántos boletines guardó) o sin cerrar. Un curso que se
      * cerró y luego se desactivó también sale (sus boletines existen).
+     * `$idAnio`: el año escolar (sin él, el del periodo pedido o el vigente). En un año que no es el
+     * vigente solo salen los cursos cerrados: los demás ya no se pueden cerrar ni previsualizar.
      */
-    public function registroBoletines(?array $niveles, ?int $idPeriodo): array
+    public function registroBoletines(?array $niveles, ?int $idPeriodo, ?int $idAnio = null): array
     {
         try {
-            $periodos = $this->periodosDelAnio();
-            $idPeriodo ??= ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
+            $vigente = ($this->anios->obtenerUltimoAnioEscolar()['data'] ?? null)?->id;
+            $idAnio ??= ($idPeriodo ? PeriodoAcademico::whereKey($idPeriodo)->value('id_anio_escolar') : null) ?? $vigente;
+            $periodos = $this->periodosDelAnio($idAnio);
+            // Un periodo de otro año no vale: el primero editable o el último del año elegido.
+            if (! $periodos->contains('id', $idPeriodo)) {
+                $idPeriodo = ($periodos->firstWhere('editable', true) ?? $periodos->last())['id'] ?? null;
+            }
+            $anios = Anio::whereIn('id', PeriodoAcademico::select('id_anio_escolar'))->orderByDesc('anio_inicio')->get(['id', 'anio_inicio', 'anio_fin'])
+                ->map(fn (Anio $a) => ['id' => $a->id, 'nombre' => "{$a->anio_inicio} - {$a->anio_fin}", 'vigente' => $a->id === $vigente])->values();
             $enNivel = fn ($q) => $q->when($niveles !== null, fn ($q) => $q->whereIn('id_nivel', $niveles ?: [0]));
 
             $cierres = $idPeriodo
@@ -1976,8 +1986,13 @@ class NotasService extends Service
             if ($faltan->isNotEmpty()) {
                 $cursos = $cursos->concat($enNivel(Cursos::with(['grado:id,nombre', 'nivel:id,nombre'])->whereIn('id', $faltan))->get());
             }
+            if ($idAnio !== $vigente) {
+                $cursos = $cursos->filter(fn (Cursos $c) => $cierres->has($c->id));
+            }
 
             return ['error' => false, 'message' => 'Registro de boletines', 'data' => [
+                'anios' => $anios,
+                'id_anio' => $idAnio,
                 'periodos' => $periodos,
                 'id_periodo' => $idPeriodo,
                 'cursos' => $cursos->map(fn (Cursos $c) => [
