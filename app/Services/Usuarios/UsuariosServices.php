@@ -338,7 +338,7 @@ class UsuariosServices
      * perfil — no se puede simplemente quitar la exclusión de aquel método porque el
      * resto de sus consumidores (el módulo /users) sigue necesitando que se excluya.
      */
-    public function mostrarAcudientesPaginados(int $perPage, ?string $busqueda, ?string $estado, string $sort = 'nombre', string $dir = 'asc', bool $soloAutoregistrados = false, ?string $acceso = null)
+    public function mostrarAcudientesPaginados(int $perPage, ?string $busqueda, ?string $estado, string $sort = 'nombre', string $dir = 'asc', bool $soloAutoregistrados = false, ?string $acceso = null, ?string $conexion = null)
     {
         $sortable = ['nombre', 'apellido', 'documento', 'correo', 'estado', 'fechareg', 'ultima_conexion', 'acceso_portal_enviado_at'];
         $sort = in_array($sort, $sortable, true) ? $sort : 'nombre';
@@ -388,6 +388,8 @@ class UsuariosServices
                 })
                 ->when($acceso === 'enviado', fn ($query) => $query->whereNotNull('acceso_portal_enviado_at'))
                 ->when($acceso === 'sin_enviar', fn ($query) => $query->whereNull('acceso_portal_enviado_at'))
+                ->when($conexion === 'conectados', fn ($query) => $query->whereNotNull('ultima_conexion'))
+                ->when($conexion === 'nunca', fn ($query) => $query->whereNull('ultima_conexion'))
                 // Hijos vinculados (activos): el módulo Acudientes los muestra en la lista.
                 ->addSelect(['hijos_count' => EstudiantesPadre::selectRaw('COUNT(*)')->whereColumn('id_acudiente', 'usuarios.id_user')->where('activo', 1)])
                 ->orderBy($sort, $dir)
