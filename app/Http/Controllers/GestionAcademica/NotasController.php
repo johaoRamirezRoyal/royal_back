@@ -226,12 +226,12 @@ class NotasController extends Controller implements HasMiddleware
         ));
     }
 
-    /** Grados del nivel de quien gestiona referentes, con el estado de cada plan. ?id_periodo= */
+    /** Grados del nivel de quien gestiona referentes, con el estado de cada plan. ?id_anio=&id_periodo= */
     public function gradosReferentes(Request $request)
     {
-        $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
+        $q = $request->validate(['id_periodo' => ['nullable', 'integer'], 'id_anio' => ['nullable', 'integer']]);
 
-        return $this->apiResponse($this->service->gradosDelNivel($this->actor($request), $q['id_periodo'] ?? null));
+        return $this->apiResponse($this->service->gradosDelNivel($this->actor($request), $q['id_periodo'] ?? null, $q['id_anio'] ?? null));
     }
 
     /**
@@ -363,14 +363,19 @@ class NotasController extends Controller implements HasMiddleware
     }
 
     /**
-     * ?id_periodo: registro de boletines del periodo (cada curso con su cierre o sin cerrar). 99, 152
-     * y 173 ven todos los cursos; 153, 154 y 172, los de su nivel.
+     * ?id_anio&id_periodo: registro de boletines del periodo (cada curso con su cierre o sin cerrar;
+     * en un año pasado, solo los cerrados). 99, 152 y 173 ven todos los cursos; 153, 154 y 172, los
+     * de su nivel.
      */
     public function registroBoletines(Request $request)
     {
-        $q = $request->validate(['id_periodo' => ['nullable', 'integer']]);
+        $q = $request->validate(['id_periodo' => ['nullable', 'integer'], 'id_anio' => ['nullable', 'integer']]);
 
-        return $this->apiResponse($this->service->registroBoletines(self::boletinesDeTodos($request) ? null : $this->actor($request)['niveles'], $q['id_periodo'] ?? null));
+        return $this->apiResponse($this->service->registroBoletines(
+            self::boletinesDeTodos($request) ? null : $this->actor($request)['niveles'],
+            $q['id_periodo'] ?? null,
+            $q['id_anio'] ?? null,
+        ));
     }
 
     /** ?id_curso&id_periodo: las fotos de boletín guardadas al cerrar (el PDF lo arma el frontend). */

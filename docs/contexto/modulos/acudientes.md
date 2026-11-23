@@ -7,7 +7,8 @@ eliminado) y, en el menú, «Vinculación Estudiante - Padre» (131).
 - `GET /` — `UsuariosServices::mostrarAcudientesPaginados` (tipo ACUDIENTE, con `hijos_count` de
   `estudiantes_padres` activos). `solo_autoregistrados=1` filtra `origen_registro='admisiones'`;
   `acceso=enviado|sin_enviar` filtra por `usuarios.acceso_portal_enviado_at` (cuándo se le envió el
-  correo de acceso; también ordenable).
+  correo de acceso; también ordenable); `conexion=conectados|nunca` filtra por `ultima_conexion`
+  (si ya entró alguna vez al sistema general o a Admisiones).
 - `POST /`, `PUT /{id}` — documento, nombre, apellido, correo (únicos documento y correo en
   `usuarios`), teléfono. Perfil `Perfil::idParaCrear(TipoPerfil::ACUDIENTE)`. **Contraseña inicial = número de
   documento sin puntos ni espacios** (`AcudientesService::nuevo`, bcrypt de 10 rondas: lo que la
