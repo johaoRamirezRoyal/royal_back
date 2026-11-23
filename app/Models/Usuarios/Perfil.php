@@ -56,7 +56,13 @@ class Perfil extends Model
             ?? throw new \RuntimeException("No hay un perfil de tipo {$tipo->value}: asígnalo en /permisos."));
     }
 
-    public function opciones(){
+    public function usuarios()
+    {
+        return $this->hasMany(Usuario::class, 'perfil', 'id_perfil');
+    }
+
+    public function opciones()
+    {
         return $this->belongsToMany(
             Opcion::class,
             'cron_permisos',

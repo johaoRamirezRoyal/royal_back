@@ -1,20 +1,22 @@
 <?php
+
 namespace App\Services\Perfiles;
 
 use App\Enums\TipoPerfil;
 use App\Models\Usuarios\Perfil;
 
-class PerfilesServices 
+class PerfilesServices
 {
-    public function mostrarTodosPerfiles(){
-        try{
-            $perfiles = Perfil::whereNot('id_perfil', 1)->get();
+    public function mostrarTodosPerfiles()
+    {
+        try {
+            $perfiles = Perfil::whereNot('id_perfil', 1)->withCount('usuarios')->get();
 
             return [
                 'error' => false,
-                'data' => $perfiles
+                'data' => $perfiles,
             ];
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return [
                 'error' => true,
                 'data' => $e->getMessage(),
