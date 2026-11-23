@@ -199,7 +199,7 @@ No es la 73 ("Estudiantes" legacy, otorgada al Acudiente). Trabaja sobre
   `GET /cursos/docentes` (145) trae cada docente con el `curso_dirigido` para el select.
 - **"Los cursos del docente" tienen una sola fuente:** `CargaAcademicaService::obtenerCursosDocente()`
   (carga activa por asignatura o suelta, más el curso activo que dirige). La usan Observaciones,
-  Actas (138), Métricas de asistencia (`metricasPorCurso`) y Mis llegadas tarde. No vuelvas a
+  Actas (138) y Métricas de asistencia (`metricasPorCurso`). No vuelvas a
   escribir esa consulta en otro lado: las copias ya divergieron una vez (la de llegadas tarde
   ignoraba la carga suelta). Prueba: `tests/Unit/GestionAcademica/CursosDelDocenteTest.php`.
 - Director de grupo sin opciones: en Observaciones ve también las de todos los profesores a

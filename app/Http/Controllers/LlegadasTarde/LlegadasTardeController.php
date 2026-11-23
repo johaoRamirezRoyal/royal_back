@@ -9,7 +9,6 @@ use App\Models\Estudiantes\EstudiantesPadre;
 use App\Models\LlegadasTarde\LlegadasTarde as LlegadaTardeModel;
 use App\Models\LlegadasTarde\ConfiguracionLlegadasTarde;
 use App\Models\Usuarios\Usuario;
-use App\Services\GestionAcademica\CargaAcademicaService;
 use App\Services\LlegadasTardeEstudiantes\LlegadasTarde;
 use Illuminate\Http\Request;
 use App\Support\Permiso;
@@ -32,15 +31,12 @@ class LlegadasTardeController extends Controller
     // "Llegadas Tarde Academicas": acceso solo a este submódulo (ver OPCION_ACCESO_COMPLETO).
     private const OPCION_SOLO_LLEGADAS_TARDE = 101;
 
-    // Autoservicio de un Docente SIN la opción 99 (Gestión Académica completa): ve las
-    // llegadas tarde de los alumnos de SUS cursos (carga académica activa), nunca de un
-    // curso ajeno — mismo criterio de "resolver los cursos propios" que ya usa
-    // AsistenciaEstudianteService::metricasPorCurso ($id_docente_scope). Un Docente CON
-    // la opción 99 (ej. también Coordinador) cae en la rama general de abajo, sin scope.
+    // Un Docente SIN la opción 99 (Gestión Académica completa) consulta todas las llegadas
+    // tarde del colegio en solo lectura (ver obtenerLlegadasTarde). Con la 99 (ej. también
+    // Coordinador) cae en la rama general.
 
     public function __construct(
         private LlegadasTarde $llegadas_tarde,
-        private CargaAcademicaService $cargaAcademica,
     ) {}
 
     private function tieneAccesoCompleto(Request $request): bool
@@ -59,31 +55,11 @@ class LlegadasTardeController extends Controller
             ->all();
     }
 
-    /** IDs de los estudiantes activos de "sus cursos" (carga académica activa, también la
-     * suelta, y el curso que dirige) — CargaAcademicaService::obtenerCursosDocente, la misma
-     * fuente que Observaciones, Actas y Métricas de asistencia. Vacío (ningún curso todavía)
-     * es un resultado válido, no un error. */
-    private function idsAlumnosDeCursosDocente(Request $request): array
-    {
-        $cursos = collect($this->cargaAcademica->obtenerCursosDocente($request->user()->id_user)['data'] ?? [])->pluck('id');
-
-        if ($cursos->isEmpty()) {
-            return [];
-        }
-
-        return Usuario::whereIn('perfil', Perfil::idsDeTipo(TipoPerfil::ESTUDIANTE))
-            ->where('estado', 'activo')
-            ->whereIn('id_curso', $cursos)
-            ->pluck('id_user')
-            ->all();
-    }
-
     /** "Operativas" (reenviar correo, editar observación) no exigen la opción 99/101 — el
      * Acudiente sí puede hacerlas sobre sus propios hijos (por eso valida scope en vez de
      * bloquear siempre). El Docente en autoservicio (sin acceso completo) es de SOLO
-     * LECTURA, sin excepción: puede ver el historial completo de sus alumnos (ver el
-     * drill-down por id_alumno en obtenerLlegadasTarde) pero no tocar ningún campo ni
-     * reenviar correo, ni siquiera de sus propios alumnos — a diferencia del Acudiente,
+     * LECTURA, sin excepción: puede ver todas las llegadas tarde (ver
+     * obtenerLlegadasTarde) pero no tocar ningún campo ni reenviar correo — a diferencia del Acudiente,
      * que si conserva esa capacidad operativa sobre sus hijos. Perfiles con acceso al
      * módulo por opción (99 o 101) no se tocan, ya están cubiertos por tener acceso al
      * módulo en primer lugar. */
@@ -209,33 +185,14 @@ class LlegadasTardeController extends Controller
             return $this->apiResponse($response);
         }
 
-        // Autoservicio del Docente (sin opción 99, tipo DOCENTE): mismo
-        // trato que el Acudiente en cuanto al scope (alumnos de SUS cursos en vez de sus
-        // hijos), pero el listado general queda acotado al día actual — a diferencia del
-        // Acudiente, a quien sí le sirve ver el historial completo de sus hijos de entrada.
-        // Mismo criterio de "solo hoy" que el acceso restringido (opción 101) más abajo:
-        // se ignora la fecha que mande el cliente para el listado general. Un Docente que
-        // además tenga la opción 99 (ej. también Coordinador) no entra acá, cae a la rama
-        // general de abajo sin scope ni límite de fecha.
+        // Docente (sin opción 99): todas las llegadas tarde del colegio, de cualquier curso
+        // y fecha, por periodo (sin id_periodo_academico, el vigente). Con id_alumno, el
+        // historial de ese alumno (modal de solo lectura). Antes quedaba en sus cursos y
+        // solo hoy. Sigue sin poder modificar nada: ver bloqueadoParaAutoservicio().
         if ($request->user()->esTipo(TipoPerfil::DOCENTE) && !$this->tieneAccesoCompleto($request)) {
-            $idsAlumnos = $this->idsAlumnosDeCursosDocente($request);
+            $idAlumno = $request->input('id_alumno');
 
-            $idAlumnoSolicitado = $request->input('id_alumno');
-
-            // Drill-down de UN alumno puntual (modal de historial completo, ver
-            // StudentLateArrivalsModal — el docente puede abrirlo en solo lectura desde
-            // "Mis llegadas tarde" para revisar todo el historial si lo necesita, aunque
-            // el listado general se quede en hoy): se valida que el alumno esté dentro de
-            // SUS cursos antes de levantar la restricción de fecha — nunca se confía en el
-            // id_alumno del cliente sin verificar el scope primero, igual que
-            // bloqueadoParaAutoservicio() para las acciones operativas.
-            if ($idAlumnoSolicitado !== null && in_array((int) $idAlumnoSolicitado, $idsAlumnos, true)) {
-                $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, (int) $idAlumnoSolicitado, null);
-
-                return $this->apiResponse($response);
-            }
-
-            $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, null, now()->toDateString(), $idsAlumnos);
+            $response = $this->llegadas_tarde->obtenerLlegadasTarde($id_anio_academico, $idAlumno !== null ? (int) $idAlumno : null, null);
 
             return $this->apiResponse($response);
         }
