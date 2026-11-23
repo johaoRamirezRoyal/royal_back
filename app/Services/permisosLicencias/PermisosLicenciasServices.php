@@ -280,6 +280,21 @@ class PermisosLicenciasServices
         return $query;
     }
 
+    /** Para el export a Excel — mismos filtros que `listar()`, sin paginar. */
+    public function exportar(array $filtros, ?int $idNivelViewer): array
+    {
+        try {
+            $permisos = $this->consultaFiltrada($filtros, $idNivelViewer)
+                ->with(['usuario:id_user,nombre,apellido,documento', 'tipo:id,nombre', 'motivo:id,nombre'])
+                ->orderBy('fecha_permiso')
+                ->get();
+
+            return ['error' => false, 'message' => 'Solicitudes obtenidas correctamente', 'data' => $permisos];
+        } catch (Exception $e) {
+            return ['error' => true, 'message' => $e->getMessage()];
+        }
+    }
+
     public function detalle(int $id): array
     {
         try {

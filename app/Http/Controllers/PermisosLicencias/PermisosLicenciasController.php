@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PermisosLicencias\ActualizarPermisoRequest;
 use App\Http\Requests\PermisosLicencias\StorePermisoRequest;
+use App\Services\permisosLicencias\PermisosLicenciasExcelService;
 use App\Services\permisosLicencias\PermisosLicenciasServices;
 use App\Services\Usuarios\PermisosPerfil;
 use App\Support\Permiso;
@@ -35,6 +36,7 @@ class PermisosLicenciasController extends Controller
 
     public function __construct(
         private PermisosLicenciasServices $service,
+        private PermisosLicenciasExcelService $excelService,
     ) {}
 
     // ── Catálogos (sin gate, necesarios en el formulario) ──────────────
@@ -150,6 +152,29 @@ class PermisosLicenciasController extends Controller
         }
 
         return $this->apiResponse($this->service->estadisticas($this->filtrosListado($request), $this->nivelViewer($request)));
+    }
+
+    /** GET /exportar — opción 81, mismos filtros que `listar()`. */
+    public function exportarExcel(Request $request)
+    {
+        if ($rechazo = $this->sinAcceso($request, self::OPCION_LISTADO)) {
+            return $rechazo;
+        }
+
+        return $this->responderXlsx($this->excelService->exportar($this->filtrosListado($request), $this->nivelViewer($request), $request->user()->correo));
+    }
+
+    /** Mismo patrón de descarga binaria que GestionAcademicaController::responderXlsx. */
+    private function responderXlsx(array $response)
+    {
+        if ($response['error']) {
+            return $this->apiResponse($response);
+        }
+
+        return response($response['data']['contenido'], 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$response['data']['nombre_archivo'].'"',
+        ]);
     }
 
     private function nivelViewer(Request $request): ?int

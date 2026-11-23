@@ -20,6 +20,7 @@ Route::match(['put', 'post'], '/{id}', [PermisosLicenciasController::class, 'act
 // Gestión (opciones 81/83/90)
 Route::get('/', [PermisosLicenciasController::class, 'listar'])->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_LISTADO]));
 Route::get('/estadisticas', [PermisosLicenciasController::class, 'estadisticas'])->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_LISTADO]));
+Route::get('/exportar', [PermisosLicenciasController::class, 'exportarExcel'])->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_LISTADO]));
 Route::get('/{id}', [PermisosLicenciasController::class, 'detalle'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_DETALLE]));
 Route::post('/{id}/aprobar', [PermisosLicenciasController::class, 'aprobar'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_APROBAR]));
 Route::post('/{id}/rechazar', [PermisosLicenciasController::class, 'rechazar'])->whereNumber('id')->middleware(Permiso::ruta([Permiso::PERMISOS_LICENCIAS_APROBAR]));
