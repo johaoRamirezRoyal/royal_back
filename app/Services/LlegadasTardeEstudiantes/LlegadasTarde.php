@@ -180,18 +180,15 @@ class LlegadasTarde extends Service
      * `idsAlumnos` — scope adicional por un conjunto de alumnos (autoservicio de
      * Acudiente/Docente, ver LlegadasTardeController::obtenerLlegadasTarde): un simple
      * whereIn superpuesto al resto del comportamiento normal (período vigente, colapsado
-     * a una fila por alumno) — a propósito NO se trata como id_alumno (historial puntual
-     * sin colapsar): con varios alumnos a la vez (varios hijos, o todo un curso) esa
-     * vista se volvería una lista larga y menos legible que ver, para cada alumno, su fila
-     * más reciente con el conteo del período — el mismo criterio con el que cualquier
-     * otro usuario ve esta pantalla, solo que acotado a un subconjunto de alumnos.
+     * a una fila por alumno: la más reciente, con el conteo del período en
+     * total_llegadas_tarde_periodo).
      */
     public function obtenerLlegadasTarde(?int $id_periodo_academico = null, ?int $id_alumno = null, ?string $fecha = null, ?array $idsAlumnos = null): array
     {
         try {
             // El período vigente solo se fuerza en el listado general (sin alumno
-            // puntual): ahí sí hace falta acotar a un período porque se colapsa a una
-            // fila por alumno más abajo. Pidiendo un alumno puntual (historial/drill-down)
+            // puntual): ahí se colapsa a una fila por alumno más abajo. Pidiendo un
+            // alumno puntual (historial/drill-down)
             // y sin período explícito, se listan TODOS sus períodos — el filtro de
             // período en ese caso lo aplica el cliente sobre la respuesta completa.
             if ($id_periodo_academico === null && $id_alumno === null) {
@@ -266,13 +263,10 @@ class LlegadasTarde extends Service
 
             // Listado del período completo (sin id_alumno puntual): una sola fila por
             // alumno, la más reciente — el resto de sus llegadas tarde ya están contadas
-            // en total_llegadas_tarde_periodo, no hace falta listarlas todas para saber que
-            // el alumno reincide. Pidiendo id_alumno explícito sí se devuelve su historial
-            // completo (p. ej. para una futura vista de detalle por alumno). idsAlumnos NO
-            // activa este modo (ver docblock del método).
+            // en total_llegadas_tarde_periodo. Pidiendo id_alumno explícito sí se devuelve
+            // su historial completo. idsAlumnos NO activa este modo (ver docblock).
             // La consulta ya viene ordenada desc (fecha, hora), así que unique() -que
-            // conserva la primera ocurrencia- se queda justo con la más reciente de cada
-            // alumno, y el orden desc de la respuesta se conserva sin reordenar de nuevo.
+            // conserva la primera ocurrencia- se queda justo con la más reciente.
             if ($id_alumno === null) {
                 $llegadas_tarde = $llegadas_tarde->unique('id_alumno')->values();
             }
