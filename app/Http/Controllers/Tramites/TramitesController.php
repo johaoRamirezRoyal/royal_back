@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Tramites;
 
+use App\Http\Controllers\Concerns\VerificaPermisos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Tramites\StoreTramiteRequest;
 use App\Services\tramites\TramitesServices;
+use App\Support\Permiso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use App\Support\Permiso;
-use App\Http\Controllers\Concerns\VerificaPermisos;
 
 class TramitesController extends Controller
 {
@@ -20,8 +20,7 @@ class TramitesController extends Controller
 
     public function __construct(
         private TramitesServices $tramitesServices,
-    ) {
-    }
+    ) {}
 
     /** GET /api/tramites/tipos — catálogo, sin gate (necesario para el formulario de solicitud). */
     public function tipos(): JsonResponse
@@ -95,9 +94,13 @@ class TramitesController extends Controller
 
         $request->validate([
             'archivo' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx', 'max:10240'],
+            'archivos' => ['nullable', 'array', 'max:10'],
+            'archivos.*' => ['file', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx', 'max:10240'],
         ]);
 
-        return $this->apiResponse($this->tramitesServices->finalizar($id, $request->user()->id_user, $request->file('archivo')));
+        $archivos = array_values(array_filter([$request->file('archivo'), ...($request->file('archivos') ?? [])]));
+
+        return $this->apiResponse($this->tramitesServices->finalizar($id, $request->user()->id_user, $archivos));
     }
 
     /** POST /api/tramites/{id}/rechazar */

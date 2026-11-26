@@ -275,6 +275,8 @@ Qué se cambió, el deploy y los pendientes:
 
 ## Correo
 
+- **Adjuntos reales**: `MailService::sendGeneric(..., $adjuntos)` recibe `[['ruta' => ruta en el disco de uploads, 'nombre' => nombre original]]` y `GenericMail` los adjunta con `FileStorageService::rutaLocal()` (en Cloudinary los descarga). Un archivo que no se puede leer se omite y queda en el log (`Adjunto de correo no disponible`). Lo usa el cambio de estado de trámites, que además registra cada intento en `tramite_correos` (`pendiente`/`enviado`/`error` + causa; `enviado` = aceptado por el SMTP, no entrega). Para reenviar los fallidos: `select * from tramite_correos where estado = 'error'`.
+
 - `MailService`: `sendView`, `sendGeneric` (con BCC a `COPIA_GESTOR`) y `send($to,
   Mailable, copiaGestor?)`. Filtra correos inválidos antes de enviar. Si detecta el límite
   por hora del hosting (`452` + "too many recipients"), lanza `MailRateLimitException`.

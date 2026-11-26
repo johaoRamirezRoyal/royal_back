@@ -1020,3 +1020,11 @@ insert ignore into nivel_nivel_academico (id_nivel, id_nivel_academico)
   select 4, 3 from dual where exists (select 1 from nivel where id = 4) and exists (select 1 from nivel_academico where id = 3);
 SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
 INSERT INTO migrations (migration, batch) SELECT '2026_11_20_110000_create_nivel_nivel_academico_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_20_110000_create_nivel_nivel_academico_table');
+
+-- ---
+-- 2026_11_26_090000_create_tramite_correos_table.php
+-- Bitácora de correos de cambio de estado de trámites (pendiente / enviado / error, adjuntos y causa del fallo).
+create table `tramite_correos` (`id` bigint unsigned not null auto_increment primary key, `id_tramite` bigint unsigned not null, `destinatarios` json not null, `asunto` varchar(255) not null, `adjuntos` json null, `estado` varchar(10) not null default 'pendiente', `error` text null, `intentado_at` timestamp null, `enviado_at` timestamp null) default character set utf8mb4 collate 'utf8mb4_unicode_ci' engine = InnoDB;
+alter table `tramite_correos` add index `tramite_correos_id_tramite_index`(`id_tramite`);
+SET @batch = (SELECT COALESCE(MAX(batch), 0) + 1 FROM migrations);
+INSERT INTO migrations (migration, batch) SELECT '2026_11_26_090000_create_tramite_correos_table', @batch FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM migrations WHERE migration = '2026_11_26_090000_create_tramite_correos_table');

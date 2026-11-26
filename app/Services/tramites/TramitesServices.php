@@ -4,6 +4,7 @@ namespace App\Services\tramites;
 
 use App\Models\Tramites\Eps;
 use App\Models\Tramites\Tramite;
+use App\Models\Tramites\TramiteCorreo;
 use App\Models\Tramites\TramiteDocumento;
 use App\Models\Tramites\TramiteFamiliar;
 use App\Models\Tramites\TramiteGrupoFamiliar;
@@ -29,8 +30,7 @@ class TramitesServices
     public function __construct(
         private FileStorageService $fileStorage,
         private MailService $mailService,
-    ) {
-    }
+    ) {}
 
     public function tipos(): array
     {
@@ -87,11 +87,11 @@ class TramitesServices
             $query = Tramite::with(['usuario:id_user,nombre,apellido,documento,telefono', 'tipo:id,nombre'])
                 ->orderByDesc('id');
 
-            if (!empty($filtros['id_user'])) {
+            if (! empty($filtros['id_user'])) {
                 $query->where('id_user', (int) $filtros['id_user']);
             }
 
-            if (!empty($filtros['tipo_tramite'])) {
+            if (! empty($filtros['tipo_tramite'])) {
                 $query->where('tipo_tramite', (int) $filtros['tipo_tramite']);
             }
 
@@ -99,7 +99,7 @@ class TramitesServices
                 $query->where('estado', (int) $filtros['estado']);
             }
 
-            if (!empty($filtros['s'])) {
+            if (! empty($filtros['s'])) {
                 $search = $filtros['s'];
                 $query->where(function ($q) use ($search) {
                     $q->where('id', $search)
@@ -125,7 +125,7 @@ class TramitesServices
                 'familiares.grupo:id,nombre',
             ])->find($id);
 
-            if (!$tramite) {
+            if (! $tramite) {
                 return ['error' => true, 'message' => 'Trámite no encontrado', 'status' => 404];
             }
 
@@ -138,8 +138,8 @@ class TramitesServices
     }
 
     /**
-     * @param array<int, UploadedFile> $archivos
-     * @param array<int, int> $grupoFamiliarIds
+     * @param  array<int, UploadedFile>  $archivos
+     * @param  array<int, int>  $grupoFamiliarIds
      */
     public function crear(array $data, array $archivos, array $grupoFamiliarIds, Usuario $solicitante, int $idLog): array
     {
@@ -180,22 +180,24 @@ class TramitesServices
         }
     }
 
-    public function finalizar(int $id, int $idLog, ?UploadedFile $archivo): array
+    /** @param UploadedFile[] $archivos */
+    public function finalizar(int $id, int $idLog, array $archivos = []): array
     {
-        return $this->cambiarEstado($id, 1, $idLog, null, $archivo);
+        return $this->cambiarEstado($id, 1, $idLog, null, $archivos);
     }
 
     public function rechazar(int $id, int $idLog, string $motivo): array
     {
-        return $this->cambiarEstado($id, 2, $idLog, $motivo, null);
+        return $this->cambiarEstado($id, 2, $idLog, $motivo);
     }
 
-    private function cambiarEstado(int $id, int $estado, int $idLog, ?string $motivo, ?UploadedFile $archivo): array
+    /** @param UploadedFile[] $archivos */
+    private function cambiarEstado(int $id, int $estado, int $idLog, ?string $motivo, array $archivos = []): array
     {
         try {
             $tramite = Tramite::with('usuario')->find($id);
 
-            if (!$tramite) {
+            if (! $tramite) {
                 return ['error' => true, 'message' => 'Trámite no encontrado', 'status' => 404];
             }
 
@@ -206,18 +208,31 @@ class TramitesServices
                 'motivo_rechazo' => $motivo,
             ]);
 
-            if ($archivo) {
+            $adjuntos = [];
+            foreach ($archivos as $archivo) {
                 $subido = $this->fileStorage->uploadFile($archivo, 'tramites/documentos');
+
+                // Los discos remotos tienen throw=false: si la subida falló, la ruta viene false/vacía.
+                if (empty($subido['ruta'])) {
+                    throw new Exception('No se pudo guardar el archivo "'.$archivo->getClientOriginalName().'"');
+                }
+
                 TramiteDocumento::create([
                     'id_tramite' => $tramite->id,
                     'archivo' => $subido['ruta'],
                     'id_log' => $idLog,
                 ]);
+                $adjuntos[] = ['ruta' => $subido['ruta'], 'nombre' => $subido['nombre_original']];
             }
 
-            $this->notificarCambioEstado($tramite->fresh(['usuario', 'tipo']));
+            $correoEnviado = $this->notificarCambioEstado($tramite->fresh(['usuario', 'tipo']), $adjuntos);
 
-            return ['error' => false, 'message' => 'Trámite actualizado correctamente', 'data' => $tramite->fresh(['usuario', 'tipo', 'documentos'])];
+            return [
+                'error' => false,
+                'message' => $correoEnviado ? 'Trámite actualizado correctamente' : 'Trámite actualizado, pero el correo de notificación no se pudo enviar',
+                'data' => $tramite->fresh(['usuario', 'tipo', 'documentos']),
+                'correo_enviado' => $correoEnviado,
+            ];
         } catch (Exception $e) {
             return ['error' => true, 'message' => $e->getMessage()];
         }
@@ -229,9 +244,9 @@ class TramitesServices
         $nombreCompleto = trim("{$solicitante->nombre} {$solicitante->apellido}");
         $fecha = $tramite->fechareg?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i');
         $contenido = "El usuario {$nombreCompleto} ha solicitado un trámite: {$tipo}\n"
-            . "Fecha: {$fecha}\n"
-            . "Documento: {$solicitante->documento}\n"
-            . "Trámite: {$tipo}";
+            ."Fecha: {$fecha}\n"
+            ."Documento: {$solicitante->documento}\n"
+            ."Trámite: {$tipo}";
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
             config('gestionHumana.correo_notificacion', []),
@@ -241,7 +256,13 @@ class TramitesServices
         $this->mailService->sendGeneric($destinatarios, 'Solicitud de trámite o servicio', $contenido);
     }
 
-    private function notificarCambioEstado(Tramite $tramite): void
+    /**
+     * Envía el correo de cambio de estado con los archivos como adjuntos reales y deja la bitácora.
+     * Nunca lanza: devuelve false si no salió, sin revertir el estado del trámite.
+     *
+     * @param  array<int, array{ruta: string, nombre: string}>  $adjuntos
+     */
+    private function notificarCambioEstado(Tramite $tramite, array $adjuntos = []): bool
     {
         $solicitante = $tramite->usuario;
 
@@ -250,8 +271,8 @@ class TramitesServices
             [$solicitante->correo]
         ))));
 
-        if (!$destinatarios) {
-            return;
+        if (! $destinatarios) {
+            return false;
         }
 
         $nombreCompleto = trim("{$solicitante->nombre} {$solicitante->apellido}");
@@ -261,20 +282,40 @@ class TramitesServices
         $estado = self::ESTADOS[$tramite->estado] ?? 'Actualizado';
 
         $fechaSolicitud = $tramite->fechareg?->format('d/m/Y H:i') ?? '';
-        
+
         $fechaEdit = $tramite->fecha_edit?->format('d/m/Y H:i') ?? now()->format('d/m/Y H:i');
 
         $contenido = "El trámite del usuario {$nombreCompleto} ha sido actualizado: {$tipo}\n"
-            . "Fecha de solicitud: {$fechaSolicitud}\n"
-            . "Documento: {$solicitante->documento}\n"
-            . "Trámite: {$tipo}\n"
-            . "Estado: {$estado}\n"
-            . "Fecha de actualización: {$fechaEdit}";
+            ."Fecha de solicitud: {$fechaSolicitud}\n"
+            ."Documento: {$solicitante->documento}\n"
+            ."Trámite: {$tipo}\n"
+            ."Estado: {$estado}\n"
+            ."Fecha de actualización: {$fechaEdit}";
 
         if ($tramite->estado === 2 && $tramite->motivo_rechazo) {
             $contenido .= "\nMotivo del rechazo: {$tramite->motivo_rechazo}";
         }
 
-        $this->mailService->sendGeneric($destinatarios, "Trámite o servicio - {$estado}", $contenido);
+        if ($adjuntos) {
+            $contenido .= "\nDocumentos adjuntos: ".implode(', ', array_column($adjuntos, 'nombre'));
+        }
+
+        $asunto = "Trámite o servicio - {$estado}";
+        $registro = TramiteCorreo::create([
+            'id_tramite' => $tramite->id,
+            'destinatarios' => $destinatarios,
+            'asunto' => $asunto,
+            'adjuntos' => array_column($adjuntos, 'nombre'),
+            'estado' => 'pendiente',
+            'intentado_at' => now(),
+        ]);
+
+        $resultado = $this->mailService->sendGeneric($destinatarios, $asunto, $contenido, null, 'Ver en OMNIA', $adjuntos);
+
+        $registro->update($resultado['error']
+            ? ['estado' => 'error', 'error' => $resultado['data']['causa'] ?? $resultado['message']]
+            : ['estado' => 'enviado', 'enviado_at' => now()]);
+
+        return ! $resultado['error'];
     }
 }

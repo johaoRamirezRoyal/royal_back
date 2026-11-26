@@ -104,7 +104,7 @@ class MailService
         }
     }
 
-    public function sendGeneric(array|string $to, string $titulo, string $contenido, ?string $urlBoton = null, string $textoBoton = 'Ver en OMNIA'): array
+    public function sendGeneric(array|string $to, string $titulo, string $contenido, ?string $urlBoton = null, string $textoBoton = 'Ver en OMNIA', array $adjuntos = []): array
     {
         try {
             $recipients = $this->filtrarCorreosValidos(is_string($to) ? [$to] : $to);
@@ -119,7 +119,7 @@ class MailService
                 ];
             }
 
-            Mail::to($recipients)->bcc($this->bccGestor($recipients))->send(new GenericMail($titulo, $contenido, $urlBoton, $textoBoton));
+            Mail::to($recipients)->bcc($this->bccGestor($recipients))->send(new GenericMail($titulo, $contenido, $urlBoton, $textoBoton, $adjuntos));
 
             Log::info('Correo genérico enviado', [
                 'to' => $recipients,
@@ -141,7 +141,7 @@ class MailService
             return [
                 'error' => true,
                 'message' => 'Correo genérico NO enviado',
-                'data' => [],
+                'data' => ['causa' => $e->getMessage()],
             ];
         }
     }
