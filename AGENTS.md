@@ -153,6 +153,7 @@ esta tabla.
 | [`modulos/gestion-academica.md`](docs/contexto/modulos/gestion-academica.md) | autoservicio del docente, cursos, niveles académicos (crear, renombrar y nivel de usuario ↔ nivel académico N:M) y catálogo de grados (`curso.id_grado`; el nivel del grado se copia a sus cursos), horarios, esquemas, franjas, años escolares, consulta de asistencias, vinculación de acudientes, seeders |
 | [`modulos/gestion-convivencial.md`](docs/contexto/modulos/gestion-convivencial.md) | Observaciones, Registro de actas |
 | [`modulos/noticias.md`](docs/contexto/modulos/noticias.md) | Noticias, cumpleaños, correos de distribución, rate-limit |
+| [`modulos/tramites.md`](docs/contexto/modulos/tramites.md) | trámites: finalizar con documentos, correo con adjuntos y bitácora `tramite_correos` |
 | [`modulos/compras.md`](docs/contexto/modulos/compras.md) | proveedores, solicitudes, agregar al inventario |
 | [`modulos/inventario.md`](docs/contexto/modulos/inventario.md) | reportes, visto bueno, listados, Áreas Comunes |
 | [`modulos/evaluaciones.md`](docs/contexto/modulos/evaluaciones.md) | Evaluaciones (Gestor de Calidad) y Encuestas |
