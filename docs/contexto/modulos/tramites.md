@@ -15,8 +15,10 @@ Ruta `routes/api/tramites.php` → `TramitesController` → `TramitesServices` (
    omite y queda en el log (`Adjunto de correo no disponible`); el correo sale con los demás.
 4. La respuesta trae `correo_enviado`. Si es `false` el trámite sigue finalizado.
 
-Destinatarios: `config('gestionHumana.correo_notificacion')` (`GESTION_HUMANA_EMAIL_ROYAL`) más el
-correo del solicitante (`usuario.correo`). Con `MAIL_MAILER=log` (el default) nada sale: producción
+Destinatarios: el solicitante (`usuario.correo`) más el grupo `GESTION_HUMANA` de
+`correos_institucionales` (`Mails::GESTION_HUMANA->recipients()`). Además, el usuario que finaliza o
+rechaza recibe un correo aparte, con el aviso "copia del correo enviado al solicitante" (no se envía si
+ya está entre los destinatarios; su resultado no afecta `correo_enviado`). Con `MAIL_MAILER=log` (el default) nada sale: producción
 debe tener `smtp`.
 
 ## Bitácora `tramite_correos`

@@ -2,6 +2,7 @@
 
 namespace App\Services\tramites;
 
+use App\Enums\Mails;
 use App\Models\Tramites\Eps;
 use App\Models\Tramites\Tramite;
 use App\Models\Tramites\TramiteCorreo;
@@ -15,6 +16,8 @@ use App\Services\MailService;
 use Exception;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TramitesServices
 {
@@ -225,7 +228,7 @@ class TramitesServices
                 $adjuntos[] = ['ruta' => $subido['ruta'], 'nombre' => $subido['nombre_original']];
             }
 
-            $correoEnviado = $this->notificarCambioEstado($tramite->fresh(['usuario', 'tipo']), $adjuntos);
+            $correoEnviado = $this->notificarCambioEstado($tramite->fresh(['usuario', 'tipo']), $adjuntos, $idLog);
 
             return [
                 'error' => false,
@@ -249,7 +252,7 @@ class TramitesServices
             ."Trámite: {$tipo}";
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
-            config('gestionHumana.correo_notificacion', []),
+            Mails::GESTION_HUMANA->recipients(),
             [$solicitante->correo]
         ))));
 
@@ -260,14 +263,16 @@ class TramitesServices
      * Envía el correo de cambio de estado con los archivos como adjuntos reales y deja la bitácora.
      * Nunca lanza: devuelve false si no salió, sin revertir el estado del trámite.
      *
+     * Además envía una copia (correo aparte, con aviso) al usuario que gestionó el trámite.
+     *
      * @param  array<int, array{ruta: string, nombre: string}>  $adjuntos
      */
-    private function notificarCambioEstado(Tramite $tramite, array $adjuntos = []): bool
+    private function notificarCambioEstado(Tramite $tramite, array $adjuntos = [], ?int $idGestor = null): bool
     {
         $solicitante = $tramite->usuario;
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
-            config('gestionHumana.correo_notificacion', []),
+            Mails::GESTION_HUMANA->recipients(),
             [$solicitante->correo]
         ))));
 
@@ -301,6 +306,24 @@ class TramitesServices
         }
 
         $asunto = "Trámite o servicio - {$estado}";
+        $resultado = $this->enviarConBitacora($tramite, $destinatarios, $asunto, $contenido, $adjuntos);
+
+        try {
+            $correoGestor = $idGestor ? Usuario::find($idGestor)?->correo : null;
+            if ($correoGestor && ! in_array($correoGestor, $destinatarios, true)) {
+                $aviso = "Esta es una copia del correo enviado al solicitante {$nombreCompleto} ({$solicitante->correo}).\n\n";
+                $this->enviarConBitacora($tramite, [$correoGestor], "Copia - {$asunto}", $aviso.$contenido, $adjuntos);
+            }
+        } catch (Throwable $e) {
+            Log::warning('No se pudo enviar la copia del trámite al gestor', ['id_tramite' => $tramite->id, 'error' => $e->getMessage()]);
+        }
+
+        return ! $resultado['error'];
+    }
+
+    /** Envía el correo y deja una fila en `tramite_correos` con el resultado. */
+    private function enviarConBitacora(Tramite $tramite, array $destinatarios, string $asunto, string $contenido, array $adjuntos): array
+    {
         $registro = TramiteCorreo::create([
             'id_tramite' => $tramite->id,
             'destinatarios' => $destinatarios,
@@ -316,6 +339,6 @@ class TramitesServices
             ? ['estado' => 'error', 'error' => $resultado['data']['causa'] ?? $resultado['message']]
             : ['estado' => 'enviado', 'enviado_at' => now()]);
 
-        return ! $resultado['error'];
+        return $resultado;
     }
 }
