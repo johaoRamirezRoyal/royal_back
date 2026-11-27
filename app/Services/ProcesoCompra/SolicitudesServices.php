@@ -2,7 +2,6 @@
 
 namespace App\Services\ProcesoCompra;
 
-use App\Services\Usuarios\PermisosPerfil;
 use App\Enums\Mails;
 use App\Mail\ProcesoCompra\OrdenCompraMail;
 use App\Models\Inventario\Inventario;
@@ -16,6 +15,7 @@ use App\Models\Usuarios\Usuario;
 use App\Services\branding\MarcaDominioService;
 use App\Services\FileStorageService;
 use App\Services\MailService;
+use App\Services\Usuarios\PermisosPerfil;
 use App\Support\HtmlCorreoSanitizer;
 use App\Support\Permiso;
 use Exception;
@@ -452,7 +452,7 @@ class SolicitudesServices
 
     /**
      * Valida la solicitud y arma el OrdenCompraMail. Solo formalizada o en devolución
-     * (reenvío), con todos los productos con cantidad y precio > 0. Los destinatarios
+     * (reenvío), con todos los productos con cantidad > 0. Los destinatarios
      * deben ser `correo`/`correo_comercial` del proveedor en BD (el body solo elige entre
      * ellos); los CC son libres (máx. 5, ver request). Los bloques de datos se arman aquí
      * desde la BD: el frontend solo dice cuáles incluir. Contacto y responder-a: el grupo
@@ -483,14 +483,13 @@ class SolicitudesServices
             return ['error' => true, 'message' => 'La solicitud no tiene proveedor asignado', 'status' => 422];
         }
 
-        // En BD cantidad y precio son strings y el precio puede ser null.
-        $positivo = fn ($valor): bool => is_numeric($valor) && (float) $valor > 0;
+        // En BD la cantidad es string. El precio puede ser 0 o null: no se valida.
         $productosInvalidos = $solicitud->productos->contains(
-            fn (SolicitudProducto $p) => ! $positivo($p->cantidad) || ! $positivo($p->precio)
+            fn (SolicitudProducto $p) => ! is_numeric($p->cantidad) || (float) $p->cantidad <= 0
         );
 
         if ($solicitud->productos->isEmpty() || $productosInvalidos) {
-            return ['error' => true, 'message' => 'Todos los productos deben tener cantidad y precio mayores a 0 (revise el estudio)', 'status' => 422];
+            return ['error' => true, 'message' => 'Todos los productos deben tener cantidad mayor a 0 (revise el estudio)', 'status' => 422];
         }
 
         $normalizar = fn (array $correos): array => array_values(array_unique(array_filter(

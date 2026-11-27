@@ -110,27 +110,6 @@ class EnviarOrdenCompraTest extends TestCase
         Mail::assertNothingSent();
     }
 
-    public function test_no_envia_si_algun_producto_no_tiene_precio(): void
-    {
-        $id = DB::table('solicitudes as s')
-            ->join('solicitud_productos as p', 'p.id_solicitud', '=', 's.id')
-            ->whereIn('s.estado', [SolicitudesServices::ESTADO_FORMALIZADA, SolicitudesServices::ESTADO_DEVOLUCION])
-            ->where('s.anulada', 0)
-            ->whereNotNull('s.id_proveedor')
-            ->whereNull('p.precio')
-            ->value('s.id');
-
-        if (! $id) {
-            $this->markTestSkipped('No hay solicitud formalizada/en devolución con un producto sin precio.');
-        }
-
-        Mail::fake();
-
-        $this->enviar($id)->assertStatus(422);
-
-        Mail::assertNothingSent();
-    }
-
     private function solicitudEnviable(): Solicitud
     {
         $positivo = fn ($v): bool => is_numeric($v) && (float) $v > 0;
@@ -143,7 +122,7 @@ class EnviarOrdenCompraTest extends TestCase
             ->limit(200)
             ->get()
             ->first(fn (Solicitud $s) => filter_var(trim((string) $s->proveedor->correo), FILTER_VALIDATE_EMAIL)
-                && $s->productos->every(fn ($p) => $positivo($p->cantidad) && $positivo($p->precio)));
+                && $s->productos->every(fn ($p) => $positivo($p->cantidad)));
 
         if (! $solicitud) {
             $this->markTestSkipped('No hay solicitud formalizada/en devolución con productos y correo de proveedor válidos.');
