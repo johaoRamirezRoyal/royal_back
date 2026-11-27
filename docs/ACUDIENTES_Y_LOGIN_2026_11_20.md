@@ -1,4 +1,4 @@
-# Módulo Acudientes, contraseña inicial, correos institucionales y arreglos del login (2026-11-18 al 20)
+# Módulo Acudientes, contraseña inicial, correos institucionales y arreglos del login (2026-11-18 al 23)
 
 Cambio en `royal_back` y en el frontend (`S.A.M.I_frontend`). Las reglas vigentes están en
 [`contexto/modulos/acudientes.md`](contexto/modulos/acudientes.md) y
@@ -127,9 +127,22 @@ qué y qué falta hacer en el despliegue.
   peticiones a internet (lista de dominios vacía en PhpSpreadsheet), el correo escapa los datos y
   todo cambio queda en el registro de actividad.
 
+### Última conexión y filtro de conexión (2026-11-23)
+
+- **«Última conexión» siempre decía «Nunca»** (`3a3eab6`): `usuarios.ultima_conexion` y
+  `ultima_ip` solo se guardaban al entrar por Admisiones; el login del sistema general (el del
+  portal para padres y el del personal) nunca los actualizaba. Ahora se guardan en
+  `JwtService::generateToken`, por donde pasan todos esos logins (contraseña, código de equipo
+  nuevo, Google), salvo con llave maestra (es soporte, no el usuario). Test: `LoginSinSamiTest`.
+  Los que entraron antes siguen en «Nunca» hasta su próximo ingreso: ese dato no se guardó.
+- **Filtro de conexión** (`d1ade9e`, frontend `0d19753`): «Se han conectado» / «Nunca se han
+  conectado» en la lista de Acudientes (`conexion=conectados|nunca` en `GET /acudientes`).
+- Con este filtro y el de acceso se ve el embudo completo: a quién no se le ha enviado el acceso,
+  a quién se le envió y quién ya entró.
+
 ## Despliegue
 
-1. En el servidor: `git pull` de `produccion` (último: `28da89f`). Si `git` avisa
+1. En el servidor: `git pull` de `produccion` (último: `01cd552`). Si `git` avisa
    `dubious ownership`, `git config --global --add safe.directory /home/omnia/app`.
 2. Migración `2026_11_18_120000_seed_opcion_acudientes` en **cada base de colegio**. Falla si el
    id 175 ya está ocupado. SQL puro al final de `migraciones_sql.sql`.
@@ -140,7 +153,7 @@ qué y qué falta hacer en el despliegue.
 5. Google: la app de OAuth (`GOOGLE_CLIENT_ID`) debe aceptar cuentas de `playandlearn.edu.co` y
    `colegiohebreounion.edu.co`; si está limitada al dominio de Royal, Google las rechaza antes de
    llegar a OMNIA.
-6. Frontend: se despliega con el push a `main` (último: `2d49e77`).
+6. Frontend: se despliega con el push a `main` (último: `0d19753`).
 
 ## Pendientes
 
