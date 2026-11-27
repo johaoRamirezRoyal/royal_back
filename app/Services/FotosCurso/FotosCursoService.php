@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Storage;
 class FotosCursoService extends Service
 {
     public const CARPETA = 'fotos-curso';
-    public const MAX_FOTOS = 10;
+    public const MAX_FOTOS = 20;
     /** Publicaciones por página en la vista del docente. */
     public const POR_PAGINA = 10;
     public const LIMITE_BUSQUEDA = 30;
