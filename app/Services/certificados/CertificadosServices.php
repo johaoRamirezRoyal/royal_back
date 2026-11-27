@@ -2,6 +2,7 @@
 
 namespace App\Services\certificados;
 
+use App\Enums\Mails;
 use App\Models\Certificados\DocumentoCertificado;
 use App\Models\Certificados\SolCertificado;
 use App\Models\Usuarios\Usuario;
@@ -48,11 +49,11 @@ class CertificadosServices
                 $query->where('estado', (int) $filtros['estado']);
             }
 
-            if (!empty($filtros['tipo_cert'])) {
+            if (! empty($filtros['tipo_cert'])) {
                 $query->where('tipo_cert', (int) $filtros['tipo_cert']);
             }
 
-            if (!empty($filtros['s'])) {
+            if (! empty($filtros['s'])) {
                 $search = $filtros['s'];
                 $query->where(function ($q) use ($search) {
                     $q->where('id', $search)
@@ -100,7 +101,7 @@ class CertificadosServices
         try {
             $solicitud = SolCertificado::with('usuario')->find($idSolicitud);
 
-            if (!$solicitud) {
+            if (! $solicitud) {
                 return ['error' => true, 'message' => 'Solicitud no encontrada', 'status' => 404];
             }
 
@@ -147,7 +148,7 @@ class CertificadosServices
         $contenido = "Se generó la solicitud de certificado #{$solicitud->id} ({$tipo}) para {$nombreCompleto}.";
 
         $destinatarios = array_values(array_unique(array_filter(array_merge(
-            config('gestionHumana.correo_notificacion', []),
+            Mails::GESTION_HUMANA->recipients(),
             [$solicitante->correo]
         ))));
 
@@ -158,7 +159,7 @@ class CertificadosServices
     {
         $correo = $solicitud->usuario?->correo;
 
-        if (!$correo) {
+        if (! $correo) {
             return;
         }
 
